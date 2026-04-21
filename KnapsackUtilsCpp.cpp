@@ -80,11 +80,11 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
 
     using namespace std::chrono;
     auto timeStart = high_resolution_clock::now();
-    
+
     if (groups.empty() || groups[0] != 0) {
         raiseAssertionError("Groups must start with 0 and increment by one for each new group. Items should be ordered by group.");
     }
-    
+
     std::vector<std::pair<int, int>> groupStartEnds;
     int lastGroup = -1, lastGroupIndex = 0, maxGroupSize = 0, curGroupSize = 0;
     for (size_t i = 0; i < groups.size(); ++i) {
@@ -101,12 +101,12 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
     }
     groupStartEnds.emplace_back(lastGroupIndex, groups.size());
     if (curGroupSize > maxGroupSize) maxGroupSize = curGroupSize;
-    
+
     int n = values.size();
     std::vector<std::vector<int>> K(n + 1, std::vector<int>(capacity + 1, 0));
 
     double estTime = estimateRuntime(n, capacity, maxGroupSize);
-    
+
     if (estTime > longRuntimeThreshold) {
         raiseAssertionError("Knapsack potential long run est {estTime:.3f}: the inputs (n {n} * capacity {capacity} * math.sqrt(maxGroupSize {maxGroupSize}) {maxGrSq}) are going to result in a substantial runtime, maybe try a different algorithm"_s.format(**py::dict(
             FMTARG(n), FMTARG(capacity), FMTARG(maxGroupSize), "maxGrSq"_a = std::sqrt(maxGroupSize), FMTARG(estTime)
@@ -172,7 +172,7 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
         lastTakenGroup = group;
         includedItems.push_back(items[i - 1]);
         if (!noLog) {
-            logbook_info("item at index {i-1} with value {values[i-1]} and weight {weights[i-1]} was included... adding it to output. (Res {res})"_s.format(**py::dict("values"_a=py::dict(FMTARG(i-1)), "weights"_a=py::dict(FMTARG(i-1)), FMTARG(res), FMTARG(i-1))));
+            logbook_info("item at index {idx} with value {val} and weight {wt} was included... adding it to output. (Res {res})"_s.format(**py::dict("idx"_a=(i-1), "val"_a=values[i-1], "wt"_a=weights[i-1], FMTARG(res))));
         }
 
         // Since this weight is included
@@ -182,21 +182,17 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
     }
 
     if (!noLog) {
-        auto uniqueGroupsIncluded = std::unordered_set<int>(includedGroups.begin(), includedGroups.end()); 
+        auto uniqueGroupsIncluded = std::unordered_set<int>(includedGroups.begin(), includedGroups.end());
         if (uniqueGroupsIncluded.size() != includedGroups.size()) {
             raiseAssertionError("Yo, the multiple choice knapsacker failed to be distinct by groups");
         }
-        auto msg = 
-            "multiple choice knapsack completed on {n} items for capacity {capacity} finding value {K[n][capacity]} in Duration {timeDiff}"_s.format(
+        auto msg =
+            "multiple choice knapsack completed on {n} items for capacity {capacity} finding value {bestVal} in Duration {timeDiff}"_s.format(
                 **py::dict(
                     FMTARG(n),
                     FMTARG(capacity),
                     "timeDiff"_a = high_resolution_clock::now() - timeStart,
-                    "K"_a = py::dict(
-                        "n"_a = py::dict (
-                            "capacity"_a = K[n][capacity]
-                        )
-                    )
+                    "bestVal"_a = K[n][capacity]
                 )
             );
         logbook_info(std::move(msg.cast<std::string>()));
@@ -208,9 +204,9 @@ std::tuple<int, std::vector<py::object>> solve_multiple_choice_knapsack(
 PYBIND11_MODULE(KnapsackUtilsCpp, m) {
     m.doc() = "C++ impl of multiple_choice_knapsack"; // optional module docstring
 
-    m.def("solve_multiple_choice_knapsack", &solve_multiple_choice_knapsack, 
+    m.def("solve_multiple_choice_knapsack", &solve_multiple_choice_knapsack,
         "items"_a, "capacity"_a, "weights"_a,
-        "values"_a, "groups"_a, "noLog"_a, 
+        "values"_a, "groups"_a, "noLog"_a,
         "longRuntimeThreshold"_a
     );
 }

@@ -5,7 +5,9 @@ from dataclasses import dataclass
 
 import logbook
 
+import Algorithms
 import Gather
+import KnapsackUtils
 from BehaviorAlgorithms.Flow.FlowGraphModels import FlowGraphMethod, IslandFlowNode, IslandMaxFlowGraph
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpanderLastRun, FlowExpansionPlanOptionCollection, ITERATIVE_EXPANSION_EN_CAP_VAL
@@ -250,51 +252,30 @@ class ArmyFlowExpanderV2:
     ) -> list[FlowBorderPairKey]:
         """Phase 1: Enumerate valid friendly-target border pairs"""
         border_pairs = []
-        seen_pairs: set[tuple[int, int]] = set()
 
-        for target_island in islands.tile_islands_by_team_id[target_team]:
-            # BFS outward from this target island through neutral islands to find
-            # all upstream friendly islands that eventually flow into it.
-            visited_neut: set[int] = set()
-            neut_queue = [target_island]
-            while neut_queue:
-                cur = neut_queue.pop()
-                for border_island in cur.border_islands:
-                    if border_island.team == my_team:
-                        friendly_island = border_island
+        for friendly_island in islands.tile_islands_by_team_id[my_team]:
+            if friendly_island.unique_id in target_crossable_islands:
+                if self.log_debug:
+                    logbook.info(f"Skipping target-crossable friendly island {friendly_island}")
+                continue
 
-                        # Skip target-crossable friendly islands from border-pair seeding
-                        if friendly_island.unique_id in target_crossable_islands:
-                            if self.log_debug:
-                                logbook.info(f"Skipping target-crossable friendly island {friendly_island.unique_id} "
-                                             f"from border-pair seeding with target {cur.unique_id}")
-                            continue
+            for target_island in sorted(friendly_island.border_islands, key=lambda b: b.tile_count_all_adjacent_friendly, reverse=True):
+                if target_island.team != target_team and target_island.team != -1 and target_island.unique_id not in target_crossable_islands:
+                    continue
 
-                        # The border pair target is `cur` — the island directly adjacent to
-                        # the friendly island.  When neutrals lie between the friendly border
-                        # and the enemy, cur will be the first neutral, NOT the far enemy island.
-                        # Border pairs must always be between physically adjacent islands.
-                        adjacent_target = cur
-                        pair_key = (friendly_island.unique_id, adjacent_target.unique_id)
-                        if pair_key in seen_pairs:
-                            continue
+                # Verify there's actual flow support between these islands
+                if not self._is_flow_supported(friendly_island, target_island, flow_graph):
+                    if self.log_debug:
+                        logbook.info(f"Skipping border pair {friendly_island.unique_id}->{target_island.unique_id}: no flow support")
+                    continue
 
-                        # Verify there is actual flow support across the pair
-                        if self._is_flow_supported(friendly_island, target_island, flow_graph):
-                            seen_pairs.add(pair_key)
-                            border_pair = FlowBorderPairKey(
-                                friendly_island_id=friendly_island.unique_id,
-                                target_island_id=adjacent_target.unique_id
-                            )
-                            border_pairs.append(border_pair)
-
-                            if self.log_debug:
-                                logbook.info(f"Added border pair: friendly {friendly_island.unique_id} -> target {adjacent_target.unique_id}")
-
-                    elif border_island.team == -1 and border_island.unique_id not in visited_neut:
-                        # Walk through neutrals to find upstream friendlies
-                        visited_neut.add(border_island.unique_id)
-                        neut_queue.append(border_island)
+                border_pair = FlowBorderPairKey(
+                    friendly_island_id=friendly_island.unique_id,
+                    target_island_id=target_island.unique_id
+                )
+                border_pairs.append(border_pair)
+                if self.log_debug:
+                    logbook.info(f"Added border pair: friendly {friendly_island} -> target {target_island}")
 
         return border_pairs
 
@@ -311,8 +292,10 @@ class ArmyFlowExpanderV2:
         the way.
         """
         # Check both neutral-inclusive and enemy-only flow graphs
-        for flow_lookup in [flow_graph.flow_node_lookup_by_island_inc_neut,
-                          flow_graph.flow_node_lookup_by_island_no_neut]:
+        for flow_lookup in [
+            flow_graph.flow_node_lookup_by_island_no_neut,
+            flow_graph.flow_node_lookup_by_island_inc_neut,
+        ]:
             if (friendly_island.unique_id not in flow_lookup or
                     target_island.unique_id not in flow_lookup):
                 continue
@@ -391,8 +374,10 @@ class ArmyFlowExpanderV2:
             has_enemy_flow_in = False
 
             # Check both neutral-inclusive and enemy-only flow graphs
-            for flow_lookup in [flow_graph.flow_node_lookup_by_island_inc_neut,
-                              flow_graph.flow_node_lookup_by_island_no_neut]:
+            for flow_lookup in [
+                flow_graph.flow_node_lookup_by_island_no_neut,
+                flow_graph.flow_node_lookup_by_island_inc_neut,
+            ]:
                 if island.unique_id in flow_lookup:
                     flow_node = flow_lookup[island.unique_id]
                     for edge in flow_node.flow_from:
@@ -458,8 +443,10 @@ class ArmyFlowExpanderV2:
         target_node = None
 
         # Check both flow graph variants
-        for flow_lookup in [flow_graph.flow_node_lookup_by_island_inc_neut,
-                          flow_graph.flow_node_lookup_by_island_no_neut]:
+        for flow_lookup in [
+            flow_graph.flow_node_lookup_by_island_no_neut,
+            flow_graph.flow_node_lookup_by_island_inc_neut
+        ]:
             if (border_pair.friendly_island_id in flow_lookup and
                 border_pair.target_island_id in flow_lookup):
                 friendly_node = flow_lookup[border_pair.friendly_island_id]
@@ -761,12 +748,23 @@ class ArmyFlowExpanderV2:
         self,
         border_pair: FlowBorderPairKey,
         target_contributions: list[FlowStreamIslandContribution],
-        stream_data: dict
+        stream_data: dict,
+        prio_mat: MapMatrixInterface[float] | None = None,
     ) -> list[FlowTurnsEntry | None]:
-        """Generate capture lookup table for a border pair"""
+        """
+        Generate capture lookup table for a border pair.
+
+        Parameters:
+            border_pair (FlowBorderPairKey): The border pair for which to generate the lookup table.
+            target_contributions (list[FlowStreamIslandContribution]): Contributions from target islands.
+            stream_data (dict): Stream data containing island information.
+
+        Returns:
+            list[FlowTurnsEntry | None]: The generated capture lookup table.
+        """
         # Start with the border crossing (turn 0 = border state, turn 1 = first target island)
         max_turns = 50  # TODO: Make this configurable
-        lookup = [None] * (max_turns + 1)
+        lookup: typing.List[FlowTurnsEntry | None] = [None] * (max_turns + 1)
 
         current_turn = 0
         current_army_cost = 0
@@ -775,8 +773,6 @@ class ArmyFlowExpanderV2:
         current_gathered_army = 0
         included_target_nodes = []
         included_friendly_nodes = []
-        incomplete_target_island_id = None
-        incomplete_target_tile_count = 0
         incomplete_friendly_island_id = None
         incomplete_friendly_tile_count = 0
 
@@ -803,25 +799,30 @@ class ArmyFlowExpanderV2:
             # Add this island to the capture plan
             included_target_nodes.append(node)
 
-            if contrib.is_crossing:
-                # Target-crossable friendly island: only turn cost, no econ value
-                current_turn += island.tile_count
-                # No army cost for crossing friendly islands
-                # No econ value for crossing
-            else:
-                # Regular capture (enemy or neutral)
-                current_turn += island.tile_count
-                current_army_cost += island.sum_army
+            i = 0
+            for tile in island.tiles_by_army:
+                current_turn += 1
+                if current_turn > max_turns:
+                    break
+                i += 1
 
-                if island.team == self.target_team:
-                    # Enemy island capture
-                    current_econ_value += ITERATIVE_EXPANSION_EN_CAP_VAL * island.tile_count
+                if contrib.is_crossing:
+                    # Target-crossable friendly island: only turn cost, no econ value
+                    current_army_cost -= tile.army
                 else:
-                    # Neutral island capture
-                    current_econ_value += 1.0 * island.tile_count
+                    if prio_mat is not None:
+                        current_econ_value += prio_mat.raw[tile.tile_index]
+                    # Regular capture (enemy or neutral)
+                    current_army_cost += tile.army
 
-            # Create entry for this exact turn count if within bounds
-            if current_turn <= max_turns:
+                    if island.team == self.target_team:
+                        # Enemy island capture
+                        current_econ_value += ITERATIVE_EXPANSION_EN_CAP_VAL
+                    else:
+                        # Neutral island capture
+                        current_econ_value += 1.0
+
+                # Create entry for this exact turn count if within bounds
                 # required_army = sum(defender_armies) + tiles_traversed + 1
                 # Each tile traversed costs 1 army (left behind on source/intermediate tile),
                 # and the final capture requires arriving with strictly more than the defender
@@ -837,12 +838,15 @@ class ArmyFlowExpanderV2:
                     included_target_flow_nodes=tuple(included_target_nodes),
                     incomplete_friendly_island_id=incomplete_friendly_island_id,
                     incomplete_friendly_tile_count=incomplete_friendly_tile_count,
-                    incomplete_target_island_id=incomplete_target_island_id,
-                    incomplete_target_tile_count=incomplete_target_tile_count
+                    incomplete_target_island_id=island.unique_id if island.tile_count > i else None,
+                    incomplete_target_tile_count=island.tile_count - i
                 )
+                if self.log_debug:
+                    logbook.info(f"CAPTURES: {border_pair.friendly_island_id}->{border_pair.target_island_id}  (cur {island.unique_id}) - Adding capture entry @{tile} for turn {current_turn} with econ value {current_econ_value:.2f}, army cost {current_army_cost}, "
+                                 f"army remaining {current_army_remaining}, gathered army {current_gathered_army}, required army {required_army_for_entry}, incomplete {lookup[current_turn].incomplete_target_tile_count}")
 
-            # TODO: Implement partial tile walking between island boundaries
-            # For now, we only create entries at exact island boundaries
+            if current_turn > max_turns:
+                break
 
         return lookup
 
@@ -1001,8 +1005,10 @@ class ArmyFlowExpanderV2:
         friendly_node = None
         target_node = None
 
-        for flow_lookup in [flow_graph.flow_node_lookup_by_island_inc_neut,
-                          flow_graph.flow_node_lookup_by_island_no_neut]:
+        for flow_lookup in [
+            flow_graph.flow_node_lookup_by_island_no_neut,
+            flow_graph.flow_node_lookup_by_island_inc_neut,
+        ]:
             if (border_pair.friendly_island_id in flow_lookup and
                 border_pair.target_island_id in flow_lookup):
                 friendly_node = flow_lookup[border_pair.friendly_island_id]
@@ -1045,6 +1051,7 @@ class ArmyFlowExpanderV2:
                 if capture_entry is None:
                     continue
 
+                # TODO this is inefficient, we should be maintaining a gather index and just walking backwards up the gathers while we walk forwards through the captures. No reason to loop gathers completely for every capture entry...
                 # Find the minimum-turn gather entry that supports this capture
                 min_gather_entry = self._find_minimum_gather_support(
                     capture_entry, gather_entries
@@ -1071,7 +1078,7 @@ class ArmyFlowExpanderV2:
                         logbook.info(f"Border pair {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
                                      f"Capture turn {capture_turn} (army={capture_entry.required_army}) "
                                      f"paired with gather turn {min_gather_entry.turns} (army={min_gather_entry.gathered_army}) "
-                                     f"-> combined cost {combined_turn_cost}, density {combined_value_density:.3f}")
+                                     f"-> total econ {capture_entry.econ_value:.2f} / combined cost {combined_turn_cost} = density {combined_value_density:.3f}")
                 else:
                     # No gather support available for this capture
                     if self.log_debug:
@@ -1126,65 +1133,83 @@ class ArmyFlowExpanderV2:
           - value  = econ_value
           - weight = combined_turn_cost (capture.turns + gather.turns)
 
-        We solve grouped knapsack for turn_budget, then return a solution dict:
-          {border_pair_key: EnrichedFlowTurnsEntry | None}
-        recording exactly which entry was chosen (or None if the group was skipped).
-        Provenance is preserved so Phase 5 and 6 can reconstruct plans.
+        Uses KnapsackUtils.solve_multiple_choice_knapsack (C++ optimized).
+        Returns a solution dict: {border_pair_key: EnrichedFlowTurnsEntry | None}
         """
-        # dp[w] = (total_econ, chosen_items)
-        # chosen_items: list of (lookup_table, EnrichedFlowTurnsEntry)
-        # Use a flat dp array of size turn_budget+1
-        NEG_INF = float('-inf')
-        dp_value: list[float] = [NEG_INF] * (turn_budget + 1)
-        dp_value[0] = 0.0
-        dp_items: list[list[tuple]] = [[] for _ in range(turn_budget + 1)]
+        # Build flat arrays for the MCKP solver
+        # Each enriched entry is an item; its lookup_table index is its group
+        items: list[EnrichedFlowTurnsEntry] = []
+        groups: list[int] = []
+        weights: list[int] = []
+        values: list[int] = []
 
+        forest = Algorithms.FastDisjointSet()
+
+        goodLookupTables = []
         for lookup_table in lookup_tables:
             if not lookup_table.enriched_capture_entries:
                 continue
 
-            # Iterate weights in reverse to enforce at-most-one selection per group
-            # (standard grouped-knapsack: iterate groups outer, weights inner in reverse)
-            new_dp_value = dp_value[:]
-            new_dp_items = [lst[:] for lst in dp_items]
+            forest.merge(lookup_table.border_pair.friendly_island_id, lookup_table.border_pair.target_island_id)
+            goodLookupTables.append(lookup_table)
+
+        subsets = forest.subsets()
+        groupIdx = 0
+        groupLookup: dict[int, int] = {}
+        for subset in subsets:
+            logbook.info(f"Group {groupIdx}: {subset}")
+            for i in subset:
+                groupLookup[i] = groupIdx
+            groupIdx += 1
+
+        for lookup_table in sorted(goodLookupTables, key=lambda t: groupLookup[t.border_pair.friendly_island_id]):
+            group_idx = groupLookup[lookup_table.border_pair.friendly_island_id]
+            if self.log_debug:
+                logbook.info(f"MKCP group {group_idx}: border pair {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id} "
+                             f"with {len(lookup_table.enriched_capture_entries)} entries. Group {group_idx} has {len(subsets[group_idx])} lookup tables.")
 
             for enriched in lookup_table.enriched_capture_entries:
-                weight = enriched.combined_turn_cost
-                value = enriched.capture_entry.econ_value
-                if weight > turn_budget:
-                    continue
+                items.append(enriched)
+                groups.append(group_idx)
+                weights.append(enriched.combined_turn_cost)
+                values.append(int(1000 * enriched.capture_entry.econ_value))
+                if self.log_debug:
+                    logbook.info(f"  MKCP item: group={group_idx} weight={enriched.combined_turn_cost} "
+                                 f"value={int(1000 * enriched.capture_entry.econ_value)} "
+                                 f"(gather={enriched.gather_entry.turns}, capture={enriched.capture_entry.turns})")
 
-                for w in range(turn_budget, weight - 1, -1):
-                    prev = dp_value[w - weight]
-                    if prev == NEG_INF:
-                        continue
-                    candidate = prev + value
-                    if candidate > new_dp_value[w]:
-                        new_dp_value[w] = candidate
-                        new_dp_items[w] = dp_items[w - weight] + [(lookup_table, enriched)]
 
-            dp_value = new_dp_value
-            dp_items = new_dp_items
+        if not items:
+            return {}
 
-        # Pick the best non-negative weight
-        best_w = 0
-        best_v = 0.0
-        for w in range(turn_budget + 1):
-            v = dp_value[w]
-            if v > best_v:
-                best_v = v
-                best_w = w
-
-        chosen: list[tuple[FlowArmyTurnsLookupTable, EnrichedFlowTurnsEntry]] = dp_items[best_w]
+        max_value, chosen_items = KnapsackUtils.solve_multiple_choice_knapsack(
+            items, turn_budget, weights, values, groups, noLog=not self.log_debug, longRuntimeThreshold=10.0
+        )
 
         if self.log_debug:
-            logbook.info(f"Grouped knapsack: budget={turn_budget}, best_weight={best_w}, best_value={best_v:.3f}, "
-                         f"chosen_groups={len(chosen)}")
+            total_weight = sum(it.combined_turn_cost for it in chosen_items)
+            logbook.info(f"Grouped knapsack: budget={turn_budget}, best_weight={total_weight}, best_value={max_value}, "
+                         f"chosen_groups={len(chosen_items)}")
 
         # Build solution dict keyed by border_pair for easy lookup
+        # Use object identity (is) not equality (==) because EnrichedFlowTurnsEntry is a dataclass
+        # and two entries from different border pairs could have the same field values
         solution: dict[FlowBorderPairKey, EnrichedFlowTurnsEntry] = {}
-        for (tbl, enriched) in chosen:
-            solution[tbl.border_pair] = enriched
+        for enriched in chosen_items:
+            # Find the lookup table this enriched entry belongs to using identity check
+            found = False
+            for lookup_table in lookup_tables:
+                if any(enriched is e for e in lookup_table.enriched_capture_entries):
+                    solution[lookup_table.border_pair] = enriched
+                    if self.log_debug:
+                        logbook.info(f"Grouped knapsack solution: {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id} "
+                                     f"(gather={enriched.gather_entry.turns}, capture={enriched.capture_entry.turns}, "
+                                     f"weight={enriched.combined_turn_cost}, value={enriched.capture_entry.econ_value:.2f})")
+                    found = True
+                    break
+            if not found and self.log_debug:
+                logbook.info(f"Grouped knapsack WARNING: chosen item not found in any lookup table! "
+                             f"(gather={enriched.gather_entry.turns}, capture={enriched.capture_entry.turns})")
 
         return solution
 

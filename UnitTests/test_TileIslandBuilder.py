@@ -1592,7 +1592,707 @@ a1
                 f'owned tile {tile} (player={tile.player}) has no island after update'
             )
 
+    def test_shouldnt_have_stale_by_unique_id_after_update_with_mixed_captures_and_army_increments(self):
+        """
+        Regression test for the production AssertionError at turn 746.
+
+        The production update_tile_islands call had 7 changed tiles in ONE call:
+        two ownership changes (captures) PLUS three army increments on nearby tiles,
+        PLUS two army decrements from the tiles the players moved off of.
+        The combination produced 164 impacted leaf islands, which triggered the bug where
+        the refreshIslands pass re-inserted dead parent full-island objects into
+        tile_islands_by_unique_id without adding them back to all_tile_islands.
+
+        All 7 changes applied in a single update call (from the production log):
+          - 16,9  pl=0  army 3→1   (player 0 moved off, army decrease)
+          - 16,10 pl=0(was 1) army 1  (player 0 captures player 1's tile)
+          - 3,13  pl=1  army 6→7   (per-turn army increment)
+          - 11,13 pl=1(was 0) army 2  (player 1 captures player 0's tile)
+          - 11,14 pl=1  army 4→1   (player 1 moved off, army decrease)
+          - 2,15  pl=1  army 8→9   (per-turn army increment)
+          - 12,19 pl=0  army 8→9   (per-turn army increment)
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Apply all 7 changes from the production log in one shot
+        tile_16_9 = map.GetTile(16, 9)
+        tile_16_10 = map.GetTile(16, 10)
+        tile_3_13 = map.GetTile(3, 13)
+        tile_11_13 = map.GetTile(11, 13)
+        tile_11_14 = map.GetTile(11, 14)
+        tile_2_15 = map.GetTile(2, 15)
+        tile_12_19 = map.GetTile(12, 19)
+
+        self.assertEqual(enemyGeneral.player, tile_16_9.player, 'fixture: 16,9 should be player 0 before move')
+        self.assertEqual(general.player, tile_16_10.player, 'fixture: 16,10 should be player 1 before move')
+        self.assertEqual(enemyGeneral.player, tile_11_13.player, 'fixture: 11,13 should be player 0 before move')
+        self.assertEqual(general.player, tile_11_14.player, 'fixture: 11,14 should be player 1 before move')
+
+        self.mark_tile_army_incremented(tile_16_9, -2)          # army 3 -> 1 (moved off)
+        self.mark_tile_captured(tile_16_10, enemyGeneral.player, 1)  # player 0 captures
+        self.mark_tile_army_incremented(tile_3_13, 1)           # army 6 -> 7 (per-turn increment)
+        self.mark_tile_captured(tile_11_13, general.player, 2)  # player 1 captures
+        self.mark_tile_army_incremented(tile_11_14, -3)         # army 4 -> 1 (moved off)
+        self.mark_tile_army_incremented(tile_2_15, 1)           # army 8 -> 9 (per-turn increment)
+        self.mark_tile_army_incremented(tile_12_19, 1)          # army 8 -> 9 (per-turn increment)
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+
+    def test_army_increment_does_not_replace_solo_friendly_island(self):
+        """
+        When the general (or a city) increments army, the solo-tile friendly island containing
+        that tile must NOT be replaced with a new island object.  Solo-tile islands can never
+        change shape, so update_tile_islands must update sum_army in-place and return the same
+        Python object rather than tearing down and recreating.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Snapshot every friendly solo-tile island (the general, cities, and single-tile land pockets)
+        soloFriendlyIslandsByTileIndex = {
+            tile.tile_index: builder.tile_island_lookup.raw[tile.tile_index]
+            for tile in map.tiles_by_index
+            if not tile.isObstacle
+            and tile.player == general.player
+            and builder.tile_island_lookup.raw[tile.tile_index] is not None
+            and builder.tile_island_lookup.raw[tile.tile_index].tile_count == 1
+        }
+        self.assertGreater(len(soloFriendlyIslandsByTileIndex), 0, 'fixture must have at least one solo friendly island')
+
+        # Increment army on the general (simulates a normal every-other-turn army tick)
+        self.mark_tile_army_incremented(general, 1)
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoLookupMismatches(builder)
+
+        for tileIndex, islandBefore in soloFriendlyIslandsByTileIndex.items():
+            islandAfter = builder.tile_island_lookup.raw[tileIndex]
+            self.assertIs(
+                islandBefore,
+                islandAfter,
+                f'Solo friendly island at tile_index={tileIndex} must not be replaced on army increment '
+                f'(before={islandBefore.unique_id}, after={islandAfter.unique_id if islandAfter else None})'
+            )
+
+    def test_army_increment_does_not_replace_enemy_islands(self):
+        """
+        Enemy islands must never be replaced on an army-only change, regardless of their size.
+        We do not apply GroupByArmy splitting to enemy land, so army changes cannot make an
+        enemy island's shape invalid.  update_tile_islands must update sum_army in-place.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        enemyTeam = map.team_ids_by_player_index[enemyGeneral.player]
+        enemyIslandsBefore = {
+            tile.tile_index: builder.tile_island_lookup.raw[tile.tile_index]
+            for tile in map.tiles_by_index
+            if not tile.isObstacle
+            and tile.player == enemyGeneral.player
+            and builder.tile_island_lookup.raw[tile.tile_index] is not None
+        }
+        self.assertGreater(len(enemyIslandsBefore), 0, 'fixture must have enemy tiles')
+
+        # Increment army on the enemy general
+        self.mark_tile_army_incremented(enemyGeneral, 1)
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoLookupMismatches(builder)
+
+        for tileIndex, islandBefore in enemyIslandsBefore.items():
+            islandAfter = builder.tile_island_lookup.raw[tileIndex]
+            self.assertIs(
+                islandBefore,
+                islandAfter,
+                f'Enemy island at tile_index={tileIndex} must not be replaced on army increment '
+                f'(before={islandBefore.unique_id}, after={islandAfter.unique_id if islandAfter else None})'
+            )
+
+    def test_per_turn_army_increments_do_not_replace_any_island(self):
+        """
+        On a normal army-increment turn (every other turn, all general/city tiles gain +1),
+        NO island object of any team should be replaced. All army updates must be applied
+        in-place without any island teardown or recreation.
+
+        This tests the full set of typical army increments including the general, enemy general,
+        and any cities — all solo-tile or same-army-value islands that need no shape change.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        snapshotBefore = self._snapshot_all_island_objects(builder)
+
+        # Simulate an army-increment turn: every general and city tile gains +1
+        for tile in map.tiles_by_index:
+            if tile.isGeneral or tile.isCity:
+                if tile.player >= 0:
+                    self.mark_tile_army_incremented(tile, 1)
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoFullIslandCycles(builder)
+
+        # No island should have been replaced — all army updates are in-place
+        for tileIndex, islandBefore in snapshotBefore.items():
+            islandAfter = builder.tile_island_lookup.raw[tileIndex]
+            tile = map.tiles_by_index[tileIndex]
+            self.assertIs(
+                islandBefore,
+                islandAfter,
+                f'Island at {tile} must not be replaced on a pure army-increment turn '
+                f'(before={islandBefore.unique_id}, after={islandAfter.unique_id if islandAfter else None})'
+            )
+
+    def test_simhost__army_increment_turn_zero_island_replacements(self):
+        """
+        Over multiple turns where both players pass (only army-increment ticks fire),
+        update_tile_islands must produce zero dropped and zero net-new islands every turn.
+        All army updates must be applied in-place — no island object should ever be replaced.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        snapshotBefore: typing.Dict[int, TileIsland] = {}
+
+        def before_turn():
+            snapshotBefore.clear()
+            snapshotBefore.update(self._snapshot_all_island_objects(bot.tileIslandBuilder))
+
+        def after_turn():
+            changed = self._tiles_changed_this_turn(playerMap)
+            if not changed:
+                return
+            # On a pure army-increment turn all changed tiles must be general/city tiles.
+            # None of those should trigger a full island teardown.
+            replacements = [
+                tileIndex for tileIndex, islandBefore in snapshotBefore.items()
+                if bot.tileIslandBuilder.tile_island_lookup.raw[tileIndex] is not None
+                and bot.tileIslandBuilder.tile_island_lookup.raw[tileIndex] is not islandBefore
+            ]
+            if replacements:
+                tiles = [str(playerMap.tiles_by_index[i]) for i in replacements[:10]]
+                self.fail(
+                    f'Turn {playerMap.turn}: {len(replacements)} island(s) replaced on army-increment turn '
+                    f'(changed tiles={len(changed)}): {tiles}'
+                )
+            self.assertAllIslandsContiguous(bot.tileIslandBuilder, debugMode)
+            self.assertNoZombieIslands(bot.tileIslandBuilder)
+            self.assertNoBorderIslandsStale(bot.tileIslandBuilder)
+            self.assertNoLookupMismatches(bot.tileIslandBuilder)
+
+        simHost.run_between_turns(before_turn)
+        simHost.run_between_turns(after_turn)
+
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None')
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=12)
+
+    def test_sibling_teardown_rebuild_reuses_prior_island_objects(self):
+        """
+        Regression test for the mass island-ID churn caused by _break_apart_island_if_too_large
+        always creating new TileIsland objects.
+
+        When an army-only change forces all siblings of a large parent island to be torn down
+        and rebuilt with an identical tile/army topology, every resulting child island must be
+        the SAME object as the prior child (i.e., same unique_id, same Python identity) rather
+        than a brand-new island.  The fix passes priorLeafIslands into
+        _break_apart_island_if_too_large so it can match each broken piece against the
+        corresponding prior child.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Find a multi-tile island with siblings under a large parent to give the prior-matching
+        # fix something to exercise.  Any army-only increment on a tile whose island has siblings
+        # (full_island is not None) will trigger the parent teardown → sibling rebuild path.
+        targetTile = None
+        targetIslandBefore = None
+        siblingsBefore: typing.List[TileIsland] = []
+        for island in builder.all_tile_islands:
+            if island.full_island is not None and island.full_island.child_islands and len(island.full_island.child_islands) >= 3:
+                targetTile = next(iter(island.tile_set))
+                targetIslandBefore = island
+                siblingsBefore = list(island.full_island.child_islands)
+                break
+
+        if targetTile is None:
+            # Fallback: any owned tile whose island exists is sufficient to exercise the path
+            for t in map.tiles_by_index:
+                if t.player >= 0 and not t.isObstacle:
+                    isl = builder.tile_island_lookup.raw[t.tile_index]
+                    if isl is not None:
+                        targetTile = t
+                        targetIslandBefore = isl
+                        siblingsBefore = [isl]
+                        break
+
+        self.assertIsNotNone(targetTile, 'Need at least one owned tile to test')
+
+        snapshotBefore = self._snapshot_all_island_objects(builder)
+        self.mark_tile_army_incremented(targetTile, 1)
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoFullIslandCycles(builder)
+
+        # No island outside the changed tile's direct neighbourhood should be replaced.
+        # (The changed tile and all tiles in its island are in scope; their siblings may
+        # also be in scope due to the full-parent teardown, but none outside that family.)
+        allowedRebuildIndices: typing.Set[int] = {targetTile.tile_index}
+        for t in targetIslandBefore.tile_set:
+            allowedRebuildIndices.add(t.tile_index)
+        if targetIslandBefore.full_island is not None and targetIslandBefore.full_island.child_islands:
+            for sib in targetIslandBefore.full_island.child_islands:
+                for t in sib.tile_set:
+                    allowedRebuildIndices.add(t.tile_index)
+        self.assertOnlyExpectedIslandsRebuilt(snapshotBefore, builder, allowedRebuildIndices)
+
+    def test_intra_island_army_move_does_not_rebuild_island(self):
+        """
+        When army moves between two tiles that both belong to the same island (intra-island
+        move), update_tile_islands must not tear down and rebuild that island — the island
+        object must be the exact same Python object before and after the update, only
+        sum_army and tiles_by_army should be refreshed.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Find a multi-tile island so we can move army between two tiles within it.
+        tileFrom = None
+        tileTo = None
+        islandUnderTest = None
+        for island in builder.all_tile_islands:
+            if island.tile_count >= 2 and island.team != -1:
+                tiles = list(island.tile_set)
+                tileFrom = tiles[0]
+                tileTo = tiles[1]
+                islandUnderTest = island
+                break
+
+        self.assertIsNotNone(islandUnderTest, 'Need a multi-tile owned island to test intra-island move')
+
+        islandObjectBefore = builder.tile_island_lookup.raw[tileFrom.tile_index]
+        sumArmyBefore = islandUnderTest.sum_army
+
+        # Simulate: tileFrom loses moveAmount army (moves), tileTo gains moveAmount army (receives move)
+        moveAmount = min(5, tileFrom.army - 1)
+        self.mark_tile_army_incremented(tileFrom, -moveAmount)
+        self.mark_tile_army_incremented(tileTo, moveAmount)
+        # Wire up fromTile/toTile so the optimization can detect the move pair
+        tileFrom.delta.toTile = tileTo
+        tileTo.delta.fromTile = tileFrom
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        islandObjectAfter = builder.tile_island_lookup.raw[tileFrom.tile_index]
+        self.assertIs(
+            islandObjectBefore,
+            islandObjectAfter,
+            f'Intra-island army move must NOT replace the island object — '
+            f'same object expected before ({islandObjectBefore.unique_id}) and after ({islandObjectAfter.unique_id if islandObjectAfter else None})'
+        )
+        # Intra-island move: army redistribution within the same island leaves total sum_army unchanged
+        self.assertEqual(sumArmyBefore, islandObjectAfter.sum_army, 'sum_army must be unchanged after intra-island army redistribution')
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+
+    def test_inter_island_army_move_only_updates_sum_army(self):
+        """
+        When army moves from one island to an adjacent island of the same team (inter-island
+        move, no ownership change), update_tile_islands must not tear down either island.
+        Both island objects must be the exact same Python objects before and after.
+        Only sum_army should be updated on each island.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Find two adjacent tiles in different islands of the same team for inter-island move.
+        tileFrom = None
+        tileTo = None
+        islandFrom = None
+        islandTo = None
+        for island in builder.all_tile_islands:
+            if island.team == -1:
+                continue
+            for tile in island.tile_set:
+                for adj in tile.movable:
+                    if adj.isObstacle or adj.player != tile.player:
+                        continue
+                    adjIsland = builder.tile_island_lookup.raw[adj.tile_index]
+                    if adjIsland is not None and adjIsland is not island:
+                        tileFrom = tile
+                        tileTo = adj
+                        islandFrom = island
+                        islandTo = adjIsland
+                        break
+                if tileFrom is not None:
+                    break
+            if tileFrom is not None:
+                break
+
+        self.assertIsNotNone(tileFrom, 'Need two adjacent same-team tiles in different islands')
+
+        islandFromBefore = builder.tile_island_lookup.raw[tileFrom.tile_index]
+        islandToBefore = builder.tile_island_lookup.raw[tileTo.tile_index]
+        sumArmyFromBefore = islandFrom.sum_army
+        sumArmyToBefore = islandTo.sum_army
+
+        moveAmount = min(5, tileFrom.army - 1)
+        self.mark_tile_army_incremented(tileFrom, -moveAmount)
+        self.mark_tile_army_incremented(tileTo, moveAmount)
+        tileFrom.delta.toTile = tileTo
+        tileTo.delta.fromTile = tileFrom
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        islandFromAfter = builder.tile_island_lookup.raw[tileFrom.tile_index]
+        islandToAfter = builder.tile_island_lookup.raw[tileTo.tile_index]
+
+        self.assertIs(
+            islandFromBefore,
+            islandFromAfter,
+            f'Source island object must not be replaced for inter-island army move '
+            f'(was {islandFromBefore.unique_id}, now {islandFromAfter.unique_id if islandFromAfter else None})'
+        )
+        self.assertIs(
+            islandToBefore,
+            islandToAfter,
+            f'Destination island object must not be replaced for inter-island army move '
+            f'(was {islandToBefore.unique_id}, now {islandToAfter.unique_id if islandToAfter else None})'
+        )
+        self.assertEqual(
+            sumArmyFromBefore - moveAmount,
+            islandFromAfter.sum_army,
+            'Source island sum_army must decrease by move amount'
+        )
+        self.assertEqual(
+            sumArmyToBefore + moveAmount,
+            islandToAfter.sum_army,
+            'Destination island sum_army must increase by move amount'
+        )
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+
     # -----------------------------------------------------------------------
+    def test_capturing_solo_tile_enemy_island_does_not_rebuild_sibling_enemy_islands(self):
+        """
+        When a solo-tile enemy island is captured (it leaves the enemy team), only that
+        island's object is torn down.  All other enemy solo-tile islands — including those
+        that share the same full_island parent — must keep the exact same island objects.
+
+        This is the core regression guard for the optimization that avoids calling
+        _get_leaf_islands_for_island on a solo capture, which would drag in every sibling
+        under the same full_island parent.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Find an enemy solo-tile island that borders a friendly tile (capturable)
+        capturedTile = next(
+            (
+                t for t in map.tiles_by_index
+                if t.player == enemyGeneral.player
+                and not t.isCity and not t.isGeneral
+                and builder.tile_island_lookup.raw[t.tile_index] is not None
+                and builder.tile_island_lookup.raw[t.tile_index].tile_count == 1
+                and any(adj.player == general.player for adj in t.movable)
+            ),
+            None,
+        )
+        self.assertIsNotNone(capturedTile, 'fixture must have a capturable solo-tile enemy island')
+
+        capturedIslandBefore = builder.tile_island_lookup.raw[capturedTile.tile_index]
+        self.assertEqual(1, capturedIslandBefore.tile_count)
+
+        # Snapshot all OTHER enemy islands (i.e. not the captured tile)
+        otherEnemyIslandsBefore = {
+            t.tile_index: builder.tile_island_lookup.raw[t.tile_index]
+            for t in map.tiles_by_index
+            if not t.isObstacle
+            and t.player == enemyGeneral.player
+            and t.tile_index != capturedTile.tile_index
+            and builder.tile_island_lookup.raw[t.tile_index] is not None
+        }
+        self.assertGreater(len(otherEnemyIslandsBefore), 0, 'fixture must have other enemy tiles')
+
+        self.mark_tile_captured(capturedTile, general.player, 1)
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoFullIslandCycles(builder)
+
+        for tileIndex, islandBefore in otherEnemyIslandsBefore.items():
+            islandAfter = builder.tile_island_lookup.raw[tileIndex]
+            tile = map.tiles_by_index[tileIndex]
+            # Only islands that are NOT adjacent to the captured tile are required to be identical.
+            if any(adj.tile_index == capturedTile.tile_index for adj in tile.movable):
+                continue
+            self.assertIs(
+                islandBefore,
+                islandAfter,
+                f'Non-adjacent enemy island at {tile} must not be replaced when a solo-tile '
+                f'enemy island is captured (before={islandBefore.unique_id}, '
+                f'after={islandAfter.unique_id if islandAfter else None})'
+            )
+
+    def test_capturing_solo_tile_enemy_island_updates_parent_full_island(self):
+        """
+        When a solo-tile enemy island that is a child of a full_island parent is captured,
+        the parent's tile_set and child_islands must be immediately updated so the parent
+        no longer references the removed tile. This guards against stale full_island state
+        that would cause debug_verify_all_islands to report 'extra tiles' errors.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Find an enemy solo-tile island whose leaf has a full_island parent (child of a big blob).
+        capturedTile = next(
+            (
+                t for t in map.tiles_by_index
+                if t.player == enemyGeneral.player
+                and not t.isCity and not t.isGeneral
+                and builder.tile_island_lookup.raw[t.tile_index] is not None
+                and builder.tile_island_lookup.raw[t.tile_index].tile_count == 1
+                and builder.tile_island_lookup.raw[t.tile_index].full_island is not None
+                and any(adj.player == general.player for adj in t.movable)
+            ),
+            None,
+        )
+        self.assertIsNotNone(capturedTile, 'fixture must have a capturable solo-tile enemy island with a full_island parent')
+
+        capturedIsland = builder.tile_island_lookup.raw[capturedTile.tile_index]
+        parentBefore = capturedIsland.full_island
+        siblingCountBefore = len(parentBefore.child_islands) if parentBefore.child_islands else 0
+
+        self.mark_tile_captured(capturedTile, general.player, 1)
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoFullIslandCycles(builder)
+
+        # The parent's tile_set must no longer contain the captured tile
+        if parentBefore.child_islands is not None:
+            self.assertNotIn(capturedTile, parentBefore.tile_set,
+                             'full_island parent must not still reference the captured tile')
+            self.assertNotIn(capturedIsland, parentBefore.child_islands,
+                             'full_island parent must remove the captured child from child_islands')
+            self.assertEqual(siblingCountBefore - 1, len(parentBefore.child_islands),
+                             'full_island parent child count must decrease by 1')
+
+    def test_capturing_friendly_solo_tile_does_not_rebuild_distant_friendly_islands(self):
+        """
+        When the bot captures a solo-tile enemy tile (it becomes friendly), only the
+        directly involved island and its immediate neighbours need to be rebuilt.
+        Friendly islands that are far from the capture should keep the same island objects.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+        builder = TileIslandBuilder(map)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        capturedTile = next(
+            (
+                t for t in map.tiles_by_index
+                if t.player == enemyGeneral.player
+                and not t.isCity and not t.isGeneral
+                and builder.tile_island_lookup.raw[t.tile_index] is not None
+                and builder.tile_island_lookup.raw[t.tile_index].tile_count == 1
+                and any(adj.player == general.player for adj in t.movable)
+            ),
+            None,
+        )
+        self.assertIsNotNone(capturedTile, 'fixture must have a capturable enemy tile')
+
+        adjacentTileIndices = {adj.tile_index for adj in capturedTile.movable if not adj.isObstacle}
+        adjacentTileIndices.add(capturedTile.tile_index)
+
+        snapshotBefore = self._snapshot_all_island_objects(builder)
+
+        self.mark_tile_captured(capturedTile, general.player, 1)
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertNoLookupMismatches(builder)
+
+        # Friendly islands more than 1 hop from the capture must be untouched
+        for tileIndex, islandBefore in snapshotBefore.items():
+            if tileIndex in adjacentTileIndices:
+                continue
+            tile = map.tiles_by_index[tileIndex]
+            if tile.player != general.player:
+                continue
+            islandAfter = builder.tile_island_lookup.raw[tileIndex]
+            self.assertIs(
+                islandBefore,
+                islandAfter,
+                f'Distant friendly island at {tile} must not be replaced when a remote enemy tile '
+                f'is captured (before={islandBefore.unique_id}, '
+                f'after={islandAfter.unique_id if islandAfter else None})'
+            )
+
+    def test_simhost__capture_does_not_mass_rebuild_enemy_islands(self):
+        """
+        When the bot captures one enemy tile per turn, none of the enemy islands that are
+        not adjacent to the captured tile should get new island objects. The old code would
+        call _get_leaf_islands_for_island on the captured solo-tile's full_island parent,
+        dragging in every sibling island for teardown. This test guards against that regression.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, allAfkExceptMapPlayer=True, botInitOnly=True)
+        simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
+        simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
+
+        bot = simHost.get_bot(general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        snapshotBefore: typing.Dict[int, TileIsland] = {}
+
+        def before_turn():
+            snapshotBefore.clear()
+            snapshotBefore.update(self._snapshot_all_island_objects(bot.tileIslandBuilder))
+
+        def after_turn():
+            changed = self._tiles_changed_this_turn(playerMap)
+            if not changed:
+                return
+            changedAndAdjacent = changed | self._tiles_adjacent_to_set(changed, playerMap)
+            # Also include all tiles of any island that contained a changed tile
+            allowedRebuildIndices: typing.Set[int] = set(changedAndAdjacent)
+            for idx in changed:
+                isl = snapshotBefore.get(idx)
+                if isl is not None:
+                    for t in isl.tile_set:
+                        allowedRebuildIndices.add(t.tile_index)
+
+            enemyTeam = bot.tileIslandBuilder.teams[enemyGeneral.player]
+            spurious = [
+                tileIndex for tileIndex, islandBefore in snapshotBefore.items()
+                if tileIndex not in allowedRebuildIndices
+                and islandBefore.team == enemyTeam
+                and bot.tileIslandBuilder.tile_island_lookup.raw[tileIndex] is not None
+                and bot.tileIslandBuilder.tile_island_lookup.raw[tileIndex] is not islandBefore
+            ]
+            if spurious:
+                tiles = [str(playerMap.tiles_by_index[i]) for i in spurious[:10]]
+                self.fail(
+                    f'Turn {playerMap.turn}: {len(spurious)} non-adjacent enemy island(s) replaced '
+                    f'(changed={len(changed)} tiles): {tiles}'
+                )
+            self.assertAllIslandsContiguous(bot.tileIslandBuilder, debugMode)
+            self.assertNoZombieIslands(bot.tileIslandBuilder)
+            self.assertNoBorderIslandsStale(bot.tileIslandBuilder)
+            self.assertNoLookupMismatches(bot.tileIslandBuilder)
+
+        simHost.run_between_turns(before_turn)
+        simHost.run_between_turns(after_turn)
+
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=16)
+
     # simHost-based tests: run real bot turns and assert island rebuild scope
     # -----------------------------------------------------------------------
 

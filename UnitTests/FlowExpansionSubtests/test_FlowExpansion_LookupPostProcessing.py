@@ -1095,7 +1095,7 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         expander.log_debug = False
         expander.get_expansion_options(
             builder, general.player, enemyGeneral.player, turns=50,
-            boardAnalysis=None, territoryMap=None, negativeTiles=None
+            boardAnalysis=None, territoryMap=None, negativeTiles=None,
         )
         lookup_tables = expander.last_lookup_tables
 

@@ -1930,11 +1930,11 @@ class OpponentTracker(object):
         """
         stats = self.get_current_cycle_stats_by_player(player)
         if stats is None:
-            return 0, 0, 0
+            return 0, 0, 0, 0
 
         enScores = self.get_current_team_scores_by_player(player)
         if enScores is None:
-            return 0, 0, 0
+            return 0, 0, 0, 0
 
         # Fog army component: approximate fog army available
         fog_army_component = stats.approximate_fog_army_available_total

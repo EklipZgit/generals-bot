@@ -1,0 +1,36 @@
+1. If you make a change and it does not change or fix the issue after testing, revert that change before trying to make other changes.
+2. Prefer adding logging to be certain what an issue is rather than guessing. This is a very complex system and random changes can have a lot of cascading effects.
+3. You use the `python3.14` command, not `python` for anything you run in this project.
+4. You are using a PowerShell terminal, not bash.
+5. You run tests like this:
+    .\generals-bot\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target test_Expansion.ExpansionTests.test_shouldnt_create_broken_islands_after_captures
+    .\generals-bot\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --path D:\2019_reformat_Backup\generals-bot\UnitTests\FlowExpansionSubtests
+6. You should ask me (the prompter) questions clarifying any assumptions you are unsure about rather than going down the wrong path.
+7. When asked to fix something, you are expected to try to reproduce it with a test first if at all possible. You should have assertions that fail before fixing the bug and seeing the assertions pass.
+
+--- GetLogsForScopeByTurn.ps1 ---
+GetLogsForScopeByTurn.ps1 is a PowerShell script at the repo root that extracts per-turn log slices for a named scope from bot test output.
+Bot logs are structured with "~~~ Turn N ~~~" markers and "Beginning: <Scope>" / "Complete: (...) <Scope>" delimiters.
+The script accepts either piped pytest output or a -LogFilePath argument, and always appends any AssertionError/Traceback it finds after the scope block.
+The -ScopeName value must match the substring between "Beginning:" and the timing "(...)".
+
+IMPORTANT: simulation tests spawn background threads that keep stdout open, so PowerShell pipe (2>&1 |) will HANG forever waiting for the process to exit.
+The correct two-step pattern is:
+  Step 1 - capture raw output to file using cmd /c redirect (OS-level, not PowerShell pipe):
+    cmd /c ".\.venv\Scripts\python.exe -m pytest Tests/test_Expansion.py::ExpansionTests::test_my_test --tb=short -q -s > raw_test.txt 2>&1"
+  Step 2 - process the file through GetLogsForScopeByTurn.ps1:
+    Get-Content raw_test.txt | .\GetLogsForScopeByTurn.ps1 -ScopeName "TileIsland update" | Out-File -Encoding utf8 debug_output.txt
+  Step 3 - grep across all turns for specific log tokens:
+    Get-Content debug_output.txt | Select-String "BACKREF|BUILD_BORDERS|REGISTER_LOOKUP|AssertionError" | ForEach-Object { $_.Line }
+
+The test must have debugMode = False or the sim runs in real-time, taking 20+ seconds and potentially never exiting cleanly.
+Do NOT remove enable_search_time_limits_and_disable_debug_asserts() from the test - it suppresses unrelated debug asserts in other subsystems that would crash before you reach the bug under investigation. Instead, re-enable use_debug_asserts on the specific subsystem object after that call if needed.
+
+--- TileIslandBuilder / island debugging tips ---
+1. Island unique_id values are NOT stable between test runs unless MapBase.DO_NOT_RANDOMIZE = True is set in the test BEFORE map loading (before both load_map_and_generals and load_map_and_general calls). Always set this when diagnosing island bugs or the IDs in your log statements will shift every run.
+2. When adding diagnostic logging to TileIslandBuilder, guard on tile position (e.g. _DIAG_TILES = {(17,10),(17,11)}) rather than unique_id. Position is stable across runs; unique_id is not.
+3. There are THREE places tile_island_lookup is written: _register_leaf_island (line ~1077), _break_apart_island_if_too_large (line ~1425), and _build_island_from_tile (line ~1339). When tracing a stale lookup, add a logbook.warning + traceback.format_stack(limit=6) at ALL three write sites guarded by a _DIAG_TILES check, not just one.
+4. The "confirmed=False" symptom in BACKREF means island.tile_set and neighbor.tile_set have no adjacent tile pair — most commonly caused by a stale tile_island_lookup entry pointing an unrelated island at a tile it no longer owns, causing _build_island_borders to skip the real neighbor (adjIsland is island → continue).
+5. When a new phantom island appears in border_islands, the first question is: what wrote tile_island_lookup for the boundary tile between the two islands incorrectly? Add REGISTER_LOOKUP tracing to find it before making any fix attempts.
+6. Full_island parents (island.child_islands is not None) must never be added to refreshIslands in update_tile_islands — they are aggregate containers and _build_island_borders must never be called on them during incremental updates.
+7. _update_island_state must NOT clear border_islands early — _build_island_borders uses the old border_islands for its pre-removal pass. Clearing early destroys the neighbor list needed for stale back-ref cleanup.

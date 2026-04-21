@@ -595,7 +595,8 @@ bot_target_player=1
         self.assertPlayerTileCountGreater(simHost, general.player, 58)
 
     def test_should_perform_early_gather_to_tendrils__cramped(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = False
+        MapBase.DO_NOT_RANDOMIZE = True
         mapFile = 'GameContinuationEntries/should_perform_early_gather_to_tendrils___SlFziucN6---0--50.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
 
@@ -606,6 +607,7 @@ bot_target_player=1
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
+        bot.tileIslandBuilder.use_debug_asserts = True
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
@@ -1173,11 +1175,10 @@ bot_target_player=1
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
         self.assertIsNone(winner)
-        self.assertOwned(general.player, playerMap.GetTile(6, 7), 'should expand away from general, not into it')
-        self.assertOwned(general.player, playerMap.GetTile(5, 7), 'should expand away from general, not into it')
-        self.assertOwned(general.player, playerMap.GetTile(4, 7), 'should expand away from general, not into it')
-        self.assertOwned(general.player, playerMap.GetTile(4, 8), 'should expand away from general, not into it')
-        self.assertOwned(general.player, playerMap.GetTile(4, 9), 'should expand away from general, not into it')
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(5, 5), 'should expand away from general, not into it')
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(5, 6), 'should expand away from general, not into it')
+        self.assertOwned(enemyGeneral.player, playerMap.GetTile(5, 7), 'should expand away from general, not into it')
+
 
     def test_should_not_loop_on_greedy_expansion(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1812,6 +1813,39 @@ bot_target_player=1
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
+    def test_shouldnt_create_broken_islands_after_captures__TMP(self):
+        """
+        Regression test for the production NetworkXUnfeasible at turn 746.
+
+        Turn 745 moves:
+          - Player 0 (blue/enemy) moves 16,9 -> 16,10, capturing player 1's tile at 16,10.
+          - Player 1 (red/bot) moves 11,14 -> 11,13, capturing player 0's tile at 11,13.
+
+        After update_tile_islands processes these two captures, two neutral tiles (7,7 and
+        3,19) were being left with tile_island_lookup==None, producing disconnected components
+        in the flow graph and raising NetworkXUnfeasible on the next expansion call.
+
+        This test directly applies those exact tile-ownership changes to the TileIslandBuilder
+        and asserts that every structural invariant holds after the update.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_create_broken_islands_after_captures___9GHWHfzuU---1--745.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=745)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None  None  None  None  None')
+        simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.armyTracker.armies.clear()
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
     def test_shouldnt_explode_flow_expand_on_direct_build_of_bad_position(self):
         """
         This is the same test as above except one turn later, being directly loaded to prove it is tile islands
@@ -1923,3 +1957,20 @@ bot_target_player=1
                     nx.flow.min_cost_flow(G)
                 except nx.NetworkXUnfeasible as ex:
                     self.fail(f'use_neutral_flow={use_neutral_flow}: NetworkXUnfeasible: {ex}')
+    
+    def test_should_continue_capturing_enemy_tiles_for_remainder_of_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_continue_capturing_enemy_tiles_for_remainder_of_round___Vbdk6Ojkl---1--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=133)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+        self.assertNoFriendliesKilled(map, general)

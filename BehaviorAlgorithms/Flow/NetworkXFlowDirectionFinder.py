@@ -142,6 +142,14 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         targetGeneralIsland = islands.tile_island_lookup.raw[self.enemy_general.tile_index]
         frGeneralIsland = islands.tile_island_lookup.raw[self.friendly_general.tile_index]
 
+        # DIAGNOSTIC: Check island 190 set membership
+        DIAG_ISLAND_190_CHECK = 190 in ourSet or 190 in targetSet
+        if DIAG_ISLAND_190_CHECK:
+            logbook.info(f'DIAG_190_SETS: ourSet contains 190 = {190 in ourSet}, targetSet contains 190 = {190 in targetSet}')
+            isl190 = islands.tile_islands_by_unique_id.get(190)
+            if isl190:
+                logbook.info(f'DIAG_190_SETS: island 190 team={isl190.team}, myTeam={myTeam}, target_team={self.target_team}')
+
         cumulativeDemand, demands, friendlyArmySupply, enemyArmyDemand, enemyGeneralDemand = self._determine_initial_demands_and_split_input_output_nodes(graph, islands, ourSet, targetSet, use_neutral_flow)
 
         neutSinks = set()
@@ -154,6 +162,8 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         def foreachFunc(t: 'Tile', dist: int) -> bool:
             island = islands.tile_island_lookup.raw[t.tile_index]
             if island is None:
+                if t.isCity and t.player == -1:
+                    return True
                 logbook.info(f'TILE {t} WAS NONE ISLAND IN FOREACH???')
                 return True
             if island.team == myTeam:
@@ -171,6 +181,8 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             maxDepth=3,
             foreachFunc=foreachFunc)
 
+        DIAG_ISLAND_190 = 190  # Island at (9,11) with 51 armies
+
         for island in islands.all_tile_islands:
             sourceCapacity = 100000
             isIslandNeut = island.team == -1
@@ -184,6 +196,13 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                     bordersFr = True
             areAllBordersNeut = not bordersFr and not bordersEn
 
+            # DIAGNOSTIC: Log island 190's border analysis
+            if island.unique_id == DIAG_ISLAND_190:
+                logbook.info(f'DIAG_190: island={island}, team={island.team}, bordersFr={bordersFr}, bordersEn={bordersEn}, areAllBordersNeut={areAllBordersNeut}')
+                logbook.info(f'DIAG_190: border_islands count={len(island.border_islands)}')
+                for bi in island.border_islands:
+                    logbook.info(f'DIAG_190:   border_island {bi} team={bi.team} at {bi.tile_set}')
+
             weight = 1
 
             for movableIsland in island.border_islands:
@@ -191,15 +210,14 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                 if self.log_debug:
                     logbook.info(f'For edge from {island} to {movableIsland} capacities were src {sourceCapacity}, dest {destCapacity}')
                 edgeCapacity = max(sourceCapacity, destCapacity)
+                # DIAGNOSTIC: Log edge creation for island 190
+                if island.unique_id == DIAG_ISLAND_190:
+                    logbook.info(f'DIAG_190_EDGE: Creating edge from {-island.unique_id} to {movableIsland.unique_id} (movableIsland={movableIsland}), weight={weight}, capacity={edgeCapacity}')
                 graph.add_edge(-island.unique_id, movableIsland.unique_id, weight=weight, capacity=edgeCapacity)
 
             sinkEnemyGeneral: bool
             if use_neutral_flow:
-                ## GPT REPLACED:                sinkEnemyGeneral = areAllBordersNeut and island.unique_id not in capacityLookup
-                ## WITH isIslandNeut and GPT commented:
-                # Every neutral island has demand assigned in _determine_initial_demands_and_split_input_output_nodes,
-                # so every neutral island must have a fakeNode drain edge or the graph is infeasible.
-                sinkEnemyGeneral = isIslandNeut
+                sinkEnemyGeneral = areAllBordersNeut and island.unique_id not in capacityLookup
             else:
                 sinkEnemyGeneral = isIslandNeut and not bordersBothPlayers
             if sinkEnemyGeneral:
@@ -328,6 +346,7 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         enemyArmyDemand = 0
         enemyGeneralDemand = 0
         targetGeneralIsland = islands.tile_island_lookup.raw[self.enemy_general.tile_index]
+        DIAG_ISLAND_190 = 190  # Island at (9,11) with 51 armies
         for island in islands.all_tile_islands:
             cost = island.tile_count - 1
             inAttrs = {}
@@ -349,6 +368,15 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                 cost *= 2
 
             demands[island.unique_id] = demand
+
+            # DIAGNOSTIC: Log demand calculation for island 190
+            if island.unique_id == DIAG_ISLAND_190:
+                inOurSet = island.unique_id in ourSet
+                inTargetSet = island.unique_id in targetSet
+                logbook.info(f'DIAG_190_DEMAND: island={island}, sum_army={island.sum_army}, tile_count={island.tile_count}')
+                logbook.info(f'DIAG_190_DEMAND: initial_demand={island.tile_count - island.sum_army}, final_demand={demand}')
+                logbook.info(f'DIAG_190_DEMAND: inOurSet={inOurSet}, inTargetSet={inTargetSet}, team={island.team}')
+                logbook.info(f'DIAG_190_DEMAND: inAttrs={repr(inAttrs)}, cost={cost}')
 
             if self.log_debug:
                 logbook.info(f'node {island.unique_id}: {repr(inAttrs)}')

@@ -14,4 +14,7 @@
     <option name="format" value="EPYTEXT" />
     <option name="myDocStringFormat" value="Epytext" />
   </component>
+  <component name="TestRunnerService">
+    <option name="PROJECT_TEST_RUNNER" value="py.test" />
+  </component>
 </module>

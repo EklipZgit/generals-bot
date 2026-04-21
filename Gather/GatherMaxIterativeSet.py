@@ -1460,6 +1460,17 @@ def _reconnect_steiner_subprune(
         logbook.info(
             f'_reconnect_steiner_subprune: skipTiles={[str(t) for t in skipTiles] if skipTiles else None}'
         )
+        toReconnectInGraph = [t for t in toReconnectInGraph if t.tile_index in steinerGraph]
+    # Filter graph to only include nodes reachable from terminals (connected component)
+    # to avoid NetworkX KeyError on disconnected components
+    terminalIndices = [t.tile_index for t in toReconnectInGraph]
+    if terminalIndices:
+        reachableFromTerminals = set()
+        for idx in terminalIndices:
+            if idx in steinerGraph:
+                reachableFromTerminals.update(nx.single_source_shortest_path_length(steinerGraph, idx).keys())
+        if reachableFromTerminals:
+            steinerGraph = steinerGraph.subgraph(reachableFromTerminals).copy()
     reconnectedSubset = GatherSteiner.build_network_x_steiner_tree_from_arbitrary_nx_graph(map, steinerGraph, requiredTiles=toReconnectInGraph)
     reconnectionTiles = []
     gathVal = 0

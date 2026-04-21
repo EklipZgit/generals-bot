@@ -315,7 +315,7 @@ class BotPathingUtils:
             return
 
         nextMove = bot.curPath.get_first_move()
-        if (bot.last_move is None and nextMove is None) or (bot.curPath.start.next is not None and not BotRepetition.dropped_move(bot, bot.curPath.start.tile, bot.curPath.start.next.tile)):
+        if (bot.last_move is None and nextMove is None) or (bot.curPath.start is not None and bot.curPath.start.next is not None and not BotRepetition.dropped_move(bot, bot.curPath.start.tile, bot.curPath.start.next.tile)):
             popped = bot.curPath.pop_first_move()
             if bot.curPath.length <= 0:
                 logbook.info("TERMINATING CURPATH BECAUSE <= 0 ???? Path better be over")

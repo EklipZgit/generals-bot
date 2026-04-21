@@ -203,8 +203,8 @@ class TileIslandBuilder(object):
         self.force_territory_borders_to_single_tile_islands: bool = True
         """If True, any tile that borders a different teams territory will be a single-tile-island. Useful for algorithms that dont safely deal with skews along borders between islands."""
 
-        self.log_debug: bool = True
-        self.use_debug_asserts: bool = True
+        self.log_debug: bool = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
+        self.use_debug_asserts: bool = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
 
     def reset_for_rebuild(self):
         self.tile_island_lookup = MapMatrix(self.map, None)
@@ -323,11 +323,70 @@ class TileIslandBuilder(object):
         impactedLeafIslands: typing.Set[TileIsland] = set()
         noIslandChangedTiles: typing.Set[Tile] = set()
         affectedTeams: typing.Set[int] = set()
+        # Tiles whose army delta is fully handled by an intra/inter-island army move update
+        # (no teardown required — just sum_army already patched in-place).
+        armyMoveHandledTiles: typing.Set[Tile] = set()
+        # Islands whose army changed but whose shape is unchanged (updated in-place).
+        # They need a border refresh but no teardown.
+        armyOnlyRefreshIslands: typing.Set[TileIsland] = set()
 
         for tile in self.map.tiles_by_index:
             ownerChanged = tile.delta.oldOwner != tile.player
             armyChanged = tile.delta.oldArmy != tile.army
             if not ownerChanged and not armyChanged:
+                # Fast path: delta says nothing changed. But the lookup island may be stale
+                # if the tile was silently reverted by fog-of-war (e.g. fill_out_tiles on
+                # one turn sets player=0, fog resets it to -1 the next turn without a delta).
+                existingIsland = self.tile_island_lookup.raw[tile.tile_index]
+                if existingIsland is not None:
+                    existingTeam = existingIsland.team if existingIsland.full_island is None else existingIsland.full_island.team
+                    if existingTeam != self.teams[tile.player]:
+                        ownerChanged = True
+                    else:
+                        continue
+                else:
+                    continue
+
+            existingIsland = self.tile_island_lookup.raw[tile.tile_index]
+            if existingIsland is not None:
+                existingTeam = existingIsland.team if existingIsland.full_island is None else existingIsland.full_island.team
+                if existingTeam != -1 and not ownerChanged and tile not in armyMoveHandledTiles:
+                    # Army-only change on an owned tile. Check if this is a pure army move
+                    # (army shifted between tiles of the same player) that needs no teardown.
+                    pairedTile: Tile | None = tile.delta.fromTile if tile.delta.fromTile is not None else tile.delta.toTile
+                    if pairedTile is not None and pairedTile.player == tile.player:
+                        pairedIsland = self.tile_island_lookup.raw[pairedTile.tile_index]
+                        if pairedIsland is not None:
+                            if pairedIsland is existingIsland:
+                                # Intra-island move: army moved within the same island.
+                                # sum_army and tile topology are unchanged — nothing to rebuild.
+                                armyMoveHandledTiles.add(tile)
+                                armyMoveHandledTiles.add(pairedTile)
+                                newArmy = sum(t.army for t in existingIsland.tile_set)
+                                if self.use_debug_asserts and newArmy != sum(t.army for t in existingIsland.tile_set):
+                                    logbook.warning(f'INTRA sum_army update tile={tile} paired={pairedTile} island={existingIsland} old={existingIsland.sum_army} new={newArmy} tiles={[(str(t), t.army) for t in existingIsland.tile_set]}')
+                                existingIsland.sum_army = newArmy
+                                existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
+                                existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
+                                continue
+                            elif pairedIsland.team == existingIsland.team:
+                                # Inter-island move: army moved between two islands of the same team.
+                                # Tile topology is unchanged; only sum_army needs updating on both islands.
+                                armyMoveHandledTiles.add(tile)
+                                armyMoveHandledTiles.add(pairedTile)
+                                newExistArmy = sum(t.army for t in existingIsland.tile_set)
+                                newPairedArmy = sum(t.army for t in pairedIsland.tile_set)
+                                if self.use_debug_asserts:
+                                    logbook.info(f'INTER sum_army update tile={tile} paired={pairedTile} existIsland={existingIsland} old={existingIsland.sum_army} new={newExistArmy} | pairedIsland={pairedIsland} old={pairedIsland.sum_army} new={newPairedArmy}')
+                                existingIsland.sum_army = newExistArmy
+                                existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
+                                existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
+                                pairedIsland.sum_army = newPairedArmy
+                                pairedIsland.tiles_by_army = sorted(pairedIsland.tile_set, key=lambda t: t.army, reverse=True)
+                                pairedIsland.sum_army_all_adjacent_friendly = max(pairedIsland.sum_army_all_adjacent_friendly, pairedIsland.sum_army)
+                                continue
+
+            if tile in armyMoveHandledTiles:
                 continue
 
             changedTiles.append(tile)
@@ -338,7 +397,6 @@ class TileIslandBuilder(object):
                 changedArmyTiles.add(tile)
             affectedTeams.add(self.teams[tile.player])
 
-            existingIsland = self.tile_island_lookup.raw[tile.tile_index]
             if existingIsland is not None:
                 existingTeam = existingIsland.team if existingIsland.full_island is None else existingIsland.full_island.team
                 if existingTeam == -1:
@@ -354,9 +412,59 @@ class TileIslandBuilder(object):
                                 break
                     else:
                         impactedLeafIslands.add(existingIsland)
+                elif ownerChanged:
+                    # Ownership change: tile is leaving this island (and possibly joining another).
+                    # The component topology may split or merge, so all siblings must be rebuilt.
+                    # Exception: a solo-tile island has no shape to fix — it will simply be replaced
+                    # by the new owner's island for this tile, so it needs teardown only of itself
+                    # (not all siblings under the same full_island parent).
+                    if existingIsland.tile_count == 1:
+                        # Solo-tile island: only this island needs to be torn down; no siblings can be affected.
+                        impactedLeafIslands.add(existingIsland)
+                    else:
+                        impactedLeafIslands.update(self._get_leaf_islands_for_island(existingIsland))
                 else:
-                    # Owned island: ownership change may split the component, so all siblings must be rebuilt.
-                    impactedLeafIslands.update(self._get_leaf_islands_for_island(existingIsland))
+                    # Army-only change on an owned tile.
+                    # Islands only need to be torn down and rebuilt if their SHAPE must change:
+                    #   - Solo-tile islands: shape cannot change, update sum_army in-place.
+                    #   - Enemy islands (any size): we never GroupByArmy-split enemy land, so shape
+                    #     is unaffected by army changes; update sum_army in-place.
+                    #   - Friendly multi-tile GroupByArmy island: the island is valid as long as every
+                    #     tile in it has the same army value.  If the changed tile now has a different
+                    #     army than its island-mates the island must be re-split; otherwise update in-place.
+                    needsTeardown = False
+                    if existingTeam == self.friendly_team and mode == IslandBuildMode.GroupByArmy:
+                        # Check whether the new army value is still consistent with island-mates.
+                        if existingIsland.tile_count > 1:
+                            needsTeardown = any(t.army != tile.army for t in existingIsland.tile_set if t is not tile)
+                        if not needsTeardown:
+                            # Also check whether the tile now matches an adjacent tile in a DIFFERENT
+                            # island — that would require a GroupByArmy merge (currently invalid state).
+                            for adj in tile.movable:
+                                if adj.isObstacle or adj.player != tile.player or adj.army != tile.army:
+                                    continue
+                                adjIsland = self.tile_island_lookup.raw[adj.tile_index]
+                                if adjIsland is not None and adjIsland is not existingIsland:
+                                    needsTeardown = True
+                                    break
+                    if needsTeardown:
+                        impactedLeafIslands.update(self._get_leaf_islands_for_island(existingIsland))
+                    else:
+                        # Shape is unchanged — patch army stats in-place and record for border refresh.
+                        newArmy = sum(t.army for t in existingIsland.tile_set)
+                        if self.use_debug_asserts:
+                            logbook.info(f'INPLACE sum_army update tile={tile} island={existingIsland} old={existingIsland.sum_army} new={newArmy}')
+                        existingIsland.sum_army = newArmy
+                        existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
+                        existingIsland.sum_army_all_adjacent_friendly = existingIsland.sum_army
+                        if existingIsland.full_island is not None:
+                            fullIsland = existingIsland.full_island
+                            newFullArmy = sum(child.sum_army for child in fullIsland.child_islands) if fullIsland.child_islands else existingIsland.sum_army
+                            fullIsland.sum_army = newFullArmy
+                            fullIsland.sum_army_all_adjacent_friendly = newFullArmy
+                            for child in (fullIsland.child_islands or []):
+                                child.sum_army_all_adjacent_friendly = newFullArmy
+                        armyOnlyRefreshIslands.add(existingIsland)
             else:
                 # Tile had no island (was outside reachable_tiles at recalculate time, e.g. undiscovered
                 # pocket tile). It still needs to be rebuilt — track it separately so it is included in
@@ -379,6 +487,28 @@ class TileIslandBuilder(object):
 
         for tile in changedTiles:
             if tile in changedOwnerTiles:
+                # Ownership change: any adjacent tile that is in a multi-tile island and that now
+                # borders a different team must be extracted as a solo tile (force_territory_borders).
+                if self.force_territory_borders_to_single_tile_islands:
+                    for adj in tile.movable:
+                        if adj.isObstacle or adj.player < 0:
+                            continue
+                        adjIsland = self.tile_island_lookup.raw[adj.tile_index]
+                        if adjIsland is None or adjIsland.tile_count <= 1:
+                            continue
+                        adjTeam = adjIsland.team if adjIsland.full_island is None else adjIsland.full_island.team
+                        if adjTeam == -1:
+                            continue
+                        # adj is in a multi-tile owned island. Re-check whether it must now be solo.
+                        if self.must_tile_be_solo(adj, adjTeam):
+                            impactedLeafIslands.update(self._get_leaf_islands_for_island(adjIsland))
+                            affectedTeams.add(adjTeam)
+                continue
+
+            # Army-only changed tile that is being torn down (friendly GroupByArmy inconsistency).
+            # Add any adjacent tile with the same army so it can be merged into the rebuilt component.
+            tileIsland = self.tile_island_lookup.raw[tile.tile_index]
+            if tileIsland not in impactedLeafIslands:
                 continue
             mustBeSolo = tile.isCity or tile.isGeneral
             if mode != IslandBuildMode.GroupByArmy and self.force_territory_borders_to_single_tile_islands and not mustBeSolo:
@@ -420,9 +550,33 @@ class TileIslandBuilder(object):
 
         islandsBeforeUpdate: typing.Set[TileIsland] = set(self.all_tile_islands) if (self.log_debug or self.use_debug_asserts) else None
 
+        # Snapshot full_island parents before clearing child pointers so they remain
+        # available as reuse candidates in _rebuild_leaf_islands_from_component.
+        priorParentsByLeaf: typing.Dict[int, TileIsland] = {}
+        for island in impactedLeafIslands:
+            if island.full_island is not None:
+                priorParentsByLeaf[island.unique_id] = island.full_island
+
+        # Remove impacted islands from all neighbors' border_islands to prevent phantom borders
+        for island in impactedLeafIslands:
+            for neighbor in island.border_islands:
+                neighbor.border_islands.discard(island)
+            island.border_islands.clear()
+
         for island in impactedLeafIslands:
             self._remove_leaf_island(island)
             self.borders_by_island.pop(island.unique_id, None)
+
+        # Any full_island parent that lost ALL its children should be removed now
+        # so it cannot act as a stale zombie island in subsequent updates.
+        parentsToRemove = [p for p in set(priorParentsByLeaf.values()) if p.child_islands is not None and len(p.child_islands) == 0]
+        for parent in parentsToRemove:
+            # Clean up parent from neighbors' border_islands before removing
+            for neighbor in parent.border_islands:
+                neighbor.border_islands.discard(parent)
+            parent.border_islands.clear()
+            self._remove_leaf_island(parent)
+            self.borders_by_island.pop(parent.unique_id, None)
 
         visited: typing.Set[Tile] = set()
         rebuiltIslands: typing.List[TileIsland] = []
@@ -441,8 +595,9 @@ class TileIslandBuilder(object):
                 visited,
                 lambda cur, nxt: not nxt.isObstacle and self.teams[nxt.player] == team
             )
-            componentPriorLeafIslands = {priorLeafIslandByTile[t] for t in componentTiles if t in priorLeafIslandByTile}
-            rebuiltIslands.extend(self._rebuild_leaf_islands_from_component(componentTiles, team, changedArmyTiles, changedOwnerTiles, componentPriorLeafIslands, mode))
+            componentPriorLeafIslands = {priorLeafIslandByTile[t] for t in componentTiles if t in priorLeafIslandByTile and priorLeafIslandByTile[t].team == team}
+            componentPriorParents = {priorParentsByLeaf[leaf.unique_id] for leaf in componentPriorLeafIslands if leaf.unique_id in priorParentsByLeaf}
+            rebuiltIslands.extend(self._rebuild_leaf_islands_from_component(componentTiles, team, changedArmyTiles, changedOwnerTiles, componentPriorLeafIslands, mode, componentPriorParents))
 
         # Build refreshTiles and refreshIslands AFTER the rebuild so tile_island_lookup reflects
         # the final island assignments (including any children from _break_apart_island_if_too_large).
@@ -459,12 +614,26 @@ class TileIslandBuilder(object):
             for adj in tile.movable:
                 if not adj.isObstacle:
                     refreshTiles.add(adj)
+            # Also add cardinal neighbours directly from the grid to handle asymmetric movable lists.
+            # tile.movable can be asymmetric when a neighbour was undiscovered (obstacle) at map init:
+            # the obstacle tile is removed from this tile's movable but never re-added on discovery.
+            # tile.adjacents is similarly unreliable (undiscovered tiles get adjacents=[self] early,
+            # causing init_grid_movable to skip them).  Grid-coordinate lookup is always correct.
+            x, y = tile.x, tile.y
+            for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if 0 <= nx < self.map.cols and 0 <= ny < self.map.rows:
+                    adj = self.map.grid[ny][nx]
+                    if not adj.isObstacle:
+                        refreshTiles.add(adj)
 
         refreshIslands: typing.Set[TileIsland] = set(rebuiltIslands)
         for tile in refreshTiles:
             island = self.tile_island_lookup.raw[tile.tile_index]
-            if island is not None:
+            if island is not None and island not in impactedLeafIslands and island.child_islands is None:
                 refreshIslands.add(island)
+        # Islands that were updated in-place (army-only, no shape change) also need border refresh
+        # in case any of their neighbours were rebuilt this turn.
+        refreshIslands.update(isl for isl in armyOnlyRefreshIslands if isl not in impactedLeafIslands and isl.child_islands is None)
 
         for island in refreshIslands:
             self.borders_by_island.pop(island.unique_id, None)
@@ -472,6 +641,26 @@ class TileIslandBuilder(object):
         for island in refreshIslands:
             self._build_island_borders(island)
             self.tile_islands_by_unique_id[island.unique_id] = island
+
+        # Add back-references: for every refreshed island, tell its current neighbors it exists.
+        # This is done as a separate pass after all refreshIslands have been rebuilt so that
+        # order-dependent phantoms cannot occur (an island cleared its border_islands during
+        # its own _build_island_borders before we added the back-ref).
+        # Guard: only add the back-ref when real tile-pair adjacency is confirmed, to avoid
+        # propagating phantom refs caused by stale tile_island_lookup entries.
+        for island in refreshIslands:
+            for neighbor in island.border_islands:
+                confirmed = any(
+                    movable in neighbor.tile_set
+                    for tile in island.tile_set
+                    for movable in tile.movable
+                ) or any(
+                    movable in island.tile_set
+                    for tile in neighbor.tile_set
+                    for movable in tile.movable
+                )
+                if confirmed:
+                    neighbor.border_islands.add(island)
 
         for team in affectedTeams:
             if team >= 0:
@@ -690,6 +879,9 @@ class TileIslandBuilder(object):
                     )
 
         # --- movable neighbours: every non-obstacle neighbour is either in this island or in border_islands ---
+        # Use symmetric adjacency: if tile→movable confirms adjacency, we require border presence.
+        # We do NOT require the reverse (movable→tile) because movable lists can be asymmetric
+        # when a tile transitions from undiscovered (obstacle) to discovered.
         for tile in island.tile_set:
             for movable in tile.movable:
                 if movable.isObstacle:
@@ -708,22 +900,28 @@ class TileIslandBuilder(object):
                             f'{prefix} tile {tile} neighbour {movable}: lookup island {neighborIsland.unique_id}/{neighborIsland.name} '
                             f'is adjacent but not in border_islands'
                         )
-                    if island not in neighborIsland.border_islands:
+                    # Only flag missing back-ref if the reverse adjacency also holds (symmetric movable).
+                    # Asymmetric movable (tile discovery transition) can legitimately produce a one-way border.
+                    reverseAdjacent = any(m is tile for m in movable.movable)
+                    if reverseAdjacent and island not in neighborIsland.border_islands:
                         errors.append(
                             f'{prefix} tile {tile} neighbour {movable}: neighbour island {neighborIsland.unique_id}/{neighborIsland.name} '
                             f'does not have this island in its border_islands (missing back-ref)'
                         )
 
         # --- border_islands must all be truly adjacent (at least one tile pair confirms adjacency) ---
+        # Check both directions: island→border AND border→island, because movable lists can be
+        # asymmetric when a tile transitions from undiscovered (obstacle) to discovered.
         for border in island.border_islands:
-            adjacencyConfirmed = False
-            for tile in island.tile_set:
-                for movable in tile.movable:
-                    if movable in border.tile_set:
-                        adjacencyConfirmed = True
-                        break
-                if adjacencyConfirmed:
-                    break
+            adjacencyConfirmed = any(
+                movable in border.tile_set
+                for tile in island.tile_set
+                for movable in tile.movable
+            ) or any(
+                movable in island.tile_set
+                for tile in border.tile_set
+                for movable in tile.movable
+            )
             if not adjacencyConfirmed:
                 errors.append(
                     f'{prefix} border {border.unique_id}/{border.name} is listed in border_islands but no tile pair is actually adjacent (phantom border)'
@@ -859,6 +1057,25 @@ class TileIslandBuilder(object):
 
         self.tile_islands_by_unique_id.pop(island.unique_id, None)
         island.border_islands.clear()
+        for tile in island.tile_set:
+            self.tile_island_lookup.raw[tile.tile_index] = None
+
+        # Clear parent ↔ child linkage so stale pointers can't cause cross-team corruption.
+        if island.full_island is not None:
+            parent = island.full_island
+            if parent.child_islands is not None:
+                try:
+                    parent.child_islands.remove(island)
+                except ValueError:
+                    pass
+            parent.tile_set -= island.tile_set
+            parent.tile_count = len(parent.tile_set)
+            island.full_island = None
+        if island.child_islands is not None:
+            for child in island.child_islands:
+                if child.full_island is island:
+                    child.full_island = None
+            island.child_islands = None
 
     def _register_leaf_island(self, island: TileIsland):
         if island.name is None or island.name == '':
@@ -883,7 +1100,10 @@ class TileIslandBuilder(object):
         island.team = team
         island.tile_count = tileCount
         island.sum_army = armySum
-        island.border_islands.clear()
+        # Do NOT clear border_islands here — _build_island_borders will be called for this
+        # island as part of refreshIslands and will pre-remove stale back-refs using the OLD
+        # border_islands before rebuilding them from the new tile_set.  Clearing here would
+        # destroy the old neighbor list that _build_island_borders needs for pre-removal.
         island.tile_count_all_adjacent_friendly = tileCount
         island.sum_army_all_adjacent_friendly = armySum
         island.tiles_by_army = [t for t in sorted(tileSet, key=lambda tile: tile.army, reverse=True)]
@@ -907,7 +1127,13 @@ class TileIslandBuilder(object):
         if len(normalizedLeafIslands) != len(leafIslands):
             fullIsland.tile_count_all_adjacent_friendly = aggregateTileCount
             fullIsland.sum_army_all_adjacent_friendly = aggregateArmy
-            self._register_leaf_island(fullIsland)
+            # Do NOT call _register_leaf_island(fullIsland) here.
+            # Full_island parents are aggregate containers — their tile_set is the union of all
+            # leaf children and registering it would stomp the correct child lookup entries with
+            # the parent, causing stale tile_island_lookup entries for tiles that get reassigned
+            # to a different team's island in subsequent turns.
+            if fullIsland.name is None or fullIsland.name == '':
+                fullIsland.name = IslandNamer.get_letter()
 
     def _take_best_matching_prior_island(self, candidateTiles: typing.Set[Tile], priorIslands: typing.Set[TileIsland]) -> TileIsland | None:
         bestIsland: TileIsland | None = None
@@ -942,14 +1168,17 @@ class TileIslandBuilder(object):
 
         return found
 
-    def _rebuild_leaf_islands_from_component(self, componentTiles: typing.Set[Tile], team: int, changedArmyTiles: typing.Set[Tile], changedOwnerTiles: typing.Set[Tile], priorLeafIslands: typing.Set[TileIsland], mode: IslandBuildMode) -> typing.List[TileIsland]:
+    def _rebuild_leaf_islands_from_component(self, componentTiles: typing.Set[Tile], team: int, changedArmyTiles: typing.Set[Tile], changedOwnerTiles: typing.Set[Tile], priorLeafIslands: typing.Set[TileIsland], mode: IslandBuildMode, priorFullIslands: typing.Set[TileIsland] | None = None) -> typing.List[TileIsland]:
         if len(componentTiles) == 0:
             return []
 
         aggregateTileCount = len(componentTiles)
         aggregateArmy = sum(tile.army for tile in componentTiles)
         priorLeafIslands = set(priorLeafIslands)
-        priorFullIslands = {island.full_island for island in priorLeafIslands if island.full_island is not None and island.full_island is not island}
+        if priorFullIslands is None:
+            priorFullIslands = {island.full_island for island in priorLeafIslands if island.full_island is not None and island.full_island is not island}
+        else:
+            priorFullIslands = set(priorFullIslands)
 
         forcedSoloTiles: typing.Set[Tile] = set()
         pendingArmyTiles: typing.Set[Tile] = set()
@@ -1001,7 +1230,7 @@ class TileIslandBuilder(object):
                 island = TileIsland(tileSet, team, len(tileSet), sum(t.army for t in tileSet))
             else:
                 self._update_island_state(island, tileSet, team, len(tileSet), sum(t.army for t in tileSet))
-            brokenUp = self._break_apart_island_if_too_large(island)
+            brokenUp = self._break_apart_island_if_too_large(island, priorLeafIslands)
             if len(brokenUp) == 1 and brokenUp[0] is island:
                 # Not split — clear any stale full_island/child_islands from a prior recalculate
                 island.full_island = None
@@ -1131,6 +1360,10 @@ class TileIslandBuilder(object):
         return island
 
     def _build_island_borders(self, island: TileIsland):
+        # Remove this island from all its current neighbors' border_islands first
+        # to prevent stale back-references when island shape changes
+        for neighbor in island.border_islands:
+            neighbor.border_islands.discard(island)
         island.border_islands.clear()  # in case its already populated. TODO eventually optimize this away if this is at all slow.
         # island.border_tiles = set()
         for tile in island.tile_set:
@@ -1146,7 +1379,7 @@ class TileIslandBuilder(object):
                 if adjIsland is not None:
                     island.border_islands.add(adjIsland)
 
-    def _break_apart_island_if_too_large(self, island: TileIsland) -> typing.List[TileIsland]:
+    def _break_apart_island_if_too_large(self, island: TileIsland, priorLeafIslands: typing.Set[TileIsland] | None = None) -> typing.List[TileIsland]:
         # stats = self._team_stats_by_team_id[island.team]
         tile_island_split_cutoff: int = int(self.desired_tile_island_size * 1.5)
         if island.tile_count > tile_island_split_cutoff and (island.team != -1 or self.break_apart_neutral_islands):
@@ -1182,11 +1415,20 @@ class TileIslandBuilder(object):
             sets = bifurcate_set_into_n_contiguous(self.map, largestEnemyBorder.tile_set, island.tile_set, breakIntoSubCount, self.log_debug)
             for namedTileSet in sets:
                 tileSet = namedTileSet.set
-                newIsland = TileIsland(tileSet, island.team)
+                if priorLeafIslands is not None:
+                    priorIsland = self._take_best_matching_prior_island(tileSet, priorLeafIslands)
+                else:
+                    priorIsland = None
+                if priorIsland is not None:
+                    self._update_island_state(priorIsland, tileSet, island.team, len(tileSet), sum(t.army for t in tileSet))
+                    newIsland = priorIsland
+                    newIsland.name = namedTileSet.name
+                else:
+                    newIsland = TileIsland(tileSet, island.team)
+                    newIsland.name = namedTileSet.name
                 newIsland.full_island = rootIsland
                 newIsland.sum_army_all_adjacent_friendly = island.sum_army_all_adjacent_friendly
                 newIsland.tile_count_all_adjacent_friendly = island.tile_count_all_adjacent_friendly
-                newIsland.name = namedTileSet.name
 
                 brokenInto.append(newIsland)
                 for tile in tileSet:

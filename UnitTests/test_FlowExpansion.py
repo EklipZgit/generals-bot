@@ -12,7 +12,7 @@ from BehaviorAlgorithms import IterativeExpansion
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode, FlowGraphMethod
 from BoardAnalyzer import BoardAnalyzer
-from Gather import GatherDebug
+from Gather import GatherDebug, GatherCapturePlan
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import ViewInfo
@@ -37,6 +37,22 @@ class FlowExpansionUnitTests(TestBase):
         # bot.info_render_general_undiscovered_prediction_values = True
 
         return bot
+
+    def assertNoOptionsOverlap(self, opts: typing.List[GatherCapturePlan]):
+        visited = set()
+        dupes = []
+        for plan in opts:
+            dupesThisSet = []
+            for t in plan.tileSet:
+                if t in visited:
+                    dupesThisSet.append(t)
+
+            visited.update(plan.tileSet)
+            if dupesThisSet:
+                dupes.append(f'plan {plan} duplicated {'|'.join([str(t.coords) for t in dupesThisSet])}')
+
+        if len(dupes) > 0:
+            self.fail(f'found {len(dupes)} plans with duplicated tiles in plan options:\r\n  {"\r\n  ".join(dupes)}')
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move(self):
@@ -1632,3 +1648,29 @@ player_index=0
                     # 7 en caps, 10 moves, should be our best case scenario.
                     self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
                     self.assertEqual(bestTurns, longestOpt.length)
+
+    def test_should_flowexpand_properly_into_enemy_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flowexpand_properly_into_enemy_fog___Vbdk6Ojkl---1--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=False)
+        MapBase.DO_NOT_RANDOMIZE = True
+
+        self.begin_capturing_logging()
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=37, debugMode=debugMode, renderThresh=700, tileIslandSize=3, shouldRender=True, method=method)
+
+        self.assertGreater(len(opts), 2)
+        self.assertNoOptionsOverlap(opts)
+        # if debugMode:
+        #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        #     simHost.queue_player_moves_str(general.player, expectedPath)
+        #
+        #     self.begin_capturing_logging()
+        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+        # self.assertEqual(planCount, len(opts), 'should not find invalid options')
+        # if planCount > 0:
+        #     longestOpt = max(opts, key=lambda opt: opt.length)
+        #
+        #     # 7 en caps, 10 moves, should be our best case scenario.
+        #     self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
+        #     self.assertEqual(bestTurns, longestOpt.length)

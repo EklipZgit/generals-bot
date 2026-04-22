@@ -9,6 +9,7 @@ import SearchUtils
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode
 from BehaviorAlgorithms import IterativeExpansion
+from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, EnrichedFlowTurnsEntry
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode, FlowGraphMethod
 from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
@@ -52,7 +53,6 @@ aG1  a3   b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Import and test the V2 expander
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
 
         # Set target team to enemy player
@@ -109,7 +109,6 @@ aG1  a3   a1   b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -176,7 +175,6 @@ aG1  a4        b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -253,7 +251,6 @@ aG1  a4   b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -311,7 +308,6 @@ aG1  a4   a1   b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -364,7 +360,6 @@ aG1  a5        b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -420,7 +415,6 @@ aG2  a2   b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -477,7 +471,6 @@ aG2  a2   a1   b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -536,7 +529,6 @@ aG2  a3        b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -599,7 +591,6 @@ aG3  a3   b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -656,7 +647,6 @@ aG3  a5   b1   bG3
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -713,7 +703,6 @@ aG3  a3   a1   b1   bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -769,7 +758,6 @@ aG2  a5   b1        bG1
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -839,7 +827,6 @@ aG1  a3   b1   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -921,7 +908,6 @@ aG1  a4        b1   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -1027,7 +1013,6 @@ aG1  a2   a1   b2   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -1100,7 +1085,6 @@ aG1  a5   b1   b1   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -1191,7 +1175,6 @@ aG1  a3   b1   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -1258,7 +1241,6 @@ aG1  a2   a2   b1   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -1326,7 +1308,6 @@ aG1  a2   a5   b1   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -1388,7 +1369,6 @@ aG1  a2   a1   a2   b1   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -1467,7 +1447,6 @@ a3   b2
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -1537,7 +1516,6 @@ a4   b2
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -1598,7 +1576,6 @@ a7   b2
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
@@ -1679,7 +1656,6 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
         flowExpanderV2.target_team = enemyGeneral.player
@@ -1756,14 +1732,13 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         builder = TileIslandBuilder(map)
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = False
-        flowExpanderV2.get_expansion_options(
+        opts = flowExpanderV2.get_expansion_options(
             builder, general.player, enemyGeneral.player, turns=50,
             boardAnalysis=None, territoryMap=None, negativeTiles=None
         )
@@ -1772,44 +1747,58 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         self.assertIsNotNone(lookup_tables, 'last_lookup_tables must be set after get_expansion_options')
         self.assertGreater(len(lookup_tables), 0, 'Should produce at least one lookup table')
 
+        self.render_flow_expansion_debug(flowExpanderV2, opts, renderAll=True)
+
         # b2 is at col 7.  Any capture entry whose included_target_flow_nodes contains b2
         # must have cap_turns >= 3 (col5 neutral + col6 neutral + col7 b2 = 3 mandatory steps).
         b2_tile = map.GetTile(7, 0)
         b2_island_id = builder.tile_island_lookup.raw[b2_tile.tile_index].unique_id
 
         found_b2_entry = False
-        for lt in lookup_tables:
-            for enriched in lt.enriched_capture_entries:
-                cap = enriched.capture_entry
-                if cap.turns == 0:
-                    continue
-                target_island_ids = {n.island.unique_id for n in cap.included_target_flow_nodes}
-                if b2_island_id not in target_island_ids:
-                    continue
-                found_b2_entry = True
-                # Must have walked through both neutrals first — minimum 3 turns
-                self.assertGreaterEqual(
-                    cap.turns, 3,
-                    f'Capture entry including b2 (col 7) has cap_turns={cap.turns} < 3; '
-                    f'the two neutral tiles at cols 5-6 are mandatory traversal and cannot be skipped. '
-                    f'req={cap.required_army} gath={enriched.gather_entry.gathered_army}'
+        self.assertEqual(1, len(lookup_tables), 'Should have exactly one lookup table - the friendly-neutral island border pair')
+        lt = lookup_tables[0]
+
+        # e0 is the entry where we spend 0 turns capturing... right?
+        e0 = lt.enriched_capture_entries[0]
+        self.assertEqual(0, e0.capture_entry.turns)
+
+        # e1 should cost 1, a2->N0
+        e1: EnrichedFlowTurnsEntry = lt.enriched_capture_entries[1]
+        self.assertEqual(1, e1.capture_entry.turns)
+        self.assertEqual(1, e1.capture_entry.econ_value)
+        self.assertEqual(1, e1.combined_value_density)
+
+        for enriched in lt.enriched_capture_entries:
+            cap = enriched.capture_entry
+            if cap.turns == 0:
+                continue
+            target_island_ids = {n.island.unique_id for n in cap.included_target_flow_nodes}
+            if b2_island_id not in target_island_ids:
+                continue
+            found_b2_entry = True
+            # Must have walked through both neutrals first — minimum 3 turns
+            self.assertGreaterEqual(
+                cap.turns, 3,
+                f'Capture entry including b2 (col 7) has cap_turns={cap.turns} < 3; '
+                f'the two neutral tiles at cols 5-6 are mandatory traversal and cannot be skipped. '
+                f'req={cap.required_army} gath={enriched.gather_entry.gathered_army}'
+            )
+            # For the 3-turn entry: required_army must equal 6 (0+0+2 army_cost + 3 turns + 1)
+            if cap.turns == 3:
+                self.assertEqual(
+                    cap.required_army, 6,
+                    f'3-turn capture of neut+neut+b2 must require army=6 (0+0+2+3+1), got {cap.required_army}'
                 )
-                # For the 3-turn entry: required_army must equal 6 (0+0+2 army_cost + 3 turns + 1)
-                if cap.turns == 3:
-                    self.assertEqual(
-                        cap.required_army, 6,
-                        f'3-turn capture of neut+neut+b2 must require army=6 (0+0+2+3+1), got {cap.required_army}'
-                    )
-                    # The 3xa2 gather covers exactly 6 — surplus must be 0, not positive
-                    # (positive surplus here would mean the plan incorrectly bypasses the neutrals)
-                    surplus = enriched.gather_entry.gathered_army - cap.required_army
-                    self.assertLessEqual(
-                        surplus, 0,
-                        f'3xa2 gather (gathered={enriched.gather_entry.gathered_army}) vs required=6 '
-                        f'should give surplus<=0 when only the 3 a2 tiles are gathered; '
-                        f'positive surplus would mean the neutral traversal cost was undercounted. '
-                        f'surplus={surplus}'
-                    )
+                # The 3xa2 gather covers exactly 6 — surplus must be 0, not positive
+                # (positive surplus here would mean the plan incorrectly bypasses the neutrals)
+                surplus = enriched.gather_entry.gathered_army - cap.required_army
+                self.assertLessEqual(
+                    surplus, 0,
+                    f'3xa2 gather (gathered={enriched.gather_entry.gathered_army}) vs required=6 '
+                    f'should give surplus<=0 when only the 3 a2 tiles are gathered; '
+                    f'positive surplus would mean the neutral traversal cost was undercounted. '
+                    f'surplus={surplus}'
+                )
 
         self.assertTrue(found_b2_entry, 'Expected at least one enriched entry capturing b2@col7')
 
@@ -1855,7 +1844,6 @@ aG1                      bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = map.team_ids_by_player_index[enemyGeneral.player]
         flowExpanderV2.enemyGeneral = enemyGeneral
@@ -1928,7 +1916,6 @@ aG1  a1   b1   bG1
         builder = TileIslandBuilder(map)
         builder.recalculate_tile_islands(enemyGeneral)
 
-        from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.log_debug = True
 
@@ -1967,5 +1954,5 @@ aG1  a1   b1   bG1
             if debugMode:
                 self._render_gather_lookup_debug(gather_lookup, border_pair, friendly_contribs)
         else:
-            # If no border pairs found, that's also a valid test result for this edge case
+            # If no border pairs found, that's also a valid test result for this edge case since there is no valid captures here at all
             self.assertTrue(True, 'No border pairs found in edge case scenario')

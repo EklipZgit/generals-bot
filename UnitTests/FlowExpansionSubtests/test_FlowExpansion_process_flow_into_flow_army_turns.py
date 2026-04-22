@@ -551,9 +551,9 @@ aG1  a3   b1   bG1
 
         entry0 = lt.gather_entries_by_turn[0]
         self.assertIsNotNone(entry0, 'gather_entries_by_turn[0] must not be None (border state)')
-        self.assertEqual(0, entry0.turns, 'turns at index 0 must be 0')
-        self.assertEqual(0, entry0.gathered_army, 'border state must have gathered_army=0')
-        self.assertEqual(0, len(entry0.included_friendly_flow_nodes),
+        self.assertEqual(0, entry0.turns, 'turns at index 0 must be 0, since the move is consumed on the capture side of the border pair')
+        self.assertEqual(2, entry0.gathered_army, 'border state must have gathered_army={whatever first tile in the friendly border island is}')
+        self.assertEqual(1, len(entry0.included_friendly_flow_nodes),
                          'border state must have no included friendly flow nodes')
 
     def test_process_flow__gather_entry_accumulated_army_matches_islands(self):
@@ -567,7 +567,7 @@ aG1  a3   b1   bG1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |
-aG1  a3   b1   bG1
+aG3  a3   b1   bG1
 |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
@@ -589,7 +589,7 @@ aG1  a3   b1   bG1
         # The cumulative gathered_army at each entry must equal the sum of sum_army
         # for all included_friendly_flow_nodes
         for e in non_zero_gath:
-            expected_army = sum(n.island.sum_army for n in e.included_friendly_flow_nodes)
+            expected_army = sum(n.island.sum_army - n.island.tile_count for n in e.included_friendly_flow_nodes)
             self.assertEqual(expected_army, e.gathered_army,
                              f'gathered_army={e.gathered_army} must equal sum of included island armies={expected_army} at t={e.turns}')
 

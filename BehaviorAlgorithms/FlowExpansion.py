@@ -827,7 +827,7 @@ class ArmyFlowExpanderV2:
                 # Each tile traversed costs 1 army (left behind on source/intermediate tile),
                 # and the final capture requires arriving with strictly more than the defender
                 # (generals.io rule: attacker wins only if attacker > defender, so need +1).
-                required_army_for_entry = current_army_cost + current_turn + 1
+                required_army_for_entry = current_army_cost + current_turn
                 lookup[current_turn] = FlowTurnsEntry(
                     turns=current_turn,
                     required_army=required_army_for_entry,
@@ -856,9 +856,15 @@ class ArmyFlowExpanderV2:
         friendly_contributions: list[FlowStreamIslandContribution],
         stream_data: dict
     ) -> list[FlowTurnsEntry | None]:
-        """Generate gather lookup table for a border pair"""
+        """
+        Generate gather lookup table for a border pair.
+
+        Processes tiles individually (like _generate_capture_lookup_table) to support
+        partial gathers - gathering from only some tiles of an island rather than
+        the entire island at once.
+        """
         max_turns = 50  # TODO: Make this configurable
-        lookup = [None] * (max_turns + 1)
+        lookup: typing.List[FlowTurnsEntry | None] = [None] * (max_turns + 1)
 
         current_turn = 0
         current_gathered_army = 0
@@ -887,71 +893,67 @@ class ArmyFlowExpanderV2:
             incomplete_target_tile_count=0
         )
 
+        friendlyContributionsByIslandId = {}
+        for contribution in friendly_contributions:
+            friendlyContributionsByIslandId[contribution.island_id] = contribution
+
         # Compute path-depth for each friendly island via BFS from the border node through
         # flow_from edges (upstream direction).  Depth = cumulative tile_count of islands
         # traversed on the shortest path from the border island to this island, INCLUDING
         # this island's own tile_count.  So traversal_cost = depth - island.tile_count.
         # Army contribution per island = island.sum_army - traversal_cost.
-        depth_by_island_id: dict[int, int] = {}
-        friendly_node = stream_data.get('friendly_node')
-        if friendly_node is not None:
-            bfs_queue = [(friendly_node, friendly_node.island.tile_count)]
-            bfs_visited: set[int] = set()
-            while bfs_queue:
-                node_bfs, depth = bfs_queue.pop(0)
-                iid = node_bfs.island.unique_id
-                if iid in bfs_visited:
-                    continue
-                bfs_visited.add(iid)
-                depth_by_island_id[iid] = depth
-                for edge in node_bfs.flow_from:
-                    src = edge.source_flow_node
-                    if src.island.team == self.team and src.island.unique_id not in bfs_visited:
-                        bfs_queue.append((src, depth + src.island.tile_count))
+        friendly_node = stream_data.get('friendly_node')  # friendly border pair node. TODO why the fuck is this a dict instead of a proper fucking class? what the fuck.
 
-        bp = border_pair
-        logbook.info(
-            f'GATHER_DEPTH bp={bp.friendly_island_id}->{bp.target_island_id}: '
-            + ' | '.join(
-                f'{iid}=>{d}'
-                for iid, d in sorted(depth_by_island_id.items(), key=lambda kv: kv[1])
-            )
-        )
+        # TODO priority queue this shit probably so we can pull the highest gather/turn shit first even if it pulls through a "1" army island or something.
+        if friendly_node is None:
+            raise ValueError("Friendly node not found in stream data")
 
-        # Sort contributions by path-depth ascending so that closer islands always write
-        # earlier lookup entries before farther ones update current_turn.
-        friendly_contributions_by_depth = sorted(
-            friendly_contributions,
-            key=lambda c: depth_by_island_id.get(c.flow_node.island.unique_id, 0)
-        )
+        bfs_queue: list[tuple[FlowNode, int]] = [(friendly_node, friendly_node.island.tile_count - 1)]
+        bfs_visited: set[int] = set()
+        while bfs_queue:
+            node_bfs, depth = bfs_queue.pop(0)
+            iid = node_bfs.island.unique_id
+            if iid in bfs_visited:
+                continue
 
-        # Process friendly contributions in depth order
-        for contrib in friendly_contributions_by_depth:
+            # if depth > max_turns:
+            #     continue
+
+            bfs_visited.add(iid)
+
+            contrib = friendlyContributionsByIslandId.get(node_bfs.island.unique_id, None)
+            if contrib is None:
+                raise ValueError(f"Contribution not found for island {node_bfs.island.unique_id}")
+
             node = contrib.flow_node
             island = node.island
 
+            # Get the island's depth - this represents the minimum turn when we can start
+            # gathering from this island (army from upstream islands needs this many turns
+            # to reach the border). Since we increment current_turn at the start of each tile
+            # loop, we use island_depth - 1 as the baseline.
+
             # Add this island to the gather plan
             included_friendly_nodes.append(node)
-            # gather_turn = the maximum path-depth of any island included so far.
-            # An island at path-depth D requires at least D turns to deliver army to the border.
-            island_depth = depth_by_island_id.get(island.unique_id, current_turn + island.tile_count)
-            current_turn = max(current_turn, island_depth)
-            # Net army contribution = sum_army - traversal_cost.
-            # traversal_cost = island_depth - island.tile_count = the number of upstream tiles
-            # that must be traversed to get this island's army to the border (not including
-            # this island's own tiles, which are already accounted for in island_depth).
-            traversal_cost = island_depth - island.tile_count
-            army_contribution = island.sum_army - traversal_cost
-            logbook.info(
-                f'GATHER_CONTRIB bp={bp.friendly_island_id}->{bp.target_island_id}: '
-                f'island={island!r} depth={island_depth} tc={island.tile_count} '
-                f'sum_army={island.sum_army} '
-                f'contrib={army_contribution} -> cumArmy={current_gathered_army + army_contribution} cumTurn={current_turn}'
-            )
-            current_gathered_army += army_contribution
 
-            # Create entry for this exact turn count if within bounds
-            if current_turn <= max_turns:
+            currentArmy = 0
+
+            # Process each tile individually (like capture lookup)
+            i = 0
+            for tile in island.tiles_by_army:
+                if current_turn > max_turns:
+                    break
+                i += 1
+
+                # Net army from this tile: tile.army (full army from tile)
+                # minus traversal_cost applied only to the first tile of the island.
+                # This matches the original logic: island.sum_army - traversal_cost
+                # For multi-tile islands, each tile contributes its full army; the "leave 1 behind"
+                # is implicit in the army movement mechanics, not subtracted here.
+
+                current_gathered_army += tile.army - 1
+
+                # Create entry for this exact turn count
                 lookup[current_turn] = FlowTurnsEntry(
                     turns=current_turn,
                     required_army=current_required_army,
@@ -960,14 +962,25 @@ class ArmyFlowExpanderV2:
                     gathered_army=current_gathered_army,
                     included_friendly_flow_nodes=tuple(included_friendly_nodes),
                     included_target_flow_nodes=tuple(included_target_nodes),
-                    incomplete_friendly_island_id=incomplete_friendly_island_id,
-                    incomplete_friendly_tile_count=incomplete_friendly_tile_count,
+                    incomplete_friendly_island_id=island.unique_id if island.tile_count > i else None,
+                    incomplete_friendly_tile_count=island.tile_count - i,
                     incomplete_target_island_id=incomplete_target_island_id,
                     incomplete_target_tile_count=incomplete_target_tile_count
                 )
+                if self.log_debug:
+                    logbook.info(
+                        f"GATHERS: {border_pair.friendly_island_id}->{border_pair.target_island_id}  (cur {island.unique_id}) - Adding gather entry @{tile} for turn {current_turn} with gathered army {int(current_gathered_army)}, "
+                        f"tile contribution {tile.army - 1:.2f}, incomplete {lookup[current_turn].incomplete_friendly_tile_count}")
 
-            # TODO: Implement partial tile walking between island boundaries
-            # For now, we only create entries at exact island boundaries
+                current_turn += 1
+
+            if current_turn > max_turns:
+                continue
+
+            for edge in node_bfs.flow_from:
+                src = edge.source_flow_node
+                if src.island.team == self.team and src.island.unique_id not in bfs_visited:
+                    bfs_queue.append((src, depth + src.island.tile_count))
 
         return lookup
 
@@ -1048,7 +1061,7 @@ class ArmyFlowExpanderV2:
             enriched_captures = []
 
             for capture_turn, capture_entry in enumerate(capture_entries):
-                if capture_entry is None:
+                if capture_entry is None: # or capture_turn is 0:
                     continue
 
                 # TODO this is inefficient, we should be maintaining a gather index and just walking backwards up the gathers while we walk forwards through the captures. No reason to loop gathers completely for every capture entry...
@@ -1136,8 +1149,6 @@ class ArmyFlowExpanderV2:
         Uses KnapsackUtils.solve_multiple_choice_knapsack (C++ optimized).
         Returns a solution dict: {border_pair_key: EnrichedFlowTurnsEntry | None}
         """
-        # Build flat arrays for the MCKP solver
-        # Each enriched entry is an item; its lookup_table index is its group
         items: list[EnrichedFlowTurnsEntry] = []
         groups: list[int] = []
         weights: list[int] = []
@@ -1177,7 +1188,6 @@ class ArmyFlowExpanderV2:
                     logbook.info(f"  MKCP item: group={group_idx} weight={enriched.combined_turn_cost} "
                                  f"value={int(1000 * enriched.capture_entry.econ_value)} "
                                  f"(gather={enriched.gather_entry.turns}, capture={enriched.capture_entry.turns})")
-
 
         if not items:
             return {}

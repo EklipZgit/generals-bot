@@ -65,7 +65,10 @@ aG1  a3   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -92,7 +95,10 @@ aG1  a3   a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -119,7 +125,10 @@ aG1  a4        b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -146,7 +155,10 @@ aG1  a4   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -173,7 +185,10 @@ aG1  a4   a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -200,7 +215,10 @@ aG1  a5        b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -227,7 +245,10 @@ aG2  a2   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -254,7 +275,10 @@ aG2  a2   a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -281,7 +305,10 @@ aG2  a3        b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -308,7 +335,10 @@ aG3  a3   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -335,7 +365,10 @@ aG3  a5   b1   bG3
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -362,7 +395,10 @@ aG3  a3   a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -389,7 +425,10 @@ aG2  a5   b1        bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -422,7 +461,10 @@ M    M         b1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
         start = time.perf_counter()
         builder.recalculate_tile_islands(enemyGeneral)
@@ -452,7 +494,10 @@ M    M         b1
                     self.render_map(map)
 
                 self.begin_capturing_logging()
-                builder = TileIslandBuilder(map)
+
+                analysis = BoardAnalyzer(map, general)
+                analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+                builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
 
                 start = time.perf_counter()
                 builder.recalculate_tile_islands(enemyGeneral)
@@ -489,7 +534,10 @@ a2
                 map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
                 self.begin_capturing_logging()
-                builder = TileIslandBuilder(map)
+
+                analysis = BoardAnalyzer(map, general)
+                analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+                builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
                 # builder.break_apart_neutral_islands = True
                 builder.recalculate_tile_islands(enemyGeneral)
                 flowExpander = ArmyFlowExpanderV2(map)
@@ -526,7 +574,10 @@ a1                  N40
                 map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
                 self.begin_capturing_logging()
-                builder = TileIslandBuilder(map)
+
+                analysis = BoardAnalyzer(map, general)
+                analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+                builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
                 # builder.break_apart_neutral_islands = True
                 builder.recalculate_tile_islands(enemyGeneral)
                 flowExpander = ArmyFlowExpanderV2(map)
@@ -559,7 +610,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
@@ -595,7 +649,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
@@ -624,7 +681,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
@@ -653,7 +713,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
@@ -682,7 +745,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
@@ -711,7 +777,10 @@ a2                  b1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.desired_tile_island_size = 0.3
         builder.recalculate_tile_islands(enemyGeneral)
         self.assertEqual(len(builder.tile_islands_by_player[enemyGeneral.player]), 5)
@@ -735,7 +804,10 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -763,7 +835,10 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
@@ -787,7 +862,10 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method

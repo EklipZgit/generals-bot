@@ -10,6 +10,7 @@ import SearchUtils
 import logbook
 
 from ArmyAnalyzer import ArmyAnalyzer
+from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 from BotModules.BotDefenseQueries import BotDefenseQueries
 from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotStateQueries import BotStateQueries
@@ -457,7 +458,7 @@ class BotExpansionOps:
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
                     ogStart = time.perf_counter()
-                    flowExpander = ArmyFlowExpander(bot._map, bot.perf_timer)
+                    flowExpander = ArmyFlowExpanderV2(bot._map, bot.perf_timer)
 
                     cutoffTime = time.perf_counter()
                     if bot.expansion_use_legacy:

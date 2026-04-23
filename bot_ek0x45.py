@@ -728,6 +728,7 @@ class EklipZBot(object):
                             self.alt_en_gen_positions[player.index] = altEnGenPositions
                             self._alt_en_gen_position_distances[player.index] = None
 
+        self.tileIslandBuilder.intergeneral_analysis = self.board_analysis.intergeneral_analysis
         if self._map.is_army_bonus_turn or self._should_recalc_tile_islands:
             with self.perf_timer.begin_move_event('TileIsland recalc'):
                 self.tileIslandBuilder.recalculate_tile_islands(self.targetPlayerExpectedGeneralLocation)
@@ -1929,10 +1930,10 @@ class EklipZBot(object):
         self.armyTracker.notify_army_moved.append(lambda move: BotEventHandlers.handle_army_moved(self, move))
         self.armyTracker.notify_army_moved.append(self.opponent_tracker.notify_army_moved)
         self.targetPlayerExpectedGeneralLocation = self.general.movable[0]
-        self.tileIslandBuilder = TileIslandBuilder(self._map)
+        self.board_analysis = BoardAnalyzer(self._map, self.general, self.teammate_general)
+        self.tileIslandBuilder = TileIslandBuilder(self._map, self.board_analysis.intergeneral_analysis)
         self.tileIslandBuilder.recalculate_tile_islands(enemyGeneralExpectedLocation=self.targetPlayerExpectedGeneralLocation)
         self.launchPoints.append(self.general)
-        self.board_analysis = BoardAnalyzer(self._map, self.general, self.teammate_general)
         self.army_interceptor = ArmyInterceptor(self._map, self.board_analysis)
         self.win_condition_analyzer = WinConditionAnalyzer(self._map, self.opponent_tracker, self.cityAnalyzer, self.territories, self.board_analysis)
         self.capture_line_tracker = CaptureLineTracker(self._map)

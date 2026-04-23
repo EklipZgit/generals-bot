@@ -1974,3 +1974,5 @@ bot_target_player=1
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
         self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(14, simHost, 'if capped enemy tiles whole round, would still have to make like 3 neutral moves bc not enough army, so go from -16 to +15')

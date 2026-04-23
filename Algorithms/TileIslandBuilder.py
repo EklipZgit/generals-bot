@@ -13,6 +13,8 @@ import Algorithms
 import DebugHelper
 import SearchUtils
 from Algorithms import FastDisjointSet
+from ArmyAnalyzer import ArmyAnalyzer
+from BoardAnalyzer import BoardAnalyzer
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import MapBase, Tile, TeamStats
@@ -170,7 +172,7 @@ class IslandBuildMode(Enum):
 
 
 class TileIslandBuilder(object):
-    def __init__(self, map: MapBase, averageTileIslandSize: int | None = None):
+    def __init__(self, map: MapBase, intergeneralAnalysis: ArmyAnalyzer, averageTileIslandSize: int | None = None):
         if averageTileIslandSize is None:
             averageTileIslandSize = 3
         self.map: MapBase = map
@@ -179,6 +181,7 @@ class TileIslandBuilder(object):
         # self.expandability_tiles_matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
         # self.expandability_army_matrix: MapMatrixInterface[int] = MapMatrix(map, 0)
         self.desired_tile_island_size: int = averageTileIslandSize
+        self.intergeneral_analysis: ArmyAnalyzer = intergeneralAnalysis
 
         # TODO examine networkX.algorithms.minors.blockmodel (aka quotient_graph with relabel=True and create_using=nx.MultiGraph()
 

@@ -3,6 +3,7 @@ import logbook
 from Algorithms import TileIslandBuilder
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, EnrichedFlowTurnsEntry, FlowBorderPairKey
 from BehaviorAlgorithms.IterativeExpansion import ITERATIVE_EXPANSION_EN_CAP_VAL
+from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
@@ -23,7 +24,10 @@ class FlowExpansionGroupedKnapsackTests(TestBase):
     def _build_expander_v2_through_phase3(self, mapData: str, turns: int = 50):
         """Helper: load map, run V2 through Phase 3, return (expander, lookup_tables)."""
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         expander = ArmyFlowExpanderV2(map)

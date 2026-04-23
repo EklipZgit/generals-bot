@@ -4,6 +4,7 @@ import time
 import logbook
 
 from ArmyAnalyzer import ArmyAnalyzer
+from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatObj, ThreatType
 from Gather import GatherSteiner
 import Gather
@@ -864,7 +865,10 @@ class GatherSteinerUnitTests(TestBase):
 
         viewInfo = self.get_renderable_view_info(map)
 
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
         tiles = []
         for island in random.sample(builder.tile_islands_by_player[general.player], 5):
@@ -919,7 +923,10 @@ class GatherSteinerUnitTests(TestBase):
         # viewInfo = self.get_renderable_view_info(map)
         viewInfo = bot.viewInfo
 
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
         tiles = []
 
@@ -1038,7 +1045,10 @@ class GatherSteinerUnitTests(TestBase):
         # self.render_map(map)
         self.begin_capturing_logging()
 
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         ourCity = map.GetTile(7, 4)

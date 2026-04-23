@@ -6,6 +6,7 @@ import logbook
 
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode, TileIsland
+from BoardAnalyzer import BoardAnalyzer
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import ViewInfo
@@ -170,7 +171,10 @@ class TileIslandBuilderUnitTests(TestBase):
         mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
 
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         self.assertNotEqual(0, len(builder.all_tile_islands))
@@ -197,7 +201,10 @@ class TileIslandBuilderUnitTests(TestBase):
                     self.render_map(map)
 
                 self.begin_capturing_logging()
-                builder = TileIslandBuilder(map)
+
+                analysis = BoardAnalyzer(map, general)
+                analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+                builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
                 builder.use_debug_asserts = False
                 builder.log_debug = False
 
@@ -218,7 +225,10 @@ class TileIslandBuilderUnitTests(TestBase):
         #     self.render_map(map)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.break_apart_neutral_islands = False
         builder.recalculate_tile_islands(enemyGeneral)
@@ -254,7 +264,10 @@ class TileIslandBuilderUnitTests(TestBase):
         #     self.render_map(map)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.BuildByDistance)
         self.assertAllIslandsContiguous(builder, debugMode)
 
@@ -385,7 +398,10 @@ class TileIslandBuilderUnitTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.reset_tile_deltas_to_current_state(map)
@@ -432,7 +448,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
 
@@ -454,7 +473,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.reset_tile_deltas_to_current_state(map)
@@ -483,7 +505,10 @@ aG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
@@ -523,7 +548,10 @@ aG1
         #     self.render_map(map)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
@@ -559,7 +587,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
 
@@ -587,7 +618,10 @@ a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
@@ -705,7 +739,10 @@ a2   b2   b2   b2   b2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
@@ -766,7 +803,10 @@ a2   a2   a2   a2   a2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
@@ -810,7 +850,10 @@ a2   a2   a2   b2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.reset_tile_deltas_to_current_state(map)
@@ -850,7 +893,10 @@ a2   a2   a2   b2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
@@ -884,7 +930,10 @@ a2   a2   a2   b2   b2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.reset_tile_deltas_to_current_state(map)
@@ -918,7 +967,10 @@ aG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
@@ -950,7 +1002,10 @@ aG1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.reset_tile_deltas_to_current_state(map)
@@ -979,7 +1034,10 @@ aG1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
@@ -1018,7 +1076,10 @@ a2   a2   a2   b3
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.reset_tile_deltas_to_current_state(map)
@@ -1058,7 +1119,10 @@ a2   a2   a2   b2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.reset_tile_deltas_to_current_state(map)
@@ -1120,7 +1184,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 50)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
 
@@ -1188,7 +1255,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 50)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
 
@@ -1258,7 +1328,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 50)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
 
@@ -1333,7 +1406,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 50)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoBorderIslandsStale(builder)
@@ -1428,7 +1504,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 100)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.force_territory_borders_to_single_tile_islands = False
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
@@ -1526,7 +1605,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoTilesWithNullIslands(builder, debugMode)
@@ -1617,7 +1699,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoTilesWithNullIslands(builder, debugMode)
@@ -1668,7 +1753,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 
@@ -1712,7 +1800,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 
@@ -1758,7 +1849,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 
@@ -1858,7 +1952,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 
@@ -1922,7 +2019,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 
@@ -1978,7 +2078,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 
@@ -2066,7 +2169,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 
@@ -2133,7 +2239,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 
@@ -2185,7 +2294,10 @@ a1
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 745, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.reset_tile_deltas_to_current_state(map)
 

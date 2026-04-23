@@ -49,7 +49,10 @@ aG1  a3   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Import and test the V2 expander
@@ -105,7 +108,10 @@ aG1  a3   a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -141,23 +147,28 @@ aG1  a3   a1   b1   bG1
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
 
         # Should have gather entries from friendly tiles
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
         # Verify the first capture has reasonable values (enemy tile with 1 army)
         first_capture = capture_entries[0]
         self.assertGreater(first_capture.turns, 0, 'Should have positive turn count')
-        self.assertGreaterEqual(first_capture.required_army, 1, 'Should require at least 1 army')
-        self.assertGreater(first_capture.econ_value, 0, 'Should have positive econ value')
+        self.assertEqual(first_capture.required_army, 2, 'Should require two army moving across the border')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should be worth enemy tile capture')
 
         # Verify gather functionality works (should gather from friendly tiles)
         first_gather = gather_entries[0]
-        self.assertGreater(first_gather.turns, 0, 'Should have positive turn count')
-        self.assertGreater(first_gather.gathered_army, 0, 'Should gather army from friendly tiles')
+        self.assertEqual(first_gather.turns, 0, 'First gather move is free since we pay the turn cost on the capture lookup side.')
+        self.assertEqual(first_gather.gathered_army, 0, 'Gathers no army in the crossing-1 move')
+
+        # Verify gather functionality works (should gather from friendly tiles)
+        second_gather = gather_entries[1]
+        self.assertEqual(second_gather.turns, 1, 'First gather move is free since we pay the turn cost on the capture lookup side.')
+        self.assertEqual(second_gather.gathered_army, 2, 'Gathers 2 army across the 1')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables")
-            print(f"First table has {len(capture_entries)} capture entries and {len(gather_entries)} gather entries")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables")
+            logbook.info(f"First table has {len(capture_entries)} capture entries and {len(gather_entries)} gather entries")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral(self):
@@ -171,7 +182,10 @@ aG1  a4        b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -207,33 +221,29 @@ aG1  a4        b1   bG1
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
 
         # Should have gather entries from friendly tiles
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
         # Verify the first capture has reasonable values
         first_capture = capture_entries[0]
-        self.assertGreater(first_capture.turns, 0, 'Should have positive turn count')
-        self.assertGreaterEqual(first_capture.required_army, 0, 'Should handle neutral capture (0 army cost)')
-        self.assertGreater(first_capture.econ_value, 0, 'Should have positive econ value')
+        self.assertEqual(first_capture.turns, 1, 'Should have positive turn count')
+        self.assertEqual(first_capture.required_army, 1, 'Should handle neutral capture (1 army cost)')
+        self.assertEqual(first_capture.econ_value, 1, 'Neut capture is worth 1')
+
+        # Verify the first capture has reasonable values
+        second_capture = capture_entries[1]
+        self.assertEqual(second_capture.turns, 2, 'Should have positive turn count')
+        self.assertEqual(second_capture.required_army, 3, '1 for the neut, 2 for the en 1')
+        self.assertEqual(second_capture.econ_value, 1 + IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Neut capture 1 + one en tile val')
 
         # Verify gather functionality works
         first_gather = gather_entries[0]
-        self.assertGreater(first_gather.turns, 0, 'Should have positive turn count')
-        self.assertGreater(first_gather.gathered_army, 0, 'Should gather army from friendly tiles')
-
-        # For neutral scenarios, should have entries with 0 army cost for neutral tiles
-        # NOTE: V2 implementation may handle neutral captures differently than old implementation
-        neutral_captures = [entry for entry in capture_entries if entry.required_army == 0 and entry.turns > 0]
-        # Don't assert neutral captures exist - V2 may handle neutrals differently
-        # self.assertGreater(len(neutral_captures), 0, 'Should have neutral capture options with 0 army cost')
-
-        # Instead, verify we have capture options (which may include enemy captures)
-        self.assertGreater(len(capture_entries), 0, 'Should have capture options in neutral scenario')
+        self.assertEqual(first_gather.turns, 0, 'Should have positive turn count')
+        self.assertEqual(first_gather.gathered_army, 3, 'Should gather army from friendly tiles')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables")
-            print(f"First table has {len(capture_entries)} capture entries and {len(gather_entries)} gather entries")
-            print(f"Found {len(neutral_captures)} neutral capture options")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables")
+            logbook.info(f"First table has {len(capture_entries)} capture entries and {len(gather_entries)} gather entries")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__excess_source(self):
@@ -247,7 +257,10 @@ aG1  a4   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -276,21 +289,24 @@ aG1  a4   b1   bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Verify basic functionality
+        # Verify the first capture has reasonable values (enemy tile with 1 army)
         first_capture = capture_entries[0]
-        self.assertGreater(first_capture.turns, 0, 'Should have positive turn count')
-        self.assertGreaterEqual(first_capture.required_army, 1, 'Should require army for enemy capture')
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture enemy island')
+        self.assertEqual(first_capture.required_army, 2, 'Should require 2 army: 1 enemy + 1 tile traversal')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have enemy econ value')
 
+        # Verify gather functionality works (should gather from friendly tiles)
         first_gather = gather_entries[0]
-        self.assertGreater(first_gather.gathered_army, 0, 'Should gather army from friendly tiles')
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 3, 'a4 tile (border) contributes 3 army (4-1=3)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for excess source scenario")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for excess source scenario")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__excess_source(self):
@@ -304,7 +320,10 @@ aG1  a4   a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -333,16 +352,25 @@ aG1  a4   a1   b1   bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have multiple gather options due to friendly tiles
-        self.assertGreater(len(gather_entries), 1, 'Should have multiple gather options with friendly tiles')
+        # Verify the first capture has reasonable values (enemy tile with 1 army)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture enemy island')
+        self.assertEqual(first_capture.required_army, 2, 'Should require 2 army: moving a1 through to capture b1 (1+1)')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have enemy econ value')
+
+        # Verify gather functionality works (should gather from friendly tiles)
+        # The border island is a1@col2 with 1 army - contributes 0 (1-1=0)
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 0, 'a1 border tile contributes 0 army (1-1=0)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for pull-through friendly excess source")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for pull-through friendly excess source")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__excess_source(self):
@@ -356,7 +384,10 @@ aG1  a5        b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -385,19 +416,30 @@ aG1  a5        b1   bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have neutral capture options with 0 army cost
-        # NOTE: V2 implementation may handle neutral captures differently
-        neutral_captures = [entry for entry in capture_entries if entry.required_army == 0 and entry.turns > 0]
-        # Don't assert neutral captures exist - V2 may handle neutrals differently
-        # self.assertGreater(len(neutral_captures), 0, 'Should have neutral capture options')
+        # Verify the first capture (neutral tile with 0 army)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture neutral island')
+        self.assertEqual(first_capture.required_army, 1, 'Should require 1 army for neutral: 0 army + 1 tile')
+        self.assertEqual(first_capture.econ_value, 1, 'Should have neutral econ value of 1')
+
+        # Verify the second capture (neutral + enemy)
+        second_capture = capture_entries[1]
+        self.assertEqual(second_capture.turns, 2, 'Should take 2 turns to capture neutral then enemy')
+        self.assertEqual(second_capture.required_army, 3, 'Should require 3 army: 0 neut + 1 enemy + 2 tiles')
+        self.assertEqual(second_capture.econ_value, 1 + IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have neut + enemy econ value')
+
+        # Verify gather functionality works
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 4, 'a5 tile contributes 4 army (5-1=4)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for pull-through neutral excess source")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for pull-through neutral excess source")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__need_cumulative_gather(self):
@@ -411,7 +453,10 @@ aG2  a2   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -440,20 +485,30 @@ aG2  a2   b1   bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have cumulative gather options (multiple friendly tiles)
-        self.assertGreater(len(gather_entries), 1, 'Should have multiple gather options for cumulative gather')
+        # Verify the first capture has reasonable values (enemy tile with 1 army)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture enemy island')
+        self.assertEqual(first_capture.required_army, 2, 'Should require 2 army: 1 enemy + 1 tile')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have enemy econ value')
 
-        # Verify cumulative gather works
-        max_gather = max(gather_entries, key=lambda x: x.gathered_army)
-        self.assertGreater(max_gather.gathered_army, 2, 'Should be able to gather from multiple tiles cumulatively')
+        # Verify gather functionality works (should gather from friendly tiles)
+        # Border island is a2@col1 with 2 army - contributes 1 (2-1=1)
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 1, 'a2 border tile contributes 1 army (2-1=1)')
+
+        # Second gather from a2 + aG2: aG2@col0 depth=2, cost=1, contributes 2-1=1, total = 1+1=2
+        second_gather = gather_entries[1]
+        self.assertEqual(second_gather.turns, 1, 'Should take 1 turn to gather from aG2')
+        self.assertEqual(second_gather.gathered_army, 2, 'Both tiles contribute 2 army total (1+1)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for cumulative gather scenario")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for cumulative gather scenario")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__need_cumulative_gather(self):
@@ -467,7 +522,10 @@ aG2  a2   a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -496,22 +554,34 @@ aG2  a2   a1   b1   bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have multiple gather options due to multiple friendly tiles
-        self.assertGreater(len(gather_entries), 2, 'Should have multiple gather options with multiple friendly tiles')
+        # Verify the first capture (enemy with 1 army, pulled through a1)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture enemy island')
+        self.assertEqual(first_capture.required_army, 2, 'Should require 2 army: a1 through to b1')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have enemy econ value')
 
-        # Should be able to gather cumulatively from multiple friendly tiles
-        # border a1@col2 (depth=1, cost=0 -> 1), a2@col1 (depth=2, cost=1 -> 1), aG2@col0 (depth=3, cost=2 -> 0)
-        # max gathered_army at border = 1+1+0 = 2
-        max_gather = max(gather_entries, key=lambda x: x.gathered_army)
-        self.assertGreaterEqual(max_gather.gathered_army, 2, 'Should be able to gather from friendly tiles cumulatively')
+        # Verify gather functionality works (should gather from friendly tiles)
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 0, 'No army gathered at turn 0')
+
+        # Gather from a1@col2: depth=1, cost=0, contributes 1
+        second_gather = gather_entries[1]
+        self.assertEqual(second_gather.turns, 1, 'Should take 1 turn to gather from a1')
+        self.assertEqual(second_gather.gathered_army, 1, 'a1 tile contributes 1 army')
+
+        # Gather from a1 + a2: a2@col1 depth=2, cost=1, contributes 2-1=1, total = 1+1=2
+        third_gather = gather_entries[2]
+        self.assertEqual(third_gather.turns, 2, 'Should take 2 turns to gather from a1+a2')
+        self.assertEqual(third_gather.gathered_army, 2, 'a1+a2 tiles contribute 2 army total (1+1)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for pull-through friendly cumulative gather")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for pull-through friendly cumulative gather")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__need_cumulative_gather(self):
@@ -525,7 +595,10 @@ aG2  a3        b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -554,26 +627,35 @@ aG2  a3        b1   bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have neutral capture options with 0 army cost
-        # NOTE: V2 implementation may handle neutral captures differently
-        neutral_captures = [entry for entry in capture_entries if entry.required_army == 0 and entry.turns > 0]
-        # Don't assert neutral captures exist - V2 may handle neutrals differently
-        # self.assertGreater(len(neutral_captures), 0, 'Should have neutral capture options')
+        # Verify the first capture (neutral with 0 army)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture neutral island')
+        self.assertEqual(first_capture.required_army, 1, 'Should require 1 army for neutral: 0 army + 1 tile')
+        self.assertEqual(first_capture.econ_value, 1, 'Should have neutral econ value of 1')
 
-        # Should have cumulative gather from multiple friendly tiles
-        self.assertGreater(len(gather_entries), 1, 'Should have multiple gather options')
-        # border a3@col1 (depth=1, cost=0 -> 3), aG2@col0 (depth=2, cost=1 -> 1)
-        # max gathered_army at border = 3+1 = 4
-        max_gather = max(gather_entries, key=lambda x: x.gathered_army)
-        self.assertGreaterEqual(max_gather.gathered_army, 4, 'Should be able to gather from a3 and aG2 tiles cumulatively (3+1 after traversal)')
+        # Verify the second capture (neutral + enemy)
+        second_capture = capture_entries[1]
+        self.assertEqual(second_capture.turns, 2, 'Should take 2 turns to capture neutral then enemy')
+        self.assertEqual(second_capture.required_army, 3, 'Should require 3 army: 0 neut + 1 enemy + 2 tiles')
+        self.assertEqual(second_capture.econ_value, 1 + IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have neut + enemy econ value')
+
+        # Verify gather functionality works
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 2, 'a3 tile contributes 2 army (3-1=2)')
+
+        # Gather from a3 + aG2: aG2@col0 depth=2, cost=1, contributes 2-1=1, total = 2+1=3
+        second_gather = gather_entries[1]
+        self.assertEqual(second_gather.turns, 1, 'Should take 1 turn to gather from aG2')
+        self.assertEqual(second_gather.gathered_army, 3, 'a3+aG2 tiles contribute 3 army total (2+1)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for pull-through neutral cumulative gather")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for pull-through neutral cumulative gather")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__multi_enemy_tiles(self):
@@ -587,7 +669,10 @@ aG3  a3   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -616,20 +701,24 @@ aG3  a3   b1   bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have multiple capture options due to multiple enemy tiles
-        self.assertGreater(len(capture_entries), 1, 'Should have multiple capture options with multiple enemy tiles')
+        # Verify the first capture (enemy with 1 army)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture enemy island')
+        self.assertEqual(first_capture.required_army, 2, 'Should require 2 army: 1 enemy + 1 tile')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have enemy econ value')
 
-        # Verify capture functionality works for multiple enemy tiles
-        total_capture_econ = sum(entry.econ_value for entry in capture_entries)
-        self.assertGreater(total_capture_econ, 0, 'Should have positive total econ value from captures')
+        # Verify gather functionality works
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 2, 'a3 tile contributes 2 army (3-1=2)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for multi enemy tiles scenario")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for multi enemy tiles scenario")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move__multi_enemy_tiles__differing_army(self):
@@ -643,7 +732,10 @@ aG3  a5   b1   bG3
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -672,20 +764,24 @@ aG3  a5   b1   bG3
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have multiple capture options due to multiple enemy tiles with different army
-        self.assertGreater(len(capture_entries), 1, 'Should have multiple capture options with multiple enemy tiles')
+        # Verify the first capture (enemy with 1 army)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture enemy island')
+        self.assertEqual(first_capture.required_army, 2, 'Should require 2 army: 1 enemy + 1 tile')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have enemy econ value')
 
-        # Should have captures with varying army requirements due to different enemy army amounts
-        army_requirements = [entry.required_army for entry in capture_entries]
-        self.assertGreater(len(set(army_requirements)), 1, 'Should have varying army requirements for different enemy tiles')
+        # Verify gather functionality works
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 4, 'a5 tile contributes 4 army (5-1=4)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for multi enemy tiles with differing army scenario")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for multi enemy tiles with differing army scenario")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly__multi_enemy_tiles(self):
@@ -699,7 +795,10 @@ aG3  a3   a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -728,19 +827,25 @@ aG3  a3   a1   b1   bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have multiple capture options due to multiple enemy tiles
-        self.assertGreater(len(capture_entries), 1, 'Should have multiple capture options with multiple enemy tiles')
+        # Verify the first capture (enemy with 1 army, pulled through a1)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture enemy island')
+        self.assertEqual(first_capture.required_army, 2, 'Should require 2 army: a1 through to b1')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have enemy econ value')
 
-        # Should have multiple gather options due to friendly tiles
-        self.assertGreater(len(gather_entries), 1, 'Should have multiple gather options with friendly tiles')
+        # Verify gather functionality works
+        # Border island is a1@col2 with 1 army - contributes 0 (1-1=0)
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 0, 'a1 border tile contributes 0 army (1-1=0)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for pull-through friendly multi enemy tiles scenario")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for pull-through friendly multi enemy tiles scenario")
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_neutral__multi_enemy_tiles(self):
@@ -754,7 +859,10 @@ aG2  a5   b1        bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         # Use V2 expander to test lookup generation
@@ -783,32 +891,29 @@ aG2  a5   b1        bG1
         # Verify basic lookup table structure
         lookup_table = lookup_tables[0]
         capture_entries = [entry for entry in lookup_table.capture_entries_by_turn if entry is not None and entry.turns > 0]
-        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None and entry.turns > 0]
+        gather_entries = [entry for entry in lookup_table.gather_entries_by_turn if entry is not None]
 
         self.assertGreater(len(capture_entries), 0, 'Should have capture options')
         self.assertGreater(len(gather_entries), 0, 'Should have gather options')
 
-        # Should have neutral capture options with 0 army cost
-        # NOTE: V2 implementation may handle neutral captures differently
-        neutral_captures = [entry for entry in capture_entries if entry.required_army == 0 and entry.turns > 0]
-        # Don't assert neutral captures exist - V2 may handle neutrals differently
-        # self.assertGreater(len(neutral_captures), 0, 'Should have neutral capture options')
+        # Verify the first capture (enemy with 1 army)
+        first_capture = capture_entries[0]
+        self.assertEqual(first_capture.turns, 1, 'Should take 1 turn to capture enemy island')
+        self.assertEqual(first_capture.required_army, 2, 'Should require 2 army: 1 enemy + 1 tile')
+        self.assertEqual(first_capture.econ_value, IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, 'Should have enemy econ value')
 
-        # Should have at least one capture option
-        # NOTE: V2 flow routing routes a5→b1 as the primary border pair. bG1 is the terminal
-        # sink and receives flow separately; it does not appear via flow_to edges on b1, so the
-        # downstream stream only contains b1. A single entry is correct for this flow topology.
-        self.assertGreater(len(capture_entries), 0, 'Should have at least one capture option')
+        # Verify gather functionality works
+        first_gather = gather_entries[0]
+        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
+        self.assertEqual(first_gather.gathered_army, 4, 'a5 tile contributes 4 army (5-1=4)')
 
-        # Should have cumulative gather from multiple friendly tiles
-        self.assertGreater(len(gather_entries), 1, 'Should have multiple gather options')
-        # border a5@col1 (depth=1, cost=0 -> 5), aG2@col0 (depth=2, cost=1 -> 1)
-        # max gathered_army at border = 5+1 = 6
-        max_gather = max(gather_entries, key=lambda x: x.gathered_army)
-        self.assertGreaterEqual(max_gather.gathered_army, 6, 'Should be able to gather from a5 and aG2 tiles cumulatively (5+1 after traversal)')
+        # Gather from a5 + aG2: aG2@col0 depth=2, cost=1, contributes 2-1=1, total = 4+1=5
+        second_gather = gather_entries[1]
+        self.assertEqual(second_gather.turns, 1, 'Should take 1 turn to gather from aG2')
+        self.assertEqual(second_gather.gathered_army, 5, 'a5+aG2 tiles contribute 5 army total (4+1)')
 
         if debugMode:
-            print(f"Generated {len(lookup_tables)} lookup tables for pull-through neutral multi enemy tiles scenario")
+            logbook.info(f"Generated {len(lookup_tables)} lookup tables for pull-through neutral multi enemy tiles scenario")
 
 
     # CAPTURE LOOKUP GENERATION TESTS
@@ -824,7 +929,10 @@ aG1  a3   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -844,13 +952,13 @@ aG1  a3   b1   bG1
 
         # Debug: Check if we found any border pairs
         if debugMode:
-            print(f"Found {len(border_pairs)} border pairs")
-            print(f"Target-crossable islands: {target_crossable}")
-            print(f"Team: {flowExpanderV2.team}, Target team: {flowExpanderV2.target_team}")
+            logbook.info(f"Found {len(border_pairs)} border pairs")
+            logbook.info(f"Target-crossable islands: {target_crossable}")
+            logbook.info(f"Team: {flowExpanderV2.team}, Target team: {flowExpanderV2.target_team}")
 
             # Print island info
             for island in builder.all_tile_islands:
-                print(f"Island {island.unique_id}: team={island.team}, tiles={island.tile_count}, army={island.sum_army}")
+                logbook.info(f"Island {island.unique_id}: team={island.team}, tiles={island.tile_count}, army={island.sum_army}")
 
         self.assertGreater(len(border_pairs), 0, 'Should find at least one border pair for this simple map')
 
@@ -881,7 +989,7 @@ aG1  a3   b1   bG1
 
         first_capture = non_zero_entries[0]
         self.assertEqual(1, first_capture.turns, 'First capture should take 1 turn (enemy island size 1)')
-        self.assertEqual(3, first_capture.required_army, 'Should require 3 army to capture 1-army tile: sum_army(1) + tiles(1) + 1 = 3')
+        self.assertEqual(2, first_capture.required_army, 'Should require 3 army to capture 1-army tile: sum_army(1) + tiles(1) = 2')
         self.assertAlmostEqual(
             IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL,
             first_capture.econ_value,
@@ -905,7 +1013,10 @@ aG1  a4        b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -939,11 +1050,11 @@ aG1  a4        b1   bG1
 
         # Debug: Print all entries to understand what we have
         if debugMode:
-            print(f"Found {len(non_zero_entries)} non-zero entries:")
+            logbook.info(f"Found {len(non_zero_entries)} non-zero entries:")
             for i, entry in enumerate(non_zero_entries):
-                print(f"  Entry {i}: turns={entry.turns}, army={entry.required_army}, econ={entry.econ_value:.2f}")
+                logbook.info(f"  Entry {i}: turns={entry.turns}, army={entry.required_army}, econ={entry.econ_value:.2f}")
                 for j, node in enumerate(entry.included_target_flow_nodes):
-                    print(f"    Node {j}: island {node.island.unique_id}, team={node.island.team}, tiles={node.island.tile_count}, army={node.island.sum_army}")
+                    logbook.info(f"    Node {j}: island {node.island.unique_id}, team={node.island.team}, tiles={node.island.tile_count}, army={node.island.sum_army}")
 
         # Find entries with neutral econ value (1.0 per tile) vs enemy econ value (ITERATIVE_EXPANSION_EN_CAP_VAL per tile)
         neutral_entries = []
@@ -1010,7 +1121,10 @@ aG1  a2   a1   b2   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1027,10 +1141,10 @@ aG1  a2   a1   b2   bG1
 
         # Print debug info about target-crossable detection
         if debugMode:
-            print(f"Target-crossable islands: {target_crossable}")
+            logbook.info(f"Target-crossable islands: {target_crossable}")
             for island in builder.all_tile_islands:
                 if island.team == map.player_index:
-                    print(f"Friendly island {island.unique_id}: tiles={island.tile_count}, army={island.sum_army}")
+                    logbook.info(f"Friendly island {island.unique_id}: tiles={island.tile_count}, army={island.sum_army}")
 
         border_pairs = flowExpanderV2._enumerate_border_pairs(
             flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
@@ -1062,7 +1176,7 @@ aG1  a2   a1   b2   bG1
                                 # This is a crossing node - should be reflected in the turn cost
                                 # but not add army requirement or econ value
                                 if debugMode:
-                                    print(f"Crossing node {node.island.unique_id} included in turn {entry.turns}")
+                                    logbook.info(f"Crossing node {node.island.unique_id} included in turn {entry.turns}")
 
                     if debugMode:
                         self._render_capture_lookup_debug(capture_lookup, border_pair, target_contribs)
@@ -1082,7 +1196,10 @@ aG1  a5   b1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1117,7 +1234,7 @@ aG1  a5   b1   b1   bG1
         # First capture should be 1 turn for first enemy island
         first_capture = non_zero_entries[0]
         self.assertEqual(1, first_capture.turns, 'First capture should be 1 turn')
-        self.assertEqual(3, first_capture.required_army, 'First capture should require 3 army: sum_army(1) + tiles(1) + 1 = 3')
+        self.assertEqual(2, first_capture.required_army, 'First capture should require 2 army: sum_army(1) + tiles(1) = 2')
         self.assertAlmostEqual(
             IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL,
             first_capture.econ_value,
@@ -1134,7 +1251,7 @@ aG1  a5   b1   b1   bG1
 
         self.assertIsNotNone(both_captures, 'Should have entry for capturing both enemy islands')
         self.assertEqual(2, both_captures.turns, 'Both captures should take 2 turns')
-        self.assertEqual(5, both_captures.required_army, 'Both captures should require 5 army: sum_army(1+1) + tiles(2) + 1 = 5')
+        self.assertEqual(4, both_captures.required_army, 'Both captures should require 5 army: sum_army(1+1) + tiles(2) = 4')
         self.assertAlmostEqual(
             IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2,
             both_captures.econ_value,
@@ -1147,16 +1264,16 @@ aG1  a5   b1   b1   bG1
 
     def _render_capture_lookup_debug(self, capture_lookup, border_pair, target_contribs):
         """Debug rendering for capture lookup tables"""
-        print(f"\n=== CAPTURE LOOKUP DEBUG for border pair {border_pair.friendly_island_id}->{border_pair.target_island_id} ===")
-        print(f"Target contributions: {len(target_contribs)}")
+        logbook.info(f"\n=== CAPTURE LOOKUP DEBUG for border pair {border_pair.friendly_island_id}->{border_pair.target_island_id} ===")
+        logbook.info(f"Target contributions: {len(target_contribs)}")
         for i, contrib in enumerate(target_contribs):
-            print(f"  {i}: Island {contrib.island_id}, tiles={contrib.tile_count}, army={contrib.army_amount}, crossing={contrib.is_crossing}")
+            logbook.info(f"  {i}: Island {contrib.island_id}, tiles={contrib.tile_count}, army={contrib.army_amount}, crossing={contrib.is_crossing}")
 
-        print(f"\nCapture lookup entries:")
+        logbook.info(f"\nCapture lookup entries:")
         for turn, entry in enumerate(capture_lookup):
             if entry is not None:
-                print(f"  Turn {turn}: army={entry.required_army}, econ={entry.econ_value:.2f}, targets={len(entry.included_target_flow_nodes)}")
-        print("=== END CAPTURE LOOKUP DEBUG ===\n")
+                logbook.info(f"  Turn {turn}: army={entry.required_army}, econ={entry.econ_value:.2f}, targets={len(entry.included_target_flow_nodes)}")
+        logbook.info("=== END CAPTURE LOOKUP DEBUG ===\n")
 
 
     # GATHER LOOKUP GENERATION TESTS
@@ -1172,7 +1289,10 @@ aG1  a3   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1202,23 +1322,17 @@ aG1  a3   b1   bG1
 
         # Verify basic structure
         self.assertIsNotNone(gather_lookup, 'Gather lookup should be generated')
-        self.assertEqual(51, len(gather_lookup), 'Should have entries for turns 0-50')
+        self.assertEqual(51, len(gather_lookup), 'Should have entries for turns 0-50')   # this is retarded, change
 
         # Turn 0 should be the initial border state
-        turn0_entry = gather_lookup[0]
-        self.assertIsNotNone(turn0_entry, 'Turn 0 entry should exist')
-        self.assertEqual(0, turn0_entry.turns, 'Turn 0 should have 0 turns')
-        self.assertEqual(0, turn0_entry.required_army, 'Turn 0 should require 0 army')
-        self.assertEqual(0, turn0_entry.gathered_army, 'Turn 0 should have 0 gathered army')
-        self.assertEqual(0.0, turn0_entry.econ_value, 'Turn 0 should have 0 econ value')
 
         # Find first non-zero turn entry (should be the friendly island gather)
-        non_zero_entries = [entry for entry in gather_lookup if entry is not None and entry.turns > 0]
+        non_zero_entries = [entry for entry in gather_lookup if entry is not None]
         self.assertGreater(len(non_zero_entries), 0, 'Should have non-zero turn entries')
 
         first_gather = non_zero_entries[0]
-        self.assertEqual(1, first_gather.turns, 'First gather should take 1 turn (friendly island size 1)')
-        self.assertEqual(3, first_gather.gathered_army, 'Should gather 3 army from friendly island')
+        self.assertEqual(0, first_gather.turns, 'First gather should take 0 turns (friendly island size 1), as the move cost is paid on the capture side of the border crossing')
+        self.assertEqual(2, first_gather.gathered_army, 'Should gather 2 army from friendly island with a 3 on it')
         self.assertEqual(0, first_gather.required_army, 'Gather entries should have 0 required army')
         self.assertEqual(0.0, first_gather.econ_value, 'Gather entries should have 0 econ value')
         self.assertEqual(1, len(first_gather.included_friendly_flow_nodes), 'Should include 1 friendly node')
@@ -1238,7 +1352,10 @@ aG1  a2   a2   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1267,28 +1384,26 @@ aG1  a2   a2   b1   bG1
         )
 
         # Should have entries for gathering from 1, 2, or both friendly islands
-        non_zero_entries = [entry for entry in gather_lookup if entry is not None and entry.turns > 0]
+        non_zero_entries = [entry for entry in gather_lookup if entry is not None]
         self.assertGreater(len(non_zero_entries), 1, 'Should have multiple gather options')
 
         # First gather should be 1 turn for first friendly island
         first_gather = non_zero_entries[0]
-        self.assertEqual(1, first_gather.turns, 'First gather should be 1 turn')
-        self.assertEqual(2, first_gather.gathered_army, 'First gather should gather 2 army')
+        self.assertEqual(0, first_gather.turns, 'First gather should be 0 turns as we pay the cost on the capture side for crossing the border pair')
+        self.assertEqual(1, first_gather.gathered_army, 'First gather should gather 1 army from the 2 tile')
         self.assertEqual(1, len(first_gather.included_friendly_flow_nodes), 'Should include 1 friendly node')
 
         # Should have an entry for gathering from both friendly islands
-        both_gathers = None
-        for entry in non_zero_entries:
-            if len(entry.included_friendly_flow_nodes) == 2:
-                both_gathers = entry
-                break
+        self.assertEqual(2, len(non_zero_entries))
+        both_gathers = non_zero_entries[1]
+        self.assertEqual(2, len(both_gathers.included_friendly_flow_nodes))
 
         self.assertIsNotNone(both_gathers, 'Should have entry for gathering from both friendly islands')
-        self.assertEqual(2, both_gathers.turns, 'Both gathers should take 2 turns')
+        self.assertEqual(1, both_gathers.turns, 'Both gathers should take 1 turn in addition to the free initial border cost')
         # border island a2@col2: depth=1, tile_count=1, traversal_cost=0, contributes 2
         # upstream island a2@col1: depth=2, tile_count=1, traversal_cost=1, contributes 2-1=1
         # total army arriving at border = 2+1 = 3
-        self.assertEqual(3, both_gathers.gathered_army, 'Both gathers should gather 3 army at border after traversal deduction')
+        self.assertEqual(2, both_gathers.gathered_army, 'Both gathers should gather 3 army at border after traversal deduction')
         self.assertEqual(2, len(both_gathers.included_friendly_flow_nodes), 'Should include 2 friendly nodes')
 
         if debugMode:
@@ -1305,7 +1420,10 @@ aG1  a2   a5   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1334,24 +1452,21 @@ aG1  a2   a5   b1   bG1
         )
 
         # Verify that the higher army island is preferred first (due to better army/tile ratio)
-        non_zero_entries = [entry for entry in gather_lookup if entry is not None and entry.turns > 0]
+        non_zero_entries = [entry for entry in gather_lookup if entry is not None]
         self.assertGreater(len(non_zero_entries), 0, 'Should have non-zero turn entries')
 
         # The first entry should be from the island with better army/tile ratio (the 5-army island)
         first_gather = non_zero_entries[0]
-        self.assertEqual(1, first_gather.turns, 'First gather should be 1 turn')
-        # Should be 5 army if that island has better ratio, otherwise 2 army
-        self.assertIn(first_gather.gathered_army, [2, 5], f'First gather should be from either island, got {first_gather.gathered_army}')
+        self.assertEqual(0, first_gather.turns, 'First gather should be 0 turns, as we pay the move cost on the capture side for the border crossing')
+        # Should be 5 army - 1
+        self.assertEqual(first_gather.gathered_army, 4, f'First gather should be from either island, got {first_gather.gathered_army}')
 
         # Should have cumulative gathering
-        if len(non_zero_entries) > 1:
-            second_gather = non_zero_entries[1]
-            self.assertEqual(2, second_gather.turns, 'Second gather should be 2 turns')
-            # border island (whichever is first): depth=1, cost=0
-            # second island: depth=2, tile_count=1, traversal_cost=1
-            # raw sum = 2+5=7, but second island loses 1 to traversal -> 7-1=6
-            self.assertEqual(6, second_gather.gathered_army, 'Second gather should have 6 army at border after traversal deduction (2+5-1)')
-
+        self.assertEqual(2, len(non_zero_entries))
+        second_gather = non_zero_entries[1]
+        self.assertEqual(1, second_gather.turns, 'adds 1 move and 1 army to first gather.')
+        # Should be 5 army - 1
+        self.assertEqual(second_gather.gathered_army, 5, 'adds 1 move and 1 army to first gather.')
         if debugMode:
             self._render_gather_lookup_debug(gather_lookup, border_pair, friendly_contribs)
 
@@ -1366,7 +1481,10 @@ aG1  a2   a1   a2   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1395,11 +1513,11 @@ aG1  a2   a1   a2   b1   bG1
         )
 
         # Verify turn accounting: each island contributes its tile count to turn cost
-        non_zero_entries = [entry for entry in gather_lookup if entry is not None and entry.turns > 0]
+        non_zero_entries = [entry for entry in gather_lookup if entry is not None]
 
         for entry in non_zero_entries:
             # Calculate expected turn count based on included islands
-            expected_turns = sum(node.island.tile_count for node in entry.included_friendly_flow_nodes)
+            expected_turns = sum(node.island.tile_count for node in entry.included_friendly_flow_nodes) - 1
             self.assertEqual(expected_turns, entry.turns,
                            f'Turn count should match sum of tile counts for included islands')
 
@@ -1444,7 +1562,10 @@ a3   b2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1513,7 +1634,10 @@ a4   b2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1573,7 +1697,10 @@ a7   b2
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1652,7 +1779,10 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral)
 
@@ -1705,7 +1835,7 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         BEFORE the enemy tile — not sort them after it by value.
 
         Layout (1 row, 11 cols) with desired_tile_island_size=1, fill_out_tiles=False:
-          a3   aG4  a2   a2   a2   __   __   b2   N40  __   bG1
+          a3   aG4  a2   a2   a2   __   __   b2   N4   __   bG1
            0    1    2    3    4    5    6    7    8    9    10
 
         Cols 5 and 6 are neutral tiles (army=0) blocking the path from a2@col4 to b2@col7.
@@ -1718,21 +1848,24 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
 
         Assertions:
         1. No capture entry for b2 may have cap_turns < 3 (must traverse 2 neutrals first).
-        2. The 3-turn capture entry for the 2 neutrals + b2 must have required_army = 6:
-             army_cost(neut@5) + army_cost(neut@6) + army(b2) + turns + 1 = 0+0+2+3+1 = 6.
+        2. The 3-turn capture entry for the 2 neutrals + b2 must have required_army = 5:
+             army_cost(neut@5) + army_cost(neut@6) + army(b2) + turns + 1 = 1+1+3 = 5.
         3. Three a2 tiles give gathered_army = 6 — exactly meeting required, surplus = 0,
            so armyGath should be 0 (not positive), meaning aG4 IS needed for any surplus.
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |    |    |    |    |    |    |    |
-a3   aG4  a2   a2   a2             b2   N40       bG1
+aG3  a3   a2   a2   a2             b2   N4        bG10
 |    |    |    |    |    |    |    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral)
 
@@ -1747,7 +1880,7 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         self.assertIsNotNone(lookup_tables, 'last_lookup_tables must be set after get_expansion_options')
         self.assertGreater(len(lookup_tables), 0, 'Should produce at least one lookup table')
 
-        self.render_flow_expansion_debug(flowExpanderV2, opts, renderAll=True)
+        # self.render_flow_expansion_debug(flowExpanderV2, opts, renderAll=True)
 
         # b2 is at col 7.  Any capture entry whose included_target_flow_nodes contains b2
         # must have cap_turns >= 3 (col5 neutral + col6 neutral + col7 b2 = 3 mandatory steps).
@@ -1758,12 +1891,8 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         self.assertEqual(1, len(lookup_tables), 'Should have exactly one lookup table - the friendly-neutral island border pair')
         lt = lookup_tables[0]
 
-        # e0 is the entry where we spend 0 turns capturing... right?
-        e0 = lt.enriched_capture_entries[0]
-        self.assertEqual(0, e0.capture_entry.turns)
-
         # e1 should cost 1, a2->N0
-        e1: EnrichedFlowTurnsEntry = lt.enriched_capture_entries[1]
+        e1: EnrichedFlowTurnsEntry = lt.enriched_capture_entries[0]
         self.assertEqual(1, e1.capture_entry.turns)
         self.assertEqual(1, e1.capture_entry.econ_value)
         self.assertEqual(1, e1.combined_value_density)
@@ -1771,34 +1900,230 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         for enriched in lt.enriched_capture_entries:
             cap = enriched.capture_entry
             if cap.turns == 0:
-                continue
+                self.fail('should be no zero turn enriched cap entries anymore')
             target_island_ids = {n.island.unique_id for n in cap.included_target_flow_nodes}
             if b2_island_id not in target_island_ids:
                 continue
             found_b2_entry = True
             # Must have walked through both neutrals first — minimum 3 turns
-            self.assertGreaterEqual(
-                cap.turns, 3,
+            self.assertEqual(
+                3, cap.turns,
                 f'Capture entry including b2 (col 7) has cap_turns={cap.turns} < 3; '
                 f'the two neutral tiles at cols 5-6 are mandatory traversal and cannot be skipped. '
                 f'req={cap.required_army} gath={enriched.gather_entry.gathered_army}'
             )
+
+            self.assertEqual(
+                5, cap.required_army,
+                f'3-turn capture of neut+neut+b2 must require army=5 (1+1+3), got {cap.required_army}'
+            )
+            # The 3xa2 gather covers exactly 6 — surplus must be 0, not positive
+            # (positive surplus here would mean the plan incorrectly bypasses the neutrals)
+            surplus = enriched.gather_entry.gathered_army - cap.required_army
+            self.assertEqual(surplus, 0)
+
+        self.assertTrue(found_b2_entry, 'Expected at least one enriched entry capturing b2@col7')
+
+    def test_lookup_generation__MORE_neutral_tiles_between_friendly_and_enemy__must_count_as_traversal_cost(self):
+        """
+        Regression: when neutral tiles sit between the friendly border island and the
+        enemy tile, the capture stream must treat them as mandatory traversal steps
+        BEFORE the enemy tile — not sort them after it by value.
+
+        Layout (1 row, 11 cols) with desired_tile_island_size=1, fill_out_tiles=False:
+          a3   aG5  a2   a2   a2   __   __   __   b2   N4   __   bG1
+           0    1    2    3    4    5    6    7    8    9   10    11
+
+        Cols 5 and 6 are neutral tiles (army=0) blocking the path from a2@col4 to b2@col7.
+        Any plan that captures b2 must traverse both neutrals first:
+          col4 -> col5 -> col6 -> col7  =  3 moves minimum.
+
+        Previous bug: the capture stream sorted b2 (enemy, high type_bonus) before the
+        neutrals, producing a spurious cap_t=1 req=4 entry that teleports past the two
+        mandatory neutral tiles, and reported armyGath=1 instead of the correct 0.
+
+        Assertions:
+        1. No capture entry for b2 may have cap_turns < 4 (must traverse 3 neutrals first).
+        2. The 4-turn capture entry for the 2 neutrals + b2 must have required_army = 6:
+             army_cost(neut@5) + army_cost(neut@6) + army(b2) + turns + 1 = 1+1+1+3 = 6.
+        3. Three a2 tiles give gathered_army = 6 — exactly meeting required, surplus = 0,
+           so armyGath should be 0 (not positive), meaning aG4 IS needed for any surplus.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    |
+a3   aG4  a2   a2   a2                  b2   N4        bG1
+|    |    |    |    |    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.desired_tile_island_size = 1
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.log_debug = False
+        opts = flowExpanderV2.get_expansion_options(
+            builder, general.player, enemyGeneral.player, turns=50,
+            boardAnalysis=None, territoryMap=None, negativeTiles=None
+        )
+
+        lookup_tables = flowExpanderV2.last_lookup_tables
+        self.assertIsNotNone(lookup_tables, 'last_lookup_tables must be set after get_expansion_options')
+        self.assertGreater(len(lookup_tables), 0, 'Should produce at least one lookup table')
+
+#         self.render_flow_expansion_debug(flowExpanderV2, opts, renderAll=True)
+
+        # b2 is at col 7.  Any capture entry whose included_target_flow_nodes contains b2
+        # must have cap_turns >= 3 (col5 neutral + col6 neutral + col7 b2 = 3 mandatory steps).
+        b2_tile = map.GetTile(8, 0)
+
+        # TODO BELOW HERE INCORRECT
+        b2_island_id = builder.tile_island_lookup.raw[b2_tile.tile_index].unique_id
+
+        found_b2_entry = False
+        self.assertEqual(1, len(lookup_tables), 'Should have exactly one lookup table - the friendly-neutral island border pair')
+        lt = lookup_tables[0]
+
+        # e1 should cost 1, a2->N0
+        e1: EnrichedFlowTurnsEntry = lt.enriched_capture_entries[0]
+        self.assertEqual(1, e1.capture_entry.turns)
+        self.assertEqual(1, e1.capture_entry.econ_value)
+        self.assertEqual(1, e1.combined_value_density)
+
+        for enriched in lt.enriched_capture_entries:
+            cap = enriched.capture_entry
+            if cap.turns == 0:
+                self.fail('should be no zero turn enriched cap entries anymore')
+            target_island_ids = {n.island.unique_id for n in cap.included_target_flow_nodes}
+            if b2_island_id not in target_island_ids:
+                continue
+            found_b2_entry = True
+            # Must have walked through both neutrals first — minimum 3 turns
+            self.assertEqual(
+                4, cap.turns,
+                f'Capture entry including b2 (col 8) has cap_turns={cap.turns} < 3; '
+                f'the two neutral tiles at cols 5-6 are mandatory traversal and cannot be skipped. '
+                f'req={cap.required_army} gath={enriched.gather_entry.gathered_army}'
+            )
+
+            self.assertEqual(
+                6, cap.required_army,
+                f'4-turn capture of neut+neut+b2 must require army=6 (0+0+2+3), got {cap.required_army}'
+            )
+            # The 3xa2 gather covers exactly 6 — surplus must be 0, not positive
+            # (positive surplus here would mean the plan incorrectly bypasses the neutrals)
+            surplus = enriched.gather_entry.gathered_army - cap.required_army
+            self.assertEqual(surplus, 0)
+
+        self.assertTrue(found_b2_entry, 'Expected at least one enriched entry capturing b2@col7')
+    def test_lookup_generation__LARGE_GAP_neutral_tiles_between_friendly_and_enemy__must_count_as_traversal_cost(self):
+        """
+        Regression: when neutral tiles sit between the friendly border island and the
+        enemy tile, the capture stream must treat them as mandatory traversal steps
+        BEFORE the enemy tile — not sort them after it by value.
+
+        Layout (1 row, 11 cols) with desired_tile_island_size=1, fill_out_tiles=False:
+          a3   aG9  a2   a2   a2   __   __   __   __   __   __   __   __   __   b2   N4   __   bG1
+           0    1    2    3    4    5    6    7    8    9   10   11   12   13   14   15   16   17
+
+        Cols 5 and 6 are neutral tiles (army=0) blocking the path from a2@col4 to b2@col7.
+        Any plan that captures b2 must traverse both neutrals first:
+          col4 -> col5 -> ... -> col14  =  13 moves minimum.
+
+        Previous bug: the capture stream sorted b2 (enemy, high type_bonus) before the
+        neutrals, producing a spurious cap_t=1 req=4 entry that teleports past the two
+        mandatory neutral tiles, and reported armyGath=1 instead of the correct 0.
+
+        Assertions:
+        1. No capture entry for b2 may have cap_turns < 3 (must traverse 2 neutrals first).
+        2. The 3-turn capture entry for the 2 neutrals + b2 must have required_army = 5:
+             army_cost(neut@5) + army_cost(neut@6) + army(b2) + turns + 1 = 1+1+3 = 5.
+        3. Three a2 tiles give gathered_army = 6 — exactly meeting required, surplus = 0,
+           so armyGath should be 0 (not positive), meaning aG4 IS needed for any surplus.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+a3   aG10 a2   a2   a2                                                b2   N4        bG1
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.desired_tile_island_size = 1
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.log_debug = False
+        opts = flowExpanderV2.get_expansion_options(
+            builder, general.player, enemyGeneral.player, turns=50,
+            boardAnalysis=None, territoryMap=None, negativeTiles=None
+        )
+
+        lookup_tables = flowExpanderV2.last_lookup_tables
+        self.assertIsNotNone(lookup_tables, 'last_lookup_tables must be set after get_expansion_options')
+        self.assertGreater(len(lookup_tables), 0, 'Should produce at least one lookup table')
+
+#         self.render_flow_expansion_debug(flowExpanderV2, opts, renderAll=True)
+
+        # b2 is at col 7.  Any capture entry whose included_target_flow_nodes contains b2
+        # must have cap_turns >= 3 (col5 neutral + col6 neutral + col7 b2 = 3 mandatory steps).
+        b2_tile = map.GetTile(14, 0)
+
+        # TODO BELOW HERE INCORRECT
+        b2_island_id = builder.tile_island_lookup.raw[b2_tile.tile_index].unique_id
+
+        found_b2_entry = False
+        self.assertEqual(1, len(lookup_tables), 'Should have exactly one lookup table - the friendly-neutral island border pair')
+        lt = lookup_tables[0]
+
+        # e1 should cost 1, a2->N0
+        e1: EnrichedFlowTurnsEntry = lt.enriched_capture_entries[0]
+        self.assertEqual(1, e1.capture_entry.turns)
+        self.assertEqual(1, e1.capture_entry.econ_value)
+        self.assertEqual(1, e1.combined_value_density)
+
+        enriched: EnrichedFlowTurnsEntry
+        for enriched in lt.enriched_capture_entries:
+            cap = enriched.capture_entry
+            if cap.turns == 0:
+                self.fail('should be no zero turn enriched cap entries anymore')
+            target_island_ids = {n.island.unique_id for n in cap.included_target_flow_nodes}
+            if b2_island_id not in target_island_ids:
+                continue
+            found_b2_entry = True
+            # Must have walked through both neutrals first — minimum 3 turns
+            self.assertEqual(
+                10, cap.turns,
+                f'Capture entry including b2 (col 14) has cap_turns={cap.turns} < 13; '
+                f'the neutrals are mandatory traversal and cannot be skipped. '
+                f'req={cap.required_army} gath={enriched.gather_entry.gathered_army}'
+            )
+            self.assertEqual(
+                13, enriched.combined_turn_cost,
+                f'Capture entry including b2 (col 14) has cap_turns={cap.turns} < 13; '
+                f'the neutrals are mandatory traversal and cannot be skipped. '
+                f'req={cap.required_army} gath={enriched.gather_entry.gathered_army}'
+            )
             # For the 3-turn entry: required_army must equal 6 (0+0+2 army_cost + 3 turns + 1)
-            if cap.turns == 3:
-                self.assertEqual(
-                    cap.required_army, 6,
-                    f'3-turn capture of neut+neut+b2 must require army=6 (0+0+2+3+1), got {cap.required_army}'
-                )
-                # The 3xa2 gather covers exactly 6 — surplus must be 0, not positive
-                # (positive surplus here would mean the plan incorrectly bypasses the neutrals)
-                surplus = enriched.gather_entry.gathered_army - cap.required_army
-                self.assertLessEqual(
-                    surplus, 0,
-                    f'3xa2 gather (gathered={enriched.gather_entry.gathered_army}) vs required=6 '
-                    f'should give surplus<=0 when only the 3 a2 tiles are gathered; '
-                    f'positive surplus would mean the neutral traversal cost was undercounted. '
-                    f'surplus={surplus}'
-                )
+
+            self.assertEqual(
+                12, cap.required_army,
+                f'10-turn capture of neut*9+b2 must require army=9+3=12, got {cap.required_army}'
+            )
+            # The 3xa2 gather covers exactly 6 — surplus must be 0, not positive
+            # (positive surplus here would mean the plan incorrectly bypasses the neutrals)
+            surplus = enriched.gather_entry.gathered_army - cap.required_army
+            self.assertEqual(surplus, 0)
 
         self.assertTrue(found_b2_entry, 'Expected at least one enriched entry capturing b2@col7')
 
@@ -1841,7 +2166,10 @@ aG1                      bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 50, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
@@ -1892,10 +2220,10 @@ aG1                      bG1
             # This verifies the depth-based formula doesn't over-subtract the border island.
             border_island_id = tbl.border_pair.friendly_island_id
             border_island = builder.tile_islands_by_unique_id[border_island_id]
-            t1_entry = next((e for e in gather_entries if e.turns == 1), None)
+            t1_entry = next((e for e in gather_entries if e.turns == 0), None)
             if t1_entry is not None:
                 self.assertEqual(
-                    t1_entry.gathered_army, border_island.sum_army,
+                    t1_entry.gathered_army, border_island.sum_army - border_island.tile_count,
                     f'Turn-1 gather must equal border island sum_army (traversal_cost=0 at depth=1). '
                     f'got {t1_entry.gathered_army}, expected {border_island.sum_army}. '
                     f'Low value indicates depth-based over-subtraction bug.'
@@ -1913,7 +2241,10 @@ aG1  a1   b1   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)

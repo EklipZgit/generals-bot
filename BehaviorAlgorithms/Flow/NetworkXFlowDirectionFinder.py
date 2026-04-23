@@ -8,6 +8,7 @@ import logbook
 import networkx as nx
 
 import SearchUtils
+from ArmyAnalyzer import ArmyAnalyzer
 from MapMatrix import MapMatrix
 from Gather import GatherDebug
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
@@ -26,17 +27,19 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
     def __init__(
             self,
             map: 'MapBase',
+            intergeneral_analysis: 'ArmyAnalyzer',
+            friendly_general: 'Tile',
+            use_backpressure_from_enemy_general: bool,
             perf_timer: 'PerformanceTimer',
             log_debug: bool,
-            use_backpressure_from_enemy_general: bool,
-            friendly_general: 'Tile',
             invalid_flow_renderer,
     ):
-        self.map = map
+        self.map: 'MapBase' = map
         self.perf_timer = perf_timer
         self.log_debug = log_debug
+        self.intergeneral_analysis: 'ArmyAnalyzer' = intergeneral_analysis
         self.use_backpressure_from_enemy_general = use_backpressure_from_enemy_general
-        self.friendly_general = friendly_general
+        self.friendly_general: 'Tile' = friendly_general
         self.invalid_flow_renderer = invalid_flow_renderer
 
         self.team: int = map.friendly_team
@@ -115,6 +118,9 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             self._last_built_graphs_turn = self.map.turn
 
     def build_graph_data(self, islands: 'TileIslandBuilder', use_neutral_flow: bool) -> 'NxFlowGraphData':
+        enDist = self.intergeneral_analysis.shortestPathWay.distance
+        neutEnDistCutoff = int(enDist * 1.0)
+        pathwayCutoff = int(1.25 * enDist) + 1
         graph: nx.DiGraph = nx.DiGraph()
         myTeam = self.team
         ourSet = {i.unique_id for i in islands.tile_islands_by_team_id[myTeam]}
@@ -141,14 +147,6 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             raise Exception(f'Cannot call ensure_flow_graph_exists without setting enemyGeneral to some (enemy) tile.')
         targetGeneralIsland = islands.tile_island_lookup.raw[self.enemy_general.tile_index]
         frGeneralIsland = islands.tile_island_lookup.raw[self.friendly_general.tile_index]
-
-        # DIAGNOSTIC: Check island 190 set membership
-        DIAG_ISLAND_190_CHECK = 190 in ourSet or 190 in targetSet
-        if DIAG_ISLAND_190_CHECK:
-            logbook.info(f'DIAG_190_SETS: ourSet contains 190 = {190 in ourSet}, targetSet contains 190 = {190 in targetSet}')
-            isl190 = islands.tile_islands_by_unique_id.get(190)
-            if isl190:
-                logbook.info(f'DIAG_190_SETS: island 190 team={isl190.team}, myTeam={myTeam}, target_team={self.target_team}')
 
         cumulativeDemand, demands, friendlyArmySupply, enemyArmyDemand, enemyGeneralDemand = self._determine_initial_demands_and_split_input_output_nodes(graph, islands, ourSet, targetSet, use_neutral_flow)
 
@@ -181,8 +179,6 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             maxDepth=3,
             foreachFunc=foreachFunc)
 
-        DIAG_ISLAND_190 = 190  # Island at (9,11) with 51 armies
-
         for island in islands.all_tile_islands:
             sourceCapacity = 100000
             isIslandNeut = island.team == -1
@@ -196,13 +192,6 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                     bordersFr = True
             areAllBordersNeut = not bordersFr and not bordersEn
 
-            # DIAGNOSTIC: Log island 190's border analysis
-            if island.unique_id == DIAG_ISLAND_190:
-                logbook.info(f'DIAG_190: island={island}, team={island.team}, bordersFr={bordersFr}, bordersEn={bordersEn}, areAllBordersNeut={areAllBordersNeut}')
-                logbook.info(f'DIAG_190: border_islands count={len(island.border_islands)}')
-                for bi in island.border_islands:
-                    logbook.info(f'DIAG_190:   border_island {bi} team={bi.team} at {bi.tile_set}')
-
             weight = 1
 
             for movableIsland in island.border_islands:
@@ -210,16 +199,32 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                 if self.log_debug:
                     logbook.info(f'For edge from {island} to {movableIsland} capacities were src {sourceCapacity}, dest {destCapacity}')
                 edgeCapacity = max(sourceCapacity, destCapacity)
-                # DIAGNOSTIC: Log edge creation for island 190
-                if island.unique_id == DIAG_ISLAND_190:
-                    logbook.info(f'DIAG_190_EDGE: Creating edge from {-island.unique_id} to {movableIsland.unique_id} (movableIsland={movableIsland}), weight={weight}, capacity={edgeCapacity}')
+                # it costs 1 weight to move between islands. From the output port of this one to the input of the other.
                 graph.add_edge(-island.unique_id, movableIsland.unique_id, weight=weight, capacity=edgeCapacity)
-
-            sinkEnemyGeneral: bool
+            # neutEnDistCutoff
+            # pathwayCutoff
+            sinkEnemyGeneral: bool = False
             if use_neutral_flow:
-                sinkEnemyGeneral = areAllBordersNeut and island.unique_id not in capacityLookup
+                if (
+                    areAllBordersNeut
+                    and island.unique_id not in capacityLookup
+                ):
+                    sinkEnemyGeneral = True
+                    # dist = self.intergeneral_analysis.pathWayLookupMatrix.raw[island.tiles_by_army[0].tile_index].distance
+                    # if self.intergeneral_analysis.bMap.raw[island.tiles_by_army[0].tile_index] <= neutEnDistCutoff:
+                    #     sinkEnemyGeneral = False
+
             else:
-                sinkEnemyGeneral = isIslandNeut and not bordersBothPlayers
+                if (
+                    isIslandNeut
+                    and not bordersBothPlayers
+                ):
+                    pw = self.intergeneral_analysis.pathWayLookupMatrix.raw[island.tiles_by_army[0].tile_index]
+                    sinkEnemyGeneral = True
+                    if pw is not None:
+                        dist = pw.distance
+                        if dist <= pathwayCutoff and self.intergeneral_analysis.bMap.raw[island.tiles_by_army[0].tile_index] <= neutEnDistCutoff:
+                            sinkEnemyGeneral = False
             if sinkEnemyGeneral:
                 neutSinks.add(island.unique_id)
 
@@ -229,14 +234,17 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
 
         graph.add_node(fakeNode, demand=-cumulativeDemand)
 
+        # TODO document what this does
         weight = 10
         if not use_neutral_flow:
             weight = 0
 
         for neutSinkId in neutSinks:
-            capacity = islands.tile_islands_by_unique_id[neutSinkId].tile_count
+            isl = islands.tile_islands_by_unique_id[neutSinkId]
+            capacity = isl.tile_count
             graph.add_edge(fakeNode, neutSinkId, weight=weight, capacity=capacity)
 
+        # TODO document what this does
         backpressureWeight = 0
         if not self.use_backpressure_from_enemy_general:
             backpressureWeight = 10000
@@ -313,25 +321,26 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                 + ' | '.join(f'{b}(team={b.team})' for b in targetGeneralIsland.border_islands)
             )
 
-        weakComponents = list(nx.weakly_connected_components(graph))
-        if len(weakComponents) > 1:
-            logbook.error(
-                f'build_graph_data DISCONNECTED GRAPH: {len(weakComponents)} weakly connected components, '
-                f'use_neutral_flow={use_neutral_flow}, cumulativeDemand={cumulativeDemand}'
-            )
-            for i, comp in enumerate(weakComponents):
-                islandIds = [n for n in comp if n > 0]
-                islandDescs = []
-                for uid in islandIds[:8]:
-                    isl = islands.tile_islands_by_unique_id.get(uid)
-                    if isl:
-                        islandDescs.append(f'{isl}(team={isl.team})')
-                logbook.error(f'  component {i}: nodes={len(comp)}, islands={islandDescs}{"..." if len(islandIds) > 8 else ""}')
-        else:
-            logbook.info(
-                f'build_graph_data graph OK: fully connected, use_neutral_flow={use_neutral_flow}, '
-                f'cumulativeDemand={cumulativeDemand}'
-            )
+        if self.log_debug:
+            weakComponents = list(nx.weakly_connected_components(graph))
+            if len(weakComponents) > 1:
+                logbook.error(
+                    f'build_graph_data DISCONNECTED GRAPH: {len(weakComponents)} weakly connected components, '
+                    f'use_neutral_flow={use_neutral_flow}, cumulativeDemand={cumulativeDemand}'
+                )
+                for i, comp in enumerate(weakComponents):
+                    islandIds = [n for n in comp if n > 0]
+                    islandDescs = []
+                    for uid in islandIds[:8]:
+                        isl = islands.tile_islands_by_unique_id.get(uid)
+                        if isl:
+                            islandDescs.append(f'{isl}(team={isl.team})')
+                    logbook.error(f'  component {i}: nodes={len(comp)}, islands={islandDescs}{"..." if len(islandIds) > 8 else ""}')
+            else:
+                logbook.info(
+                    f'build_graph_data graph OK: fully connected, use_neutral_flow={use_neutral_flow}, '
+                    f'cumulativeDemand={cumulativeDemand}'
+                )
 
         nxData = NxFlowGraphData(graph, neutSinks, demands, cumulativeDemand, fakeNodes)
         nxData.friendly_army_supply = friendlyArmySupply
@@ -346,7 +355,6 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         enemyArmyDemand = 0
         enemyGeneralDemand = 0
         targetGeneralIsland = islands.tile_island_lookup.raw[self.enemy_general.tile_index]
-        DIAG_ISLAND_190 = 190  # Island at (9,11) with 51 armies
         for island in islands.all_tile_islands:
             cost = island.tile_count - 1
             inAttrs = {}
@@ -368,15 +376,6 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                 cost *= 2
 
             demands[island.unique_id] = demand
-
-            # DIAGNOSTIC: Log demand calculation for island 190
-            if island.unique_id == DIAG_ISLAND_190:
-                inOurSet = island.unique_id in ourSet
-                inTargetSet = island.unique_id in targetSet
-                logbook.info(f'DIAG_190_DEMAND: island={island}, sum_army={island.sum_army}, tile_count={island.tile_count}')
-                logbook.info(f'DIAG_190_DEMAND: initial_demand={island.tile_count - island.sum_army}, final_demand={demand}')
-                logbook.info(f'DIAG_190_DEMAND: inOurSet={inOurSet}, inTargetSet={inTargetSet}, team={island.team}')
-                logbook.info(f'DIAG_190_DEMAND: inAttrs={repr(inAttrs)}, cost={cost}')
 
             if self.log_debug:
                 logbook.info(f'node {island.unique_id}: {repr(inAttrs)}')

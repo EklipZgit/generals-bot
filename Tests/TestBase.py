@@ -1721,10 +1721,10 @@ class TestBase(unittest.TestCase):
         if timeLimit is not None:
             cutoffTime = time.perf_counter() + timeLimit
         start = time.perf_counter()
-        builder = TileIslandBuilder(map, averageTileIslandSize=tileIslandSize)
-        builder.recalculate_tile_islands(enemyGeneral)
         analysis = BoardAnalyzer(map, general)
         analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis, averageTileIslandSize=tileIslandSize)
+        builder.recalculate_tile_islands(enemyGeneral)
         GatherDebug.USE_DEBUG_ASSERTS = True
 
         # if debugMode:

@@ -216,11 +216,12 @@ class ArmyFlowExpanderV2:
         if self._networkx_finder is None:
             self._networkx_finder = NetworkXFlowDirectionFinder(
                 self.map,
-                self.perf_timer,
-                self.log_debug and False, # no debug logging, for now.
-                use_backpressure_from_enemy_general=True,
+                islands.intergeneral_analysis,
                 friendly_general=self.friendlyGeneral,
-                invalid_flow_renderer=None  # TODO: Add renderer if needed
+                use_backpressure_from_enemy_general=True,
+                perf_timer=self.perf_timer,
+                log_debug=self.log_debug and False, # no debug logging, for now.
+                invalid_flow_renderer=None,  # TODO: Add renderer if needed
             )
 
         self._networkx_finder.configure(self.team, self.target_team, self.enemyGeneral)
@@ -443,14 +444,15 @@ class ArmyFlowExpanderV2:
         target_node = None
 
         # Check both flow graph variants
+        lookup = None
         for flow_lookup in [
             flow_graph.flow_node_lookup_by_island_no_neut,
             flow_graph.flow_node_lookup_by_island_inc_neut
         ]:
-            if (border_pair.friendly_island_id in flow_lookup and
-                border_pair.target_island_id in flow_lookup):
-                friendly_node = flow_lookup[border_pair.friendly_island_id]
-                target_node = flow_lookup[border_pair.target_island_id]
+            friendly_node = flow_lookup.get(border_pair.friendly_island_id, None)
+            target_node = flow_lookup.get(border_pair.target_island_id, None)
+            if (friendly_node is not None and target_node is not None):
+                lookup = flow_lookup
                 break
 
         if friendly_node is None or target_node is None:
@@ -458,14 +460,14 @@ class ArmyFlowExpanderV2:
 
         # Build upstream friendly stream traversal
         friendly_stream = self._build_upstream_stream(
-            friendly_node, flow_graph, target_crossable_islands
+            friendly_node, target_crossable_islands
         )
 
         # Build downstream target stream traversal — walk from the friendly border
         # node outward so mandatory intermediate tiles (neutrals) are emitted before
         # the first enemy tile, preserving physical path order.
         target_stream = self._build_downstream_stream(
-            friendly_node, flow_graph, target_crossable_islands
+            friendly_node, target_crossable_islands
         )
 
         logbook.info(
@@ -488,7 +490,6 @@ class ArmyFlowExpanderV2:
     def _build_upstream_stream(
         self,
         start_node: IslandFlowNode,
-        flow_graph: IslandMaxFlowGraph,
         target_crossable_islands: set[int]
     ) -> list[IslandFlowNode]:
         """Build upstream traversal from friendly border node"""
@@ -524,7 +525,6 @@ class ArmyFlowExpanderV2:
     def _build_downstream_stream(
         self,
         start_node: IslandFlowNode,
-        flow_graph: IslandMaxFlowGraph,
         target_crossable_islands: set[int]
     ) -> list[IslandFlowNode]:
         """Build downstream traversal from the friendly border node.
@@ -1061,7 +1061,7 @@ class ArmyFlowExpanderV2:
             enriched_captures = []
 
             for capture_turn, capture_entry in enumerate(capture_entries):
-                if capture_entry is None: # or capture_turn is 0:
+                if capture_entry is None or capture_turn == 0:
                     continue
 
                 # TODO this is inefficient, we should be maintaining a gather index and just walking backwards up the gathers while we walk forwards through the captures. No reason to loop gathers completely for every capture entry...
@@ -1279,10 +1279,11 @@ class ArmyFlowExpanderV2:
             capping: set = set()
             for flow_node in capture_entry.included_target_flow_nodes:
                 island = flow_node.island
-                if island.team == self.team:
-                    gathing.update(island.tile_set)
-                else:
-                    capping.update(island.tile_set)
+                # if island.team == self.team:
+                #     gathing.update(island.tile_set)
+                # else:
+                #     capping.update(island.tile_set)
+                capping.update(island.tile_set)
 
             if not gathing and not capping:
                 if self.log_debug:
@@ -1334,6 +1335,7 @@ class ArmyFlowExpanderV2:
                     useTrueValueGathered=True,
                     captures=capping,
                 )
+                plan._turns = len(gathing) + len(capping) - 1
             except Exception:
                 if self.log_debug:
                     logbook.info(f'_materialize_plans: skipping border pair {border_pair.friendly_island_id}->{border_pair.target_island_id} (plan build failed)')

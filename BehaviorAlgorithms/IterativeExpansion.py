@@ -350,10 +350,11 @@ class ArmyFlowExpander(object):
         if self._networkx_flow_direction_finder is None:
             self._networkx_flow_direction_finder = NetworkXFlowDirectionFinder(
                 self.map,
+                self.island_builder.intergeneral_analysis,
+                self.friendlyGeneral,
+                self.use_backpressure_from_enemy_general,
                 self.perf_timer,
                 self.log_debug,
-                self.use_backpressure_from_enemy_general,
-                self.friendlyGeneral,
                 self.live_render_invalid_flow_config,
             )
         self._networkx_flow_direction_finder.configure(self.team, self.target_team, self.enemyGeneral)

@@ -3,6 +3,7 @@ import typing
 from Algorithms import TileIslandBuilder
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, FlowStreamIslandContribution, FlowBorderPairKey
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
+from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
@@ -139,7 +140,10 @@ class FlowExpansionStreamOrderingMetadataTests(TestBase):
         enemyGeneral: Tile,
     ) -> tuple[ArmyFlowExpanderV2, TileIslandBuilder]:
         """Build the flow expander and flow graph for a given map/generals."""
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         expander = ArmyFlowExpanderV2(map)

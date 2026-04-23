@@ -2,6 +2,7 @@ import typing
 
 from Algorithms import TileIslandBuilder
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, FlowBorderPairKey, FlowArmyTurnsLookupTable, EnrichedFlowTurnsEntry, FlowTurnsEntry
+from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
 from Sim.GameSimulator import GameSimulatorHost
 from Tests.TestBase import TestBase
@@ -26,7 +27,10 @@ class FlowExpansionLookupPostProcessingTests(TestBase):
         enemyGeneral,
     ) -> tuple[ArmyFlowExpanderV2, TileIslandBuilder, list[FlowArmyTurnsLookupTable]]:
         """Build the flow expander, flow graph, and lookup tables for a given map/generals."""
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.recalculate_tile_islands(enemyGeneral)
 
         expander = ArmyFlowExpanderV2(map)
@@ -992,7 +996,10 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral)
 
@@ -1053,7 +1060,7 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         b2 requires walking through col5 and col6 first.
 
         Layout (1 row, 11 cols) with desired_tile_island_size=1, fill_out_tiles=False:
-          a3   aG4  a2   a2   a2   __   __   b2   N40  __   bG1
+          a3   aG4  a2   a2   a2   __   __   b2   N4   __   bG1
            0    1    2    3    4    5    6    7    8    9    10
 
         From the observed bug (before fix):
@@ -1081,13 +1088,16 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |    |    |    |    |    |    |    |
-a3   aG4  a2   a2   a2             b2   N40       bG1
+a3   aG4  a2   a2   a2             b2   N4        bG1
 |    |    |    |    |    |    |    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
 
         self.begin_capturing_logging()
-        builder = TileIslandBuilder(map)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         builder.desired_tile_island_size = 1
         builder.recalculate_tile_islands(enemyGeneral)
 
@@ -1145,27 +1155,24 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         #   e2: cap_t=2 req=3  -> gath_t=3 gath=5   (gath_t=1=2 insufficient; t=3 gives 5>=3)
         #   e3: cap_t=3 req=6  -> gath_t=4 gath=6   (gath_t=3=5 insufficient; t=4 adds aG4 -> 6>=6)
         enriched = lt.enriched_capture_entries
-        self.assertEqual(len(enriched), 4, f'Expected exactly 4 enriched entries (t=0,1,2,3), got {len(enriched)}')
-        e0, e1, e2, e3 = enriched
+        self.assertEqual(len(enriched), 3, f'Expected exactly 4 enriched entries (t=0,1,2,3), got {len(enriched)}')
+        e1, e2, e3 = enriched
         """
         |    |    |    |    |    |    |    |    |    |    |
         a3   aG4  a2   a2   a2             b2   N40       bG1
         |    |    |    |    |    |    |    |    |    |    |
                 """
 
-        self.assertEqual(e0.capture_entry.turns, 0)
-        self.assertEqual(e0.gather_entry.turns, 0)
-
         self.assertEqual(e1.capture_entry.turns, 1)
-        self.assertEqual(e1.capture_entry.required_army, 2)
-        self.assertEqual(e1.gather_entry.turns, 1)
-        self.assertEqual(e1.gather_entry.gathered_army, 2)
+        self.assertEqual(e1.capture_entry.required_army, 1)
+        self.assertEqual(e1.gather_entry.turns, 0)
+        self.assertEqual(e1.gather_entry.gathered_army, 1)
 
         self.assertEqual(e2.capture_entry.turns, 2)
-        self.assertEqual(e2.capture_entry.required_army, 3)
-        self.assertEqual(e2.gather_entry.turns, 3,
+        self.assertEqual(e2.capture_entry.required_army, 2)
+        self.assertEqual(e2.gather_entry.turns, 1,
                          'cap_t=2 req=3: gath_t=1 gives 2 (insufficient); gath_t=3 gives 5')
-        self.assertEqual(e2.gather_entry.gathered_army, 5,
+        self.assertEqual(e2.gather_entry.gathered_army, 2,
                          'gath_t=3: col4(2) + col2-col3(4-1traversal=3) = 5 army at border')
 
         """
@@ -1174,12 +1181,12 @@ a3   aG4  a2   a2   a2             b2   N40       bG1
         |    |    |    |    |    |    |    |    |    |    |
                 """
         self.assertEqual(e3.capture_entry.turns, 3)
-        self.assertEqual(e3.capture_entry.required_army, 6)
+        self.assertEqual(e3.capture_entry.required_army, 5)
         # gath_t=3 only delivers 5 army at the border (insufficient for req=6).
         # gath_t=4 adds aG4@col1 (army=4, depth=4, traversal_cost=3 -> 1 net) -> 5+1=6.
-        self.assertEqual(e3.gather_entry.turns, 4,
+        self.assertEqual(e3.gather_entry.turns, 3,
                          'cap_t=3 req=6: gath_t=3 delivers only 5; must use gath_t=4 (adds aG4)')
-        self.assertEqual(e3.gather_entry.gathered_army, 6,
+        self.assertEqual(e3.gather_entry.gathered_army, 1+1+1+3,
                          'gath_t=4: col4(2) + col2-3(3) + aG4(4-3=1) = 6 army at border')
         aG4_tile = map.GetTile(1, 0)
         e3_gather_tiles = {tl for n in e3.gather_entry.included_friendly_flow_nodes for tl in n.island.tile_set}

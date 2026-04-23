@@ -166,8 +166,11 @@ class IslandFlowNode(object):
         """
         existingEdge = SearchUtils.where(self.flow_to, lambda e: e.target_flow_node.island.unique_id == destNode.island.unique_id)
         if existingEdge:
+            # once these are no longer hit we can remove the whole existingEdge path
             if destNode != existingEdge[0].target_flow_node:
                 raise Exception(f'Corrupt flow nodes in add_edge. destNode and existingEdge target nodes were not equal, despite being for the same island. {existingEdge[0]}  |  {destNode}')
+            if existingEdge[0].edge_army != edgeArmy:
+                raise Exception(f'Corrupt flow nodes in add_edge. edgeArmy mismatch. {existingEdge[0]}  |  {destNode}')
             existingEdge[0].edge_army = edgeArmy
             return False
         else:

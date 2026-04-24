@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import logbook
 
 import Algorithms
+import DebugHelper
 import Gather
 import KnapsackUtils
 from BehaviorAlgorithms.Flow.FlowGraphModels import FlowGraphMethod, IslandFlowNode, IslandMaxFlowGraph
@@ -130,10 +131,10 @@ class ArmyFlowExpanderV2:
         # Configuration options
         self.method: FlowGraphMethod = FlowGraphMethod.MinCostFlow
         self.use_simple_flow_stream_maximization: bool = True
-        self.log_debug: bool = True
+        self.log_debug: bool = DebugHelper.IS_DEBUGGING
         self.debug_render_capture_count_threshold: int = 10000
         """If there are more captures in any given plan option than this, then the option will be rendered inline as generated in a new debug viewer window."""
-        self.use_debug_asserts: bool = True
+        self.use_debug_asserts: bool = DebugHelper.IS_DEBUGGING
 
         # Internal state
         self.flow_graph: IslandMaxFlowGraph | None = None
@@ -470,14 +471,15 @@ class ArmyFlowExpanderV2:
             friendly_node, target_crossable_islands
         )
 
-        logbook.info(
-            f'STREAM_DATA bp={border_pair.friendly_island_id}->{border_pair.target_island_id}: '
-            f'friendly_stream=['
-            + ', '.join(f'{n.island.unique_id}({n.island.tile_count}t {n.island.sum_army}a flow_from={[e.source_flow_node.island.unique_id for e in n.flow_from]})' for n in friendly_stream)
-            + f'] target_stream=['
-            + ', '.join(f'{n.island.unique_id}({n.island.tile_count}t)' for n in target_stream)
-            + ']'
-        )
+        if self.log_debug:
+            logbook.info(
+                f'STREAM_DATA bp={border_pair.friendly_island_id}->{border_pair.target_island_id}: '
+                f'friendly_stream=['
+                + ', '.join(f'{n.island.unique_id}({n.island.tile_count}t {n.island.sum_army}a flow_from={[e.source_flow_node.island.unique_id for e in n.flow_from]})' for n in friendly_stream)
+                + f'] target_stream=['
+                + ', '.join(f'{n.island.unique_id}({n.island.tile_count}t)' for n in target_stream)
+                + ']'
+            )
 
         return {
             'border_pair': border_pair,
@@ -506,15 +508,16 @@ class ArmyFlowExpanderV2:
                 stream.append(node)
 
                 # Continue upstream through incoming flow edges
-                logbook.info(
-                    f'UPSTREAM_BFS node={node.island.unique_id}({node.island!r}) '
-                    f'flow_from=[{", ".join(f"{e.source_flow_node.island.unique_id}(team={e.source_flow_node.island.team} army={e.edge_army})" for e in node.flow_from)}]'
-                )
+                if self.log_debug:
+                    logbook.info(
+                        f'UPSTREAM_BFS node={node.island.unique_id}({node.island!r}) '
+                        f'flow_from=[{", ".join(f"{e.source_flow_node.island.unique_id}(team={e.source_flow_node.island.team} army={e.edge_army})" for e in node.flow_from)}]'
+                    )
                 for edge in node.flow_from:
                     src = edge.source_flow_node
                     if src.island.team == self.team:
                         traverse_upstream(src)
-                    else:
+                    elif self.log_debug:
                         logbook.info(
                             f'UPSTREAM_BFS  SKIP non-friendly flow_from: {src.island.unique_id}(team={src.island.team})'
                         )
@@ -1168,7 +1171,8 @@ class ArmyFlowExpanderV2:
         groupIdx = 0
         groupLookup: dict[int, int] = {}
         for subset in subsets:
-            logbook.info(f"Group {groupIdx}: {subset}")
+            if self.log_debug:
+                logbook.info(f"Group {groupIdx}: {subset}")
             for i in subset:
                 groupLookup[i] = groupIdx
             groupIdx += 1
@@ -1257,6 +1261,7 @@ class ArmyFlowExpanderV2:
 
         plans = []
         asPlayer = self.friendlyGeneral.player
+        plan_errors: list[tuple] = []  # Collect all errors for aggregated reporting
 
         for border_pair, enriched in solution.items():
             capture_entry = enriched.capture_entry
@@ -1336,13 +1341,59 @@ class ArmyFlowExpanderV2:
                     captures=capping,
                 )
                 plan._turns = len(gathing) + len(capping) - 1
-            except Exception:
+            except Exception as ex:
+                # Collect error for aggregated reporting
+                error_details = {
+                    'border_pair': f"{border_pair.friendly_island_id}->{border_pair.target_island_id}",
+                    'gathing_count': len(gathing),
+                    'capping_count': len(capping),
+                    'root_tiles_count': len(root_tiles),
+                    'gather_entry_turns': gather_entry.turns,
+                    'capture_entry_turns': capture_entry.turns,
+                    'exception': str(ex),
+                    'exception_type': type(ex).__name__,
+                }
+                plan_errors.append((border_pair, error_details, ex))
                 if self.log_debug:
-                    logbook.info(f'_materialize_plans: skipping border pair {border_pair.friendly_island_id}->{border_pair.target_island_id} (plan build failed)')
+                    logbook.info(f'_materialize_plans: skipping border pair {border_pair.friendly_island_id}->{border_pair.target_island_id} (plan build failed): {ex}')
                 continue
             finally:
                 Gather.GatherDebug.USE_DEBUG_ASSERTS = _prev_asserts
 
             plans.append(plan)
+
+        # Aggregate error reporting: log all failures together for visibility
+        if plan_errors:
+            error_summary = [
+                f"\n{'='*80}",
+                f"FLOW_EXPANSION_V2: PLAN MATERIALIZATION ERRORS",
+                f"{'='*80}",
+                f"Total plans attempted: {len(solution)}",
+                f"Successful plans: {len(plans)}",
+                f"Failed plans: {len(plan_errors)}",
+                f"\nFAILED BORDER PAIRS:",
+            ]
+            for i, (border_pair, details, ex) in enumerate(plan_errors, 1):
+                error_summary.append(
+                    f"  {i}. {details['border_pair']}: {details['exception_type']}: {details['exception']}"
+                )
+                error_summary.append(
+                    f"     (gathing={details['gathing_count']}, capping={details['capping_count']}, "
+                    f"gather_turns={details['gather_entry_turns']}, capture_turns={details['capture_entry_turns']})"
+                )
+            error_summary.append(f"{'='*80}\n")
+            logbook.error("\n".join(error_summary))
+
+            # If any plans failed, this is a critical error - raise an exception with all details
+            if len(plan_errors) > 0:
+                all_errors_str = "\n\n".join([
+                    f"{details['border_pair']}: {details['exception_type']}: {details['exception']}"
+                    for _, details, _ in plan_errors
+                ])
+                raise AssertionError(
+                    f"ALL {len(plan_errors)} plan materializations failed!\n\n"
+                    f"Errors:\n{all_errors_str}\n\n"
+                    f"Check logs above for detailed parameter dumps from each failed GCP creation."
+                )
 
         return plans

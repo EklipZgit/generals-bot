@@ -192,6 +192,7 @@ class BotExpansionOps:
                             bot.board_analysis,
                             bot.territories.territoryMap,
                             bot.tileIslandBuilder,
+                            includeExpansionSearch=bot.expansion_use_legacy,
                             negativeTiles=expansionNegatives,
                             viewInfo=bot.viewInfo
                         )
@@ -483,6 +484,8 @@ class BotExpansionOps:
                             negativeTiles=expansionNegatives,
                             cutoffTime=cutoffTime,
                         )
+                        for opt in optCollection.flow_plans:
+                            bot.info(f'FE: {opt}')
                         addlOptions.extend(optCollection.flow_plans)
                         bot.last_flow_expander = flowExpander
                         bot.last_flow_opt_collection = optCollection
@@ -712,6 +715,7 @@ class BotExpansionOps:
                     leafMoves=bot.targetPlayerLeafMoves,
                     useLeafMovesFirst=bot.expansion_use_leaf_moves_first,
                     viewInfo=bot.viewInfo,
+                    includeExpansionSearch=bot.expansion_use_legacy,
                     singleIterationPathTimeCap=min(bot.expansion_single_iteration_time_cap, timeLimit / 3),
                     forceNoGlobalVisited=bot.expansion_force_no_global_visited,
                     forceGlobalVisitedStage1=bot.expansion_force_global_visited_stage_1,
@@ -786,6 +790,7 @@ class BotExpansionOps:
                 bot.board_analysis,
                 bot.territories.territoryMap,
                 bonusCapturePointMatrix=BotExpansionOps.get_expansion_weight_matrix(bot, ),
+                includeExpansionSearch=bot.expansion_use_legacy,
                 tileIslands=bot.tileIslandBuilder,
                 negativeTiles=negExpandTiles,
                 viewInfo=bot.viewInfo

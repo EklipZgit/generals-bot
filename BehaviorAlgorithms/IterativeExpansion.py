@@ -136,7 +136,7 @@ class ArmyFlowExpander(object):
         self.debug_render_capture_count_threshold: int = 10000
         """If there are more captures in any given plan option than this, then the option will be rendered inline as generated in a new debug viewer window."""
 
-        self.log_debug: bool = DebugHelper.is_debug_or_unit_test_mode()
+        self.log_debug: bool = DebugHelper.is_debug_or_unit_test_mode() and False
         self.use_debug_asserts: bool = True
 
         # TODO determine if this should always be true when using use_min_cost_flow_edges_only=True  Turning this on produces worse plans with max flow

@@ -5,9 +5,11 @@ import typing
 import DebugHelper
 import Gather
 import SearchUtils
+import ViewInfo
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
+from ViewInfo import TargetStyle
 from base.client.tile import TILE_EMPTY
 from bot_ek0x45 import EklipZBot
 
@@ -76,9 +78,9 @@ class GatherCapturePlanTests(TestBase):
     def test_build_capture_tree_contiguous__should_property_respect_gathered_THROUGH_friendly_land(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 aG12 a8   a2   b1   a2   b2   b1   b1   b1   b1   bG1
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 player_index=0
 """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
@@ -133,14 +135,14 @@ player_index=0
     def test_build_capture_tree_contiguous__should_build_something_sane_on_forked_land(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
-|    |    |    |    |    |    |    |    |    |    |    
-aG12 a9   a6   a3   a5   b1   b1   b1   M    M    
-     M    M    M    b1   M    M    M    M    M    
-     M    M    M    b1   M    M    M    M    M    
-     M    M    M    b1   M    M    M    M    M    
-     M    M    M    b1   M    M    M    M    M    
+|    |    |    |    |    |    |    |    |    |    |
+aG12 a9   a6   a3   a5   b1   b1   b1   M    M
+     M    M    M    b1   M    M    M    M    M
+     M    M    M    b1   M    M    M    M    M
+     M    M    M    b1   M    M    M    M    M
+     M    M    M    b1   M    M    M    M    M
      M    M    M    b1   b1   b1   b1   b1   b1   bG1
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 player_index=0
 """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
@@ -193,14 +195,14 @@ player_index=0
     def test_build_capture_tree_contiguous__should_build_something_sane_on_forked_land__mixed_fr_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 aG12 a9   a6   a3   a5   b1   b1   b1   b1   M    M
 M    M    M    M    b1   M    M    M    M    M    M
 M    M    M    M    b1   M    M    M    M    M    M
 M    M    M    M    b1   M    M    M    M    M    M
 M    M    M    M    b1   M    M    M    M    M    M
 M    M    M    M    a1   b1   a1   b1   b1   b1   bG1
-|    |    |    |    |    |    |    |    |    |    |    
+|    |    |    |    |    |    |    |    |    |    |
 player_index=0
 """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
@@ -295,3 +297,112 @@ player_index=0
                 # gather for 4, need to cap 3 right, need to cap 9 down (we did include en general here)
                 self.assertEqual(19, plan.length)
                 self.assertEqual(round(13 * 2.2, 3), round(plan.econValue, 3))
+    def test_should_not_return_a_bad_gather_capture_plan_with_no_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_return_a_bad_gather_capture_plan_with_no_moves___BIkwJSjcW---1--161.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 161, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=161)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_return_a_bad_gather_capture_plan_with_no_moves")
+
+    def test_should_not_return_a_bad_gather_capture_plan_with_no_moves__direct_input_reproduction(self):
+        """
+        Direct reproduction of the issue where GatherCapturePlan was created with no moves.
+        This test directly calls the plan creator with the exact inputs that caused the failure,
+        instead of running through the full game simulator.
+
+        Error log showed:
+        - TILES: (13,13), (13,14), (13,15), (14,15)
+        - ROOT_TILES: (13,13), (13,14), (13,15), (14,15)
+        - CAPTURES: (8,9), (8,10), (9,8), (9,9), (9,10), (10,9), (10,10), (11,8), (11,9)
+        - searchingPlayer: 1
+        - map.turn: 161
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_return_a_bad_gather_capture_plan_with_no_moves___BIkwJSjcW---1--161.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 161, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        # Reconstruct the exact inputs from the error log
+        # Gather tiles (friendly tiles to gather from)
+        gathing = {
+            map.At(13, 13),
+            map.At(13, 14),
+            map.At(13, 15),
+            map.At(14, 15),
+        }
+
+        # Capture tiles (enemy tiles to capture)
+        capping = {
+            map.At(8, 9),
+            map.At(8, 10),
+            map.At(9, 8),
+            map.At(9, 9),
+            map.At(9, 10),
+            map.At(10, 9),
+            map.At(10, 10),
+            map.At(11, 8),
+            map.At(11, 9),
+        }
+
+        # Root tiles (where the gather starts from - border tiles adjacent to captures)
+        root_tiles = {
+            map.At(13, 13),
+            map.At(13, 14),
+            map.At(13, 15),
+            map.At(14, 15),
+        }
+
+        # The error showed these tiles are disconnected - gathing tiles at (13,13)-(14,15)
+        # are far from capture tiles at (8,9)-(11,9). This should still produce a valid plan
+        # or fail gracefully, but NOT produce a plan with no moves.
+
+        negativeTiles = set()
+
+        vi = ViewInfo.ViewInfo(1, map)
+        vi.add_targeted_tiles_with_legend(root_tiles, 'Root Tiles', targetStyle=TargetStyle.TEAL, radiusReduction=0)
+        vi.add_targeted_tiles_with_legend(gathing, 'Gathing', targetStyle=TargetStyle.GREEN, radiusReduction=-3)
+        vi.add_targeted_tiles_with_legend(capping, 'Capping', targetStyle=TargetStyle.RED, radiusReduction=-6)
+        self.render_view_info(map, vi)
+
+        # This is the exact call that was failing
+        plan = Gather.convert_contiguous_capture_tiles_to_gather_capture_plan(
+            map,
+            rootTiles=root_tiles,
+            tiles=gathing,
+            negativeTiles=negativeTiles,
+            searchingPlayer=general.player,
+            priorityMatrix=None,
+            useTrueValueGathered=True,
+            includeGatherPriorityAsEconValues=False,
+            includeCapturePriorityAsEconValues=True,
+            captures=capping,
+        )
+
+        if debugMode:
+            self.render_gather_capture_plan(map, plan, general.player, enemyGeneral.player)
+
+        # ASSERT: The plan must have moves
+        first_move = plan.get_first_move()
+        self.assertIsNotNone(first_move,
+            f"GatherCapturePlan produced no moves! root_nodes={len(plan.root_nodes)}, "
+            f"gathered_army={plan.gathered_army}, turns={plan._turns}")
+
+        # ASSERT: The plan should have a positive length
+        self.assertGreater(plan.length, 0, "Plan length should be greater than 0")
+
+        # ASSERT: The plan should have valid root nodes
+        self.assertGreater(len(plan.root_nodes), 0, "Plan should have at least one root node")

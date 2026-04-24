@@ -279,49 +279,48 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             )
             logbook.info(f'flow precursor special edges={special_edges}')
 
-        neutSinkTotalCap = sum(islands.tile_islands_by_unique_id[uid].tile_count for uid in neutSinks if uid in islands.tile_islands_by_unique_id)
-        fakeNodeSupply = -cumulativeDemand
-        logbook.error(
-            f'build_graph_data neutSinks: count={len(neutSinks)}, totalCap={neutSinkTotalCap}, '
-            f'fakeNodeSupply={fakeNodeSupply}, '
-            f'cumulativeDemand={cumulativeDemand}, use_neutral_flow={use_neutral_flow}'
-        )
-        if use_neutral_flow and neutSinkTotalCap > fakeNodeSupply:
+            neutSinkTotalCap = sum(islands.tile_islands_by_unique_id[uid].tile_count for uid in neutSinks if uid in islands.tile_islands_by_unique_id)
+            fakeNodeSupply = -cumulativeDemand
             logbook.error(
-                f'build_graph_data IMBALANCE: neutSinkTotalCap {neutSinkTotalCap} '
-                f'exceeds fakeNodeSupply {fakeNodeSupply} — graph likely infeasible'
+                f'build_graph_data neutSinks: count={len(neutSinks)}, totalCap={neutSinkTotalCap}, '
+                f'fakeNodeSupply={fakeNodeSupply}, '
+                f'cumulativeDemand={cumulativeDemand}, use_neutral_flow={use_neutral_flow}'
             )
+            if use_neutral_flow and neutSinkTotalCap > fakeNodeSupply:
+                logbook.error(
+                    f'build_graph_data IMBALANCE: neutSinkTotalCap {neutSinkTotalCap} '
+                    f'exceeds fakeNodeSupply {fakeNodeSupply} — graph likely infeasible'
+                )
 
-        isolatedDemandIslands = [
-            isl for isl in islands.all_tile_islands
-            if len(isl.border_islands) == 0 and demands.get(isl.unique_id, 0) != 0
-        ]
-        if isolatedDemandIslands:
-            logbook.error(
-                f'build_graph_data ISOLATED islands with non-zero demand (use_neutral_flow={use_neutral_flow}): '
-                + ' | '.join(f'{isl}(team={isl.team},dem={demands.get(isl.unique_id)})' for isl in isolatedDemandIslands)
-            )
+            isolatedDemandIslands = [
+                isl for isl in islands.all_tile_islands
+                if len(isl.border_islands) == 0 and demands.get(isl.unique_id, 0) != 0
+            ]
+            if isolatedDemandIslands:
+                logbook.error(
+                    f'build_graph_data ISOLATED islands with non-zero demand (use_neutral_flow={use_neutral_flow}): '
+                    + ' | '.join(f'{isl}(team={isl.team},dem={demands.get(isl.unique_id)})' for isl in isolatedDemandIslands)
+                )
 
-        topDemandIslands = sorted(
-            [(demands[isl.unique_id], isl) for isl in islands.all_tile_islands if isl.unique_id in demands],
-            key=lambda x: abs(x[0]), reverse=True
-        )[:10]
-        logbook.info(
-            f'build_graph_data top 10 demand contributors (use_neutral_flow={use_neutral_flow}): '
-            + ' | '.join(f'{isl}(team={isl.team},dem={dem})' for dem, isl in topDemandIslands)
-        )
-        logbook.info(
-            f'build_graph_data: fakeNode demand={-cumulativeDemand}, '
-            f'targetGeneralIsland={targetGeneralIsland}(borders={len(targetGeneralIsland.border_islands) if targetGeneralIsland else "N/A"}), '
-            f'frGeneralIsland={frGeneralIsland}'
-        )
-        if targetGeneralIsland:
+            topDemandIslands = sorted(
+                [(demands[isl.unique_id], isl) for isl in islands.all_tile_islands if isl.unique_id in demands],
+                key=lambda x: abs(x[0]), reverse=True
+            )[:10]
             logbook.info(
-                f'build_graph_data targetGeneralIsland border_islands: '
-                + ' | '.join(f'{b}(team={b.team})' for b in targetGeneralIsland.border_islands)
+                f'build_graph_data top 10 demand contributors (use_neutral_flow={use_neutral_flow}): '
+                + ' | '.join(f'{isl}(team={isl.team},dem={dem})' for dem, isl in topDemandIslands)
             )
+            logbook.info(
+                f'build_graph_data: fakeNode demand={-cumulativeDemand}, '
+                f'targetGeneralIsland={targetGeneralIsland}(borders={len(targetGeneralIsland.border_islands) if targetGeneralIsland else "N/A"}), '
+                f'frGeneralIsland={frGeneralIsland}'
+            )
+            if targetGeneralIsland:
+                logbook.info(
+                    f'build_graph_data targetGeneralIsland border_islands: '
+                    + ' | '.join(f'{b}(team={b.team})' for b in targetGeneralIsland.border_islands)
+                )
 
-        if self.log_debug:
             weakComponents = list(nx.weakly_connected_components(graph))
             if len(weakComponents) > 1:
                 logbook.error(

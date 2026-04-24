@@ -11,10 +11,111 @@ from bot_ek0x45 import EklipZBot
 
 
 class FlowExpansionLookupPostProcessingTests(TestBase):
+    """
+    Tests for Phase 3: Enriching capture entries with minimum gather support.
+
+    Also includes connectivity validations to catch disconnected tile set bugs
+    when gather and capture entries are paired together.
+    """
+
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
         GatherDebug.USE_DEBUG_ASSERTS = True
         super().__init__(methodName)
+
+    def _assert_flow_nodes_produce_connected_tiles(
+        self,
+        flow_nodes,
+        set_name: str,
+        test_context: str
+    ):
+        """
+        Assert that a set of flow nodes produces a connected tile set.
+        """
+        from base.client.tile import Tile
+        all_tiles = set()
+        for flow_node in flow_nodes:
+            all_tiles.update(flow_node.island.tile_set)
+
+        if not all_tiles:
+            return
+
+        remaining = set(all_tiles)
+        components = []
+
+        while remaining:
+            start = remaining.pop()
+            component = {start}
+            queue = [start]
+
+            while queue:
+                current = queue.pop(0)
+                for neighbor in current.movable:
+                    if neighbor in remaining and neighbor in all_tiles:
+                        remaining.remove(neighbor)
+                        component.add(neighbor)
+                        queue.append(neighbor)
+
+            components.append(component)
+
+        if len(components) > 1:
+            component_info = []
+            for i, comp in enumerate(components):
+                tile_strs = [f"({t.x},{t.y})" for t in sorted(comp, key=lambda t: (t.x, t.y))]
+                component_info.append(f"  Component {i+1} ({len(comp)} tiles): {', '.join(tile_strs)}")
+
+            error_msg = (
+                f"{set_name} flow nodes produce DISCONNECTED tile set in {test_context}!\n"
+                f"Expected 1 connected component, found {len(components)}:\n"
+                + "\n".join(component_info)
+            )
+            self.fail(error_msg)
+
+    def _assert_enriched_entry_combined_set_connected(
+        self,
+        enriched,
+        border_pair,
+    ):
+        """
+        Assert that the combined gather + capture tile set is connected.
+        This catches bugs where gather and capture sets are individually connected
+        but the combination (with border adjacency) is disconnected.
+        """
+        gather_tiles = set()
+        for flow_node in enriched.gather_entry.included_friendly_flow_nodes:
+            gather_tiles.update(flow_node.island.tile_set)
+
+        capture_tiles = set()
+        for flow_node in enriched.capture_entry.included_target_flow_nodes:
+            capture_tiles.update(flow_node.island.tile_set)
+
+        all_tiles = gather_tiles | capture_tiles
+
+        if not all_tiles:
+            return
+
+        # Check for adjacency between gather and capture
+        has_border_adjacency = False
+        for cap_tile in capture_tiles:
+            for adj in cap_tile.movable:
+                if adj in gather_tiles:
+                    has_border_adjacency = True
+                    break
+            if has_border_adjacency:
+                break
+
+        context = f"border_pair {border_pair.friendly_island_id}->{border_pair.target_island_id}, enriched_entry (gather_turns={enriched.gather_entry.turns}, capture_turns={enriched.capture_entry.turns})"
+
+        # If no border adjacency, the sets might still be connected through the flow graph,
+        # but for a valid gather/capture plan, we need at least one adjacent pair
+        if not has_border_adjacency and gather_tiles and capture_tiles:
+            gather_str = ', '.join([f"({t.x},{t.y})" for t in sorted(gather_tiles, key=lambda t: (t.x, t.y))])
+            capture_str = ', '.join([f"({t.x},{t.y})" for t in sorted(capture_tiles, key=lambda t: (t.x, t.y))])
+            self.fail(
+                f"Gather and capture sets have NO BORDER ADJACENCY in {context}!\n"
+                f"Gather tiles ({len(gather_tiles)}): {gather_str}\n"
+                f"Capture tiles ({len(capture_tiles)}): {capture_str}"
+            )
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
         bot = super().get_debug_render_bot(simHost, player)
@@ -1212,3 +1313,70 @@ aG1  bG1
 
         for lookup_table in lookup_tables:
             self.assertIsInstance(lookup_table.enriched_capture_entries, list)
+
+    # ------------------------------------------------------------------
+    # Connectivity validation tests
+    # ------------------------------------------------------------------
+
+    def test_postprocess__connectivity__enriched_entries_produce_valid_combined_sets(self):
+        """
+        Regression test: Verify that enriched entries produce connected gather+capture sets.
+
+        This test uses the problematic map and validates that when gather and capture
+        entries are paired in Phase 3, the resulting combined tile set is valid
+        (both sets individually connected, and they share at least one border adjacency).
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+aG1  M    M    a3   a4   a4   a8   a2   a6   a1   a1   a1   a1   a1   a1   a1   a1   a1
+a1   M    M    a3   a3   a3   a3   a2   a1   a2   b2   b2   b2   b6   b2   b2   b2   a1
+a2   a3   a4   a2   a3   a3   a8   a2   a2   a2   b2   a2   b2   b5   b2   b2   b3   a1
+a3   a3   a3   a3   a3   a3   a3   a3   a3   a2   b2   a2   b2   b4   b4   b4   b3   a1
+a3   a3   a2   a3   a4   a3   a4   a3   a3   a2   b2   a2   a2   a2   a2   a2   b2   a1
+a3   a3   a3   a5   a3   a2   a2   a3   a2   a1   a1   a1   a1   b2   b2   b2   b2   a1
+a3   a3   a3   a3   a3   a3   a3   a3   a2   a4   a4   a4   a4   b4   b3   b3   b3   a1
+a4   a4   a2   a4   a4   a3   a3   a4   a2   a4   a3   a3   a3   b3   b2   b2   b2   b2
+a4   a2   a3   a3   a4   a3   a2   a2   M    M    a2   b2   b2   b2   b2   b2   b2   b2
+a2   a3   a3   a2   a3   a2   a3   a2   M    b1   a2   b2   M    M    b2   b2   b2   b2
+a2   a3   a3   a3   a3   a2   a2   a3   M    b1   a2   b2   b2   M    b2   b2   b2   b2
+a2   a3   a2   a3   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b2   b2   b2
+a4   a4   a4   a4   a3   a3   M    a2   M    M    b2   b2   b2   b2   b2   b2   b2   b2
+a3   a3   a4   a3   a3   a2   M    a2   a2   b2   b2   b2   b2   b2   b2   b1   b1   b2
+a3   a3   a3   a3   a3   a2   M    a2   a2   b2   b2   b2   b1   b1   b1   b1   b1   b1
+a3   a3   a3   a2   a3   a3   M    a2   a2   b2   b2   b2   b2   b1   b1   b1   b1   b1
+a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   b1   bG1
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+        self.begin_capturing_logging()
+
+        expander, builder, lookup_tables = self._setup_expander_with_lookup_tables(map, general, enemyGeneral)
+
+        # Run post-processing
+        expander._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
+
+        # Validate connectivity for all enriched entries
+        for lookup_table in lookup_tables:
+            border_pair = lookup_table.border_pair
+
+            for enriched in lookup_table.enriched_capture_entries:
+                # Validate individual gather and capture sets are connected
+                self._assert_flow_nodes_produce_connected_tiles(
+                    enriched.gather_entry.included_friendly_flow_nodes,
+                    f"Gather (turns={enriched.gather_entry.turns})",
+                    f"border_pair {border_pair.friendly_island_id}->{border_pair.target_island_id}"
+                )
+                self._assert_flow_nodes_produce_connected_tiles(
+                    enriched.capture_entry.included_target_flow_nodes,
+                    f"Capture (turns={enriched.capture_entry.turns})",
+                    f"border_pair {border_pair.friendly_island_id}->{border_pair.target_island_id}"
+                )
+
+                # Validate combined set has border adjacency
+                self._assert_enriched_entry_combined_set_connected(enriched, border_pair)
+
+        if debugMode:
+            logbook.info(f"Validated connectivity for enriched entries in {len(lookup_tables)} lookup tables")

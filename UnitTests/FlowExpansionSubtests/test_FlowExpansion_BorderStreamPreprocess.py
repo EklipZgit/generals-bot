@@ -449,5 +449,155 @@ aG2  a5   b1        bG1
         # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
         # opt = opts[0]
         self.assertEqual(4, longestOpt.length, 'must make 4 moves to pull the ')
-        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2 + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(ITERATIVE_EXPANSION_EN_CAP_VAL * 2 + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
         self.assertEqual(5, longestOpt.gathered_army, 'gathered a 2 and a 5')
+
+    # ------------------------------------------------------------------
+    # Connectivity validation tests for stream building
+    # ------------------------------------------------------------------
+
+    def _assert_stream_islands_spatially_connected(
+        self,
+        stream: typing.List,
+        set_name: str,
+        test_context: str
+    ):
+        """
+        Assert that islands in a stream form a spatially connected sequence.
+        Each island in the stream should be adjacent to at least one previous island.
+        """
+        if not stream:
+            return
+
+        # Build a set of all tiles we've seen so far as we iterate
+        accumulated_tiles: typing.Set[Tile] = set()
+
+        for i, flow_node in enumerate(stream):
+            island = flow_node.island
+            island_tiles = set(island.tile_set)
+
+            if i == 0:
+                # First island - just add it
+                accumulated_tiles.update(island_tiles)
+                continue
+
+            # Check if this island is adjacent to any previously accumulated tiles
+            is_adjacent = False
+            for tile in island_tiles:
+                for neighbor in tile.movable:
+                    if neighbor in accumulated_tiles:
+                        is_adjacent = True
+                        break
+                if is_adjacent:
+                    break
+
+            if not is_adjacent:
+                # Find the closest distance for debugging
+                min_dist = float('inf')
+                closest_pair = None
+                for tile in island_tiles:
+                    for acc_tile in accumulated_tiles:
+                        dist = abs(tile.x - acc_tile.x) + abs(tile.y - acc_tile.y)
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_pair = (tile, acc_tile)
+
+                island_center = self._get_island_center(island)
+                accumulated_str = ', '.join([f"({t.x},{t.y})" for t in sorted(accumulated_tiles, key=lambda t: (t.x, t.y))[:10]])
+                island_str = ', '.join([f"({t.x},{t.y})" for t in sorted(island_tiles, key=lambda t: (t.x, t.y))])
+
+                error_msg = (
+                    f"{set_name} stream ISLAND DISCONNECT at index {i} in {test_context}!\n"
+                    f"Island {island.unique_id} (center ~{island_center}) is NOT adjacent to any previous island.\n"
+                    f"Closest distance to accumulated tiles: {min_dist}\n"
+                    f"Closest pair: {closest_pair[0].x},{closest_pair[0].y} -> {closest_pair[1].x},{closest_pair[1].y}\n"
+                    f"Current island tiles ({len(island_tiles)}): {island_str}\n"
+                    f"Accumulated tiles (first 10): {accumulated_str}..."
+                )
+                self.fail(error_msg)
+
+            # Add this island's tiles to accumulated set
+            accumulated_tiles.update(island_tiles)
+
+    def _get_island_center(self, island) -> typing.Tuple[int, int]:
+        """Get approximate center of an island for debugging."""
+        if not island.tile_set:
+            return (-1, -1)
+        avg_x = sum(t.x for t in island.tile_set) // len(island.tile_set)
+        avg_y = sum(t.y for t in island.tile_set) // len(island.tile_set)
+        return (avg_x, avg_y)
+
+    def test_border_stream__connectivity__downstream_stream_spatially_connected(self):
+        """
+        Regression test: Verify that _build_downstream_stream produces spatially connected
+        island sequences.
+
+        The downstream stream should only include islands that are adjacent to previously
+        included islands, forming a contiguous path from the border outward.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+aG1  M    M    a3   a4   a4   a8   a2   a6   a1   a1   a1   a1   a1   a1   a1   a1   a1
+a1   M    M    a3   a3   a3   a3   a2   a1   a2   b2   b2   b2   b6   b2   b2   b2   a1
+a2   a3   a4   a2   a3   a3   a8   a2   a2   a2   b2   a2   b2   b5   b2   b2   b3   a1
+a3   a3   a3   a3   a3   a3   a3   a3   a3   a2   b2   a2   b2   b4   b4   b4   b3   a1
+a3   a3   a2   a3   a4   a3   a4   a3   a3   a2   b2   a2   a2   a2   a2   a2   b2   a1
+a3   a3   a3   a5   a3   a2   a2   a3   a2   a1   a1   a1   a1   b2   b2   b2   b2   a1
+a3   a3   a3   a3   a3   a3   a3   a3   a2   a4   a4   a4   a4   b4   b3   b3   b3   a1
+a4   a4   a2   a4   a4   a3   a3   a4   a2   a4   a3   a3   a3   b3   b2   b2   b2   b2
+a4   a2   a3   a3   a4   a3   a2   a2   M    M    a2   b2   b2   b2   b2   b2   b2   b2
+a2   a3   a3   a2   a3   a2   a3   a2   M    b1   a2   b2   M    M    b2   b2   b2   b2
+a2   a3   a3   a3   a3   a2   a2   a3   M    b1   a2   b2   b2   M    b2   b2   b2   b2
+a2   a3   a2   a3   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b2   b2   b2
+a4   a4   a4   a4   a3   a3   M    a2   M    M    b2   b2   b2   b2   b2   b2   b2   b2
+a3   a3   a4   a3   a3   a2   M    a2   a2   b2   b2   b2   b2   b2   b2   b1   b1   b2
+a3   a3   a3   a3   a3   a2   M    a2   a2   b2   b2   b2   b1   b1   b1   b1   b1   b1
+a3   a3   a3   a2   a3   a3   M    a2   a2   b2   b2   b2   b2   b1   b1   b1   b1   b1
+a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   b1   bG1
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.target_team = enemyGeneral.player
+
+        # Set up the flow graph
+        flowExpanderV2._ensure_flow_graph_exists(builder)
+        target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
+            builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
+        )
+        border_pairs = flowExpanderV2._enumerate_border_pairs(
+            flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
+        )
+
+        self.assertGreater(len(border_pairs), 0, 'Should find at least one border pair')
+
+        # Validate connectivity for each border pair's downstream stream
+        for border_pair in border_pairs:
+            stream_data = flowExpanderV2._build_border_pair_stream_data(
+                border_pair, flowExpanderV2.flow_graph, target_crossable
+            )
+
+            if not stream_data:
+                continue
+
+            target_stream = stream_data.get('target_stream', [])
+
+            # The target stream should be spatially connected
+            self._assert_stream_islands_spatially_connected(
+                target_stream,
+                "Target (downstream)",
+                f"border_pair {border_pair.friendly_island_id}->{border_pair.target_island_id}"
+            )
+
+        if debugMode:
+            logbook.info(f"Validated spatial connectivity for {len(border_pairs)} border pairs")

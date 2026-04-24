@@ -175,6 +175,12 @@ class ViewInfo(object):
     def add_targeted_tile(self, tile: Tile, targetStyle: TargetStyle = TargetStyle.RED, radiusReduction: int = 6):
         self.targetedTiles.append((tile, targetStyle, radiusReduction))
 
+    def add_targeted_tiles_with_legend(self, tiles: typing.Iterable[Tile], legend, targetStyle: TargetStyle = TargetStyle.RED, radiusReduction: int = 6):
+        self.add_info_line(f'{str(targetStyle).split('.')[1]}={legend}')
+        for tile in tiles:
+            self.targetedTiles.append((tile, targetStyle, radiusReduction))
+
+
     def add_info_line(self, additionalInfo: str):
         logbook.info(additionalInfo)
         self.infoLines.append(additionalInfo)
@@ -320,7 +326,6 @@ class ViewInfo(object):
 
             if len(curWords) > 1:
                 self.add_info_line(' '.join(curWords))
-
 
 
 

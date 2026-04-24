@@ -599,7 +599,7 @@ class GeneralsClient(object):
             forcing = True
             isHost = True
             self._send(["set_custom_options", self._gameid, {
-                'game_speed': 0.5,
+                'game_speed': 0.75,
             }])
 
             if self._currentQueue:

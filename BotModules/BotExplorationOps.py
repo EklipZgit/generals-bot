@@ -122,6 +122,7 @@ class BotExplorationOps:
                     bot.tileIslandBuilder,
                     expansionNegatives,
                     bot.captureLeafMoves,
+                    includeExpansionSearch=True,
                     allowLeafMoves=False,
                     viewInfo=bot.viewInfo,
                     time_limit=0.03)

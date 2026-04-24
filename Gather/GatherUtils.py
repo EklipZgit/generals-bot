@@ -464,6 +464,52 @@ def convert_contiguous_capture_tiles_to_gather_capture_plan(
         cloneNodes=False,
     )
 
+    # Runtime assertion: plan must produce at least one move
+    first_move = plan.get_first_move()
+    if first_move is None:
+        # Build detailed error message with all parameters for test reconstruction
+        tiles_str = ", ".join([f"({t.x},{t.y})" for t in sorted(tiles, key=lambda t: (t.x, t.y))])
+        root_tiles_str = ", ".join([f"({t.x},{t.y})" for t in sorted(rootTiles, key=lambda t: (t.x, t.y))]) if rootTiles else "None"
+        captures_str = ", ".join([f"({t.x},{t.y})" for t in sorted(captures, key=lambda t: (t.x, t.y))]) if captures else "None"
+        root_nodes_info = []
+        for node in rootNodes:
+            children_str = ", ".join([f"({c.tile.x},{c.tile.y})" for c in node.children]) if node.children else "None"
+            root_nodes_info.append(f"  root({node.tile.x},{node.tile.y}) children=[{children_str}]")
+        root_nodes_str = "\n".join(root_nodes_info) if root_nodes_info else "  (no root nodes)"
+
+        error_msg = (
+            f"\n{'='*80}\n"
+            f"GATHER_CAPTURE_PLAN_NO_MOVE_ERROR\n"
+            f"{'='*80}\n"
+            f"Plan created with no moves (get_first_move() returned None)\n"
+            f"\nPARAMETERS:\n"
+            f"  map.turn: {map.turn}\n"
+            f"  searchingPlayer: {searchingPlayer}\n"
+            f"  useTrueValueGathered: {useTrueValueGathered}\n"
+            f"  includeGatherPriorityAsEconValues: {includeGatherPriorityAsEconValues}\n"
+            f"  includeCapturePriorityAsEconValues: {includeCapturePriorityAsEconValues}\n"
+            f"\nTILES ({len(tiles)} total):\n"
+            f"  {tiles_str}\n"
+            f"\nROOT_TILES ({len(list(rootTiles)) if rootTiles else 0} total):\n"
+            f"  {root_tiles_str}\n"
+            f"\nCAPTURES ({len(captures) if captures else 0} total):\n"
+            f"  {captures_str}\n"
+            f"\nROOT_NODES ({len(rootNodes)} total):\n"
+            f"{root_nodes_str}\n"
+            f"\nPLAN STATE:\n"
+            f"  root_nodes count: {len(plan.root_nodes)}\n"
+            f"  has_more_moves: {plan.has_more_moves}\n"
+            f"  gathered_army: {plan.gathered_army}\n"
+            f"  _turns: {plan._turns}\n"
+            f"\nTo reproduce, create a unit test with:\n"
+            f"  mapData = \"\"\"\n"
+            f"  [paste the map dump here - you can get it from Sim/GameSimulator.py output]\n"
+            f"  \"\"\"\n"
+            f"  Then call convert_contiguous_capture_tiles_to_gather_capture_plan with the tiles above.\n"
+            f"{'='*80}\n"
+        )
+        raise AssertionError(error_msg)
+
     return plan
 
     # logs = []

@@ -79,6 +79,7 @@ class FlowDirectionFinderABC(ABC):
             flow_dict,
             graph_lookup,
             graph_data,
+            log_debug: bool = False,
     ):
         backfill_neut_edges: typing.List[IslandFlowEdge] = []
         our_set = {i.unique_id for i in our_islands}
@@ -141,12 +142,13 @@ class FlowDirectionFinderABC(ABC):
                     continue
 
                 source_node.set_flow_to(target_node, target_flow_amount)
-                logbook.info(f'FOUND FLOW EDGE {source_node} ({target_flow_amount}a) -> {target_node}')
-                # DIAGNOSTIC: Trace island 190 flow specifically
-                if source_node.island and source_node.island.unique_id == 190:
-                    logbook.info(f'DIAG_190_FLOW: SOURCE {source_node} sending {target_flow_amount} to {target_node}')
-                if target_node.island and target_node.island.unique_id == 190:
-                    logbook.info(f'DIAG_190_FLOW: TARGET {target_node} receiving {target_flow_amount} from {source_node}')
+                if log_debug:
+                    logbook.info(f'FOUND FLOW EDGE {source_node} ({target_flow_amount}a) -> {target_node}')
+                    # DIAGNOSTIC: Trace island 190 flow specifically
+                    if source_node.island and source_node.island.unique_id == 190:
+                        logbook.info(f'DIAG_190_FLOW: SOURCE {source_node} sending {target_flow_amount} to {target_node}')
+                    if target_node.island and target_node.island.unique_id == 190:
+                        logbook.info(f'DIAG_190_FLOW: TARGET {target_node} receiving {target_flow_amount} from {source_node}')
 
         final_root_flow_nodes = [graph_lookup[id] for id in our_set]
         enemy_backfill_flow_nodes = [graph_lookup[id] for id in target_set]

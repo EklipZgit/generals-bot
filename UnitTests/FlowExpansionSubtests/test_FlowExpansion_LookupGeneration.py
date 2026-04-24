@@ -24,10 +24,67 @@ from bot_ek0x45 import EklipZBot
 method = FlowGraphMethod.MinCostFlow
 
 class FlowExpansionLookupGenerationTests(TestBase):
+    """
+    Tests for Phase 2: Building per-border gather/capture lookup tables.
+
+    Also includes connectivity validations to catch disconnected tile set bugs
+    at the lookup generation stage.
+    """
+
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
         GatherDebug.USE_DEBUG_ASSERTS = True
         super().__init__(methodName)
+
+    def _assert_flow_nodes_produce_connected_tiles(
+        self,
+        flow_nodes: typing.Iterable,
+        set_name: str,
+        test_context: str
+    ):
+        """
+        Assert that a set of flow nodes produces a connected tile set.
+        Flow nodes are connected if their islands share at least one border tile.
+        """
+        # Collect all tiles from the flow nodes
+        all_tiles: typing.Set[Tile] = set()
+        for flow_node in flow_nodes:
+            all_tiles.update(flow_node.island.tile_set)
+
+        if not all_tiles:
+            return  # Empty set is vacuously connected
+
+        # Find connected components using BFS
+        remaining = set(all_tiles)
+        components = []
+
+        while remaining:
+            start = remaining.pop()
+            component = {start}
+            queue = [start]
+
+            while queue:
+                current = queue.pop(0)
+                for neighbor in current.movable:
+                    if neighbor in remaining and neighbor in all_tiles:
+                        remaining.remove(neighbor)
+                        component.add(neighbor)
+                        queue.append(neighbor)
+
+            components.append(component)
+
+        if len(components) > 1:
+            component_info = []
+            for i, comp in enumerate(components):
+                tile_strs = [f"({t.x},{t.y})" for t in sorted(comp, key=lambda t: (t.x, t.y))]
+                component_info.append(f"  Component {i+1} ({len(comp)} tiles): {', '.join(tile_strs)}")
+
+            error_msg = (
+                f"{set_name} flow nodes produce DISCONNECTED tile set in {test_context}!\n"
+                f"Expected 1 connected component, found {len(components)}:\n"
+                + "\n".join(component_info)
+            )
+            self.fail(error_msg)
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
         bot = super().get_debug_render_bot(simHost, player)
@@ -2287,3 +2344,96 @@ aG1  a1   b1   bG1
         else:
             # If no border pairs found, that's also a valid test result for this edge case since there is no valid captures here at all
             self.assertTrue(True, 'No border pairs found in edge case scenario')
+
+    # ------------------------------------------------------------------
+    # Connectivity validation tests
+    # ------------------------------------------------------------------
+
+    def test_lookup_generation__connectivity__horizontal_split_map(self):
+        """
+        Regression test: Verify that lookup table entries produce connected tile sets.
+
+        This test loads the problematic map from the screenshot and asserts that
+        each gather and capture entry's included flow nodes produce a connected
+        set of tiles (not disconnected components).
+
+        Layout resembles: friendly territory on right, enemy on left, contested border.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+aG1  M    M    a3   a4   a4   a8   a2   a6   a1   a1   a1   a1   a1   a1   a1   a1   a1
+a1   M    M    a3   a3   a3   a3   a2   a1   a2   b2   b2   b2   b6   b2   b2   b2   a1
+a2   a3   a4   a2   a3   a3   a8   a2   a2   a2   b2   a2   b2   b5   b2   b2   b3   a1
+a3   a3   a3   a3   a3   a3   a3   a3   a3   a2   b2   a2   b2   b4   b4   b4   b3   a1
+a3   a3   a2   a3   a4   a3   a4   a3   a3   a2   b2   a2   a2   a2   a2   a2   b2   a1
+a3   a3   a3   a5   a3   a2   a2   a3   a2   a1   a1   a1   a1   b2   b2   b2   b2   a1
+a3   a3   a3   a3   a3   a3   a3   a3   a2   a4   a4   a4   a4   b4   b3   b3   b3   a1
+a4   a4   a2   a4   a4   a3   a3   a4   a2   a4   a3   a3   a3   b3   b2   b2   b2   b2
+a4   a2   a3   a3   a4   a3   a2   a2   M    M    a2   b2   b2   b2   b2   b2   b2   b2
+a2   a3   a3   a2   a3   a2   a3   a2   M    b1   a2   b2   M    M    b2   b2   b2   b2
+a2   a3   a3   a3   a3   a2   a2   a3   M    b1   a2   b2   b2   M    b2   b2   b2   b2
+a2   a3   a2   a3   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b2   b2   b2
+a4   a4   a4   a4   a3   a3   M    a2   M    M    b2   b2   b2   b2   b2   b2   b2   b2
+a3   a3   a4   a3   a3   a2   M    a2   a2   b2   b2   b2   b2   b2   b2   b1   b1   b2
+a3   a3   a3   a3   a3   a2   M    a2   a2   b2   b2   b2   b1   b1   b1   b1   b1   b1
+a3   a3   a3   a2   a3   a3   M    a2   a2   b2   b2   b2   b2   b1   b1   b1   b1   b1
+a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   b1   bG1
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.target_team = enemyGeneral.player
+
+        # Set up the flow graph and preprocessing
+        flowExpanderV2._ensure_flow_graph_exists(builder)
+        target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
+            builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
+        )
+        border_pairs = flowExpanderV2._enumerate_border_pairs(
+            flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
+        )
+
+        self.assertGreater(len(border_pairs), 0, 'Should find at least one border pair')
+
+        # Generate lookup tables
+        lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
+            border_pairs, flowExpanderV2.flow_graph, target_crossable
+        )
+
+        self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
+
+        # Validate connectivity for each lookup table entry
+        for lookup_table in lookup_tables:
+            border_pair = lookup_table.border_pair
+            context = f"border_pair {border_pair.friendly_island_id}->{border_pair.target_island_id}"
+
+            # Check gather entries for connectivity
+            for entry in lookup_table.gather_entries_by_turn:
+                if entry is not None and entry.included_friendly_flow_nodes:
+                    self._assert_flow_nodes_produce_connected_tiles(
+                        entry.included_friendly_flow_nodes,
+                        f"Gather entry (turns={entry.turns})",
+                        context
+                    )
+
+            # Check capture entries for connectivity
+            for entry in lookup_table.capture_entries_by_turn:
+                if entry is not None and entry.included_target_flow_nodes:
+                    self._assert_flow_nodes_produce_connected_tiles(
+                        entry.included_target_flow_nodes,
+                        f"Capture entry (turns={entry.turns})",
+                        context
+                    )
+
+        if debugMode:
+            logbook.info(f"Validated connectivity for {len(lookup_tables)} lookup tables")

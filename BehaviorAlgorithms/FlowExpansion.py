@@ -357,10 +357,12 @@ class ArmyFlowExpanderV2:
             friendly_border_tiles = 0
 
             for border_island in island.border_islands:
-                if border_island.team == target_team:
-                    enemy_border_tiles += border_island.tile_count
-                elif border_island.team == my_team:
+                # TODO instead, look immediately at the flow-froms and if the flow from isn't friendly then it is crossable presumably.
+                if border_island.team == my_team:
                     friendly_border_tiles += border_island.tile_count
+                elif border_island.team != my_team and border_island.team >= 0:
+                    enemy_border_tiles += border_island.tile_count
+                # else: # neutral border, ignore for now..?
 
             # Check if bordered by more enemy than friendly tiles
             if enemy_border_tiles <= friendly_border_tiles:
@@ -380,14 +382,15 @@ class ArmyFlowExpanderV2:
                 flow_graph.flow_node_lookup_by_island_no_neut,
                 flow_graph.flow_node_lookup_by_island_inc_neut,
             ]:
-                if island.unique_id in flow_lookup:
-                    flow_node = flow_lookup[island.unique_id]
-                    for edge in flow_node.flow_from:
-                        if edge.source_flow_node.island.team == target_team:
-                            has_enemy_flow_in = True
-                            break
-                    if has_enemy_flow_in:
+                flow_node = flow_lookup.get(island.unique_id, None)
+                if flow_node is None:
+                    continue
+                for edge in flow_node.flow_from:
+                    if edge.source_flow_node.island.team != my_team:
+                        has_enemy_flow_in = True
                         break
+                if has_enemy_flow_in:
+                    break
 
             if has_enemy_flow_in:
                 target_crossable.add(island.unique_id)
@@ -395,6 +398,123 @@ class ArmyFlowExpanderV2:
                     logbook.info(f"Marked island {island.unique_id} as target-crossable: "
                              f"enemy_border={enemy_border_tiles}, friendly_border={friendly_border_tiles}, "
                              f"size={island.tile_count}, threshold={threshold_tiles}")
+
+
+    # DEBUG
+    # def _detect_target_crossable_friendly_islands(
+    #     self,
+    #     islands: TileIslandBuilder,
+    #     flow_graph: IslandMaxFlowGraph,
+    #     my_team: int,
+    #     target_team: int
+    # ) -> set[int]:
+    #     """
+    #     Detect friendly islands that should be treated as target-side crossing nodes.
+
+    #     A friendly island is target crossable when:
+    #     - it is a friendly island
+    #     - it is bordered by more enemy island tile counts than friendly island tile counts
+    #     - its parent island contains less than 1/5 of the friendly team's total tile count
+    #     - the max-flow graph shows pathing into the friendly island from enemy islands
+    #     """
+    #     # DEBUG: Log entry and cache state
+    #     try:
+    #         from base.client.map import MapBase
+    #         do_not_randomize = getattr(MapBase, 'DO_NOT_RANDOMIZE', 'N/A')
+    #     except:
+    #         do_not_randomize = 'ERROR'
+    #     logbook.info(f"[TARGET_CROSSABLE] ENTER: my_team={my_team}, target_team={target_team}, "
+    #                  f"existing_cache_size={len(self._target_crossable_cache)}, "
+    #                  f"MapBase.DO_NOT_RANDOMIZE={do_not_randomize}")
+
+    #     target_crossable = set()
+
+    #     # Calculate total friendly tile count for the 1/5 threshold
+    #     total_friendly_tiles = sum(
+    #         island.tile_count
+    #         for island in islands.tile_islands_by_team_id[my_team]
+    #     )
+    #     threshold_tiles = total_friendly_tiles // 5
+
+    #     logbook.info(f"[TARGET_CROSSABLE] total_friendly_tiles={total_friendly_tiles}, threshold={threshold_tiles}")
+    #     logbook.info(f"[TARGET_CROSSABLE] all_islands count={len(islands.all_tile_islands)}, "
+    #                  f"friendly_islands count={len(islands.tile_islands_by_team_id[my_team])}")
+
+    #     for island in islands.all_tile_islands:
+    #         if island.team != my_team:
+    #             continue
+
+    #         # Count bordering enemy vs friendly tile counts
+    #         enemy_border_tiles = 0
+    #         friendly_border_tiles = 0
+    #         border_island_ids = [b.unique_id for b in island.border_islands]
+
+    #         for border_island in island.border_islands:
+    #             if border_island.team == target_team:
+    #                 enemy_border_tiles += border_island.tile_count
+    #             elif border_island.team == my_team:
+    #                 friendly_border_tiles += border_island.tile_count
+
+    #         parent_tile_count = island.full_island.tile_count if island.full_island is not None else island.tile_count
+
+    #         # Check conditions
+    #         cond2_fail = enemy_border_tiles <= friendly_border_tiles
+    #         cond3_fail = parent_tile_count >= threshold_tiles
+
+    #         # Check flow graph for enemy flow in
+    #         has_enemy_flow_in = False
+    #         flow_node_found = False
+    #         flow_from_edges = []
+    #         for flow_lookup_name, flow_lookup in [
+    #             ("no_neut", flow_graph.flow_node_lookup_by_island_no_neut),
+    #             ("inc_neut", flow_graph.flow_node_lookup_by_island_inc_neut),
+    #         ]:
+    #             flow_node = flow_lookup.get(island.unique_id, None)
+    #             if flow_node is not None:
+    #                 flow_node_found = True
+    #                 for edge in flow_node.flow_from:
+    #                     src_team = edge.source_flow_node.island.team
+    #                     src_id = edge.source_flow_node.island.unique_id
+    #                     flow_from_edges.append(f"{src_id}(t{src_team})")
+    #                     if src_team == target_team:
+    #                         has_enemy_flow_in = True
+    #                         break
+    #             if has_enemy_flow_in:
+    #                 break
+
+    #         cond4_fail = not has_enemy_flow_in
+    #         # DEBUG: Log flow details for islands that pass cond2 and cond3 but fail cond4
+    #         if not cond2_fail and not cond3_fail and cond4_fail:
+    #             logbook.info(f"[TARGET_CROSSABLE] DEBUG island {island.unique_id} ({island}) flow_from: [{', '.join(flow_from_edges)}], target_team={target_team}")
+    #             # Check if island exists in flow lookups
+    #             in_no_neut = island.unique_id in flow_graph.flow_node_lookup_by_island_no_neut
+    #             in_inc_neut = island.unique_id in flow_graph.flow_node_lookup_by_island_inc_neut
+    #             logbook.info(f"[TARGET_CROSSABLE] DEBUG island {island.unique_id} in lookups: no_neut={in_no_neut}, inc_neut={in_inc_neut}")
+
+    #         # Log evaluation for every friendly island
+    #         logbook.info(f"[TARGET_CROSSABLE] island {island.unique_id}: "
+    #                      f"team={island.team}, tiles={island.tile_count}, parent_tiles={parent_tile_count}, "
+    #                      f"borders={border_island_ids}, enemy_border={enemy_border_tiles}, friendly_border={friendly_border_tiles}, "
+    #                      f"cond2_pass={not cond2_fail}, cond3_pass={not cond3_fail}, flow_node_found={flow_node_found}, cond4_pass={not cond4_fail}")
+
+    #         if cond2_fail or cond3_fail or cond4_fail:
+    #             if self.log_debug:
+    #                 skip_reasons = []
+    #                 if cond2_fail:
+    #                     skip_reasons.append(f"enemy_border({enemy_border_tiles}) <= friendly_border({friendly_border_tiles})")
+    #                 if cond3_fail:
+    #                     skip_reasons.append(f"parent_tiles({parent_tile_count}) >= threshold({threshold_tiles})")
+    #                 if cond4_fail:
+    #                     skip_reasons.append("no_enemy_flow_in")
+    #                 logbook.info(f"[TARGET_CROSSABLE]   SKIP island {island.unique_id}: {', '.join(skip_reasons)}")
+    #             continue
+
+    #         target_crossable.add(island.unique_id)
+    #         logbook.info(f"[TARGET_CROSSABLE]   ACCEPT island {island.unique_id} as target-crossable")
+    #         if self.log_debug:
+    #             logbook.info(f"Marked island {island.unique_id} as target-crossable: "
+    #                      f"enemy_border={enemy_border_tiles}, friendly_border={friendly_border_tiles}, "
+    #                      f"size={island.tile_count}, threshold={threshold_tiles}")
 
         # Propagate crossability via island border adjacency: any friendly island that borders
         # an already-crossable island and passes conditions 1-3 is also crossable.
@@ -429,6 +549,8 @@ class ArmyFlowExpanderV2:
 
         # Update cache
         self._target_crossable_cache = target_crossable
+
+        logbook.info(f"[TARGET_CROSSABLE] EXIT: found {len(target_crossable)} target-crossable islands: {sorted(target_crossable)}")
 
         return target_crossable
 
@@ -494,35 +616,85 @@ class ArmyFlowExpanderV2:
         start_node: IslandFlowNode,
         target_crossable_islands: set[int]
     ) -> list[IslandFlowNode]:
-        """Build upstream traversal from friendly border node"""
+        """Build upstream traversal from friendly border node using priority queue.
+
+        Uses a priority queue with heuristic = sum_army / tile_count, preferring
+        islands with higher army density. Only adds islands to the frontier if they
+        are spatially adjacent to already-included islands, ensuring connectivity.
+        """
+        import heapq
+
         visited = set()
         stream = []
+        accumulated_tiles: set[Tile] = set()
 
-        def traverse_upstream(node: IslandFlowNode):
-            if node.island.unique_id in visited:
-                return
-            visited.add(node.island.unique_id)
+        # Priority queue: (-heuristic, island_id, node, upstream_army_sum)
+        # Negative heuristic for max-heap behavior (higher = better)
+        frontier = []
 
-            # Only include friendly islands in upstream traversal
-            if node.island.team == self.team:
-                stream.append(node)
+        # Calculate initial heuristic for start node
+        start_island = start_node.island
+        if start_island.team == self.team:
+            start_heuristic = start_island.sum_army / max(start_island.tile_count, 1)
+            heapq.heappush(frontier, (-start_heuristic, start_island.unique_id, start_node, start_island.sum_army))
+            visited.add(start_island.unique_id)
 
-                # Continue upstream through incoming flow edges
-                if self.log_debug:
-                    logbook.info(
-                        f'UPSTREAM_BFS node={node.island.unique_id}({node.island!r}) '
-                        f'flow_from=[{", ".join(f"{e.source_flow_node.island.unique_id}(team={e.source_flow_node.island.team} army={e.edge_army})" for e in node.flow_from)}]'
-                    )
-                for edge in node.flow_from:
-                    src = edge.source_flow_node
-                    if src.island.team == self.team:
-                        traverse_upstream(src)
-                    elif self.log_debug:
+        while frontier:
+            _, _, current_node, upstream_army = heapq.heappop(frontier)
+
+            # Add to stream
+            stream.append(current_node)
+            accumulated_tiles.update(current_node.island.tile_set)
+
+            if self.log_debug:
+                logbook.info(
+                    f'UPSTREAM_PQ node={current_node.island.unique_id}({current_node.island!r}) '
+                    f'heuristic={upstream_army / max(current_node.island.tile_count, 1):.2f} '
+                    f'upstream_army={upstream_army}'
+                )
+
+            # Explore upstream neighbors
+            for edge in current_node.flow_from:
+                src = edge.source_flow_node
+                src_island = src.island
+
+                if src_island.unique_id in visited:
+                    continue
+                if src_island.team != self.team:
+                    if self.log_debug:
                         logbook.info(
-                            f'UPSTREAM_BFS  SKIP non-friendly flow_from: {src.island.unique_id}(team={src.island.team})'
+                            f'UPSTREAM_PQ  SKIP non-friendly: {src_island.unique_id}(team={src_island.team})'
                         )
+                    continue
 
-        traverse_upstream(start_node)
+                # Check spatial adjacency: src island must be adjacent to accumulated tiles
+                is_adjacent = False
+                for tile in src_island.tile_set:
+                    for neighbor in tile.movable:
+                        if neighbor in accumulated_tiles:
+                            is_adjacent = True
+                            break
+                    if is_adjacent:
+                        break
+
+                if not is_adjacent:
+                    if self.log_debug:
+                        logbook.info(
+                            f'UPSTREAM_PQ  SKIP non-adjacent: {src_island.unique_id} not adjacent to accumulated set'
+                        )
+                    continue
+
+                # Calculate heuristic: sum_army / tile_count
+                # Higher army density = higher priority for gathering
+                heuristic = src_island.sum_army / max(src_island.tile_count, 1)
+
+                # Track total upstream army (current upstream + this island's army)
+                # This is used for gather calculations, not for priority
+                total_upstream_army = upstream_army + src_island.sum_army
+
+                visited.add(src_island.unique_id)
+                heapq.heappush(frontier, (-heuristic, src_island.unique_id, src, total_upstream_army))
+
         return stream
 
     def _build_downstream_stream(
@@ -530,37 +702,140 @@ class ArmyFlowExpanderV2:
         start_node: IslandFlowNode,
         target_crossable_islands: set[int]
     ) -> list[IslandFlowNode]:
-        """Build downstream traversal from the friendly border node.
+        """Build downstream traversal from the friendly border node using priority queue.
 
-        Walks flow_to edges from the friendly side outward so that every node is
-        emitted in physical path order — mandatory intermediate tiles (neutral or
-        target-crossable friendly) appear before the enemy tile they guard.
+        Uses a priority queue with heuristic = econ_value / army_sum, preferring
+        islands with better econ-to-army ratios. Only adds islands to the frontier
+        if they are spatially adjacent to already-included islands, ensuring connectivity.
         """
+        import heapq
+
         visited = set()
         stream = []
+        accumulated_tiles: set[Tile] = set()
 
-        # BFS from the friendly border node so we encounter nodes in the order
-        # they are physically reached when marching toward the enemy.
-        queue = [start_node]
-        while queue:
-            node = queue.pop(0)
-            if node.island.unique_id in visited:
+        # Priority queue: (-heuristic, island_id, node)
+        # Negative heuristic for max-heap behavior (higher = better)
+        frontier = []
+
+        # Start node is the friendly border island - we don't emit it in the stream
+        # but it's the seed for adjacency
+        visited.add(start_node.island.unique_id)
+        accumulated_tiles.update(start_node.island.tile_set)
+
+        # Add initial downstream neighbors from start_node
+        for edge in start_node.flow_to:
+            dest = edge.target_flow_node
+            dest_island = dest.island
+            if dest_island.unique_id in visited:
                 continue
-            visited.add(node.island.unique_id)
 
-            # Emit non-friendly nodes: enemy, neutral, and target-crossable friendly
-            if (node.island.team == self.target_team or
-                node.island.team == -1 or
-                node.island.unique_id in target_crossable_islands):
-                stream.append(node)
+            # Check if this island should be included in target stream
+            is_target = (dest_island.team == self.target_team or
+                        dest_island.team == -1 or
+                        dest_island.unique_id in target_crossable_islands)
 
-            # Continue along all outgoing flow edges
-            for edge in node.flow_to:
+            if not is_target:
+                continue
+
+            # Check spatial adjacency to accumulated tiles
+            is_adjacent = False
+            for tile in dest_island.tile_set:
+                for neighbor in tile.movable:
+                    if neighbor in accumulated_tiles:
+                        is_adjacent = True
+                        break
+                if is_adjacent:
+                    break
+
+            if not is_adjacent:
+                if self.log_debug:
+                    logbook.info(f'DOWNSTREAM init SKIP non-adjacent: {dest_island.unique_id} to accumulated')
+                continue
+
+            # Calculate econ value and heuristic
+            econ_value = self._calculate_island_econ_value(dest_island, target_crossable_islands)
+            army_sum = max(dest_island.sum_army, 1)  # Avoid division by zero
+            heuristic = econ_value / army_sum
+
+            visited.add(dest_island.unique_id)
+            heapq.heappush(frontier, (-heuristic, dest_island.unique_id, dest))
+
+        # Process priority queue
+        while frontier:
+            _, _, current_node = heapq.heappop(frontier)
+            current_island = current_node.island
+
+            # Emit this node
+            stream.append(current_node)
+            accumulated_tiles.update(current_island.tile_set)
+
+            if self.log_debug:
+                econ_val = self._calculate_island_econ_value(current_island, target_crossable_islands)
+                logbook.info(
+                    f'DOWNSTREAM_PQ node={current_island.unique_id}({current_island!r}) '
+                    f'heuristic={econ_val / max(current_island.sum_army, 1):.4f} '
+                    f'econ={econ_val:.1f} army={current_island.sum_army}'
+                )
+
+            # Add downstream neighbors to frontier
+            for edge in current_node.flow_to:
                 dest = edge.target_flow_node
-                if dest.island.unique_id not in visited:
-                    queue.append(dest)
+                dest_island = dest.island
+                if dest_island.unique_id in visited:
+                    continue
+
+                # Check if this island should be included
+                is_target = (dest_island.team == self.target_team or
+                            dest_island.team == -1 or
+                            dest_island.unique_id in target_crossable_islands)
+
+                if not is_target:
+                    continue
+
+                # Check spatial adjacency to accumulated tiles
+                is_adjacent = False
+                for tile in dest_island.tile_set:
+                    for neighbor in tile.movable:
+                        if neighbor in accumulated_tiles:
+                            is_adjacent = True
+                            break
+                    if is_adjacent:
+                        break
+
+                if not is_adjacent:
+                    if self.log_debug:
+                        logbook.info(
+                            f'DOWNSTREAM_PQ  SKIP non-adjacent: {dest_island.unique_id}'
+                        )
+                    continue
+
+                # Calculate heuristic
+                econ_value = self._calculate_island_econ_value(dest_island, target_crossable_islands)
+                army_sum = max(dest_island.sum_army, 1)
+                heuristic = econ_value / army_sum
+
+                visited.add(dest_island.unique_id)
+                heapq.heappush(frontier, (-heuristic, dest_island.unique_id, dest))
 
         return stream
+
+    def _calculate_island_econ_value(self, island, target_crossable_islands: set[int]) -> float:
+        """Calculate total econ value for an island."""
+        from BehaviorAlgorithms.IterativeExpansion import ITERATIVE_EXPANSION_EN_CAP_VAL
+
+        is_crossing = island.unique_id in target_crossable_islands
+
+        if is_crossing:
+            return 0.0
+        elif island.team == self.target_team:
+            # Enemy island: value per tile
+            return island.tile_count * ITERATIVE_EXPANSION_EN_CAP_VAL
+        elif island.team == -1:
+            # Neutral island: 1.0 per tile
+            return island.tile_count * 1.0
+        else:
+            return 0.0
 
     def _preprocess_flow_stream_tilecounts(
         self,
@@ -1337,7 +1612,7 @@ class ArmyFlowExpanderV2:
                     negativeTiles=None,
                     searchingPlayer=asPlayer,
                     priorityMatrix=None,
-                    useTrueValueGathered=True,
+                    useTrueValueGathered=False,
                     captures=capping,
                 )
                 plan._turns = len(gathing) + len(capping) - 1

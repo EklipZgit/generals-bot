@@ -118,7 +118,7 @@ class EklipZBot(object):
         self.general_safe_func_set = {}
         self.clear_moves_func: typing.Union[None, typing.Callable] = None
         self.surrender_func: typing.Union[None, typing.Callable] = None
-        self._map: MapBase | None = None
+        self._map: MapBase = None
         self.curPath: Path | None = None
         self.last_move: Move | None = None
         self.curPathPrio = -1
@@ -142,9 +142,9 @@ class EklipZBot(object):
         self.enemy_city_approxed_attacks: typing.Dict[Tile, typing.Tuple[int, int, int]] = {}
         """Contains a mapping from an enemy city, to the approximate (turns, ourAttack, theirDefense)"""
 
-        self.dangerAnalyzer: DangerAnalyzer | None = None
-        self.cityAnalyzer: CityAnalyzer | None = None
-        self.gatherAnalyzer: GatherAnalyzer | None = None
+        self.dangerAnalyzer: DangerAnalyzer = None
+        self.cityAnalyzer: CityAnalyzer = None
+        self.gatherAnalyzer: GatherAnalyzer = None
         self.lastTimingFactor = -1
         self.lastTimingTurn = 0
         self._evaluatedUndiscoveredCache = []
@@ -214,7 +214,7 @@ class EklipZBot(object):
         self.largeNegativeNeutralTiles: typing.List[Tile] = []
         """Large negative neutral tiles (less than or equal to -2), ordered from most-negative to least-negative."""
         self.playerTargetScores = [0 for i in range(16)]
-        self.general: Tile | None = None
+        self.general: Tile = None
         self.gatherNodes = None
         self.redGatherTreeNodes = None
         self.isInitialized = False
@@ -305,7 +305,7 @@ class EklipZBot(object):
 
         self.is_lag_massive_map: bool = False
 
-        self.undiscovered_priorities: MapMatrixInterface[float] | None = None
+        self.undiscovered_priorities: MapMatrixInterface[float] = None
         self._undisc_prio_turn: int = -1
         self._afk_players: typing.List[Player] | None = None
         self._is_ffa_situation: bool | None = None

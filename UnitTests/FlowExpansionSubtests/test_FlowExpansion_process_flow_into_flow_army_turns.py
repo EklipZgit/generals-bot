@@ -459,8 +459,8 @@ aG1  a5        b1   bG1
 
         Layout (5 rows, 6 cols):
           b1   b1   b1   b1   b1   b1
-          aG1  a1   a1   a1   b1   bG1
-          a1   a1   a1   b1   a1   b1   <- outpost at (4,2)
+          aG1  a1   a1   a1   b1   b1
+          a1   a1   a1   b1   a1   bG1   <- outpost at (4,2)
           a1   a1   a1   a1   b1   b1
           b1   b1   b1   b1   b1   b1
         """
@@ -474,10 +474,13 @@ a1   a1   a1   a1   b1   b1
 b1   b1   b1   b1   b1   b1
 |    |    |    |    |    |
         """
+        MapBase.DO_NOT_RANDOMIZE = True
+
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
-        self.begin_capturing_logging()
 
         expander, builder = self._build_expander_with_flow_graph(map, general, enemyGeneral)
+        self.begin_capturing_logging()
+        expander.log_debug = True
         target_crossable = expander._detect_target_crossable_friendly_islands(
             builder, expander.flow_graph, expander.team, expander.target_team
         )

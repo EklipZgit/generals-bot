@@ -448,7 +448,8 @@ def convert_contiguous_capture_tiles_to_gather_capture_plan(
 
     # rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles, ignoreTiles=captures)
 
-    rootNodes = build_capture_mst_from_root_and_contiguous_tiles(map, tiles.union(captures), searchingPlayer=searchingPlayer)  #, ignoreTiles=ignore
+    allTiles = tiles.union(captures)
+    rootNodes = build_capture_mst_from_root_and_contiguous_tiles(map, allTiles, searchingPlayer=searchingPlayer)  #, ignoreTiles=ignore
 
     plan = GatherCapturePlan.build_from_root_nodes(
         map,
@@ -463,6 +464,10 @@ def convert_contiguous_capture_tiles_to_gather_capture_plan(
         viewInfo=viewInfo,
         cloneNodes=False,
     )
+
+    frTeam = map.team_ids_by_player_index[searchingPlayer]
+    frTiles = [t for t in allTiles if map.team_ids_by_player_index[t.player] == frTeam]
+    plan.gathered_army = sum(t.army for t in frTiles) - len(frTiles)
 
     # Runtime assertion: plan must produce at least one move
     first_move = plan.get_first_move()

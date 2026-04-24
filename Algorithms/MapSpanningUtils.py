@@ -108,6 +108,17 @@ def get_spanning_tree_set_from_tile_lists_with_cost_per(
     @param requiredTiles:
     @return:
     """
+
+    # TODO this can be implemented as a bfs from all required tiles,
+    #  storing the from-tile + seed tile in a map matrix for each tile as you iterate.
+    #  When you pop a from-tile / seed-tile combo and the next location has a different from/seed already written to it,
+    #  then you've connected both of those sources to each other via shortest path and can "include" the from-tile chain
+    #  from the meeting point back to each respective seed tile.
+    #  You stop traversing at this point, and any additional meetings between those seed tiles in future pops get ignored,
+    #  as these two tiles are already connected. The search stops once each seed tile has found at least one connection.
+    #  Probably triangles need to be ignored, when testing if a seed already has a connection to some target, we need to check if we have any connection to any of our targets connections as well.
+    #  Actually if we maintain a forest as we connect everything up we can just test if the seed pairing are already in the same forest subset already and skip if not. Thats prob easiest.
+
     start = time.perf_counter()
     if LOG_VERBOSE:
         logbook.info('starting get_spanning_tree_set_from_tile_lists')
@@ -436,3 +447,35 @@ def _include_all_adj_required_max_gather(node: Tile, includedSet: TileSet, usefu
             q.append(movable)
 
     # logbook.info(f'_include_all_adj_required, iter {iter} included {included}')
+
+
+def trim_spanning_tree_ends_as_new_set(toTrim: typing.Iterable[Tile], trimDepth: int, minRemainingCount: int) -> typing.Set[Tile]:
+    """
+    Trims nodes that only connect to one other node. O(len(toTrim) * trimDepth)
+
+    :param toTrim:
+    :param trimDepth: How many nodes to remove from each end
+    :param minRemainingCount: if num remaining nodes reaches this point, stop trimming and return.
+    :return:
+    """
+
+    remainingNodes = set(toTrim)
+    for iteration in range(trimDepth):
+        toTrim = [n for n in remainingNodes if is_end_node_in_spanning_tree(n, remainingNodes)]
+
+        for n in toTrim:
+            remainingNodes.remove(n)
+            if len(remainingNodes) == minRemainingCount:
+                return remainingNodes
+
+    return remainingNodes
+
+def is_end_node_in_spanning_tree(n: Tile, nodes: typing.Set[Tile]):
+    num = 0
+    for m in n.movable:
+        if m in nodes:
+            num += 1
+            if num > 1:
+                return False
+
+    return True

@@ -140,6 +140,9 @@ aG1  a4        b1   bG1
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
 
+        if debugMode:
+            self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=False)
+
         self.assertEqual(1, len(opts), 'taking the neut, and taking the neut + enemy 1')
         longestOpt = self.get_longest_flow_expansion_option(opts)
         # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
@@ -449,7 +452,7 @@ aG2  a5   b1        bG1
         # self.assertEqual(1, len(opts), 'should only have one option in this case (assuming we continue not allowing neutral expansion)')
         # opt = opts[0]
         self.assertEqual(4, longestOpt.length, 'must make 4 moves to pull the ')
-        self.assertEqual(ITERATIVE_EXPANSION_EN_CAP_VAL * 2 + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2 + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
         self.assertEqual(5, longestOpt.gathered_army, 'gathered a 2 and a 5')
 
     # ------------------------------------------------------------------

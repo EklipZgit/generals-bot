@@ -9,22 +9,12 @@
 7. When asked to fix something, you are expected to try to reproduce it with a test first if at all possible. You should have assertions that fail before fixing the bug and seeing the assertions pass.
 
 --- GetLogsForScopeByTurn.ps1 ---
-GetLogsForScopeByTurn.ps1 is a PowerShell script at the repo root that extracts per-turn log slices for a named scope from bot test output.
-Bot logs are structured with "~~~ Turn N ~~~" markers and "Beginning: <Scope>" / "Complete: (...) <Scope>" delimiters.
-The script accepts either piped pytest output or a -LogFilePath argument, and always appends any AssertionError/Traceback it finds after the scope block.
-The -ScopeName value must match the substring between "Beginning:" and the timing "(...)".
-
-IMPORTANT: simulation tests spawn background threads that keep stdout open, so PowerShell pipe (2>&1 |) will HANG forever waiting for the process to exit.
-The correct two-step pattern is:
-  Step 1 - capture raw output to file using cmd /c redirect (OS-level, not PowerShell pipe):
-    cmd /c ".\.venv\Scripts\python.exe -m pytest Tests/test_Expansion.py::ExpansionTests::test_my_test --tb=short -q -s > raw_test.txt 2>&1"
-  Step 2 - process the file through GetLogsForScopeByTurn.ps1:
-    Get-Content raw_test.txt | .\GetLogsForScopeByTurn.ps1 -ScopeName "TileIsland update" | Out-File -Encoding utf8 debug_output.txt
-  Step 3 - grep across all turns for specific log tokens:
-    Get-Content debug_output.txt | Select-String "BACKREF|BUILD_BORDERS|REGISTER_LOOKUP|AssertionError" | ForEach-Object { $_.Line }
-
-The test must have debugMode = False or the sim runs in real-time, taking 20+ seconds and potentially never exiting cleanly.
-Do NOT remove enable_search_time_limits_and_disable_debug_asserts() from the test - it suppresses unrelated debug asserts in other subsystems that would crash before you reach the bug under investigation. Instead, re-enable use_debug_asserts on the specific subsystem object after that call if needed.
+1. GetLogsForScopeByTurn.ps1 is a PowerShell script at the repo root that extracts per-turn log slices for a named scope from bot test output.
+2. Bot logs are structured with "~~~ Turn N ~~~" markers and "Beginning: <Scope>" / "Complete: (...) <Scope>" delimiters.
+3. debugMode = False in the test (no real-time delays, process exits cleanly)
+4. cmd /c "... > raw_test.txt 2>&1" to redirect at OS level (not PowerShell pipe, which hangs)
+5. Then process raw_test.txt separately with GetLogsForScopeByTurn.ps1
+6. Do NOT remove enable_search_time_limits_and_disable_debug_asserts() — it suppresses unrelated asserts that would otherwise crash first
 
 --- TileIslandBuilder / island debugging tips ---
 1. Island unique_id values are NOT stable between test runs unless MapBase.DO_NOT_RANDOMIZE = True is set in the test BEFORE map loading (before both load_map_and_generals and load_map_and_general calls). Always set this when diagnosing island bugs or the IDs in your log statements will shift every run.

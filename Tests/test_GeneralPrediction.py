@@ -19,7 +19,9 @@ class GeneralPredictionTests(TestBase):
         bot = super().get_debug_render_bot(simHost, player)
 
         bot.info_render_tile_deltas = True
+        bot.info_render_general_undiscovered_prediction_values = True
         bot.info_render_army_emergence_values = True
+        bot.info_render_flow_expand = False
         # bot.info_render_
         # bot.info_render_general_undiscovered_prediction_values = True
 
@@ -61,7 +63,7 @@ class GeneralPredictionTests(TestBase):
         enTile.army = 1
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=39)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '9,23->9,24')
@@ -100,7 +102,7 @@ class GeneralPredictionTests(TestBase):
             tile.army = 1
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '2,5->1,5')
@@ -116,7 +118,7 @@ class GeneralPredictionTests(TestBase):
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[gen1.player][playerMap.GetTile(gen1.x, gen1.y)])
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[gen1.player][playerMap.GetTile(0, 9)])
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[gen1.player][playerMap.GetTile(4, 1)])
-    
+
     def test_should_correctly_predict_general_location(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_correctly_predict_general_location___1KRpoWTgQ---1--2.txtmap'
@@ -128,7 +130,7 @@ class GeneralPredictionTests(TestBase):
         enemyGeneral.army = 2
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=2)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  6,5->5,5->5,6->5,7->5,8->6,8z->7,8->8,8->8,9')
@@ -203,7 +205,7 @@ class GeneralPredictionTests(TestBase):
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=75)
         rawMap.GetTile(6, 8).reset_wrong_undiscovered_fog_guess()
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '6,8->5,8')
@@ -228,7 +230,7 @@ class GeneralPredictionTests(TestBase):
             self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should be allowed')
         for tile in shouldNotBe:
             self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][tile], f'{str(tile)} should not be allowed')
-    
+
     def test_should_immediately_re_evaluate_target_path(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49_actual_spawn.txtmap'
@@ -236,7 +238,7 @@ class GeneralPredictionTests(TestBase):
 
         ogFile = 'GameContinuationEntries/should_immediately_re_evaluate_target_path___Pmzuw7IAX---0--49.txtmap'
         rawMap, _ = self.load_map_and_general(ogFile, respect_undiscovered=True, turn=49)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,3->9,3')
@@ -353,7 +355,7 @@ class GeneralPredictionTests(TestBase):
         rawMap.GetTile(6, 13).reset_wrong_undiscovered_fog_guess()
         rawMap.GetTile(7, 13).reset_wrong_undiscovered_fog_guess()
         # rawMap.GetTile(10, 0).reset_wrong_undiscovered_fog_guess()
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '6,15->6,14')
@@ -395,7 +397,7 @@ class GeneralPredictionTests(TestBase):
         rawMap.GetTile(18, 17).reset_wrong_undiscovered_fog_guess()
         rawMap.GetTile(19, 17).reset_wrong_undiscovered_fog_guess()
         rawMap.GetTile(19, 16).reset_wrong_undiscovered_fog_guess()
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -564,7 +566,7 @@ class GeneralPredictionTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 151, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=151)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '5,11->2,11->2,13->3,13')
@@ -749,7 +751,7 @@ class GeneralPredictionTests(TestBase):
                     self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(18, 12)])
                     self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(12, 3)])
                     self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(20, 11)])
-    
+
     def test_should_convert_final_valid_tile_into_general(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_convert_final_valid_tile_into_general___ajPs0-Z_w---1--342.txtmap'
@@ -757,7 +759,7 @@ class GeneralPredictionTests(TestBase):
         enemyGeneral = self.move_enemy_general(map, enemyGeneral, 2, 12)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=342)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '6,13->6,14->5,14')
@@ -780,7 +782,7 @@ class GeneralPredictionTests(TestBase):
 
         mapFile = 'GameContinuationEntries/should_eliminate_anything_outside_the_bounds_of_minimum_connected_mst_range___hFVc9L3b2---1--99.txtmap'
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=99)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '12,11->12,12')
@@ -804,7 +806,7 @@ class GeneralPredictionTests(TestBase):
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=2)
         self.reset_general(rawMap, enemyGeneral)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  '
@@ -821,7 +823,7 @@ class GeneralPredictionTests(TestBase):
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(4, 3)])
         # self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(12, 3)])
         # self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(20, 11)])
-    
+
     def test_should_not_keep_bad_general_as_general_after_discovers_not_general(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_keep_bad_general_as_general_after_discovers_not_general___yEYQfURCl---0--94.txtmap'
@@ -829,7 +831,7 @@ class GeneralPredictionTests(TestBase):
         enemyGeneral = self.move_enemy_general(map, enemyGeneral, 4, 3)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=94)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '2,8->2,7')
@@ -870,7 +872,7 @@ class GeneralPredictionTests(TestBase):
         self.assertGreater(moreLikelyGeneral, almostCertainlyNotGeneralEmVal, 'should have lower prediction for tile highly unlikely to be general')
         self.assertGreater(moreLikelyGeneral, 10, 'should have good prediction for tile reasonably into the fog')
         self.assertLess(almostCertainlyNotGeneralEmVal, 5, 'should have lower prediction for tile highly unlikely to be general')
-    
+
     def test_should_keep_diving_wtf(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_keep_diving_wtf___77gwInmiz---0--375.txtmap'
@@ -879,7 +881,7 @@ class GeneralPredictionTests(TestBase):
         enemyGeneral.army = 4
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '14,9->10,9')
@@ -889,14 +891,14 @@ class GeneralPredictionTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertEqual(map.player_index, winner)
-    
+
     def test_should_pick_central_general_location(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_pick_central_general_location___PH1_vGrSj---0--71.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 71, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=71)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -908,14 +910,14 @@ class GeneralPredictionTests(TestBase):
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_pick_central_general_location")
-    
+
     def test_should_not_spend_literal_ages_on_FFA_general_prediction_from_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_spend_literal_ages_on_FFA_general_prediction_from_fog___QVy9h9CfV---5--86.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 86, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=86)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         self.queue_all_other_players_leafmoves(simHost)
@@ -937,7 +939,7 @@ class GeneralPredictionTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         self.queue_all_other_players_leafmoves(simHost)
@@ -952,7 +954,7 @@ class GeneralPredictionTests(TestBase):
         duration = time.perf_counter() - start
 
         self.assertLess(duration, 0.020)
-    
+
     def test_shouldnt_mess_up_the_emergence_values_for_no_apparent_reason_after_discovering_expected_1(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/shouldnt_mess_up_the_emergence_values_for_no_apparent_reason_after_discovering_expected_1___B-OhXQP69---1--87.txtmap'
@@ -961,7 +963,7 @@ class GeneralPredictionTests(TestBase):
         map.GetTile(0, 14).army = 2
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=87)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '6,5->7,5')
@@ -982,14 +984,14 @@ class GeneralPredictionTests(TestBase):
         for badTile in badTiles:
             badTileVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][badTile]
             self.assertGreater(goodTileVal, badTileVal * 1.5, f'{goodTile} should have had a much better prediction val than {badTile}')
-    
+
     def test_should_eliminate_impossible_spawn_locations_by_bifurcating_map_after_turn_50(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_eliminate_impossible_spawn_locations_by_bifurcating_map_after_turn_50___3t__cnSLF---1--81.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 81, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=81)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '14,7->14,6')
@@ -1003,7 +1005,7 @@ class GeneralPredictionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(18, 0)], 'should consider this not possible spawn since left side emergence guarantees no path through mountains')
-    
+
     def test_should_not_drop_general_predictions_on_collision(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         for misjudgedEnemyFog in [True, False]:
@@ -1039,7 +1041,7 @@ class GeneralPredictionTests(TestBase):
 
                     emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][map.GetTile(7, 2)]
                     self.assertGreater(emergence, 9)
-    
+
     def test_should_not_overestimate_emergence_and_underestimate_general_dist(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_overestimate_emergence_and_underestimate_general_dist___QuBFbVDAe---1--78__actual.txtmap'
@@ -1047,7 +1049,7 @@ class GeneralPredictionTests(TestBase):
 
         mapFile = 'GameContinuationEntries/should_not_overestimate_emergence_and_underestimate_general_dist___QuBFbVDAe---1--78.txtmap'
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=78)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '7,7->6,7')
@@ -1321,7 +1323,7 @@ class GeneralPredictionTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 15, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=15)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.reveal_player_general(enemyGeneral.player, general.player, hidden=True)
@@ -1335,7 +1337,7 @@ class GeneralPredictionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
         self.assertValidGeneralPosition(bot, enemyGeneral)
         self.assertNoFriendliesKilled(map, general)
-    
+
     def test_should_not_mis_eliminate_on_custom_map_with_walled_cities(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_mis-eliminate_on_custom_map_with_walled_cities___adYlTe7JG---1--415.txtmap'
@@ -1345,7 +1347,7 @@ class GeneralPredictionTests(TestBase):
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=415)
         rawMap.GetTile(30, 32).reset_wrong_undiscovered_fog_guess()
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '35,12->35,13')
@@ -1357,14 +1359,14 @@ class GeneralPredictionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertFalse(playerMap.GetTile(39,36).isGeneral)
-    
+
     def test_should_not_overlimit_on_army_that_enters_and_leaves_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_overlimit_on_army_that_enters_and_leaves_fog___Gm0k2qU_c---1--92.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 92, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,7->6,7')
@@ -1392,7 +1394,7 @@ class GeneralPredictionTests(TestBase):
 # 10f, 87p, 1s  AFTER MOVED DIVE RELATED TESTS TO OTHER TEST FILE
 # 22f, 868p after adding the million blah blah blah
 # 8f, 880p (49s) after fixing stuff up and moving the gen position limiting to after the emergence pathing.
-    
+
     def test_should_not_predict_en_gen_in_random_location(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_predict_en_gen_in_random_location___SuogENMBi---1--138.txtmap'
@@ -1402,7 +1404,7 @@ class GeneralPredictionTests(TestBase):
         rawMap.reset_wrong_undiscovered_fog_guess(rawMap.GetTile(0, 10))
         rawMap.reset_wrong_undiscovered_fog_guess(rawMap.GetTile(8, 13))
         rawMap.reset_wrong_undiscovered_fog_guess(rawMap.GetTile(10, 10))
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1424,3 +1426,25 @@ class GeneralPredictionTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
 
         self.assertEmergenceGreaterThanXY(bot, 8, 14, 5)
+
+    def test_should_immediately_change_target_path_and_predicted_general_location(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_immediately_change_target_path_and_predicted_general_location___jAymL4BlP---1--129.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 128, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general('GameContinuationEntries/should_immediately_change_target_path_and_predicted_general_location___jAymL4BlP---1--128.txtmap', respect_undiscovered=True, turn=128)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,4->15,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        # should find the point between the two emergences / the "center" of the emergence spanning tree graph and use that. Which should clearly be pretty much the exact general location here.
+        self.assertTileNearOtherTile(map, map.GetTile(2, 2), bot.targetPlayerExpectedGeneralLocation, 5)
+
+        self.assertTileNearOtherTile(map, map.GetTile(2, 2), bot.target_player_gather_path.tail.tile, 5)

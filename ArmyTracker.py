@@ -14,7 +14,7 @@ import SearchUtils
 from Algorithms import MapSpanningUtils
 from Army import Army
 from BoardAnalyzer import BoardAnalyzer
-from Interfaces import MetaTileSet
+from Interfaces import TileSet
 from Models import Move
 from MapMatrix import MapMatrixSet, TileSet
 from PerformanceTimer import PerformanceTimer
@@ -30,7 +30,10 @@ class PlayerAggressionTracker(object):
 
 class ArmyTracker(object):
     def __init__(self, map: MapBase, perfTimer: PerformanceTimer | None = None):
-        self.connectedByPlayer: typing.List[MetaTileSet] = [set() for p in map.players]
+        self.connectedByPlayer: typing.List[TileSet] = [set() for p in map.players]
+        self.coreConnectedByPlayer: typing.List[TileSet] = [set() for p in map.players]
+        """Connected by player except with ends trimmed to just the core of the graph."""
+
         self.perf_timer: PerformanceTimer = perfTimer
         if self.perf_timer is None:
             self.perf_timer = PerformanceTimer()
@@ -3565,8 +3568,9 @@ class ArmyTracker(object):
             return
 
         ourGen = self.map.generals[self.map.player_index]
-        bannedTiles, connectedTiles, pathToUnelim = self.get_fog_connected_based_on_emergences(player, predictedGeneralLocation)
+        bannedTiles, connectedTiles, coreConnected, pathToUnelim = self.get_fog_connected_based_on_emergences(player, predictedGeneralLocation)
         self.connectedByPlayer[player] = connectedTiles
+        self.coreConnectedByPlayer[player] = coreConnected
 
         keep = []
         for tile in playerObj.tiles:
@@ -3597,12 +3601,12 @@ class ArmyTracker(object):
 
     def get_fog_connected_based_on_emergences(
             self,
-            player,
+            player: int,
             predictedGeneralLocation,
             additionalRequiredTiles: typing.Iterable[Tile] | None = None
-    ) -> typing.Tuple[MapMatrixSet, TileSet, Path | None]:
+    ) -> typing.Tuple[MapMatrixSet, TileSet, TileSet, Path | None]:
         """
-        Returns bannedTiles, connectedSet, pathToClosestUneliminatedGenPosition
+        Returns bannedTiles, connectedSet, coreConnectedSet, pathToClosestUneliminatedGenPosition
         @param player:
         @param predictedGeneralLocation:
         @param additionalRequiredTiles:
@@ -3610,7 +3614,7 @@ class ArmyTracker(object):
         """
         tilesEverOwned = self.tiles_ever_owned_by_player[player]
         uneliminated = self.uneliminated_emergence_events[player]
-        unrecapturedEmergenceEvents = self.unrecaptured_emergence_events[player]
+        unrecapturedEmergenceEvents: typing.Set[Tile] = self.unrecaptured_emergence_events[player]
         validGenSpots = self.valid_general_positions_by_player[player]
         teamStats = self.map.get_team_stats(player)
         perfectInfo = teamStats.cityCount == len(teamStats.teamPlayers)
@@ -3664,6 +3668,7 @@ class ArmyTracker(object):
             connectedSet, missingRequired = MapSpanningUtils.get_spanning_tree_set_from_tile_lists(self.map, requiredTiles, bannedTiles)
             # connectedTiles = [t for t in connectedSet]
             self.unconnectable_tiles[player] = missingRequired
+            coreConnected = MapSpanningUtils.trim_spanning_tree_ends_as_new_set(toTrim=connectedSet, trimDepth=5, minRemainingCount=int(0.49 + len(connectedSet) / 3))
         # with self.perf_timer.begin_move_event(f'ArmyTracker build_network_x_steiner_tree p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
         #     connectedTiles = GatherSteiner.build_network_x_steiner_tree(self.map, requiredTiles, bannedTiles=bannedTiles)
         self.player_connected_tiles[player] = connectedSet
@@ -3703,7 +3708,7 @@ class ArmyTracker(object):
             else:
                 logbook.warning(f'no pathToUnelim to p{player} spawn found!?')
 
-        return bannedTiles, connectedSet, pathToUnelim
+        return bannedTiles, connectedSet, coreConnected, pathToUnelim
 
     def _fill_land_from_connected_tiles_for_player(
             self,

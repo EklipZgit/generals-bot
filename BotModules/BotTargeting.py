@@ -8,6 +8,7 @@ import ExpandUtils
 import logbook
 
 import SearchUtils
+from ArmyTracker import ArmyTracker
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotComms import BotComms
@@ -490,7 +491,7 @@ class BotTargeting:
         return path
 
     @staticmethod
-    def get_max_explorable_undiscovered_tile(bot, minSpawnDist: int):
+    def get_max_explorable_undiscovered_tile(bot, minSpawnDist: int) -> Tile:
         # 4 and larger gets dicey
         depth = BotTargeting.get_safe_per_tile_bfs_depth(bot)
 
@@ -830,7 +831,7 @@ class BotTargeting:
             bot.info(f'bypassed get_predicted_target_player_general_location because no target player and ffa')
             return bot.general
 
-        if bot.targetPlayer == -1 or (len(bot._map.players) == 2 and len([t for t in filter(lambda tile: tile.visible, bot._map.players[bot.targetPlayer].tiles)])):
+        if bot.targetPlayer == -1 or (len(bot._map.players) == 2 and len([t for t in filter(lambda tile: tile.visible, bot._map.players[bot.targetPlayer].tiles)]) == 0):
             with bot.perf_timer.begin_move_event('get_max_explorable_undiscovered_tile'):
                 bot.info(f'DEBUG get_max_explorable_undiscovered_tile')
                 return BotTargeting.get_max_explorable_undiscovered_tile(bot, minSpawnDist)
@@ -843,12 +844,15 @@ class BotTargeting:
         values = MapMatrix(bot._map, 0.0)
 
         if bot.armyTracker.connectedByPlayer[bot.targetPlayer] is not None:
+            range = bot._map.rows / 3
+            distMap = SearchUtils.build_distance_map_matrix(bot._map, bot.armyTracker.uneliminated_emergence_events[bot.targetPlayer].keys())
+
             def foreachFunc(curTile: Tile, state: typing.Tuple[float, int]):
                 (baseFloat, dist) = state
-                values.raw[curTile.tile_index] += baseFloat / dist
+                values.raw[curTile.tile_index] += baseFloat / (dist + 4)
                 return (baseFloat, dist + 1)
-            startTiles = {t: (bot.armyTracker.emergenceLocationMap[bot.targetPlayer][t] + 10.0, 1) for t in bot.armyTracker.connectedByPlayer[bot.targetPlayer] if bot.armyTracker.emergenceLocationMap[bot.targetPlayer][t] > 0}
-            SearchUtils.breadth_first_foreach_with_state(bot._map, startTiles, 15, foreachFunc, None, noLog=True)
+            startTiles = {t: (bot.armyTracker.emergenceLocationMap[bot.targetPlayer][t] * 4 + distMap.raw[t.tile_index] * 20, 1) for t in bot.armyTracker.coreConnectedByPlayer[bot.targetPlayer]}
+            SearchUtils.breadth_first_foreach_with_state(bot._map, startTiles, range, foreachFunc, None, noLog=True)
 
         maxAmount = 0
 
@@ -856,7 +860,7 @@ class BotTargeting:
             if tile.discovered or tile.isMountain or tile.isNotPathable or tile.isCity:
                 continue
 
-            foundValue = 0
+            foundValue = values.raw[tile.tile_index]
 
             if not bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer][tile]:
                 continue
@@ -865,11 +869,11 @@ class BotTargeting:
                 foundValue += bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile] * 10
 
             values.raw[tile.tile_index] = foundValue
-            if foundValue > maxAmount:
+            if values.raw[tile.tile_index] > maxAmount:
                 maxTile = tile
-                maxAmount = foundValue
+                maxAmount = values.raw[tile.tile_index]
             if foundValue > 0 and bot.info_render_general_undiscovered_prediction_values:
-                bot.viewInfo.midRightGridText[tile] = f'we{foundValue}'
+                bot.viewInfo.midRightGridText[tile] = f'we{int(foundValue)}'
 
         bot.viewInfo.add_targeted_tile(maxTile, TargetStyle.BLUE, radiusReduction=11)
 

@@ -140,30 +140,32 @@ class TileIsland(object):
 class IslandNamer(object):
     letterStart: int = ord('A')
     letterEnd: int = ord('z')
-    curLetter: int = letterStart
-    letterSkips: typing.List[int] = [ord('['), ord('\\'), ord(']'), ord('^'), ord('_'), ord('`')]
+    curLetter: int = 0
+    letters: typing.List[str] = [chr(i) for i in range(letterStart, letterEnd + 1) if i not in [ord('['), ord('\\'), ord(']'), ord('^'), ord('_'), ord('`')]]
+    numLetters = len(letters)
 
     curInt: int = 0
 
     @staticmethod
-    def get_letter() -> chr:
-        ch = IslandNamer.curLetter + 1
+    def get_letter() -> str:
+        letter = IslandNamer.letters[IslandNamer.curLetter]
 
-        while ch in IslandNamer.letterSkips:
-            ch += 1
+        IslandNamer.curLetter += 1
+        if IslandNamer.curLetter >= IslandNamer.numLetters:
+            IslandNamer.curLetter = 0
 
-        if ch > IslandNamer.letterEnd:
-            ch = IslandNamer.letterStart
-
-        IslandNamer.curLetter = ch
-
-        return chr(ch)
+        return letter
 
     @staticmethod
     def get_int() -> int:
         IslandNamer.curInt += 1
 
         return IslandNamer.curInt
+
+    @staticmethod
+    def reset():
+        IslandNamer.curLetter = 0
+        IslandNamer.curInt = 1
 
 
 class IslandBuildMode(Enum):
@@ -1082,7 +1084,7 @@ class TileIslandBuilder(object):
 
     def _register_leaf_island(self, island: TileIsland):
         if island.name is None or island.name == '':
-            island.name = IslandNamer.get_letter()
+            raise AssertionError(f'leaf_island {island.unique_id} has no name')
         self.all_tile_islands.add(island)
         self.tile_islands_by_team_id[island.team].append(island)
         stats = self._team_stats_by_team_id[island.team]
@@ -1136,7 +1138,7 @@ class TileIslandBuilder(object):
             # the parent, causing stale tile_island_lookup entries for tiles that get reassigned
             # to a different team's island in subsequent turns.
             if fullIsland.name is None or fullIsland.name == '':
-                fullIsland.name = IslandNamer.get_letter()
+                raise AssertionError(f'full_island {fullIsland.unique_id} has no name')
 
     def _take_best_matching_prior_island(self, candidateTiles: typing.Set[Tile], priorIslands: typing.Set[TileIsland]) -> TileIsland | None:
         bestIsland: TileIsland | None = None
@@ -1211,6 +1213,7 @@ class TileIslandBuilder(object):
             island = self._take_best_matching_prior_island(candidateTiles, priorLeafIslands)
             if island is None:
                 island = TileIsland(candidateTiles, team, 1, tile.army)
+                island.name = '!' + IslandNamer.get_letter()
             else:
                 self._update_island_state(island, candidateTiles, team, 1, tile.army)
             island.full_island = None
@@ -1231,6 +1234,7 @@ class TileIslandBuilder(object):
             island = self._take_best_matching_prior_island(tileSet, priorLeafIslands)
             if island is None:
                 island = TileIsland(tileSet, team, len(tileSet), sum(t.army for t in tileSet))
+                island.name = '%' + IslandNamer.get_letter()
             else:
                 self._update_island_state(island, tileSet, team, len(tileSet), sum(t.army for t in tileSet))
             brokenUp = self._break_apart_island_if_too_large(island, priorLeafIslands)
@@ -1260,6 +1264,7 @@ class TileIslandBuilder(object):
                 island = self._take_best_matching_prior_island(candidateTiles, priorLeafIslands)
                 if island is None:
                     island = TileIsland(candidateTiles, team, 1, tile.army)
+                    island.name = '*' + IslandNamer.get_letter()
                 else:
                     self._update_island_state(island, candidateTiles, team, 1, tile.army)
                 leafIslands.append(island)
@@ -1295,6 +1300,7 @@ class TileIslandBuilder(object):
         fullIsland = self._take_best_matching_prior_island(componentTiles, priorFullIslands)
         if fullIsland is None:
             fullIsland = TileIsland(componentTiles, team, aggregateTileCount, aggregateArmy)
+            fullIsland.name = '&' + IslandNamer.get_letter()
         else:
             self._update_island_state(fullIsland, componentTiles, team, aggregateTileCount, aggregateArmy)
         self._link_leaf_islands_to_full_island(fullIsland, leafIslands, aggregateTileCount, aggregateArmy)
@@ -1648,6 +1654,12 @@ class TileIslandBuilder(object):
         return borderLookup
 
     def add_tile_islands_to_view_info(self, viewInfo, printIslandInfoLines: bool = False, renderIslandNames: bool = True):
+        if renderIslandNames:
+            viewInfo.add_info_line('ISLAND NAME PREFIXES:')
+            viewInfo.add_info_line('!  forced solo during breakup')
+            viewInfo.add_info_line('+  remaining after solo\'d')
+            viewInfo.add_info_line('*  rebuild pending army tiles')
+            viewInfo.add_info_line('%  rebuild contiguous to base tile')
         for island in sorted(self.all_tile_islands, key=lambda i: (i.team, i.unique_id)):
             _rng = random.Random(hash(island.unique_id))
             color = (_rng.randint(0, 255), _rng.randint(0, 255), _rng.randint(0, 255))
@@ -1667,6 +1679,7 @@ class TileIslandBuilder(object):
                     else:
                         viewInfo.bottomRightGridText.raw[tile.tile_index] = island.name
                     viewInfo.topRightGridText.raw[tile.tile_index] = island.unique_id
+
 
             if printIslandInfoLines:
                 viewInfo.add_info_line(f'{island.team}: island {island.unique_id}/{island.name} - {island.sum_army}a/{island.tile_count}t ({island.sum_army_all_adjacent_friendly}a/{island.tile_count_all_adjacent_friendly}t) {str(island.tile_set)}')

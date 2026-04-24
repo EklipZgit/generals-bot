@@ -1,6 +1,9 @@
 import typing
 
+import logbook
+
 from Algorithms import TileIslandBuilder
+from Algorithms.TileIslandBuilder import IslandNamer
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, FlowBorderPairKey, FlowArmyTurnsLookupTable, EnrichedFlowTurnsEntry, FlowTurnsEntry
 from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
@@ -1350,10 +1353,13 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
         """
 
+        MapBase.DO_NOT_RANDOMIZE = True
+        IslandNamer.reset()
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
-        self.begin_capturing_logging()
 
         expander, builder, lookup_tables = self._setup_expander_with_lookup_tables(map, general, enemyGeneral)
+        self.begin_capturing_logging()
+        expander.log_debug = True  # DEBUG: enable logging for connectivity debugging
 
         # Run post-processing
         expander._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
@@ -1378,5 +1384,4 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
                 # Validate combined set has border adjacency
                 self._assert_enriched_entry_combined_set_connected(enriched, border_pair)
 
-        if debugMode:
-            logbook.info(f"Validated connectivity for enriched entries in {len(lookup_tables)} lookup tables")
+        logbook.info(f"Validated connectivity for enriched entries in {len(lookup_tables)} lookup tables")

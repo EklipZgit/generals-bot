@@ -2392,6 +2392,7 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
         builder.recalculate_tile_islands(enemyGeneral)
 
         flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.log_debug = True
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing

@@ -34,6 +34,9 @@ class TileIsland(object):
             self.tile_count = len(self.tile_set)
 
         self.sum_army: int = armySum
+        """
+        Total army on this island. Does not pre-subtract the 1's that need to be left behind on the tiles.
+        """
         if self.sum_army is None:
             self.sum_army = 0
             for t in self.tile_set:

@@ -192,9 +192,9 @@ class BotExpansionOps:
                             bot.board_analysis,
                             bot.territories.territoryMap,
                             bot.tileIslandBuilder,
-                            includeExpansionSearch=bot.expansion_use_legacy,
+                            includeExpansionSearch=True,
                             negativeTiles=expansionNegatives,
-                            viewInfo=bot.viewInfo
+                            viewInfo=bot.viewInfo,
                         )
 
                         path = expUtilPlan.selected_option
@@ -790,10 +790,10 @@ class BotExpansionOps:
                 bot.board_analysis,
                 bot.territories.territoryMap,
                 bonusCapturePointMatrix=BotExpansionOps.get_expansion_weight_matrix(bot, ),
-                includeExpansionSearch=bot.expansion_use_legacy,
+                includeExpansionSearch=True,
                 tileIslands=bot.tileIslandBuilder,
                 negativeTiles=negExpandTiles,
-                viewInfo=bot.viewInfo
+                viewInfo=bot.viewInfo,
             )
         newPath = expUtilPlan.selected_option
         otherPaths = expUtilPlan.all_paths

@@ -443,8 +443,8 @@ aG1  a3   a2   b1   bG1
         stream_data = expander._build_border_pair_stream_data(border_pair, expander.flow_graph, target_crossable)
         self.assertIsNotNone(stream_data)
 
-        friendly_stream = stream_data.get('friendly_stream', [])
-        target_stream = stream_data.get('target_stream', [])
+        friendly_stream = stream_data.friendly_stream
+        target_stream = stream_data.target_stream
 
         friendly_contribs, target_contribs = expander._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 

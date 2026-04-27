@@ -593,7 +593,7 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
             if not stream_data:
                 continue
 
-            target_stream = stream_data.get('target_stream', [])
+            target_stream = stream_data.target_stream
 
             # The target stream should be spatially connected
             self._assert_stream_islands_spatially_connected(

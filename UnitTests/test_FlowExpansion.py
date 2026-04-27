@@ -1548,7 +1548,7 @@ player_index=0
                 self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
                 self.assertEqual(bestTurns, longestOpt.length)
 
-    def test_should_be_able_to_flow_expand_towards_neutrals_and_predicted_general_in_1v1(self):
+    def test_should_be_able_to_flow_expand_towards_neutrals_and_predicted_general_in_1v1__no_duplicate_tile_use(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_be_able_to_flow_expand_towards_neutrals_and_predicted_general_in_1v1___Human.exe-TEST__d151ce15-cc2d-4bfc-8540-0b2b63dce963---1--50.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
@@ -1559,6 +1559,8 @@ player_index=0
         self.begin_capturing_logging()
 
         opts = self.run_army_flow_expansion(rawMap, rawMap.GetTile(general.x, general.y), rawMap.GetTile(enemyGeneral.x, enemyGeneral.y), turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True, method=method)
+
+        self.assertNoDuplicateTileUse(opts)
 
         # if debugMode:
         #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
@@ -1752,3 +1754,16 @@ player_index=0
         #     # 7 en caps, 10 moves, should be our best case scenario.
         #     self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
         #     self.assertEqual(bestTurns, longestOpt.length)
+
+    def assertNoDuplicateTileUse(self, opts: typing.List[GatherCapturePlan]):
+        usedSet = {}
+        dupes = []
+        for opt in opts:
+            for tile in opt.tileSet:
+                if tile in usedSet:
+                    dupes.append(f"Tile {tile} used multiple times in options.\r\n       {usedSet[tile]}\r\n    vs {opt}")
+                else:
+                    usedSet[tile] = opt
+
+        if len(dupes) > 0:
+            raise AssertionError(f"Found duplicate tile use in options:\r\n  {'\r\n  '.join(dupes)}")

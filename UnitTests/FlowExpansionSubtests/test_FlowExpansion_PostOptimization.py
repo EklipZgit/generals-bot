@@ -11,7 +11,7 @@ from Tests.TestBase import TestBase
 from base.client.map import MapBase
 from bot_ek0x45 import EklipZBot
 
-method = FlowGraphMethod.MinCostFlow
+method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
 
 class FlowExpansionPostOptimizationTests(TestBase):
     def __init__(self, methodName: str = ...):

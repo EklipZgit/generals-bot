@@ -21,6 +21,7 @@ from base.client.tile import Tile
 from base.viewer import PLAYER_COLORS
 from bot_ek0x45 import EklipZBot
 
+method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
 method = FlowGraphMethod.MinCostFlow
 
 class FlowExpansionUnitTests(TestBase):
@@ -1439,6 +1440,7 @@ player_index=0
         self.assertNotEqual(0, len(opts))
 
         longestOpt = max(opts, key=lambda opt: opt.length)
+        time.sleep(0.1)
 
     def test_should_find_merging_streams_when_optimal(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

@@ -11,8 +11,10 @@ import Algorithms
 import DebugHelper
 import Gather
 import KnapsackUtils
+from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.FlowGraphModels import FlowGraphMethod, IslandFlowNode, IslandMaxFlowGraph
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
+from BehaviorAlgorithms.PyMaxFlowIteratorHelpers import PyMaxFlowDirectionFinder
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpanderLastRun, FlowExpansionPlanOptionCollection, ITERATIVE_EXPANSION_EN_CAP_VAL
 from Interfaces import MapMatrixInterface
 from PerformanceTimer import PerformanceTimer
@@ -131,7 +133,7 @@ class ArmyFlowExpanderV2:
         self.island_builder: TileIslandBuilder | None = None
 
         # Configuration options
-        self.method: FlowGraphMethod = FlowGraphMethod.MinCostFlow
+        self.method: FlowGraphMethod = FlowGraphMethod.PyMaxflowBoykovKolmogorov
         self.use_simple_flow_stream_maximization: bool = True
         self.log_debug: bool = DebugHelper.IS_DEBUGGING
         self.debug_render_capture_count_threshold: int = 10000
@@ -143,6 +145,9 @@ class ArmyFlowExpanderV2:
         self.last_run: ArmyFlowExpanderLastRun = ArmyFlowExpanderLastRun()
         self.last_lookup_tables: list | None = None
         self._networkx_finder: NetworkXFlowDirectionFinder | None = None  # Will be initialized when needed
+        self._pymax_finder: PyMaxFlowDirectionFinder | None = None  # Will be initialized when needed
+        self.use_backpressure_from_enemy_general: bool = True
+        self.live_render_invalid_flow_config = None
         self._target_crossable_cache: set[int] = set()  # Cache for target-crossable islands
 
     def get_expansion_options(
@@ -214,27 +219,67 @@ class ArmyFlowExpanderV2:
         result.flow_plans = plans
         return result
 
-    def _ensure_flow_graph_exists(self, islands: TileIslandBuilder) -> None:
-        """Build or reuse the flow graph using existing NetworkXFlowDirectionFinder"""
+    def _get_networkx_finder(self) -> NetworkXFlowDirectionFinder:
+        """Lazily construct the NetworkX-backed flow direction finder."""
         if self._networkx_finder is None:
+            assert self.island_builder is not None, '_get_networkx_finder requires island_builder to be set'
             self._networkx_finder = NetworkXFlowDirectionFinder(
                 self.map,
-                islands.intergeneral_analysis,
+                self.island_builder.intergeneral_analysis,
                 friendly_general=self.friendlyGeneral,
-                use_backpressure_from_enemy_general=True,
+                use_backpressure_from_enemy_general=self.use_backpressure_from_enemy_general,
                 perf_timer=self.perf_timer,
-                log_debug=self.log_debug and False, # no debug logging, for now.
+                log_debug=self.log_debug,  # enable debug logging for comparison
                 invalid_flow_renderer=None,  # TODO: Add renderer if needed
             )
-
         self._networkx_finder.configure(self.team, self.target_team, self.enemyGeneral)
-        self._networkx_finder.ensure_flow_graph_exists(islands)
+        return self._networkx_finder
 
-        # Build the flow graph using existing trusted components
+    def _get_pymax_finder(self) -> PyMaxFlowDirectionFinder:
+        """Lazily construct the PyMaxflow-backed flow direction finder. Mirrors the
+        construction pattern in ArmyFlowExpander._get_pymax_flow_direction_finder."""
+        if self._pymax_finder is None:
+            self._pymax_finder = PyMaxFlowDirectionFinder(
+                self.map,
+                self.island_builder.intergeneral_analysis,
+                self.perf_timer,
+                self.log_debug,
+                self.use_backpressure_from_enemy_general,
+                self.friendlyGeneral,
+                self.live_render_invalid_flow_config,
+            )
+        self._pymax_finder.configure(self.team, self.target_team, self.enemyGeneral)
+        return self._pymax_finder
+
+    def _get_flow_direction_finder(self, method: FlowGraphMethod | None = None) -> FlowDirectionFinderABC:
+        """Dispatch to the correct concrete finder for the requested flow method.
+        Mirrors ArmyFlowExpander._get_flow_direction_finder so V2 supports the same
+        FlowGraphMethod values as the legacy expander."""
+        if method is None:
+            method = self.method
+        if method in (FlowGraphMethod.PyMaxflowBoykovKolmogorov, FlowGraphMethod.PyMaxflowWithNodeSplitting):
+            return self._get_pymax_finder()
+        return self._get_networkx_finder()
+
+    def _ensure_flow_graph_exists(self, islands: TileIslandBuilder) -> None:
+        """Build or reuse the flow graph using whichever finder backs self.method.
+
+        This used to be hardcoded to NetworkXFlowDirectionFinder; it now mirrors
+        ArmyFlowExpander's dispatcher so PyMaxflow-based methods (BoykovKolmogorov /
+        WithNodeSplitting) actually run their concrete finder instead of silently
+        falling back to NetworkX.
+        """
+        self.island_builder = islands
+        finder = self._get_flow_direction_finder(self.method)
+        finder.ensure_graph_data_available(islands)
+        # Some finders (PyMax) discover the enemy general lazily during graph build —
+        # propagate that discovery back so downstream phases see the same tile.
+        self.enemyGeneral = finder.enemy_general
+
         our_islands = islands.tile_islands_by_player[self.map.player_index]
         target_islands = islands.tile_islands_by_team_id[self.target_team]
 
-        self.flow_graph = self._networkx_finder.build_max_flow_min_cost_flow_nodes(
+        self.flow_graph = finder.build_flow_graph(
             islands,
             our_islands,
             target_islands,
@@ -243,8 +288,9 @@ class ArmyFlowExpanderV2:
             blockGatherFromEnemyBorders=True,
             negativeTiles=None,
             includeNeutralDemand=True,
-            method=self.method
+            method=self.method,
         )
+        self.enemyGeneral = finder.enemy_general
 
     def _enumerate_border_pairs(
         self,
@@ -297,6 +343,9 @@ class ArmyFlowExpanderV2:
         the way.
         """
 
+        if self.log_debug:
+            logbook.info(f"Checking flow support: {friendly_island.unique_id} -> {target_island.unique_id}")
+
         # TODO why the fuck is this a bfs?
         # Check both neutral-inclusive and enemy-only flow graphs
         for flow_lookup in [
@@ -304,10 +353,15 @@ class ArmyFlowExpanderV2:
             # flow_graph.flow_node_lookup_by_island_inc_neut,
         ]:
             if (friendly_island.unique_id not in flow_lookup or
-                    target_island.unique_id not in flow_lookup):
+                target_island.unique_id not in flow_lookup):
+                if self.log_debug:
+                    logbook.info(f"  Flow lookup missing: friendly {friendly_island.unique_id} in_lookup={friendly_island.unique_id in flow_lookup}, target {target_island.unique_id} in_lookup={target_island.unique_id in flow_lookup}")
                 continue
 
             friendly_node = flow_lookup[friendly_island.unique_id]
+
+            if self.log_debug:
+                logbook.info(f"  Starting BFS from friendly node {friendly_island.unique_id}, flow_to={[e.target_flow_node.island.unique_id for e in friendly_node.flow_to]}")
 
             # BFS forward through flow edges from the friendly node
             visited: set[int] = set()
@@ -320,11 +374,18 @@ class ArmyFlowExpanderV2:
 
                 for edge in cur.flow_to:
                     dest = edge.target_flow_node
+                    if self.log_debug:
+                        logbook.info(f"    BFS: {cur.island.unique_id} -> {dest.island.unique_id} (team={dest.island.team})")
                     if dest.island.unique_id == target_island.unique_id:
+                        if self.log_debug:
+                            logbook.info(f"    BFS FOUND PATH to {target_island.unique_id}")
                         return True
                     # Continue BFS through neutral islands
                     if dest.island.team == -1:
                         q.append(dest)
+
+            if self.log_debug:
+                logbook.info(f"  BFS failed to reach {target_island.unique_id}, visited={visited}")
 
         return False
 

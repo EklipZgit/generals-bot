@@ -28,8 +28,9 @@ from PerformanceTimer import PerformanceTimer
 from ViewInfo import ViewInfo, TargetStyle, PathColorer
 from base import Colors
 from base.client.map import MapBase, Tile
+from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
-from BehaviorAlgorithms.PyMaxFlowIteratorHelpers import compute_island_max_flow_with_pymaxflow
+from BehaviorAlgorithms.PyMaxFlowIteratorHelpers import PyMaxFlowDirectionFinder
 
 ITERATIVE_EXPANSION_EN_CAP_VAL = 2.2
 
@@ -132,6 +133,7 @@ class ArmyFlowExpander(object):
         self.flow_graph: IslandMaxFlowGraph | None = None
         self.last_run: ArmyFlowExpanderLastRun = ArmyFlowExpanderLastRun()
         self._networkx_flow_direction_finder: NetworkXFlowDirectionFinder | None = None
+        self._pymax_flow_direction_finder: PyMaxFlowDirectionFinder | None = None
 
         self.debug_render_capture_count_threshold: int = 10000
         """If there are more captures in any given plan option than this, then the option will be rendered inline as generated in a new debug viewer window."""
@@ -331,7 +333,8 @@ class ArmyFlowExpander(object):
             blockGatherFromEnemyBorders: bool = True,
             negativeTiles: TileSet | None = None
     ) -> typing.List[FlowExpansionPlanOption]:
-        self.ensure_flow_graph_exists(islands)
+        self.ensure_graph_data_available(islands, FlowGraphMethod.NetworkSimplex)
+        self.enemyGeneral = self._get_flow_direction_finder().enemy_general
         flowGraph = self._build_max_flow_min_cost_flow_nodes(
             islands,
             ourIslands,
@@ -355,10 +358,63 @@ class ArmyFlowExpander(object):
                 self.use_backpressure_from_enemy_general,
                 self.perf_timer,
                 self.log_debug,
+                self.use_backpressure_from_enemy_general,
+                self.friendlyGeneral,
                 self.live_render_invalid_flow_config,
             )
         self._networkx_flow_direction_finder.configure(self.team, self.target_team, self.enemyGeneral)
         return self._networkx_flow_direction_finder
+
+    def _get_pymax_flow_direction_finder(self) -> PyMaxFlowDirectionFinder:
+        if self._pymax_flow_direction_finder is None:
+            self._pymax_flow_direction_finder = PyMaxFlowDirectionFinder(
+                self.map,
+                self.perf_timer,
+                self.log_debug,
+                self.use_backpressure_from_enemy_general,
+                self.friendlyGeneral,
+                self.live_render_invalid_flow_config,
+            )
+        return self._pymax_flow_direction_finder
+
+    def _get_flow_direction_finder(self, method: FlowGraphMethod | None = None) -> FlowDirectionFinderABC:
+        if method in (FlowGraphMethod.PyMaxflowBoykovKolmogorov, FlowGraphMethod.PyMaxflowWithNodeSplitting):
+            return self._get_pymax_flow_direction_finder()
+        return self._get_networkx_flow_direction_finder()
+
+    def ensure_graph_data_available(self, islands: TileIslandBuilder, method: FlowGraphMethod | None = None):
+        finder = self._get_flow_direction_finder(method)
+        finder.configure(self.team, self.target_team, self.enemyGeneral)
+        finder.ensure_graph_data_available(islands)
+        self.enemyGeneral = finder.enemy_general
+
+    def build_flow_graph(
+            self,
+            islands: TileIslandBuilder,
+            ourIslands: typing.List[TileIsland],
+            targetIslands: typing.List[TileIsland],
+            searchingPlayer: int,
+            turns: int,
+            blockGatherFromEnemyBorders: bool = True,
+            negativeTiles: TileSet | None = None,
+            includeNeutralDemand: bool = False,
+            method: FlowGraphMethod = FlowGraphMethod.NetworkSimplex
+    ) -> IslandMaxFlowGraph:
+        finder = self._get_flow_direction_finder(method)
+        finder.configure(self.team, self.target_team, self.enemyGeneral)
+        flowGraph = finder.build_flow_graph(
+            islands,
+            ourIslands,
+            targetIslands,
+            searchingPlayer,
+            turns,
+            blockGatherFromEnemyBorders,
+            negativeTiles,
+            includeNeutralDemand,
+            method,
+        )
+        self.enemyGeneral = finder.enemy_general
+        return flowGraph
 
     def _get_island_max_flow_dict(
             self,
@@ -368,7 +424,9 @@ class ArmyFlowExpander(object):
             render_on_exception: bool = True
     ) -> typing.Dict[int, typing.Dict[int, int]]:
         """Returns the flow dict produced from the input graph data"""
-        return self._get_networkx_flow_direction_finder().get_island_max_flow_dict(islands, graphData, method, render_on_exception)
+        finder = self._get_flow_direction_finder(method)
+        finder.configure(self.team, self.target_team, self.enemyGeneral)
+        return finder.compute_flow_dict(islands, graphData, method, render_on_exception)
 
     def _build_max_flow_min_cost_flow_nodes(
             self,
@@ -383,7 +441,9 @@ class ArmyFlowExpander(object):
             method: FlowGraphMethod = FlowGraphMethod.NetworkSimplex
     ) -> IslandMaxFlowGraph:
         """Returns the list of root IslandFlowNodes that have nothing that flows in to them. The entire graph can be traversed from the root nodes (from possibly multiple directions)."""
-        return self._get_networkx_flow_direction_finder().build_max_flow_min_cost_flow_nodes(
+        finder = self._get_flow_direction_finder(method)
+        finder.configure(self.team, self.target_team, self.enemyGeneral)
+        return finder.build_flow_graph(
             islands,
             ourIslands,
             targetIslands,
@@ -415,7 +475,7 @@ class ArmyFlowExpander(object):
         :param nxGraphData:
         :return: backfillNeutEdges, enemyBackfillFlowNodes, finalRootFlowNodes
         """
-        return self._get_networkx_flow_direction_finder().get_flow_nodes_from_lookups(
+        return self._get_flow_direction_finder().build_flow_nodes_from_lookups(
             ourIslands,
             targetGeneralIsland,
             targetIslands,
@@ -467,20 +527,22 @@ class ArmyFlowExpander(object):
 
         if self.use_min_cost_flow_edges_only:
             # method = FlowGraphMethod.CapacityScaling  # 67ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
-            # method = FlowGraphMethod.MinCostFlow    # 6.5ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
+            # method = FlowGraphMethod.PyMaxflowBoykovKolmogorov    # 6.5ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
             # method = FlowGraphMethod.NetworkSimplex    # 9ms on test_should_recognize_gather_into_top_path_is_best (with single-tile islands on borders)
-            # method = FlowGraphMethod.MinCostFlow
+            # method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
             method = self.method
             # method = FlowGraphMethod.PyMaxflowWithNodeSplitting
 
+            finder = self._get_flow_direction_finder(method)
+            finder.configure(self.team, self.target_team, self.enemyGeneral)
 
             # Build the flow graph data - needed by both NetworkX and PyMaxflow
             # PyMaxflow converts from NetworkX graph format internally
             with self.perf_timer.begin_move_event('ensure_flow_graph_exists'):
-                self.ensure_flow_graph_exists(islands)
+                self.ensure_graph_data_available(islands, method)
 
             with self.perf_timer.begin_move_event('_build_max_flow_min_cost_flow_nodes'):
-                self.flow_graph = self._build_max_flow_min_cost_flow_nodes(
+                self.flow_graph = self.build_flow_graph(
                     islands,
                     ourIslands,
                     targetIslands,
@@ -1656,18 +1718,15 @@ class ArmyFlowExpander(object):
             except:
                 logbook.info(' | '.join(str(n.island.unique_id) for n in ArmyFlowExpander.iterate_flow_nodes(rootNodes.values())))
                 raise
-
             nextFriendlyUncalculatedNode = IslandFlowNode(nextFriendlyUncalculated, 0 - nextFriendlyUncalculated.sum_army + nextFriendlyUncalculated.tile_count)
             if self.use_debug_asserts and nextFriendlyUncalculatedNode.island not in copyFriendlyFromNode.island.border_islands:
                 # TODO remove once algo reliable
                 raise Exception(f'Tried to add illegal edge from {nextFriendlyUncalculatedNode} TO {copyFriendlyFromNode}')
-
             if self.log_debug:
                 logbook.info(f'    adding friendly edge from {nextFriendlyUncalculatedNode.island.unique_id} TO {copyFriendlyFromNode.island.unique_id}')
             nextFriendlyUncalculatedNode.set_flow_to(copyFriendlyFromNode, 0)
-            # if copyFriendlyFromNode.island.team == self.team:
+            # if copyTargetCalculatedNode.island.team == self.team:
             newRootNodes[nextFriendlyUncalculated.unique_id] = nextFriendlyUncalculatedNode
-
             newNextFriendlies = {island: _deep_copy_flow_node(n, lookup) for island, n in nextFriendlies.items()}
             del newNextFriendlies[nextFriendlyUncalculated]
             newNextTargets = {island: _deep_copy_flow_node(n, lookup) for island, n in nextTargets.items()}
@@ -2265,17 +2324,6 @@ class ArmyFlowExpander(object):
                 destY = viewInfo.map.rows + 2
 
             viewInfo.draw_diagonal_arrow_between_xy(sourceX, sourceY, destX, destY, label=f'{weight}, {capacity}', color=Colors.BLACK)
-
-    def ensure_flow_graph_exists(self, islands: TileIslandBuilder):
-        finder = self._get_networkx_flow_direction_finder()
-        finder.ensure_flow_graph_exists(islands)
-        self.enemyGeneral = finder.enemy_general
-
-    def _build_island_flow_precursor_nx_data(self, islands: TileIslandBuilder, useNeutralFlow: bool) -> NxFlowGraphData:
-        finder = self._get_networkx_flow_direction_finder()
-        graphData = finder._build_island_flow_precursor_nx_data(islands, useNeutralFlow)
-        self.enemyGeneral = finder.enemy_general
-        return graphData
 
     def _determine_initial_demands_and_split_input_output_nodes(self, graph, islands, ourSet, targetSet, includeNeutralFlow: bool):
         return self._get_networkx_flow_direction_finder()._determine_initial_demands_and_split_input_output_nodes(graph, islands, ourSet, targetSet, includeNeutralFlow)

@@ -5,13 +5,14 @@ from abc import ABC, abstractmethod
 
 import logbook
 
-
-
+import SearchUtils
 from BehaviorAlgorithms.Flow.FlowGraphModels import IslandFlowEdge, IslandFlowNode, IslandMaxFlowGraph
+from BehaviorAlgorithms.Flow.TileIslandFlowRole import TileIslandFlowRole
 
 if typing.TYPE_CHECKING:
     from Algorithms import TileIslandBuilder, TileIsland
-    from base.client.map import Tile
+    from ArmyAnalyzer import ArmyAnalyzer
+    from base.client.map import Tile, MapBase
     from Interfaces import TileSet
 
 
@@ -70,6 +71,84 @@ class FlowDirectionFinderABC(ABC):
             method=None,
     ) -> 'IslandMaxFlowGraph':
         raise NotImplementedError()
+
+    def classify_islands_for_flow(
+            self,
+            islands: 'TileIslandBuilder',
+            intergeneral_analysis: 'ArmyAnalyzer',
+            map: 'MapBase',
+            team: int,
+            target_team: int,
+    ) -> typing.Dict[int, TileIslandFlowRole]:
+        """
+        Classify every island's role in the flow graph — which are neutral sinks, border flags,
+        etc. — using intergeneral distance data.  Returns a dict keyed by island.unique_id.
+
+        This is a concrete shared implementation so that NetworkX and PyMaxflow builders produce
+        identical classifications from the same island topology.
+        """
+        enDist = intergeneral_analysis.shortestPathWay.distance
+        neutEnDistCutoff = int(enDist * 1.0)
+        pathwayCutoff = int(1.25 * enDist) + 1
+
+        # BFS from all friendly tiles (depth 3) to find neutral islands adjacent to us;
+        # their proximity is used to exclude them from being neutral sinks in certain modes.
+        capacityLookup: typing.Dict[int, int] = {}
+        startTiles = []
+        usPlayers = map.get_team_stats_by_team_id(team).livingPlayers
+        for p in usPlayers:
+            startTiles.extend(map.players[p].tiles)
+
+        def _foreach(t: 'Tile', dist: int) -> bool:
+            island = islands.tile_island_lookup.raw[t.tile_index]
+            if island is None:
+                return True
+            if island.team == team:
+                return False
+            if island.team == -1:
+                if island.unique_id not in capacityLookup:
+                    capacityLookup[island.unique_id] = 5 - dist
+            return False
+
+        SearchUtils.breadth_first_foreach_dist(map, startTiles, maxDepth=3, foreachFunc=_foreach)
+
+        result: typing.Dict[int, TileIslandFlowRole] = {}
+        for island in islands.all_tile_islands:
+            borders_fr = False
+            borders_en = False
+            for nb in island.border_islands:
+                if nb.team == target_team:
+                    borders_en = True
+                if nb.team == team:
+                    borders_fr = True
+            are_all_borders_neut = not borders_fr and not borders_en
+            is_neut = island.team == -1
+
+            # with_neut sink: outskirt neutral islands not near friendly tiles
+            sink_with_neut = are_all_borders_neut and island.unique_id not in capacityLookup
+
+            # no_neut sink: neutral islands not on the direct pathway corridor
+            sink_no_neut = False
+            if is_neut and not (borders_fr and borders_en):
+                pw = intergeneral_analysis.pathWayLookupMatrix.raw[island.tiles_by_army[0].tile_index]
+                sink_no_neut = True
+                if pw is not None:
+                    dist = pw.distance
+                    if (
+                        dist <= pathwayCutoff
+                        and intergeneral_analysis.bMap.raw[island.tiles_by_army[0].tile_index] <= neutEnDistCutoff
+                    ):
+                        sink_no_neut = False
+
+            result[island.unique_id] = TileIslandFlowRole(
+                island=island,
+                is_neutral_sink_with_neut=sink_with_neut,
+                is_neutral_sink_no_neut=sink_no_neut,
+                borders_friendly=borders_fr,
+                borders_enemy=borders_en,
+                are_all_borders_neutral=are_all_borders_neut,
+            )
+        return result
 
     def build_flow_nodes_from_lookups(
             self,

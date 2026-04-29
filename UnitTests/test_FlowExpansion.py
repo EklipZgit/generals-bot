@@ -22,7 +22,7 @@ from base.viewer import PLAYER_COLORS
 from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
-method = FlowGraphMethod.MinCostFlow
+# method = FlowGraphMethod.MinCostFlow
 
 class FlowExpansionUnitTests(TestBase):
     def __init__(self, methodName: str = ...):

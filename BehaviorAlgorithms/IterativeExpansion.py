@@ -30,7 +30,7 @@ from base import Colors
 from base.client.map import MapBase, Tile
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
-from BehaviorAlgorithms.PyMaxFlowIteratorHelpers import PyMaxFlowDirectionFinder
+from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionFinder
 
 ITERATIVE_EXPANSION_EN_CAP_VAL = 2.2
 

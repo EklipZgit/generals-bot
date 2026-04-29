@@ -7,7 +7,6 @@ import typing
 import logbook
 import networkx as nx
 
-import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from MapMatrix import MapMatrix
 from Gather import GatherDebug
@@ -150,47 +149,12 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
 
         cumulativeDemand, demands, friendlyArmySupply, enemyArmyDemand, enemyGeneralDemand = self._determine_initial_demands_and_split_input_output_nodes(graph, islands, ourSet, targetSet, use_neutral_flow)
 
+        island_roles = self.classify_islands_for_flow(islands, self.intergeneral_analysis, self.map, self.team, self.target_team)
+
         neutSinks = set()
-        capacityLookup = {}
-        startTiles = []
-        usPlayers = self.map.get_team_stats_by_team_id(self.team).livingPlayers
-        for p in usPlayers:
-            startTiles.extend(self.map.players[p].tiles)
-
-        def foreachFunc(t: 'Tile', dist: int) -> bool:
-            island = islands.tile_island_lookup.raw[t.tile_index]
-            if island is None:
-                if t.isCity and t.player == -1:
-                    return True
-                logbook.info(f'TILE {t} WAS NONE ISLAND IN FOREACH???')
-                return True
-            if island.team == myTeam:
-                return False
-
-            if island.team == -1:
-                existCapac = capacityLookup.get(island.unique_id, -1)
-                if existCapac < 0:
-                    capacityLookup[island.unique_id] = 5 - dist
-            return False
-
-        SearchUtils.breadth_first_foreach_dist(
-            self.map,
-            startTiles,
-            maxDepth=3,
-            foreachFunc=foreachFunc)
-
         for island in islands.all_tile_islands:
             sourceCapacity = 100000
-            isIslandNeut = island.team == -1
-            bordersFr = False
-            bordersEn = False
-            bordersBothPlayers = False
-            for movableIsland in island.border_islands:
-                if movableIsland.team == self.target_team:
-                    bordersEn = True
-                if movableIsland.team == self.team:
-                    bordersFr = True
-            areAllBordersNeut = not bordersFr and not bordersEn
+            role = island_roles[island.unique_id]
 
             weight = 1
 
@@ -203,28 +167,10 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
                 graph.add_edge(-island.unique_id, movableIsland.unique_id, weight=weight, capacity=edgeCapacity)
             # neutEnDistCutoff
             # pathwayCutoff
-            sinkEnemyGeneral: bool = False
             if use_neutral_flow:
-                if (
-                    areAllBordersNeut
-                    and island.unique_id not in capacityLookup
-                ):
-                    sinkEnemyGeneral = True
-                    # dist = self.intergeneral_analysis.pathWayLookupMatrix.raw[island.tiles_by_army[0].tile_index].distance
-                    # if self.intergeneral_analysis.bMap.raw[island.tiles_by_army[0].tile_index] <= neutEnDistCutoff:
-                    #     sinkEnemyGeneral = False
-
+                sinkEnemyGeneral = role.is_neutral_sink_with_neut
             else:
-                if (
-                    isIslandNeut
-                    and not bordersBothPlayers
-                ):
-                    pw = self.intergeneral_analysis.pathWayLookupMatrix.raw[island.tiles_by_army[0].tile_index]
-                    sinkEnemyGeneral = True
-                    if pw is not None:
-                        dist = pw.distance
-                        if dist <= pathwayCutoff and self.intergeneral_analysis.bMap.raw[island.tiles_by_army[0].tile_index] <= neutEnDistCutoff:
-                            sinkEnemyGeneral = False
+                sinkEnemyGeneral = role.is_neutral_sink_no_neut
             if sinkEnemyGeneral:
                 neutSinks.add(island.unique_id)
 

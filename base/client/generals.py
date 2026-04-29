@@ -177,7 +177,7 @@ class GeneralsClient(object):
             'desert_density': None,
             'observatory_density': None,
             'lookout_density': None,
-            'game_speed': 0.5,
+            # 'game_speed': 0.5,
         }
 
         if gameid and gameid.__contains__('AltTiles'):
@@ -598,9 +598,9 @@ class GeneralsClient(object):
         while 'replay_id' not in self.start_data:
             forcing = True
             isHost = True
-            self._send(["set_custom_options", self._gameid, {
-                'game_speed': 0.75,
-            }])
+            # self._send(["set_custom_options", self._gameid, {
+            #     'game_speed': 0.75,
+            # }])
 
             if self._currentQueue:
                 if 'options' in self._currentQueue:

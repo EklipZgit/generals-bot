@@ -114,6 +114,9 @@ class FlowGraphMethod(Enum):
     PyMaxflowBoykovKolmogorov = 10  # Standard BK maxflow - fast but not min-cost
     PyMaxflowWithNodeSplitting = 11  # Experimental: node splitting to approximate min-cost
 
+    # OR-Tools min-cost flow methods
+    OrToolsSimpleMinCost = 20  # ortools SimpleMinCostFlow - true min-cost, uses edge weights
+
 
 class IslandFlowNode(object):
     def __init__(self, island: TileIsland, desiredArmy: int):

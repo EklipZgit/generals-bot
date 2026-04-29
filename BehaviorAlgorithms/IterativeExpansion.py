@@ -31,6 +31,7 @@ from base.client.map import MapBase, Tile
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
 from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionFinder
+from BehaviorAlgorithms.Flow.OrToolsFlowDirectionFinder import OrToolsFlowDirectionFinder
 
 ITERATIVE_EXPANSION_EN_CAP_VAL = 2.2
 
@@ -134,6 +135,7 @@ class ArmyFlowExpander(object):
         self.last_run: ArmyFlowExpanderLastRun = ArmyFlowExpanderLastRun()
         self._networkx_flow_direction_finder: NetworkXFlowDirectionFinder | None = None
         self._pymax_flow_direction_finder: PyMaxFlowDirectionFinder | None = None
+        self._ortools_flow_direction_finder: OrToolsFlowDirectionFinder | None = None
 
         self.debug_render_capture_count_threshold: int = 10000
         """If there are more captures in any given plan option than this, then the option will be rendered inline as generated in a new debug viewer window."""
@@ -377,9 +379,25 @@ class ArmyFlowExpander(object):
             )
         return self._pymax_flow_direction_finder
 
+    def _get_ortools_flow_direction_finder(self) -> OrToolsFlowDirectionFinder:
+        if self._ortools_flow_direction_finder is None:
+            self._ortools_flow_direction_finder = OrToolsFlowDirectionFinder(
+                self.map,
+                self.island_builder.intergeneral_analysis,
+                self.perf_timer,
+                self.log_debug,
+                self.use_backpressure_from_enemy_general,
+                self.friendlyGeneral,
+                self.live_render_invalid_flow_config,
+            )
+        self._ortools_flow_direction_finder.configure(self.team, self.target_team, self.enemyGeneral)
+        return self._ortools_flow_direction_finder
+
     def _get_flow_direction_finder(self, method: FlowGraphMethod | None = None) -> FlowDirectionFinderABC:
         if method in (FlowGraphMethod.PyMaxflowBoykovKolmogorov, FlowGraphMethod.PyMaxflowWithNodeSplitting):
             return self._get_pymax_flow_direction_finder()
+        if method == FlowGraphMethod.OrToolsSimpleMinCost:
+            return self._get_ortools_flow_direction_finder()
         return self._get_networkx_flow_direction_finder()
 
     def ensure_graph_data_available(self, islands: TileIslandBuilder, method: FlowGraphMethod | None = None):

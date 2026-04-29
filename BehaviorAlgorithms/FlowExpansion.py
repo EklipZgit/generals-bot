@@ -15,6 +15,7 @@ from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderAB
 from BehaviorAlgorithms.Flow.FlowGraphModels import FlowGraphMethod, IslandFlowNode, IslandMaxFlowGraph
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
 from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionFinder
+from BehaviorAlgorithms.Flow.OrToolsFlowDirectionFinder import OrToolsFlowDirectionFinder
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpanderLastRun, FlowExpansionPlanOptionCollection, ITERATIVE_EXPANSION_EN_CAP_VAL
 from Interfaces import MapMatrixInterface
 from PerformanceTimer import PerformanceTimer
@@ -133,7 +134,7 @@ class ArmyFlowExpanderV2:
         self.island_builder: TileIslandBuilder | None = None
 
         # Configuration options
-        self.method: FlowGraphMethod = FlowGraphMethod.PyMaxflowBoykovKolmogorov
+        self.method: FlowGraphMethod = FlowGraphMethod.OrToolsSimpleMinCost
         self.use_simple_flow_stream_maximization: bool = True
         self.log_debug: bool = DebugHelper.IS_DEBUGGING
         self.debug_render_capture_count_threshold: int = 10000
@@ -146,6 +147,7 @@ class ArmyFlowExpanderV2:
         self.last_lookup_tables: list | None = None
         self._networkx_finder: NetworkXFlowDirectionFinder | None = None  # Will be initialized when needed
         self._pymax_finder: PyMaxFlowDirectionFinder | None = None  # Will be initialized when needed
+        self._ortools_finder: OrToolsFlowDirectionFinder | None = None  # Will be initialized when needed
         self.use_backpressure_from_enemy_general: bool = True
         self.live_render_invalid_flow_config = None
         self._target_crossable_cache: set[int] = set()  # Cache for target-crossable islands
@@ -251,6 +253,21 @@ class ArmyFlowExpanderV2:
         self._pymax_finder.configure(self.team, self.target_team, self.enemyGeneral)
         return self._pymax_finder
 
+    def _get_ortools_finder(self) -> OrToolsFlowDirectionFinder:
+        """Lazily construct the OR-Tools-backed flow direction finder."""
+        if self._ortools_finder is None:
+            self._ortools_finder = OrToolsFlowDirectionFinder(
+                self.map,
+                self.island_builder.intergeneral_analysis,
+                self.perf_timer,
+                self.log_debug,
+                self.use_backpressure_from_enemy_general,
+                self.friendlyGeneral,
+                self.live_render_invalid_flow_config,
+            )
+        self._ortools_finder.configure(self.team, self.target_team, self.enemyGeneral)
+        return self._ortools_finder
+
     def _get_flow_direction_finder(self, method: FlowGraphMethod | None = None) -> FlowDirectionFinderABC:
         """Dispatch to the correct concrete finder for the requested flow method.
         Mirrors ArmyFlowExpander._get_flow_direction_finder so V2 supports the same
@@ -259,6 +276,8 @@ class ArmyFlowExpanderV2:
             method = self.method
         if method in (FlowGraphMethod.PyMaxflowBoykovKolmogorov, FlowGraphMethod.PyMaxflowWithNodeSplitting):
             return self._get_pymax_finder()
+        if method == FlowGraphMethod.OrToolsSimpleMinCost:
+            return self._get_ortools_finder()
         return self._get_networkx_finder()
 
     def _ensure_flow_graph_exists(self, islands: TileIslandBuilder) -> None:

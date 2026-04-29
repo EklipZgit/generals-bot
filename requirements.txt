@@ -12,6 +12,7 @@ pcst_fast
 networkx
 matplotlib
 heapq_max
+ortools
 # heap-class  this performed poorly
 # dill
 # if ever need fast dict for int:int or str:str or int:str -> https://github.com/touqir14/Microdict?tab=readme-ov-file

@@ -45,7 +45,7 @@ class FlowExpansionNetworkXPyMaxEquivalencyTests(TestBase):
         expanderPyMax._ensure_flow_graph_exists(builder)
 
         expanderNx = ArmyFlowExpanderV2(map)
-        expanderNx.method = FlowGraphMethod.MinCostFlow
+        expanderNx.method = FlowGraphMethod.OrToolsSimpleMinCost
         expanderNx.target_team = map.team_ids_by_player_index[enemyGeneral.player]
         expanderNx.enemy_general = enemyGeneral
         expanderNx._ensure_flow_graph_exists(builder)

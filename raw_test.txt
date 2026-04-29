@@ -1,0 +1,18 @@
+##teamcity[enteredTheMatrix timestamp='2026-04-29T14:43:57.486']
+##teamcity[testCount timestamp='2026-04-29T14:43:58.558' count='1']
+##teamcity[testSuiteStarted timestamp='2026-04-29T14:43:58.559' locationHint='python<D:\2019_reformat_Backup\generals-bot>://unittest' name='unittest' nodeId='1' parentNodeId='0']
+##teamcity[testSuiteStarted timestamp='2026-04-29T14:43:58.559' locationHint='python<D:\2019_reformat_Backup\generals-bot>://unittest.loader' name='loader' nodeId='2' parentNodeId='1']
+##teamcity[testSuiteStarted timestamp='2026-04-29T14:43:58.559' locationHint='python<D:\2019_reformat_Backup\generals-bot>://unittest.loader._FailedTest' name='_FailedTest' nodeId='3' parentNodeId='2']
+##teamcity[testStarted timestamp='2026-04-29T14:43:58.559' captureStandardOutput='true' locationHint='python<D:\2019_reformat_Backup\generals-bot>://unittest.loader._FailedTest.test_FlowExpansion' name='test_FlowExpansion' nodeId='4' parentNodeId='3']
+##teamcity[testFailed timestamp='2026-04-29T14:43:58.561' details='Traceback (most recent call last):|n  File "C:\Users\tdrak\AppData\Local\Python\pythoncore-3.14-64\Lib\unittest\loader.py", line 33, in testFailure|n    raise self._exception|nImportError: Failed to import test module: test_FlowExpansion|nTraceback (most recent call last):|n  File "C:\Users\tdrak\AppData\Local\Python\pythoncore-3.14-64\Lib\unittest\loader.py", line 137, in loadTestsFromName|n    module = __import__(module_name)|n  File "D:\2019_reformat_Backup\generals-bot\UnitTests\test_FlowExpansion.py", line 17, in <module>|n    from TestBase import TestBase|nModuleNotFoundError: No module named |'TestBase|'|n|n' locationHint='python<D:\2019_reformat_Backup\generals-bot>://unittest.loader._FailedTest.test_FlowExpansion' message='Error' name='test_FlowExpansion' nodeId='4' parentNodeId='3']
+##teamcity[testFinished timestamp='2026-04-29T14:43:58.561' duration='2' locationHint='python<D:\2019_reformat_Backup\generals-bot>://unittest.loader._FailedTest.test_FlowExpansion' name='test_FlowExpansion' nodeId='4' parentNodeId='3']
+
+
+Ran 1 test in 0.003s
+
+FAILED (errors=1)
+##teamcity[testSuiteFinished timestamp='2026-04-29T14:43:58.561' name='unittest.loader._FailedTest' nodeId='3' parentNodeId='2']
+##teamcity[testSuiteFinished timestamp='2026-04-29T14:43:58.561' name='unittest.loader' nodeId='2' parentNodeId='1']
+##teamcity[testSuiteFinished timestamp='2026-04-29T14:43:58.561' name='unittest' nodeId='1' parentNodeId='0']
+Launching unittests with arguments python -m unittest D:\2019_reformat_Backup\generals-bot\UnitTests\test_FlowExpansion.py --quiet in D:\2019_reformat_Backup\generals-bot
+

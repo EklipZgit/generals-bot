@@ -21,7 +21,7 @@ from base.client.tile import Tile
 from base.viewer import PLAYER_COLORS
 from bot_ek0x45 import EklipZBot
 
-method = FlowGraphMethod.MinCostFlow
+method = FlowGraphMethod.OrToolsSimpleMinCost
 
 class FlowExpansionBorderStreamPreprocessTests(TestBase):
     def __init__(self, methodName: str = ...):

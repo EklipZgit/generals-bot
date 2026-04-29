@@ -329,10 +329,16 @@ class NxToPyMaxflowConverter(object):
             if u in node_to_idx and v in node_to_idx:
                 u_is_fake = abs(u) in nx_graph_data.fake_nodes
                 v_is_fake = abs(v) in nx_graph_data.fake_nodes
-                u_demand = demands.get(u, 0)
-                if nx_graph_data.cumulative_demand < 0 and not u_is_fake and v_is_fake and u_demand < 0:
+                # u is a negative (output-port) node id; its corresponding island id is -u
+                u_island_demand = demands.get(-u, 0) if u < 0 else demands.get(u, 0)
+                if not u_is_fake and v_is_fake and u_island_demand < 0:
+                    # Supply-node output → fakeNode edge. In NX min-cost flow this edge carries
+                    # a high weight (1000) that prevents it from being used except as a last
+                    # resort. PyMaxflow ignores weights entirely, so without this skip the
+                    # solver routes army through the friendly general as a free transit hub to
+                    # reach the fakeNode, causing the general to appear as a flow sink.
                     if self.log_debug:
-                        logbook.info(f'  Skipping PyMaxflow excess-source fake shortcut edge: {u} -> {v} cap={capacity}')
+                        logbook.info(f'  Skipping PyMaxflow supply-output->fake shortcut edge: {u} -> {v} cap={capacity}')
                     continue
                 edges.append((node_to_idx[u], node_to_idx[v], capacity, 0))
 

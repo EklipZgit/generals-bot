@@ -189,7 +189,7 @@ class ArmyFlowExpanderV2:
         # Phase 2: Build per-border gather/capture lookup tables
         with self.perf_timer.begin_move_event('V2 phase2 _process_flow_into_flow_army_turns'):
             lookup_tables = self._process_flow_into_flow_army_turns(
-                border_pairs, self.flow_graph, target_crossable
+                border_pairs, self.flow_graph, target_crossable, turns
             )
 
         # Phase 3: Enrich capture entries with minimum gather support
@@ -301,7 +301,7 @@ class ArmyFlowExpanderV2:
         # Check both neutral-inclusive and enemy-only flow graphs
         for flow_lookup in [
             flow_graph.flow_node_lookup_by_island_no_neut,
-            flow_graph.flow_node_lookup_by_island_inc_neut,
+            # flow_graph.flow_node_lookup_by_island_inc_neut,
         ]:
             if (friendly_island.unique_id not in flow_lookup or
                     target_island.unique_id not in flow_lookup):
@@ -366,7 +366,7 @@ class ArmyFlowExpanderV2:
             # Check both neutral-inclusive and enemy-only flow graphs
             for flow_lookup in [
                 flow_graph.flow_node_lookup_by_island_no_neut,
-                flow_graph.flow_node_lookup_by_island_inc_neut,
+#                 flow_graph.flow_node_lookup_by_island_inc_neut,
             ]:
                 flow_node = flow_lookup.get(island.unique_id, None)
                 if flow_node is None:
@@ -461,7 +461,8 @@ class ArmyFlowExpanderV2:
         self,
         border_pair: FlowBorderPairKey,
         flow_graph: IslandMaxFlowGraph,
-        target_crossable_islands: set[int]
+        target_crossable_islands: set[int],
+        turn_budget: int = 50,
     ) -> BorderPairStreamPotential:
         """Phase 1: Build directional stream traversals for a border pair"""
 
@@ -473,7 +474,7 @@ class ArmyFlowExpanderV2:
         lookup = None
         for flow_lookup in [
             flow_graph.flow_node_lookup_by_island_no_neut,
-            flow_graph.flow_node_lookup_by_island_inc_neut
+            # flow_graph.flow_node_lookup_by_island_inc_neut,
         ]:
             friendly_node = flow_lookup.get(border_pair.friendly_island_id, None)
             target_node = flow_lookup.get(border_pair.target_island_id, None)
@@ -494,7 +495,7 @@ class ArmyFlowExpanderV2:
         # border pairs that share the same friendly node (friendly.flow_to often
         # contains multiple target neighbours, each of which is its own border pair).
         target_stream = self._build_downstream_stream(
-            target_node, target_crossable_islands
+            target_node, target_crossable_islands, flow_graph, turn_budget
         )
 
         # Calculate potential values from streams
@@ -616,21 +617,35 @@ class ArmyFlowExpanderV2:
     def _build_downstream_stream(
         self,
         start_node: IslandFlowNode,
-        target_crossable_islands: set[int]
+        target_crossable_islands: set[int],
+        flow_graph: IslandMaxFlowGraph,
+        max_stream_size: int,
     ) -> list[IslandFlowNode]:
         """Build downstream traversal starting AT the target border node.
 
         start_node is the target half of a border pair; it is emitted first as the
         entry point into enemy/neutral territory, and the traversal then walks
-        flow_to edges outward in priority-queue order (heuristic = econ_value /
-        army_sum, higher is better).
+        outward in priority-queue order (heuristic = econ_value / army_sum,
+        higher is better).
 
-        Flow edges (flow_to / flow_from) are created only between islands that
-        are in each other's border_islands (see NetworkXFlowDirectionFinder.build_network_graph),
-        and border_islands is strictly asserted as tile-adjacent in
-        TileIslandBuilder.debug_verify_all_islands. Therefore every edge we walk
-        here is guaranteed to connect two spatially adjacent islands — no
-        per-tile adjacency check is needed.
+        Two edge sources are considered from each visited node:
+          1. flow_to edges produced by MinCostFlow — the "routed" downstream path.
+          2. physical adjacency via island.border_islands — a fallback so that
+             neutrals/enemies adjacent to the routed path (but not themselves
+             receiving flow) still appear as capture targets. Without this, each
+             border pair's capture count is capped at whatever MinCostFlow chose
+             to route, starving the MCKP of capture items and leaving faraway
+             friendly army (e.g. landlocked cave tiles) with no plan to fund.
+
+        Flow edges and border_islands are both strictly tile-adjacent (the
+        former via NetworkXFlowDirectionFinder.build_network_graph, the latter
+        via TileIslandBuilder.debug_verify_all_islands). Because every newly
+        added node is adjacent to at least one already-visited node, the stream
+        preserves its "each tile is adjacent to a predecessor" invariant that
+        downstream capture-plan materialization relies on.
+
+        max_stream_size bounds traversal at the turn budget — capture entries
+        beyond that are unusable in the MCKP anyway.
         """
 
         visited = {start_node.island.unique_id}
@@ -640,26 +655,42 @@ class ArmyFlowExpanderV2:
         # Negative heuristic for max-heap behavior (higher = better)
         frontier = []
 
+        flow_lookup = flow_graph.flow_node_lookup_by_island_no_neut
+
+        def _enqueue_candidate(dest_node: IslandFlowNode) -> None:
+            dest_island = dest_node.island
+            if dest_island.unique_id in visited:
+                return
+
+            # Only include targets, neutrals, or target-crossable friendlies
+            is_target = (dest_island.team == self.target_team or
+                         dest_island.team == -1 or
+                         dest_island.unique_id in target_crossable_islands)
+            if not is_target:
+                return
+
+            econ_value = self._calculate_island_econ_value(dest_island, target_crossable_islands)
+            army_sum = max(dest_island.sum_army, 1)  # Avoid division by zero
+            heuristic = econ_value / army_sum
+
+            visited.add(dest_island.unique_id)
+            heapq.heappush(frontier, (-heuristic, dest_island.unique_id, dest_node))
+
         def _enqueue_downstream(node: IslandFlowNode) -> None:
+            # 1) Routed flow_to edges (preferred: preserves prior behavior for
+            #    pairs where MinCostFlow already routed into neutrals).
             for edge in node.flow_to:
-                dest = edge.target_flow_node
-                dest_island = dest.island
-                if dest_island.unique_id in visited:
+                _enqueue_candidate(edge.target_flow_node)
+            # 2) Physical-adjacency fallback: include neutral/enemy neighbors
+            #    that MinCostFlow did not route to. Dedup via `visited` prevents
+            #    doubling of candidates already enqueued through flow_to.
+            for neighbor_island in node.island.border_islands:
+                if neighbor_island.unique_id in visited:
                     continue
-
-                # Only include targets, neutrals, or target-crossable friendlies
-                is_target = (dest_island.team == self.target_team or
-                             dest_island.team == -1 or
-                             dest_island.unique_id in target_crossable_islands)
-                if not is_target:
+                neighbor_node = flow_lookup.get(neighbor_island.unique_id)
+                if neighbor_node is None:
                     continue
-
-                econ_value = self._calculate_island_econ_value(dest_island, target_crossable_islands)
-                army_sum = max(dest_island.sum_army, 1)  # Avoid division by zero
-                heuristic = econ_value / army_sum
-
-                visited.add(dest_island.unique_id)
-                heapq.heappush(frontier, (-heuristic, dest_island.unique_id, dest))
+                _enqueue_candidate(neighbor_node)
 
         if self.log_debug:
             econ_val = self._calculate_island_econ_value(start_node.island, target_crossable_islands)
@@ -670,7 +701,7 @@ class ArmyFlowExpanderV2:
 
         _enqueue_downstream(start_node)
 
-        while frontier:
+        while frontier and len(stream) < max_stream_size:
             _, _, current_node = heapq.heappop(frontier)
             current_island = current_node.island
 
@@ -830,7 +861,8 @@ class ArmyFlowExpanderV2:
         self,
         border_pairs: list[FlowBorderPairKey],
         flow_graph: IslandMaxFlowGraph,
-        target_crossable_islands: set[int]
+        target_crossable_islands: set[int],
+        turn_budget: int = 50,
     ) -> list[FlowArmyTurnsLookupTable]:
         """
         Phase 2: Build per-border gather/capture lookup tables.
@@ -844,7 +876,7 @@ class ArmyFlowExpanderV2:
 
         for border_pair in border_pairs:
             # Build stream data for this border pair
-            stream_data = self._build_border_pair_stream_data(border_pair, flow_graph, target_crossable_islands)
+            stream_data = self._build_border_pair_stream_data(border_pair, flow_graph, target_crossable_islands, turn_budget)
             if stream_data is None:
                 continue
 
@@ -1168,7 +1200,7 @@ class ArmyFlowExpanderV2:
 
         for flow_lookup in [
             flow_graph.flow_node_lookup_by_island_no_neut,
-            flow_graph.flow_node_lookup_by_island_inc_neut,
+#             flow_graph.flow_node_lookup_by_island_inc_neut,
         ]:
             if (border_pair.friendly_island_id in flow_lookup and
                 border_pair.target_island_id in flow_lookup):
@@ -1287,20 +1319,66 @@ class ArmyFlowExpanderV2:
         turn_budget: int
     ) -> dict:
         """
-        Phase 4: Simple solution path via grouped knapsack.
+        Phase 4: Solve grouped knapsack for turn budget, respecting friendly-tile mutex.
 
-        Each border pair is a multiple-choice group.
-        Each usable (enriched) capture entry is one candidate item:
-          - value  = econ_value
-          - weight = combined_turn_cost (capture.turns + gather.turns)
+        ===========================================================================
+        Multi-pair friendly-tile mutex problem
+        ===========================================================================
+        Different border pairs can share friendly tiles in their gather chains
+        (e.g. a passthrough tile that the max-flow solution forwards army through
+        toward both target T1 and target T2 produces two pairs F->T1 and F->T2
+        whose gather chains both consume F's army). The base MCKP treats every
+        candidate (gather_turns, capture_turns) item as independent and can
+        therefore double-spend the same friendly tile across two chosen items,
+        producing duplicate-tile-use plans.
 
-        Uses KnapsackUtils.solve_multiple_choice_knapsack (C++ optimized).
-        Returns a solution dict: {border_pair_key: EnrichedFlowTurnsEntry | None}
+        Required behaviour: among items chosen from DIFFERENT border-pair groups,
+        no two may share a friendly island in their gather chains. Items WITHIN
+        the same group are already mutex via standard MCKP.
+
+        ===========================================================================
+        Approaches considered
+        ===========================================================================
+
+        (1) Greedy + conflict-repair  *** IMPLEMENTED BELOW ***
+            Run MCKP unchanged. Inspect chosen items for cross-group friendly-island
+            overlap. For each conflicting pair, blacklist the lower-density item
+            from the input set and re-run MCKP. Iterate until MCKP output is
+            conflict-free. The "greedy" decision is only the choice of which item
+            to remove from the input set; MCKP itself remains optimal on each
+            reduced set. Fast (sub-ms) and converges in a small number of
+            iterations because each pass removes at least one item from candidacy.
+            Heuristic: not guaranteed globally optimal (a different combination
+            of pair-internal items might score higher than the greedy reductions
+            allow), but in practice resolves the realistic conflict patterns.
+
+        (2) Multi-dimensional DP
+            Add one knapsack dimension per shared friendly island, each with
+            capacity 1, weight 1 if the item consumes that island else 0. Cost
+            is O(N * T * 2^S) where S = number of shared friendly islands.
+            Optimal but blows up when many islands fork into multiple pairs.
+            Could be wrapped with a fallback to (1) once S exceeds a threshold.
+
+        (3) ILP via scipy.optimize.milp / PuLP
+            Encode the constrained MCKP as a 0/1 integer linear program: one
+            binary per item, sum<=1 per group, sum<=1 per shared friendly island,
+            sum(weight) <= turn_budget, maximise sum(value). Always optimal but
+            adds an external solver dependency and is the slowest option.
+
+        (4) Pure greedy without MCKP
+            Sort items by value-density and walk the list, picking each item
+            whose group is unused and whose friendly islands are unconsumed. No
+            DP at all. Even faster than (1) but loses MCKP's tradeoff search
+            within a group entirely.
+        ===========================================================================
         """
         items: list[EnrichedFlowTurnsEntry] = []
         groups: list[int] = []
         weights: list[int] = []
         values: list[int] = []
+        # Per-item set of friendly island ids consumed by the gather chain.
+        # Used by the conflict-repair pass below.
+        friendly_island_sets: list[frozenset[int]] = []
 
         forest = Algorithms.FastDisjointSet()
 
@@ -1333,6 +1411,9 @@ class ArmyFlowExpanderV2:
                 groups.append(group_idx)
                 weights.append(enriched.combined_turn_cost)
                 values.append(int(1000 * enriched.capture_entry.econ_value))
+                friendly_island_sets.append(frozenset(
+                    n.island.unique_id for n in enriched.gather_entry.included_friendly_flow_nodes
+                ))
                 if self.log_debug:
                     logbook.info(f"  MKCP item: group={group_idx} weight={enriched.combined_turn_cost} "
                                  f"value={int(1000 * enriched.capture_entry.econ_value)} "
@@ -1341,14 +1422,142 @@ class ArmyFlowExpanderV2:
         if not items:
             return {}
 
-        max_value, chosen_items = KnapsackUtils.solve_multiple_choice_knapsack(
-            items, turn_budget, weights, values, groups, noLog=not self.log_debug, longRuntimeThreshold=10.0
-        )
+        # --- Conflict-repair loop -------------------------------------------------
+        # Map item identity -> original index so we can blacklist by index even
+        # when we filter the active list each iteration.
+        item_to_index = {id(it): i for i, it in enumerate(items)}
+        blacklist: set[int] = set()
+        max_iterations = 32  # bounded; each iteration blacklists >= 1 item.
+
+        chosen_items: list[EnrichedFlowTurnsEntry] = []
+        max_value = 0
+        for iteration in range(max_iterations):
+            active_idx = [i for i in range(len(items)) if i not in blacklist]
+            if not active_idx:
+                chosen_items = []
+                max_value = 0
+                break
+
+            a_items = [items[i] for i in active_idx]
+            a_weights = [weights[i] for i in active_idx]
+            a_values = [values[i] for i in active_idx]
+            # MCKP requires group indices to be contiguous (no gaps). After
+            # blacklisting empties an entire group, the surviving items may
+            # span e.g. groups {0, 1, 3, 4} — remap those to {0, 1, 2, 3}
+            # so the solver doesn't reject the input.
+            present_groups = sorted({groups[i] for i in active_idx})
+            group_remap = {g: idx for idx, g in enumerate(present_groups)}
+            a_groups = [group_remap[groups[i]] for i in active_idx]
+
+            max_value, chosen_items = KnapsackUtils.solve_multiple_choice_knapsack(
+                a_items, turn_budget, a_weights, a_values, a_groups,
+                noLog=not self.log_debug, longRuntimeThreshold=10.0
+            )
+
+            # Detect cross-group friendly-island conflicts among chosen items.
+            # Two items conflict iff they belong to different groups (intra-group
+            # mutex is already enforced by MCKP) AND their gather chains share at
+            # least one friendly island.
+            conflicts: list[tuple[EnrichedFlowTurnsEntry, EnrichedFlowTurnsEntry]] = []
+            n = len(chosen_items)
+            chosen_orig_idx = [item_to_index[id(c)] for c in chosen_items]
+            for i in range(n):
+                gi = groups[chosen_orig_idx[i]]
+                fi = friendly_island_sets[chosen_orig_idx[i]]
+                if not fi:
+                    continue
+                for j in range(i + 1, n):
+                    if groups[chosen_orig_idx[j]] == gi:
+                        continue
+                    fj = friendly_island_sets[chosen_orig_idx[j]]
+                    if fi & fj:
+                        conflicts.append((chosen_items[i], chosen_items[j]))
+
+            if not conflicts:
+                break
+
+            # Choose the loser per conflict pair using a hybrid heuristic:
+            #
+            #   DEFAULT  — drop the lower value-per-turn item (density pruning).
+            #              Density is the right metric when the knapsack budget
+            #              is the binding constraint: every freed turn can be
+            #              backfilled by smaller high-density items, so keeping
+            #              the densest options yields the best total value.
+            #
+            #   EXCEPTION — if density says to drop the HEAVIER plan AND doing
+            #              so would leave the chosen total weight below the
+            #              turn budget, keep the heavier plan instead and drop
+            #              the lighter one. Rationale: a low-density deep
+            #              chain is only worth dropping if the freed weight
+            #              gets refilled. When the knapsack already has slack
+            #              after the drop, the freed weight is just wasted
+            #              budget, so we strictly lose absolute econ value by
+            #              dropping the heavier (higher-absolute-value) chain.
+            #
+            # Ties on density: compare absolute econ_value, then weight.
+            current_chosen_weight = sum(c.combined_turn_cost for c in chosen_items)
+            newly_blacklisted = 0
+            for item_a, item_b in conflicts:
+                wa = max(item_a.combined_turn_cost, 1)
+                wb = max(item_b.combined_turn_cost, 1)
+                da = item_a.capture_entry.econ_value / wa
+                db = item_b.capture_entry.econ_value / wb
+
+                # Density-based default loser
+                if da < db:
+                    default_loser, default_winner = item_a, item_b
+                elif da > db:
+                    default_loser, default_winner = item_b, item_a
+                else:
+                    # density tie — fall back to absolute value, then weight
+                    if item_a.capture_entry.econ_value < item_b.capture_entry.econ_value:
+                        default_loser, default_winner = item_a, item_b
+                    elif item_a.capture_entry.econ_value > item_b.capture_entry.econ_value:
+                        default_loser, default_winner = item_b, item_a
+                    else:
+                        default_loser, default_winner = (
+                            (item_a, item_b) if item_a.combined_turn_cost < item_b.combined_turn_cost
+                            else (item_b, item_a)
+                        )
+
+                # Exception: if dropping the default loser is the heavier item AND
+                # doing so leaves total weight below capacity, swap — keep the heavier.
+                heavier = item_a if item_a.combined_turn_cost > item_b.combined_turn_cost else item_b
+                lighter = item_b if heavier is item_a else item_a
+                if (default_loser is heavier and heavier is not lighter and
+                        current_chosen_weight - heavier.combined_turn_cost < turn_budget):
+                    loser = lighter
+                else:
+                    loser = default_loser
+
+                loser_idx = item_to_index[id(loser)]
+                if loser_idx not in blacklist:
+                    blacklist.add(loser_idx)
+                    newly_blacklisted += 1
+
+            if self.log_debug:
+                logbook.info(
+                    f"Conflict-repair iter {iteration}: detected {len(conflicts)} cross-group "
+                    f"friendly-island conflicts, blacklisted {newly_blacklisted} items "
+                    f"(total blacklisted: {len(blacklist)})"
+                )
+
+            if newly_blacklisted == 0:
+                # Defensive: no progress — should not happen but avoid infinite loop.
+                if self.log_debug:
+                    logbook.warning("Conflict-repair made no progress; aborting loop")
+                break
+        else:
+            if self.log_debug:
+                logbook.warning(
+                    f"Conflict-repair hit max_iterations={max_iterations}; returning last MCKP result"
+                )
 
         if self.log_debug:
             total_weight = sum(it.combined_turn_cost for it in chosen_items)
             logbook.info(f"Grouped knapsack: budget={turn_budget}, best_weight={total_weight}, best_value={max_value}, "
-                         f"chosen_groups={len(chosen_items)}")
+                         f"chosen_groups={len(chosen_items)}, repair_iterations={iteration if chosen_items else 0}, "
+                         f"blacklisted={len(blacklist)}")
 
         # Build solution dict keyed by border_pair for easy lookup
         # Use object identity (is) not equality (==) because EnrichedFlowTurnsEntry is a dataclass
@@ -1467,6 +1676,30 @@ class ArmyFlowExpanderV2:
 
             root_tiles = all_border_tiles if all_border_tiles else gathing
 
+            # Build the reconnect whitelist: this plan's own (gather ∪ capture ∪ root)
+            # tiles, PLUS the full tile_set of any partially-captured/gathered islands
+            # so bridge tiles *inside the same partial island* (e.g. when
+            # _select_partial_capture_tiles picks a deep tile like (13,1) from a 13-tile
+            # island and the shortest route from the border into that tile passes through
+            # other same-island tiles (13,2), (13,3) etc.) can be used for reconnect
+            # without pulling in tiles owned by OTHER plans. Partial-island tiles are
+            # logically claimed by this plan even if not all are in the capping set.
+            allowed_reconnect_tiles: set = set(gathing)
+            allowed_reconnect_tiles.update(capping)
+            allowed_reconnect_tiles.update(root_tiles)
+            if (capture_entry.incomplete_target_island_id is not None
+                    and self.island_builder is not None):
+                partial_island = self.island_builder.tile_islands_by_unique_id.get(
+                    capture_entry.incomplete_target_island_id)
+                if partial_island is not None:
+                    allowed_reconnect_tiles.update(partial_island.tile_set)
+            if (gather_entry.incomplete_friendly_island_id is not None
+                    and self.island_builder is not None):
+                partial_fr_island = self.island_builder.tile_islands_by_unique_id.get(
+                    gather_entry.incomplete_friendly_island_id)
+                if partial_fr_island is not None:
+                    allowed_reconnect_tiles.update(partial_fr_island.tile_set)
+
             if self.log_debug:
                 logbook.info(
                     f'_materialize_plans: {border_pair.friendly_island_id}->{border_pair.target_island_id} '
@@ -1492,6 +1725,16 @@ class ArmyFlowExpanderV2:
             _prev_asserts = Gather.GatherDebug.USE_DEBUG_ASSERTS
             Gather.GatherDebug.USE_DEBUG_ASSERTS = False
             try:
+                # Restrict the materializer's MST A* reconnect to ONLY this plan's
+                # own (gather ∪ capture ∪ root) tiles. Without this restriction,
+                # convert_contiguous_capture_tiles_to_gather_capture_plan -> build_capture_mst_
+                # from_root_and_contiguous_tiles falls back to an *unrestricted* a_star_find
+                # which happily routes through tiles already allocated to other border pairs,
+                # producing cross-plan duplicate-tile use in the final option set. If a plan's
+                # own tile set is disconnected under this restriction, the materializer raises
+                # and we aggregate the error below — that is the correct outcome (the caller
+                # needs to include the bridge tile in its plan rather than silently steal one
+                # from another plan).
                 plan = Gather.convert_contiguous_capture_tiles_to_gather_capture_plan(
                     self.map,
                     rootTiles=root_tiles,
@@ -1501,6 +1744,7 @@ class ArmyFlowExpanderV2:
                     priorityMatrix=None,
                     useTrueValueGathered=False,
                     captures=capping,
+                    allowedReconnectTiles=allowed_reconnect_tiles,
                 )
                 plan._turns = len(gathing) + len(capping) - 1
             except Exception as ex:

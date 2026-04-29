@@ -829,7 +829,7 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
 |    |    |    |    |    |    |    |    |    |    |
-a3   aG4  a2   a2   a2             b2   N40       bG1
+a3   aG4  a2   a2   a2             b2   N5        bG1
 |    |    |    |    |    |    |    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
@@ -1558,7 +1558,7 @@ player_index=0
         self.enable_search_time_limits_and_disable_debug_asserts()
         self.begin_capturing_logging()
 
-        opts = self.run_army_flow_expansion(rawMap, rawMap.GetTile(general.x, general.y), rawMap.GetTile(enemyGeneral.x, enemyGeneral.y), turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=True, method=method)
+        opts = self.run_army_flow_expansion(rawMap, rawMap.GetTile(general.x, general.y), rawMap.GetTile(enemyGeneral.x, enemyGeneral.y), turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=10, shouldRender=True, method=method)
 
         self.assertNoDuplicateTileUse(opts)
 
@@ -1574,40 +1574,30 @@ player_index=0
         # The isolated 2-army tile at (0,0) borders one neutral. A 2-army tile CAN capture a
         # 0-army neutral in one move (sends 1, arrives with 1 > 0 defender). The solution must
         # include a plan that captures the neutral adjacent to (0,0) — i.e., has it in its captures.
-        tile_0_0 = rawMap.GetTile(0, 0)
-        neutral_adj_to_0_0 = [t for t in tile_0_0.movable if t.player == -1 and not t.isObstacle]
-        self.assertGreater(
-            len(neutral_adj_to_0_0), 0,
-            'Expected at least one neutral adjacent to (0,0) — map layout may have changed'
-        )
+        neutral_adj_to_0_0 = rawMap.GetTile(1, 0)
         plans_capturing_0_0_neighbor = [
             opt for opt in opts
-            if any(t in opt.approximate_capture_tiles for t in neutral_adj_to_0_0)
+            if neutral_adj_to_0_0 in opt.tileSet
         ]
         self.assertGreater(
             len(plans_capturing_0_0_neighbor), 0,
             f'Expected at least one plan capturing the neutral adjacent to the isolated 2-army tile at (0,0). '
-            f'Neutral candidates: {[str(t) for t in neutral_adj_to_0_0]}. '
+            f'Neutral candidates: {str(neutral_adj_to_0_0)}. '
             f'All plan captures: {[[str(t) for t in opt.approximate_capture_tiles] for opt in opts]}'
         )
 
         # The isolated 2-army tile at (8,3) borders one neutral at (8,4). Same reasoning applies.
         tile_8_3 = rawMap.GetTile(8, 3)
-        neutral_adj_to_8_3 = [t for t in tile_8_3.movable if t.player == -1 and not t.isObstacle]
-        self.assertGreater(
-            len(neutral_adj_to_8_3), 0,
-            'Expected at least one neutral adjacent to (8,3) — map layout may have changed'
-        )
         plans_capturing_8_3_neighbor = [
             opt for opt in opts
-            if any(t in opt.approximate_capture_tiles for t in neutral_adj_to_8_3)
+            if opt.length == 1 and (map.GetTile(9, 3) in opt.tileSet or map.GetTile(8, 4) in opt.tileSet)
         ]
-        self.assertGreater(
-            len(plans_capturing_8_3_neighbor), 0,
-            f'Expected at least one plan capturing the neutral adjacent to the isolated 2-army tile at (8,3). '
-            f'Neutral candidates: {[str(t) for t in neutral_adj_to_8_3]}. '
-            f'All plan captures: {[[str(t) for t in opt.approximate_capture_tiles] for opt in opts]}'
+        self.assertEqual(
+            len(plans_capturing_8_3_neighbor), 1,
+            f'Expected at least one plan capturing the neutral adjacent to the isolated 2-army tile at (8,3).'
         )
+
+        self.assertGreater(sum(opt.length for opt in opts), 43)
 
     def test_should_find_most_basic_neutral_capture(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

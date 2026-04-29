@@ -2123,7 +2123,7 @@ class ArmyFlowExpander(object):
             flowGraph: IslandMaxFlowGraph,
             viewInfo: ViewInfo,
             noNeut: bool = True,
-            withNeut: bool = True,
+            withNeut: bool = False,
             showBackfillNeut: bool = False,
             lastRun: ArmyFlowExpanderLastRun | None = None,
             noLog: bool = False):

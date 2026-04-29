@@ -321,13 +321,13 @@ class BotPathingUtils:
                 logbook.info("TERMINATING CURPATH BECAUSE <= 0 ???? Path better be over")
                 bot.curPath = None
             if bot.curPath is not None:
-                if bot.curPath.start.next is not None and bot.curPath.start.next.next is not None and bot.curPath.start.next.next.next is not None and bot.curPath.start.tile == bot.curPath.start.next.next.tile and bot.curPath.start.next.tile == bot.curPath.start.next.next.next.tile:
+                if bot.curPath.start is not None and bot.curPath.start.next is not None and bot.curPath.start.next.next is not None and bot.curPath.start.next.next.next is not None and bot.curPath.start.tile == bot.curPath.start.next.next.tile and bot.curPath.start.next.tile == bot.curPath.start.next.next.next.tile:
                     logbook.info("\n\n\n~~~~~~~~~~~\nDe-duped path\n~~~~~~~~~~~~~\n\n~~~\n")
                     bot.curPath.pop_first_move()
                     bot.curPath.pop_first_move()
                     bot.curPath.pop_first_move()
                     bot.curPath.pop_first_move()
-                elif bot.curPath.start.next is not None and bot.curPath.start.tile.x == bot.curPath.start.next.tile.x and bot.curPath.start.tile.y == bot.curPath.start.next.tile.y:
+                elif bot.curPath.start is not None and bot.curPath.start.next is not None and bot.curPath.start.tile.x == bot.curPath.start.next.tile.x and bot.curPath.start.tile.y == bot.curPath.start.next.tile.y:
                     logbook.warning("           wtf, doubled up tiles in path?????")
                     bot.curPath.pop_first_move()
                     bot.curPath.pop_first_move()

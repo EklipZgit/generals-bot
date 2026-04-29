@@ -178,7 +178,7 @@ class Path(TilePlanInterface):
 
     def pop_first_move(self) -> Move | None:
         if len(self._pathQueue) <= 1:
-            raise ", bitch? Why you tryin to pop_first_move when there aint no moves to made?"
+            raise ValueError(", bitch? Why you tryin to pop_first_move when there aint no moves to made?")
 
         move = self.get_first_move()
 

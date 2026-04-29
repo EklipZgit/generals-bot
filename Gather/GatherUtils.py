@@ -426,6 +426,7 @@ def convert_contiguous_capture_tiles_to_gather_capture_plan(
         includeCapturePriorityAsEconValues: bool = True,
         captures: typing.Set[Tile] | None = None,
         viewInfo=None,
+        allowedReconnectTiles: typing.Set[Tile] | None = None,
 ) -> GatherCapturePlan:
     """
 
@@ -449,7 +450,7 @@ def convert_contiguous_capture_tiles_to_gather_capture_plan(
     # rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles, ignoreTiles=captures)
 
     allTiles = tiles.union(captures)
-    rootNodes = build_capture_mst_from_root_and_contiguous_tiles(map, allTiles, searchingPlayer=searchingPlayer)  #, ignoreTiles=ignore
+    rootNodes = build_capture_mst_from_root_and_contiguous_tiles(map, allTiles, searchingPlayer=searchingPlayer, allowedReconnectTiles=allowedReconnectTiles)  #, ignoreTiles=ignore
 
     plan = GatherCapturePlan.build_from_root_nodes(
         map,
@@ -729,8 +730,17 @@ def build_capture_mst_from_root_and_contiguous_tiles_old(map: MapBase, tiles: Ti
     return roots
 
 
-def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing.Set[Tile], searchingPlayer: int, ignoreTiles: typing.Iterable[Tile] | None = None) -> typing.List[GatherTreeNode]:
-    """Does NOT calculate values"""
+def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing.Set[Tile], searchingPlayer: int, ignoreTiles: typing.Iterable[Tile] | None = None, allowedReconnectTiles: typing.Set[Tile] | None = None) -> typing.List[GatherTreeNode]:
+    """Does NOT calculate values.
+
+    @param allowedReconnectTiles: if provided, the disconnected-input A* reconnect
+        fallback is restricted to ONLY traverse tiles in this set (still skipping
+        mountains / costly neutrals). Callers that need duplicate-tile avoidance
+        across multiple independent plans should pass their own (gather ∪ capture
+        ∪ root) tile set here so the reconnect cannot steal tiles owned by a
+        sibling plan. If the restricted BFS cannot reach the disconnected tile
+        the function raises, just as the unrestricted variant does.
+    """
     dists = MapMatrix(map)
     teams = map.team_ids_by_player_index
     searchingTeam = teams[searchingPlayer]
@@ -789,11 +799,54 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing
             raise Exception(f'the input tiles were not fully connected to one another. disconnected tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(unvisited)])}')
 
         frTiles = [t for t in tiles if t.player == searchingPlayer]
-        addPath = SearchUtils.a_star_find(frTiles, goal=next(iter(unvisited)), noLog=True)
-        if addPath is None:
-            raise Exception(f'Unable to recover disconnected inputs, aStar find was unable to find a path to reconnect.')
-        tiles.update(addPath.tileList)
-        return build_capture_mst_from_root_and_contiguous_tiles(map, tiles, searchingPlayer, ignoreTiles)
+        goal = next(iter(unvisited))
+        if allowedReconnectTiles is not None:
+            # Restricted reconnect: BFS goal → start (reverse so we can reconstruct the
+            # path via parent pointers once we hit any friendly tile) traversing ONLY
+            # tiles in allowedReconnectTiles (plus the frTiles themselves as valid
+            # terminators). Mountains / costly neutrals are always skipped. We reverse
+            # BFS for simplicity: start from `goal`, expand outward, stop when we pop a
+            # frTile. Hardcoded inline — do NOT route through a_star_find which would
+            # permit any map tile and defeat the point of the whitelist.
+            fr_set = set(frTiles)
+            parent: dict[int, Tile | None] = {goal.tile_index: None}
+            bfs: typing.Deque[Tile] = deque()
+            bfs.appendleft(goal)
+            reached_fr: Tile | None = None
+            while bfs:
+                cur = bfs.pop()
+                if cur in fr_set:
+                    reached_fr = cur
+                    break
+                for nxt in cur.movable:
+                    if nxt.tile_index in parent:
+                        continue
+                    if nxt.isMountain or ((not nxt.discovered) and nxt.isNotPathable):
+                        continue
+                    if nxt.isCostlyNeutral:
+                        continue
+                    # allow traversal only through allowed tiles or a frTile terminator
+                    if nxt not in allowedReconnectTiles and nxt not in fr_set:
+                        continue
+                    parent[nxt.tile_index] = cur
+                    bfs.appendleft(nxt)
+            if reached_fr is None:
+                raise Exception(
+                    f'Unable to recover disconnected inputs under allowedReconnectTiles restriction; '
+                    f'no path from any friendly tile to {goal} within allowed set '
+                    f'(|allowed|={len(allowedReconnectTiles)}, |fr|={len(frTiles)}).'
+                )
+            # Walk parent chain from reached_fr back to goal (reverse), adding each tile.
+            node = reached_fr
+            while node is not None:
+                tiles.add(node)
+                node = parent[node.tile_index]
+        else:
+            addPath = SearchUtils.a_star_find(frTiles, goal=goal, noLog=True)
+            if addPath is None:
+                raise Exception(f'Unable to recover disconnected inputs, aStar find was unable to find a path to reconnect.')
+            tiles.update(addPath.tileList)
+        return build_capture_mst_from_root_and_contiguous_tiles(map, tiles, searchingPlayer, ignoreTiles, allowedReconnectTiles)
 
     if GatherDebug.USE_DEBUG_ASSERTS:
         for tile in tiles:

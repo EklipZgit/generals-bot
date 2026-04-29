@@ -1991,7 +1991,7 @@ class BotCombatOps:
 
         vt = val / path.length + 1
         skipped = []
-        while path.start.tile.army < vt:
+        while path.length > 1 and path.start.tile.army < vt:
             skipped.append(path.pop_first_move())
 
         if skipped:

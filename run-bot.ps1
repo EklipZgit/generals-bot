@@ -1393,7 +1393,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'run-blob -game 1v1 -sleepMax 240 -name "QueueT" -public'
+        $command = 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public'
         try {
             Invoke-Expression $command
         } finally {
@@ -1405,7 +1405,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'run-path -game 1v1 -sleepMax 240 -name "a98i40pwpfah" -public'
+        $command = 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public'
         try {
             Invoke-Expression $command
         } finally {
@@ -1417,7 +1417,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'run-SoraAlt -public -sleepMax 360'
+        $command = 'run-SoraAlt -public -sleepMax 240'
         try {
             Invoke-Expression $command
         } finally {

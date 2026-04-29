@@ -1,10 +1,12 @@
+import typing
+
 import logbook
 
 import Utils
 from MapMatrix import MapMatrixSet
 from Path import Path
 from Sim.TextMapLoader import TextMapLoader
-from ViewInfo import TargetStyle, PathColorer
+from ViewInfo import TargetStyle, PathColorer, ViewInfo
 from base import Colors
 from base.client.map import MapBase, PLAYER_CHAR_BY_INDEX
 from ViewInfo import ViewInfo
@@ -12,9 +14,12 @@ from ViewInfo import ViewInfo
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
 from BotModules.BotSerialization import BotSerialization
 
+if typing.TYPE_CHECKING:
+    import EklipZBot
+
 class BotRendering:
     @staticmethod
-    def prep_view_info_for_render(bot, move=None):
+    def prep_view_info_for_render(bot: EklipZBot, move=None):
         bot.viewInfo.board_analysis = bot.board_analysis
         bot.viewInfo.targetingArmy = bot.targetingArmy
         bot.viewInfo.armyTracker = bot.armyTracker
@@ -144,6 +149,9 @@ class BotRendering:
 
         if bot.info_render_defense_spanning_tree and bot.defensive_spanning_tree:
             bot.viewInfo.add_map_zone(bot.defensive_spanning_tree, Colors.WHITE_PURPLE, alpha=90)
+
+        if bot.win_condition_analyzer.defend_cities:
+            bot.viewInfo.add_targeted_tiles_with_legend(bot.win_condition_analyzer.defend_cities, 'DEFEND CITIES', TargetStyle.PURPLE, radiusReduction=3)
 
         if bot.info_render_friendly_city_spanning_tree and bot.friendly_city_spanning_tree:
             bot.viewInfo.add_map_zone(bot.friendly_city_spanning_tree, Colors.GOLD, alpha=50)

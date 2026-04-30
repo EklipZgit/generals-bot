@@ -151,6 +151,7 @@ class ArmyFlowExpanderV2:
         self.use_backpressure_from_enemy_general: bool = True
         self.live_render_invalid_flow_config = None
         self._target_crossable_cache: set[int] = set()  # Cache for target-crossable islands
+        self._allow_neut_only_flow: bool = False
 
     def get_expansion_options(
             self,
@@ -369,8 +370,10 @@ class ArmyFlowExpanderV2:
         # Check both neutral-inclusive and enemy-only flow graphs
         for flow_lookup in [
             flow_graph.flow_node_lookup_by_island_no_neut,
-            # flow_graph.flow_node_lookup_by_island_inc_neut,
+            flow_graph.flow_node_lookup_by_island_inc_neut if self._allow_neut_only_flow else None,
         ]:
+            if flow_lookup is None:
+                continue
             if (friendly_island.unique_id not in flow_lookup or
                 target_island.unique_id not in flow_lookup):
                 if self.log_debug:
@@ -446,8 +449,10 @@ class ArmyFlowExpanderV2:
             # Check both neutral-inclusive and enemy-only flow graphs
             for flow_lookup in [
                 flow_graph.flow_node_lookup_by_island_no_neut,
-#                 flow_graph.flow_node_lookup_by_island_inc_neut,
+                flow_graph.flow_node_lookup_by_island_inc_neut if self._allow_neut_only_flow else None,
             ]:
+                if flow_lookup is None:
+                    continue
                 flow_node = flow_lookup.get(island.unique_id, None)
                 if flow_node is None:
                     continue
@@ -554,8 +559,10 @@ class ArmyFlowExpanderV2:
         lookup = None
         for flow_lookup in [
             flow_graph.flow_node_lookup_by_island_no_neut,
-            # flow_graph.flow_node_lookup_by_island_inc_neut,
+            flow_graph.flow_node_lookup_by_island_inc_neut if self._allow_neut_only_flow else None,
         ]:
+            if flow_lookup is None:
+                continue
             friendly_node = flow_lookup.get(border_pair.friendly_island_id, None)
             target_node = flow_lookup.get(border_pair.target_island_id, None)
             if (friendly_node is not None and target_node is not None):
@@ -1280,8 +1287,10 @@ class ArmyFlowExpanderV2:
 
         for flow_lookup in [
             flow_graph.flow_node_lookup_by_island_no_neut,
-#             flow_graph.flow_node_lookup_by_island_inc_neut,
+            flow_graph.flow_node_lookup_by_island_inc_neut if self._allow_neut_only_flow else None,
         ]:
+            if flow_lookup is None:
+                continue
             if (border_pair.friendly_island_id in flow_lookup and
                 border_pair.target_island_id in flow_lookup):
                 friendly_node = flow_lookup[border_pair.friendly_island_id]

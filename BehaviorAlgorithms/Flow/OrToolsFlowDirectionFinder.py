@@ -336,13 +336,16 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
 
     def ensure_graph_data_available(self, islands: 'TileIslandBuilder'):
         nx_finder = self._get_nx_finder()
-        nx_finder.ensure_graph_data_available(islands)
+        with self.perf_timer.begin_move_event('OrTools nx ensure_graph_data_available'):
+            nx_finder.ensure_graph_data_available(islands)
         self._enemy_general = nx_finder.enemy_general
 
         converter = NxToOrToolsConverter()
         converter.log_debug = self.log_debug
-        self.ortools_graph_data = converter.convert(nx_finder.nx_graph_data)
-        self.ortools_graph_data_no_neut = converter.convert(nx_finder.nx_graph_data_no_neut)
+        with self.perf_timer.begin_move_event('OrTools NxToOrTools convert inc_neut'):
+            self.ortools_graph_data = converter.convert(nx_finder.nx_graph_data)
+        with self.perf_timer.begin_move_event('OrTools NxToOrTools convert no_neut'):
+            self.ortools_graph_data_no_neut = converter.convert(nx_finder.nx_graph_data_no_neut)
         self._last_built_graphs_turn = self.map.turn
 
     def build_graph_data(self, islands: 'TileIslandBuilder', use_neutral_flow: bool) -> OrToolsGraphData:
@@ -380,36 +383,42 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         graph_data_with_neut: OrToolsGraphData = self.ortools_graph_data
         graph_data_no_neut: OrToolsGraphData = self.ortools_graph_data_no_neut
 
-        with_neut_flow_dict = self.compute_flow_dict(islands, graph_data_with_neut, method)
-        no_neut_flow_dict = self.compute_flow_dict(islands, graph_data_no_neut, method)
+        with self.perf_timer.begin_move_event('OrTools compute_flow_dict inc_neut'):
+            with_neut_flow_dict = self.compute_flow_dict(islands, graph_data_with_neut, method)
+        with self.perf_timer.begin_move_event('OrTools compute_flow_dict no_neut'):
+            no_neut_flow_dict = self.compute_flow_dict(islands, graph_data_no_neut, method)
 
         target_general_island = islands.tile_island_lookup.raw[self._enemy_general.tile_index]
 
         with_neut_graph_lookup: typing.Dict[int, IslandFlowNode] = {}
         no_neut_graph_lookup: typing.Dict[int, IslandFlowNode] = {}
 
-        for island in islands.all_tile_islands:
-            demand_no_neut = graph_data_no_neut.demand_lookup.get(island.unique_id, 0)
-            no_neut_graph_lookup[island.unique_id] = IslandFlowNode(island, demand_no_neut)
+        with self.perf_timer.begin_move_event('OrTools build graph_lookups'):
+            for island in islands.all_tile_islands:
+                demand_no_neut = graph_data_no_neut.demand_lookup.get(island.unique_id, 0)
+                no_neut_graph_lookup[island.unique_id] = IslandFlowNode(island, demand_no_neut)
 
-            demand_with_neut = graph_data_with_neut.demand_lookup.get(island.unique_id, 0)
-            with_neut_graph_lookup[island.unique_id] = IslandFlowNode(island, demand_with_neut)
+                demand_with_neut = graph_data_with_neut.demand_lookup.get(island.unique_id, 0)
+                with_neut_graph_lookup[island.unique_id] = IslandFlowNode(island, demand_with_neut)
 
-        backfill_neut_edges, enemy_backfill_flow_nodes, final_root_flow_nodes = self.build_flow_nodes_from_lookups(
-            our_islands, target_general_island, target_islands, with_neut_flow_dict, with_neut_graph_lookup, graph_data_with_neut, self.log_debug
-        )
-        backfill_neut_no_neut_edges, enemy_backfill_no_neut_flow_nodes, final_root_no_neut_flow_nodes = self.build_flow_nodes_from_lookups(
-            our_islands, target_general_island, target_islands, no_neut_flow_dict, no_neut_graph_lookup, graph_data_no_neut, self.log_debug
-        )
+        with self.perf_timer.begin_move_event('OrTools build_flow_nodes_from_lookups inc_neut'):
+            backfill_neut_edges, enemy_backfill_flow_nodes, final_root_flow_nodes = self.build_flow_nodes_from_lookups(
+                our_islands, target_general_island, target_islands, with_neut_flow_dict, with_neut_graph_lookup, graph_data_with_neut, self.log_debug
+            )
+        with self.perf_timer.begin_move_event('OrTools build_flow_nodes_from_lookups no_neut'):
+            backfill_neut_no_neut_edges, enemy_backfill_no_neut_flow_nodes, final_root_no_neut_flow_nodes = self.build_flow_nodes_from_lookups(
+                our_islands, target_general_island, target_islands, no_neut_flow_dict, no_neut_graph_lookup, graph_data_no_neut, self.log_debug
+            )
 
         no_neut_flow_node_lookup = MapMatrix(self.map, None)
         inc_neut_flow_node_lookup = MapMatrix(self.map, None)
-        for flow_node in no_neut_graph_lookup.values():
-            for t in flow_node.island.tile_set:
-                no_neut_flow_node_lookup.raw[t.tile_index] = flow_node
-        for flow_node in with_neut_graph_lookup.values():
-            for t in flow_node.island.tile_set:
-                inc_neut_flow_node_lookup.raw[t.tile_index] = flow_node
+        with self.perf_timer.begin_move_event('OrTools populate tile MapMatrix lookups'):
+            for flow_node in no_neut_graph_lookup.values():
+                for t in flow_node.island.tile_set:
+                    no_neut_flow_node_lookup.raw[t.tile_index] = flow_node
+            for flow_node in with_neut_graph_lookup.values():
+                for t in flow_node.island.tile_set:
+                    inc_neut_flow_node_lookup.raw[t.tile_index] = flow_node
 
         return IslandMaxFlowGraph(
             final_root_no_neut_flow_nodes,

@@ -252,7 +252,7 @@ class BotExpansionOps:
         ):
             haveFullExpPlanAlready = True
 
-        haveFullExpPlanAlready = False
+        # haveFullExpPlanAlready = False
 
         havePotentialIntercept = bot.expansion_plan.includes_intercept
 

@@ -16,6 +16,7 @@ from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotRepetition import BotRepetition
+from BotModules.BotTimings import BotTimings
 from ArmyAnalyzer import ArmyAnalyzer
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from DangerAnalyzer import ThreatType
@@ -24,6 +25,7 @@ from DangerAnalyzer import ThreatObj
 from Interfaces import TilePlanInterface, MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet, TileSet
 from Behavior.ArmyInterceptor import ThreatBlockInfo
+from BotModules.BotTargeting import BotTargeting
 import DebugHelper
 from Path import Path
 from base import Colors
@@ -328,7 +330,6 @@ class BotDefense:
                 if isRealThreat or BotRepetition.detect_repetition_tile(bot, move.source, turns=8, numReps=3):
                     realThreats.append(threat)
                     if threat.turns < 7:
-                        from BotModules.BotTargeting import BotTargeting
                         BotTargeting.increment_attack_counts(bot, threat.path.tail.tile)
 
                 if valueGathered > abandonDefenseThreshold or (BotComms.is_2v2_teammate_still_alive(bot) and len(additionalNegatives) == 0):
@@ -462,7 +463,6 @@ class BotDefense:
 
             skippedIntercepts = []
             start = time.perf_counter()
-            from BotModules.BotTargeting import BotTargeting
             isFfa = BotTargeting.is_ffa_situation(bot)
 
             with bot.perf_timer.begin_move_event(f'INT Ensure analysis\''):
@@ -1021,7 +1021,7 @@ class BotDefense:
             negTiles = []
             if bot.curPath is not None:
                 negTiles = [tile for tile in bot.curPath.tileSet]
-            armyToSearch = BotStateQueries.get_target_army_inc_adjacent_enemy(bot, tile)
+            armyToSearch = BotStateQueries.get_target_army_inc_adjacent_enemy(bot, tile) - 2
             killPath = SearchUtils.dest_breadth_first_target(
                 bot._map,
                 [tile],
@@ -1086,7 +1086,6 @@ class BotDefense:
         """
         territoryDists = bot.territories.territoryDistances[bot.general.player]
 
-        from BotModules.BotTargeting import BotTargeting
         enemyLaunchPoints = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=5, cutoffEmergenceRatio=0.25)
         for c in bot.targetPlayerObj.cities:
             if c.visible:
@@ -1893,8 +1892,6 @@ class BotDefense:
 
     @staticmethod
     def should_defend_economy(bot, defenseTiles: typing.Set[Tile]):
-        from BotModules.BotTimings import BotTimings
-
         if bot._map.remainingPlayers > 2:
             return False
         if bot.targetPlayer == -1:
@@ -1995,8 +1992,6 @@ class BotDefense:
 
     @staticmethod
     def check_should_defend_economy_based_on_cycle_behavior(bot, defenseCriticalTileSet: typing.Set[Tile]) -> bool:
-        from BotModules.BotTargeting import BotTargeting
-
         bot.likely_kill_push = False
 
         if BotTargeting.is_ffa_situation(bot):
@@ -2232,7 +2227,6 @@ class BotDefense:
             midDist = fullDist // 2
             closestToMid = None
             closestToMidDist = 100000
-            from BotModules.BotTargeting import BotTargeting
             cutoff = BotTargeting.get_median_tile_value(bot, 85) + 2
             for p in bot.expansion_plan.all_paths:
                 if not isinstance(p, Path):
@@ -2295,8 +2289,6 @@ class BotDefense:
 
     @staticmethod
     def _get_flank_vision_defense_move_internal(bot, flankThreatPath: Path, negativeTiles: typing.Set[Tile], atDist: int) -> Move | None:
-        from BotModules.BotGatherOps import BotGatherOps
-
         included = set()
         for tile in flankThreatPath.tileList[:(flankThreatPath.length * 5) // 6]:
             if tile in bot.board_analysis.flank_danger_play_area_matrix and not tile.visible and not tile.isSwamp:
@@ -2377,36 +2369,37 @@ class BotDefense:
 
     @staticmethod
     def find_flank_defense_move(bot, defenseCriticalTileSet: typing.Set[Tile], highPriority: bool = False) -> Move | None:
-        from BotModules.BotTargeting import BotTargeting
-
-        checkPath = bot.sketchiest_potential_inbound_flank_path
+        pathToCheck = bot.sketchiest_potential_inbound_flank_path
 
         if bot.enemy_attack_path is not None and bot.likely_kill_push:
             bot.info(f'~~risk threat - replacing flank with risk threat BC likely_kill_push')
-            checkPath = bot.enemy_attack_path.get_subsegment_excluding_trailing_visible()
+            pathToCheck = bot.enemy_attack_path
         elif BotTargeting.is_ffa_situation(bot):
             return None
 
-        checkFlank = checkPath is not None and (
-                checkPath.tail.tile in bot.board_analysis.flank_danger_play_area_matrix
-                or checkPath.tail.tile in bot.board_analysis.core_play_area_matrix
+        checkFlank = pathToCheck is not None and (
+                pathToCheck.tail.tile in bot.board_analysis.flank_danger_play_area_matrix
+                or pathToCheck.tail.tile in bot.board_analysis.core_play_area_matrix
         )
+
+        if pathToCheck:
+            pathToCheck = pathToCheck.get_subsegment_excluding_trailing_visible()
 
         coreNegs = defenseCriticalTileSet.copy()
         coreNegs.update(bot.win_condition_analyzer.defend_cities)
         coreNegs.update(bot.win_condition_analyzer.contestable_cities)
 
-        if highPriority and checkPath:
+        if highPriority and pathToCheck:
             winningMassivelyOnArmy = bot.opponent_tracker.winning_on_army(byRatio=1.4) and bot.opponent_tracker.winning_on_economy(byRatio=1.15)
             winningMassivelyOnEcon = bot.opponent_tracker.winning_on_army(byRatio=1.1) and bot.opponent_tracker.winning_on_economy(byRatio=1.4)
             winningInTheMiddle = bot.opponent_tracker.winning_on_army(byRatio=1.25) and bot.opponent_tracker.winning_on_economy(byRatio=1.05, offset=-25)
             winningByEnoughToBeSuperCareful = winningMassivelyOnArmy or winningMassivelyOnEcon or winningInTheMiddle
 
-            flankIsCloserThanThreeFifths = bot.distance_from_general(checkPath.tail.tile) < 3 * bot.shortest_path_to_target_player.length // 5
+            flankIsCloserThanThreeFifths = bot.distance_from_general(pathToCheck.tail.tile) < 3 * bot.shortest_path_to_target_player.length // 5
             if winningByEnoughToBeSuperCareful and flankIsCloserThanThreeFifths:
                 turns = 3 + (bot.timings.get_turns_left_in_cycle(bot._map.turn) + 1) % 4
                 with bot.perf_timer.begin_move_event(f'superCareful flank gath {turns}t'):
-                    startTiles = checkPath.convert_to_dist_dict(offset=0 - checkPath.length)
+                    startTiles = pathToCheck.convert_to_dist_dict(offset=0 - pathToCheck.length)
                     for t in list(startTiles.keys()):
                         if t.isSwamp or SearchUtils.any_where(t.movable, lambda m: m.isSwamp):
                             startTiles.pop(t)
@@ -2432,7 +2425,7 @@ class BotDefense:
                         bot.info(f'superCareful flank gath for {turns}t: {move} ({valGathered} in {turnsUsed}t). Half {forcedHalf}')
                         return move
 
-                leafMove = BotDefense._get_vision_expanding_available_move(bot, coreNegs, checkPath)
+                leafMove = BotDefense._get_vision_expanding_available_move(bot, coreNegs, pathToCheck)
                 if leafMove is not None:
                     return leafMove
 
@@ -2441,7 +2434,7 @@ class BotDefense:
         if BotStateQueries.is_still_ffa_and_non_dominant(bot):
             return None
 
-        leafMove = BotDefense._get_vision_expanding_available_move(bot, coreNegs, checkPath)
+        leafMove = BotDefense._get_vision_expanding_available_move(bot, coreNegs, pathToCheck)
         if leafMove is not None:
             return leafMove
 
@@ -2449,7 +2442,7 @@ class BotDefense:
             return None
 
         if checkFlank:
-            leafMove = BotDefense._get_flank_defense_leafmove(bot, checkPath, coreNegs)
+            leafMove = BotDefense._get_flank_defense_leafmove(bot, pathToCheck, coreNegs)
             if leafMove is not None:
                 bot.info(f'LEAF proactive flank vision defense {str(leafMove)}')
                 return leafMove
@@ -2462,7 +2455,7 @@ class BotDefense:
             if firstMove is not None and firstMove.source.delta.armyDelta == 0
         ])
         flankDefMove = BotDefense._get_flank_vision_defense_move_internal(bot,
-            checkPath,
+            pathToCheck,
             negs,
             atDist=bot.board_analysis.within_flank_danger_play_area_threshold)
         if flankDefMove is not None:
@@ -2470,7 +2463,7 @@ class BotDefense:
             return flankDefMove
 
         flankDefMove = BotDefense._get_flank_vision_defense_move_internal(bot,
-            checkPath,
+            pathToCheck,
             coreNegs,
             atDist=bot.board_analysis.within_flank_danger_play_area_threshold)
         if flankDefMove is not None:

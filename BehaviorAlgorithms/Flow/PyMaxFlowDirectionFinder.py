@@ -105,19 +105,20 @@ class PyMaxFlowDirectionFinder(FlowDirectionFinderABC):
     def enemy_general(self, value: 'Tile | None'):
         self._enemy_general = value
 
-    def ensure_graph_data_available(self, islands: 'TileIslandBuilder'):
+    def ensure_graph_data_available(self, islands: 'TileIslandBuilder', allow_neutral_flow: bool = False):
         # if self.pymax_graph_data is not None and self._last_built_graphs_turn >= self.map.turn:
         #     return
 
         # TODO directly build pymaxflow input graph instead of converting nx lol
 
         nx_finder = self._get_nx_finder()
-        nx_finder.ensure_graph_data_available(islands)
+        nx_finder.ensure_graph_data_available(islands, allow_neutral_flow)
         self._enemy_general = nx_finder.enemy_general
 
         converter = NxToPyMaxflowConverter()
         converter.log_debug = self.log_debug
-        self.pymax_graph_data = converter.convert_nx_flow_graph_data(nx_finder.nx_graph_data)
+        if allow_neutral_flow:
+            self.pymax_graph_data = converter.convert_nx_flow_graph_data(nx_finder.nx_graph_data)
         self.pymax_graph_data_no_neut = converter.convert_nx_flow_graph_data(nx_finder.nx_graph_data_no_neut)
         self._last_built_graphs_turn = self.map.turn
 

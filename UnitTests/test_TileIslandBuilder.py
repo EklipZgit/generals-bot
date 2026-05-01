@@ -2786,3 +2786,84 @@ a1
         simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None')
         self.begin_capturing_logging()
         simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=16)
+
+    def test_update_tile_islands__enemy_captures_neutral_splits_adjacent_friendly_multi_tile_island(self):
+        """
+        Regression test: when an enemy player captures a neutral tile that is adjacent to a
+        friendly multi-tile island, the friendly tile(s) now bordering enemy territory must be
+        broken off as solo islands (force_territory_borders_to_single_tile_islands).
+
+        Before the fix, _rebuild_leaf_islands_from_component set
+            shouldForceBorderSolo = mode != IslandBuildMode.GroupByArmy
+        which was always False for GroupByArmy mode, so must_tile_be_solo was never called
+        during rebuild and the border tile remained merged in the multi-tile island.
+
+        Scenario:
+          - recalculate with force_territory_borders=False so friendly tiles form a 3-tile island
+          - Enable force_territory_borders before update
+          - Enemy captures a neutral tile adjacent to one tile in that island
+          - After update: the adjacent friendly tile must be broken off as a solo island
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        # Layout (cols 0-3, rows 0-4):
+        #   (0,0) aG1   — friendly general (solo, not part of test island)
+        #   (0,1) a2    |
+        #   (0,2) a2    |- these three form the friendly multi-tile island (all same army, no enemy neighbors)
+        #   (0,3) a2    |
+        #   (1,3) N     — neutral tile that the enemy will capture
+        #   (3,3) bG1   — enemy general (far away so (0,3) does not already border enemy)
+        testData = """
+|    |    |    |    |
+aG1
+a2
+a2
+a2             bG1
+|    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        # Recalculate WITHOUT force_territory_borders so the friendly tiles form one multi-tile island.
+        builder.force_territory_borders_to_single_tile_islands = False
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Verify precondition: (0,3) is in a multi-tile island (no force-border-solo was applied)
+        borderTile = map.GetTile(0, 3)
+        neutralTile = map.GetTile(1, 3)
+
+        self.assertEqual(general.player, borderTile.player, 'fixture: (0,3) should be friendly')
+        self.assertEqual(-1, neutralTile.player, 'fixture: (1,3) should be neutral before capture')
+
+        islandBefore = builder.tile_island_lookup.raw[borderTile.tile_index]
+        self.assertIsNotNone(islandBefore, 'fixture: (0,3) must belong to an island before update')
+        self.assertGreater(islandBefore.tile_count, 1, 'fixture: (0,3) must be in a multi-tile island (force_territory_borders was False during recalculate)')
+
+        # Now enable force_territory_borders and have enemy capture (1,3)
+        builder.force_territory_borders_to_single_tile_islands = True
+        self.mark_tile_captured(neutralTile, enemyGeneral.player, 1)
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+
+        # THE CRITICAL ASSERTION: (0,3) now borders enemy at (1,3) and must be a solo island
+        islandAfter = builder.tile_island_lookup.raw[borderTile.tile_index]
+        self.assertIsNotNone(islandAfter, f'{borderTile} must still belong to an island after update')
+        self.assertEqual(
+            1, islandAfter.tile_count,
+            f'{borderTile} now borders enemy-captured {neutralTile} and must be broken off as a '
+            f'solo island (force_territory_borders_to_single_tile_islands), '
+            f'but island still has {islandAfter.tile_count} tiles'
+        )

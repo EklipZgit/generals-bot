@@ -18,7 +18,6 @@ from BotModules.BotTargeting import BotTargeting
 from BotModules.BotComms import BotComms
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotTimings import BotTimings
-from CityAnalyzer import CityAnalyzer
 from DangerAnalyzer import ThreatType, ThreatObj
 from Gather import GatherTreeNode
 from Path import Path, MoveListPath
@@ -718,8 +717,6 @@ class BotCityOps:
             negativeTiles: typing.Set[Tile],
             gatherMinDuration: int = 0,
     ) -> typing.Tuple[Path | None, Move | None]:
-        from BotModules.BotGatherOps import BotGatherOps
-
         if targetGatherArmy < targetKillArmy + targetCity.army:
             raise AssertionError(f'You cant gather less army {targetGatherArmy} to a city than the kill requirement {targetKillArmy} or the kill requirement will never fire and you will gather-loop.')
 
@@ -854,7 +851,6 @@ class BotCityOps:
             if targetCity.player >= 0 and (cityGatherPath is not None and targetCity not in cityGatherPath.tileSet):
                 addlIncrementing += 1
 
-            from BotModules.BotGatherOps import BotGatherOps
             move, gatherValue, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
                 bot,
                 targets,

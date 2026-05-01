@@ -434,7 +434,7 @@ def get_round_plan_with_expansion(
                     valueOverrides[opt] = (opt.econValue, opt.length)
 
         with perfTimer.begin_move_event(f'knapsack_multi_paths {len(valueOverrides)} ext, {len(multiPathDict)} multiPath, {len(pathsCrossingTiles)} crossed'):
-            path, otherPaths, totalTurns, neutCaps, enCaps, totalValue = knapsack_multi_paths(
+            maxPaths, totalValue = knapsack_multi_paths(
                 map,
                 searchingPlayer,
                 friendlyPlayers,
@@ -452,7 +452,7 @@ def get_round_plan_with_expansion(
                 leafMoves)
 
         with perfTimer.begin_move_event(f'knapsack_no_cross {len(valueOverrides)} ext, {len(multiPathDict)} multiPath, {len(pathsCrossingTiles)} crossed'):
-            altPath, altOtherPaths, altTotalTurns, altNeutCaps, altEnCaps, altTotalValue = knapsack_multi_paths_no_crossover(
+            altMaxPaths, altTotalValue = knapsack_multi_paths_no_crossover(
                 map,
                 searchingPlayer,
                 friendlyPlayers,
@@ -469,14 +469,41 @@ def get_round_plan_with_expansion(
                 valueOverrides,
                 leafMoves)
 
-        if (totalTurns == 0 and altTotalTurns > 0) or (altTotalTurns > 0 and altTotalValue / altTotalTurns > totalValue / totalTurns):
-            msg = f'EXP CROSS-KNAP WORSE THAN NON, {altTotalValue}v/{altTotalTurns}t vs {totalValue}v/{totalTurns}t'
+        if altTotalValue > totalValue:
+            msg = f'EXP CROSS-KNAP WORSE THAN NON, {altTotalValue}v vs {totalValue}v'
             if viewInfo is not None:
                 viewInfo.add_info_line(msg)
             else:
                 logbook.warning(msg)
 
-            path, otherPaths, totalTurns, neutCaps, enCaps, totalValue = altPath, altOtherPaths, altTotalTurns, altNeutCaps, altEnCaps, altTotalValue
+            maxPaths, totalValue = altMaxPaths, altTotalValue
+
+        with perfTimer.begin_move_event(f'find opt exp first move'):
+            path = find_optimal_expansion_path_to_move_first(
+                map,
+                maxPaths,
+                tryAvoidSet,
+                originalNegativeTiles,
+                postPathEvalFunction,
+                remainingTurns,
+                searchingPlayer,
+                friendlyPlayers,
+                territoryMap,
+                valueOverrides)
+
+            otherPaths = [p for p in maxPaths if p != path]
+            otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, originalNegativeTiles) / pa.length, reverse=True)]
+
+        with perfTimer.begin_move_event(f'_get_capture_counts'):
+            totalTurns, enCaps, neutCaps, visited = _get_capture_counts(
+                searchingPlayer,
+                friendlyPlayers,
+                targetPlayers,
+                path,
+                otherPaths,
+                originalNegativeTiles,
+                valueOverrides,
+                leafMoves)
 
         with perfTimer.begin_move_event(f'cleanup pre-return, render-prep'):
             if viewInfo is not None:
@@ -2099,7 +2126,7 @@ def knapsack_multi_paths(
                 logbook.info(f'    INPUT {val:.2f} dist {dist}: {str(p)}')
 
     with perfTimer.begin_move_event(f'extract knap multi-path run'):
-        enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
+        maxPaths, totalValue = extract_paths_from_knapsack_groups(
             map,
             searchingPlayer,
             friendlyPlayers,
@@ -2116,10 +2143,9 @@ def knapsack_multi_paths(
 
     with perfTimer.begin_move_event(f'post path conversion / postPathEvalFunction'):
         logbook.info(
-            f'MEXPX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
-        otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
+            f'MEXPX {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
 
-    return path, otherPaths, turnsUsed, neutralCapped, enemyCapped, totalValue
+    return maxPaths, totalValue
 
 
 def knapsack_multi_paths_no_crossover(
@@ -2212,7 +2238,7 @@ def knapsack_multi_paths_no_crossover(
                 logbook.info(f'    INPUT {val:.2f} len {p.length}: {str(p)}')
 
     with perfTimer.begin_move_event(f'extract knap no cross'):
-        enemyCapped, maxPaths, neutralCapped, otherPaths, path, totalValue, turnsUsed, visited = extract_paths_from_knapsack_groups(
+        maxPaths, totalValue = extract_paths_from_knapsack_groups(
             map,
             searchingPlayer,
             friendlyPlayers,
@@ -2229,11 +2255,9 @@ def knapsack_multi_paths_no_crossover(
 
     with perfTimer.begin_move_event(f'postPathEvalFunction'):
         logbook.info(
-            f'MEXPNX en{enemyCapped} neut{neutralCapped} {turnsUsed}/{remainingTurns}t {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
+            f'MEXPNX {totalValue}v num paths {len(maxPaths)} (used {time.perf_counter() - startTime:.4f}s)')
 
-        otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, negativeTiles) / pa.length, reverse=True)]
-
-    return path, otherPaths, turnsUsed, neutralCapped, enemyCapped, totalValue
+    return maxPaths, totalValue
 
 
 def get_multiple_choice_expansion_knapsack_val_converter(valueOverrides, postPathEvalFunction, negativeTiles):
@@ -2281,41 +2305,10 @@ def extract_paths_from_knapsack_groups(
         valueFunc=valFunc
     )
 
-    # 8ms
-    with perfTimer.begin_move_event('find opt exp first move'):
-        path = find_optimal_expansion_path_to_move_first(
-            map,
-            maxPaths,
-            tryAvoidSet,
-            negativeTiles,
-            postPathEvalFunction,
-            remainingTurns,
-            searchingPlayer,
-            friendlyPlayers,
-            territoryMap,
-            valueOverrides)
-
-        otherPaths = [p for p in maxPaths if p != path]
-
-    with perfTimer.begin_move_event('_get_capture_counts'):
-        turnsUsed, enemyCapped, neutralCapped, visited = _get_capture_counts(
-            searchingPlayer,
-            friendlyPlayers,
-            targetPlayers,
-            path,
-            otherPaths,
-            negativeTiles,
-            valueOverrides,
-            leafMoves)
-
     effectiveTotalValue = 0
     effectiveNegativeTiles = negativeTiles.copy()
-    selectedPaths = []
-    if path is not None:
-        selectedPaths.append(path)
-    selectedPaths.extend(otherPaths)
 
-    for selectedPath in selectedPaths:
+    for selectedPath in maxPaths:
         if issubclass(type(selectedPath), Path):
             # force a recalculation... We are caching the postPathEvalFunction output internally per path LOL.
             selectedPath.econValue = 0.0
@@ -2345,9 +2338,9 @@ def extract_paths_from_knapsack_groups(
         effectiveTotalValue += int(pathValue * 10000.0)
 
     if effectiveTotalValue != totalValue:
-        logbook.info(f'Decreased totalValue from {totalValue:.2f} to {effectiveTotalValue:.2f} for {len(selectedPaths)} paths.')
+        logbook.info(f'Decreased totalValue from {totalValue:.2f} to {effectiveTotalValue:.2f} for {len(maxPaths)} paths.')
 
-    return enemyCapped, maxPaths, neutralCapped, otherPaths, path, effectiveTotalValue, turnsUsed, visited
+    return maxPaths, effectiveTotalValue
 
 
 def _add_expansion_to_view_info(path: TilePlanInterface, otherPaths: typing.List[TilePlanInterface], viewInfo: ViewInfo, colors: typing.Tuple[int, int, int]):

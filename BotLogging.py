@@ -1,6 +1,7 @@
 import pathlib
 
 import logbook
+import logbook.handlers
 import logging
 import os
 
@@ -8,6 +9,29 @@ import os
 # logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
 FILE_FORMATTER = logging.Formatter("%(asctime)s  %(name)s  %(message)s")
 LOG_FORMATTER = logging.Formatter("%(message)s")
+
+_LEVEL_ABBREV = {
+    logbook.DEBUG: 'DBG',
+    logbook.INFO: None,
+    logbook.WARNING: 'WARN',
+    logbook.ERROR: 'ERR',
+    logbook.CRITICAL: 'CRIT',
+}
+
+
+class _CompactFormatter(logbook.handlers.StringFormatter):
+    """Formats log records as  MM:SS.ffff: message  (INFO) or  MM:SS.ffff LEVEL: message  (others)."""
+
+    def format_record(self, record, handler):
+        t = record.time
+        # MM:SS.ffff — keep only 4 decimal places of microseconds
+        ts = f'{t:%M:%S.}{t.microsecond // 100:04d}'
+        abbrev = _LEVEL_ABBREV.get(record.level)
+        if abbrev is None:
+            prefix = f'{ts}:'
+        else:
+            prefix = f'{ts} {abbrev}:'
+        return f'{prefix} {record.message}'
 
 LOGGING_SET_UP = False
 LOGGING_PORT = 0
@@ -46,7 +70,8 @@ def set_up_logger(logLevel: int, mainProcess: bool = False, queue = None):
     if mainProcess:
         import sys
         from logbook import StreamHandler
-        my_handler = StreamHandler(sys.stderr, logLevel)  #  format_string=LOG_FORMATTER
+        my_handler = StreamHandler(sys.stderr, logLevel)
+        my_handler.formatter = _CompactFormatter(logbook.handlers.DEFAULT_FORMAT_STRING)  # format_string unused but required by ctor
         # from logbook.queues import ZeroMQSubscriber
         # subscriber = ZeroMQSubscriber(f'tcp://127.0.0.1:{LOGGING_PORT}')
         # # with my_handler:

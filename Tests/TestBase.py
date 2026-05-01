@@ -5,6 +5,7 @@ import sys
 from collections import deque
 
 import logbook
+import logbook.handlers
 import random
 import time
 import traceback
@@ -14,6 +15,7 @@ import unittest
 from logbook import StreamHandler
 
 import BotHost
+import BotLogging
 import DebugHelper
 from Algorithms import TileIslandBuilder
 from ArmyAnalyzer import ArmyAnalyzer
@@ -60,6 +62,7 @@ class TestBase(unittest.TestCase):
         super().__init__(methodName)
         self._initialized: bool = False
         self._logging_handler = StreamHandler(sys.stderr, logbook.INFO)  #  format_string=LOG_FORMATTER
+        self._logging_handler.formatter = BotLogging._CompactFormatter(logbook.handlers.DEFAULT_FORMAT_STRING)
         ArmyInterceptor.DEBUG_BYPASS_BAD_INTERCEPTIONS = False
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
@@ -1716,7 +1719,7 @@ class TestBase(unittest.TestCase):
             shouldRender: bool = True,
             timeLimit: float | None = None,
             method: FlowGraphMethod | None = None,
-    ) -> typing.Tuple[ArmyFlowExpander, FlowExpansionPlanOptionCollection]:
+    ) -> typing.Tuple[ArmyFlowExpanderV2, FlowExpansionPlanOptionCollection]:
         cutoffTime = None
         if timeLimit is not None:
             cutoffTime = time.perf_counter() + timeLimit

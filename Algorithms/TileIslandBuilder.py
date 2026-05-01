@@ -1190,7 +1190,7 @@ class TileIslandBuilder(object):
 
         forcedSoloTiles: typing.Set[Tile] = set()
         pendingArmyTiles: typing.Set[Tile] = set()
-        shouldForceBorderSolo = mode != IslandBuildMode.GroupByArmy
+        shouldForceBorderSolo = mode != IslandBuildMode.GroupByArmy or self.force_territory_borders_to_single_tile_islands
         for tile in componentTiles:
             mustBeSolo = tile.isCity or tile.isGeneral
             if shouldForceBorderSolo and self.force_territory_borders_to_single_tile_islands and not mustBeSolo:

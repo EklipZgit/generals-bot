@@ -2782,6 +2782,11 @@ class ArmyTracker(object):
             if tile.player == -1:
                 continue
 
+            if tile.delta.gainedSight and tile.delta.oldOwner == tile.player:
+                # We just walked up and now see this tile; the enemy already held it before.
+                # This is NOT a fog-emergence event and tells us nothing new about their general location.
+                continue
+
             skip = False
             for mv in tile.movable:
                 # if (mv.player == tile.player or mv.delta.oldOwner == tile.player) and not mv.delta.gainedSight and mv.discovered: # todo removed gainedsight?

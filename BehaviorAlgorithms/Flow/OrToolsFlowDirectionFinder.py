@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import typing
 from collections import defaultdict
 
@@ -60,6 +61,247 @@ class OrToolsGraphData(object):
         self.neutral_sinks: typing.Set[int] = neutral_sinks
         self.fake_nodes: typing.Set[int] = fake_nodes
         self.cumulative_demand: int = cumulative_demand
+
+
+class DirectOrToolsGraphBuilder(object):
+    """
+    Builds OrToolsGraphData directly from island topology, mirroring exactly what
+    NetworkXFlowDirectionFinder.build_graph_data + NxToOrToolsConverter produce, but
+    without constructing a NetworkX DiGraph as an intermediate step.
+
+    The graph structure mirrors the NX builder:
+      - For every island: node island.unique_id (with demand/supply) + split edge
+        island.unique_id → -island.unique_id (weight=tile_count-1, capacity=100000)
+      - For every border pair: edge -island.unique_id → neighbour.unique_id
+        (weight=1, capacity=100000)
+      - fakeNode: balances cumulative demand; edges to/from generals and neutral sinks
+
+    OR-Tools supply convention: positive = supply, negative = demand.
+    NX demand convention:       negative = supply, positive = demand.
+    Therefore: or_supply = -nx_demand.
+    """
+
+    def __init__(self):
+        self.log_debug: bool = False
+
+    def build(
+        self,
+        islands: 'TileIslandBuilder',
+        intergeneral_analysis,
+        map_obj: 'MapBase',
+        team: int,
+        target_team: int,
+        friendly_general: 'Tile',
+        enemy_general: 'Tile',
+        use_backpressure_from_enemy_general: bool,
+        use_neutral_flow: bool,
+        perf_timer: 'PerformanceTimer',
+    ) -> OrToolsGraphData:
+        """
+        Build OrToolsGraphData equivalent to what NxFlowDirectionFinder.build_graph_data
+        followed by NxToOrToolsConverter.convert would produce.
+        """
+
+        target_general_island = islands.tile_island_lookup.raw[enemy_general.tile_index]
+        fr_general_island = islands.tile_island_lookup.raw[friendly_general.tile_index]
+
+        # ----------------------------------------------------------------
+        # Phase 1: per-island demands (mirrors _determine_initial_demands...)
+        # ----------------------------------------------------------------
+        demands: typing.Dict[int, int] = {}
+        cumulative_demand: int = 0
+        friendly_army_supply: int = 0
+        enemy_army_demand: int = 0
+        enemy_general_demand: int = target_general_island.sum_army + target_general_island.tile_count
+
+        with perf_timer.begin_move_event('OrTools build classify_islands'):
+            island_roles = FlowDirectionFinderABC.classify_islands_for_flow(
+                self,  # type: ignore[arg-type]
+                islands,
+                intergeneral_analysis,
+                map_obj,
+                team,
+                target_team,
+            )
+
+        # node supply dict: node_id → or_supply (positive = source)
+        node_supply_map: typing.Dict[int, int] = {}
+
+        arc_starts: typing.List[int] = []
+        arc_ends: typing.List[int] = []
+        arc_caps: typing.List[int] = []
+        arc_costs: typing.List[int] = []
+
+        all_node_ids: typing.Set[int] = set()
+
+        with perf_timer.begin_move_event('OrTools build phase1 demands'):
+            for island in islands.all_tile_islands:
+                cost = island.tile_count - 1
+                demand = island.tile_count - island.sum_army
+                has_nx_demand_attr = False
+                if island.team == team:
+                    has_nx_demand_attr = True
+                    cumulative_demand += demand
+                    friendly_army_supply += island.sum_army - island.tile_count
+                elif island.team == target_team:
+                    has_nx_demand_attr = True
+                    demand = island.sum_army + island.tile_count
+                    cumulative_demand += demand
+                    enemy_army_demand += demand
+                elif island.team == -1:
+                    role = island_roles[island.unique_id]
+                    if not role.is_neutral_sink_no_neut or use_neutral_flow:
+                        has_nx_demand_attr = True
+                        cumulative_demand += demand
+                        cost *= 2
+
+                demands[island.unique_id] = demand
+
+                # NX demand → OR-Tools supply: or_supply = -nx_demand.
+                # Only islands that get a 'demand' attribute on their NX node contribute
+                # a non-zero supply; all others default to 0 (NX nodes without 'demand').
+                node_supply_map[island.unique_id] = -demand if has_nx_demand_attr else 0
+                # Output port has zero supply (no demand attr in NX)
+                node_supply_map[-island.unique_id] = 0
+
+                all_node_ids.add(island.unique_id)
+                all_node_ids.add(-island.unique_id)
+
+                # Split edge: input → output (weight=cost, capacity=100000)
+                arc_starts.append(island.unique_id)
+                arc_ends.append(-island.unique_id)
+                arc_caps.append(100000)
+                arc_costs.append(cost)
+
+        # ----------------------------------------------------------------
+        # Phase 2: border edges and neutral sinks (mirrors build_graph_data)
+        # ----------------------------------------------------------------
+        with perf_timer.begin_move_event('OrTools build phase2 border edges'):
+            neut_sinks: typing.Set[int] = set()
+            for island in islands.all_tile_islands:
+                role = island_roles[island.unique_id]
+
+                for movable_island in island.border_islands:
+                    # Edge: output port → neighbour input port (weight=1, capacity=100000)
+                    src = -island.unique_id
+                    dst = movable_island.unique_id
+                    arc_starts.append(src)
+                    arc_ends.append(dst)
+                    arc_caps.append(100000)
+                    arc_costs.append(1)
+                    all_node_ids.add(src)
+                    all_node_ids.add(dst)
+
+                if use_neutral_flow:
+                    sink_flag = role.is_neutral_sink_with_neut
+                else:
+                    sink_flag = role.is_neutral_sink_no_neut
+                if sink_flag:
+                    neut_sinks.add(island.unique_id)
+        # ----------------------------------------------------------------
+        # Phase 3: fakeNode (mirrors build_graph_data)
+        # ----------------------------------------------------------------
+        with perf_timer.begin_move_event('OrTools build phase3 fill input arrays'):
+            fake_node = random.randint(1000000, 9000000)
+            while fake_node in islands.tile_islands_by_unique_id:
+                fake_node = random.randint(1000000, 9000000)
+
+            # fakeNode supply = -(-cumulativeDemand) = cumulativeDemand (balances the graph)
+            node_supply_map[fake_node] = cumulative_demand
+            all_node_ids.add(fake_node)
+
+            # Edges to/from neutral sinks
+            neut_sink_weight = 10 if use_neutral_flow else 0
+            for neut_sink_id in neut_sinks:
+                isl = islands.tile_islands_by_unique_id[neut_sink_id]
+                capacity = isl.tile_count
+                arc_starts.append(fake_node)
+                arc_ends.append(neut_sink_id)
+                arc_caps.append(capacity)
+                arc_costs.append(neut_sink_weight)
+                all_node_ids.add(neut_sink_id)
+
+            # Backpressure weight mirrors NX builder
+            backpressure_weight = 0 if use_backpressure_from_enemy_general else 10000
+
+            # -targetGeneralIsland.unique_id → fakeNode
+            arc_starts.append(-target_general_island.unique_id)
+            arc_ends.append(fake_node)
+            arc_caps.append(1000000)
+            arc_costs.append(backpressure_weight)
+            all_node_ids.add(-target_general_island.unique_id)
+
+            # -frGeneralIsland.unique_id → fakeNode
+            arc_starts.append(-fr_general_island.unique_id)
+            arc_ends.append(fake_node)
+            arc_caps.append(1000000)
+            arc_costs.append(1000)
+            all_node_ids.add(-fr_general_island.unique_id)
+
+            # fakeNode → targetGeneralIsland.unique_id
+            arc_starts.append(fake_node)
+            arc_ends.append(target_general_island.unique_id)
+            arc_caps.append(1000000)
+            arc_costs.append(backpressure_weight)
+            all_node_ids.add(target_general_island.unique_id)
+
+            # fakeNode → frGeneralIsland.unique_id
+            arc_starts.append(fake_node)
+            arc_ends.append(fr_general_island.unique_id)
+            arc_caps.append(1000000)
+            arc_costs.append(1000)
+            all_node_ids.add(fr_general_island.unique_id)
+
+        # ----------------------------------------------------------------
+        # Phase 4: build sorted node index arrays (mirrors NxToOrToolsConverter)
+        # ----------------------------------------------------------------
+        with perf_timer.begin_move_event('OrTools build phase4 node index arrays'):
+            all_node_ids.discard(0)
+            node_list = sorted(all_node_ids)
+            node_to_idx: typing.Dict[int, int] = {nid: i for i, nid in enumerate(node_list)}
+            idx_to_node: typing.Dict[int, int] = {i: nid for i, nid in enumerate(node_list)}
+
+            num_nodes = len(node_list)
+            node_ids_arr = np.array(node_list, dtype=np.int64)
+            node_supplies_arr = np.zeros(num_nodes, dtype=np.int64)
+            for nid, supply in node_supply_map.items():
+                if nid in node_to_idx:
+                    node_supplies_arr[node_to_idx[nid]] = supply
+
+            start_nodes = np.array([node_to_idx[s] for s in arc_starts], dtype=np.int64)
+            end_nodes   = np.array([node_to_idx[e] for e in arc_ends],   dtype=np.int64)
+            capacities  = np.array(arc_caps,  dtype=np.int64)
+            unit_costs  = np.array(arc_costs, dtype=np.int64)
+
+        if self.log_debug:
+            non_zero_supply = [(node_list[i], int(node_supplies_arr[i])) for i in range(num_nodes) if node_supplies_arr[i] != 0]
+            logbook.info(
+                f'DirectOrToolsGraphBuilder: {num_nodes} nodes, {len(arc_starts)} arcs, '
+                f'non-zero supplies={non_zero_supply}, cumulative_demand={cumulative_demand}, '
+                f'use_neutral_flow={use_neutral_flow}'
+            )
+
+        result = OrToolsGraphData(
+            start_nodes=start_nodes,
+            end_nodes=end_nodes,
+            capacities=capacities,
+            unit_costs=unit_costs,
+            node_ids=node_ids_arr,
+            node_supplies=node_supplies_arr,
+            node_to_idx=node_to_idx,
+            idx_to_node=idx_to_node,
+            demand_lookup=demands,
+            neutral_sinks=neut_sinks,
+            fake_nodes={fake_node},
+            cumulative_demand=cumulative_demand,
+        )
+        result.friendly_army_supply = friendly_army_supply
+        result.enemy_army_demand = enemy_army_demand
+        result.enemy_general_demand = enemy_general_demand
+        return result
+
+    # Delegate classify_islands_for_flow to the ABC mixin
+    classify_islands_for_flow = FlowDirectionFinderABC.classify_islands_for_flow
 
 
 class NxToOrToolsConverter(object):
@@ -205,46 +447,47 @@ class OrToolsFlowComputer(object):
         if self.log_debug:
             logbook.info(f'OrTools optimal_cost={smcf.optimal_cost()}')
 
-        flow_dict: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
-        fake_nodes = graph_data.fake_nodes
-        idx_to_node = graph_data.idx_to_node
+        with self.perf_timer.begin_move_event('OrTools flow_dict builder post-solve'):
+            flow_dict: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
+            fake_nodes = graph_data.fake_nodes
+            idx_to_node = graph_data.idx_to_node
 
-        solution_flows = smcf.flows(all_arcs)
+            solution_flows = smcf.flows(all_arcs)
 
-        for arc_idx in range(len(all_arcs)):
-            flow_amount = int(solution_flows[arc_idx])
-            if flow_amount <= 0:
-                continue
+            for arc_idx in range(len(all_arcs)):
+                flow_amount = int(solution_flows[arc_idx])
+                if flow_amount <= 0:
+                    continue
 
-            from_orig = idx_to_node.get(int(graph_data.start_nodes[arc_idx]))
-            to_orig = idx_to_node.get(int(graph_data.end_nodes[arc_idx]))
+                from_orig = idx_to_node.get(int(graph_data.start_nodes[arc_idx]))
+                to_orig = idx_to_node.get(int(graph_data.end_nodes[arc_idx]))
 
-            if from_orig is None or to_orig is None:
-                continue
+                if from_orig is None or to_orig is None:
+                    continue
 
-            from_is_fake = abs(from_orig) in fake_nodes
-            to_is_fake = abs(to_orig) in fake_nodes
+                from_is_fake = abs(from_orig) in fake_nodes
+                to_is_fake = abs(to_orig) in fake_nodes
+
+                if self.log_debug:
+                    logbook.info(
+                        f'  OrTools arc {arc_idx}: {from_orig} -> {to_orig} '
+                        f'flow={flow_amount} from_fake={from_is_fake} to_fake={to_is_fake}'
+                    )
+
+                if not from_is_fake and not to_is_fake:
+                    flow_dict[from_orig][to_orig] = flow_dict[from_orig].get(to_orig, 0) + flow_amount
+                    continue
+
+                if from_is_fake and not to_is_fake and to_orig in graph_data.neutral_sinks:
+                    flow_dict[from_orig][to_orig] = flow_dict[from_orig].get(to_orig, 0) + flow_amount
+                    continue
+
+                if self.log_debug:
+                    logbook.info(f'    ignored arc (fake-node handling)')
 
             if self.log_debug:
-                logbook.info(
-                    f'  OrTools arc {arc_idx}: {from_orig} -> {to_orig} '
-                    f'flow={flow_amount} from_fake={from_is_fake} to_fake={to_is_fake}'
-                )
-
-            if not from_is_fake and not to_is_fake:
-                flow_dict[from_orig][to_orig] = flow_dict[from_orig].get(to_orig, 0) + flow_amount
-                continue
-
-            if from_is_fake and not to_is_fake and to_orig in graph_data.neutral_sinks:
-                flow_dict[from_orig][to_orig] = flow_dict[from_orig].get(to_orig, 0) + flow_amount
-                continue
-
-            if self.log_debug:
-                logbook.info(f'    ignored arc (fake-node handling)')
-
-        if self.log_debug:
-            non_zero = {src: dict(tgts) for src, tgts in flow_dict.items() if tgts}
-            logbook.info(f'OrTools flow_dict={non_zero}')
+                non_zero = {src: dict(tgts) for src, tgts in flow_dict.items() if tgts}
+                logbook.info(f'OrTools flow_dict={non_zero}')
 
         return dict(flow_dict)
 
@@ -253,11 +496,9 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
     """
     FlowDirectionFinderABC implementation backed by OR-Tools SimpleMinCostFlow.
 
-    Graph construction is delegated to NetworkXFlowDirectionFinder (which builds the
-    NxFlowGraphData); the result is then converted to OR-Tools input arrays and solved
-    with SimpleMinCostFlow — a true min-cost solver that respects edge weights.
-
-    This mirrors the structure of PyMaxFlowDirectionFinder exactly.
+    Graph construction is handled directly by DirectOrToolsGraphBuilder, which mirrors
+    exactly what NetworkXFlowDirectionFinder.build_graph_data + NxToOrToolsConverter
+    produce but without constructing a NetworkX DiGraph as an intermediate step.
     """
 
     def __init__(
@@ -334,21 +575,40 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
     def enemy_general(self, value: 'Tile | None'):
         self._enemy_general = value
 
-    def ensure_graph_data_available(self, islands: 'TileIslandBuilder'):
-        nx_finder = self._get_nx_finder()
-        with self.perf_timer.begin_move_event('OrTools nx ensure_graph_data_available'):
-            nx_finder.ensure_graph_data_available(islands)
-        self._enemy_general = nx_finder.enemy_general
 
-        converter = NxToOrToolsConverter()
-        converter.log_debug = self.log_debug
-        with self.perf_timer.begin_move_event('OrTools NxToOrTools convert inc_neut'):
-            self.ortools_graph_data = converter.convert(nx_finder.nx_graph_data)
-        with self.perf_timer.begin_move_event('OrTools NxToOrTools convert no_neut'):
-            self.ortools_graph_data_no_neut = converter.convert(nx_finder.nx_graph_data_no_neut)
-        self._last_built_graphs_turn = self.map.turn
+    def ensure_graph_data_available(self, islands: 'TileIslandBuilder', allow_neutral_flow: bool):
+        turn_stale = self._last_built_graphs_turn < self.map.turn
+        if self.ortools_graph_data_no_neut is None or turn_stale:
+            with self.perf_timer.begin_move_event('OrTools build_graph_data no_neut'):
+                self.ortools_graph_data_no_neut = self.build_graph_data(islands, use_neutral_flow=False)
+            self._last_built_graphs_turn = self.map.turn
+        if allow_neutral_flow and (self.ortools_graph_data is None or turn_stale):
+            with self.perf_timer.begin_move_event('OrTools build_graph_data inc_neut'):
+                self.ortools_graph_data = self.build_graph_data(islands, use_neutral_flow=True)
 
     def build_graph_data(self, islands: 'TileIslandBuilder', use_neutral_flow: bool) -> OrToolsGraphData:
+        if self._enemy_general is None:
+            self._enemy_general = self._intergeneral_analysis.tileB
+        enemy_general = self._enemy_general
+        if enemy_general is None:
+            raise Exception("Enemy general is None")
+
+        builder = DirectOrToolsGraphBuilder()
+        builder.log_debug = self.log_debug
+        return builder.build(
+            islands,
+            self._intergeneral_analysis,
+            self.map,
+            self.team,
+            self.target_team,
+            self.friendly_general,
+            enemy_general,
+            self.use_backpressure_from_enemy_general,
+            use_neutral_flow,
+            perf_timer=self.perf_timer,
+        )
+
+    def build_graph_data__old(self, islands: 'TileIslandBuilder', use_neutral_flow: bool) -> OrToolsGraphData:
         nx_finder = self._get_nx_finder()
         nx_data: NxFlowGraphData = nx_finder.build_graph_data(islands, use_neutral_flow)
         self._enemy_general = nx_finder.enemy_general
@@ -378,57 +638,68 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         includeNeutralDemand: bool = False,
         method=None,
     ) -> 'IslandMaxFlowGraph':
-        self.ensure_graph_data_available(islands)
+        with self.perf_timer.begin_move_event('OrTools ensure_graph_data_available'):
+            self.ensure_graph_data_available(islands, allow_neutral_flow=includeNeutralDemand)
 
         graph_data_with_neut: OrToolsGraphData = self.ortools_graph_data
         graph_data_no_neut: OrToolsGraphData = self.ortools_graph_data_no_neut
 
-        with self.perf_timer.begin_move_event('OrTools compute_flow_dict inc_neut'):
-            with_neut_flow_dict = self.compute_flow_dict(islands, graph_data_with_neut, method)
         with self.perf_timer.begin_move_event('OrTools compute_flow_dict no_neut'):
             no_neut_flow_dict = self.compute_flow_dict(islands, graph_data_no_neut, method)
+        if includeNeutralDemand:
+            with self.perf_timer.begin_move_event('OrTools compute_flow_dict inc_neut'):
+                with_neut_flow_dict = self.compute_flow_dict(islands, graph_data_with_neut, method)
 
         target_general_island = islands.tile_island_lookup.raw[self._enemy_general.tile_index]
 
         with_neut_graph_lookup: typing.Dict[int, IslandFlowNode] = {}
         no_neut_graph_lookup: typing.Dict[int, IslandFlowNode] = {}
 
+        backfill_neut_edges: typing.List = []
+        enemy_backfill_flow_nodes: typing.List[IslandFlowNode] = []
+        final_root_flow_nodes: typing.List[IslandFlowNode] = []
+
         with self.perf_timer.begin_move_event('OrTools build graph_lookups'):
             for island in islands.all_tile_islands:
                 demand_no_neut = graph_data_no_neut.demand_lookup.get(island.unique_id, 0)
                 no_neut_graph_lookup[island.unique_id] = IslandFlowNode(island, demand_no_neut)
+                if includeNeutralDemand:
+                    demand_with_neut = graph_data_with_neut.demand_lookup.get(island.unique_id, 0)
+                    with_neut_graph_lookup[island.unique_id] = IslandFlowNode(island, demand_with_neut)
 
-                demand_with_neut = graph_data_with_neut.demand_lookup.get(island.unique_id, 0)
-                with_neut_graph_lookup[island.unique_id] = IslandFlowNode(island, demand_with_neut)
-
-        with self.perf_timer.begin_move_event('OrTools build_flow_nodes_from_lookups inc_neut'):
-            backfill_neut_edges, enemy_backfill_flow_nodes, final_root_flow_nodes = self.build_flow_nodes_from_lookups(
-                our_islands, target_general_island, target_islands, with_neut_flow_dict, with_neut_graph_lookup, graph_data_with_neut, self.log_debug
-            )
         with self.perf_timer.begin_move_event('OrTools build_flow_nodes_from_lookups no_neut'):
             backfill_neut_no_neut_edges, enemy_backfill_no_neut_flow_nodes, final_root_no_neut_flow_nodes = self.build_flow_nodes_from_lookups(
                 our_islands, target_general_island, target_islands, no_neut_flow_dict, no_neut_graph_lookup, graph_data_no_neut, self.log_debug
             )
+        if includeNeutralDemand:
+            with self.perf_timer.begin_move_event('OrTools build_flow_nodes_from_lookups inc_neut'):
+                backfill_neut_edges, enemy_backfill_flow_nodes, final_root_flow_nodes = self.build_flow_nodes_from_lookups(
+                    our_islands, target_general_island, target_islands, with_neut_flow_dict, with_neut_graph_lookup, graph_data_with_neut, self.log_debug
+                )
 
-        no_neut_flow_node_lookup = MapMatrix(self.map, None)
-        inc_neut_flow_node_lookup = MapMatrix(self.map, None)
-        with self.perf_timer.begin_move_event('OrTools populate tile MapMatrix lookups'):
+
+        with self.perf_timer.begin_move_event('OrTools alloc+populate tile MapMatrix lookups'):
+            no_neut_flow_node_lookup = MapMatrix(self.map, None)
+            inc_neut_flow_node_lookup = MapMatrix(self.map, None)
             for flow_node in no_neut_graph_lookup.values():
                 for t in flow_node.island.tile_set:
                     no_neut_flow_node_lookup.raw[t.tile_index] = flow_node
-            for flow_node in with_neut_graph_lookup.values():
-                for t in flow_node.island.tile_set:
-                    inc_neut_flow_node_lookup.raw[t.tile_index] = flow_node
+            if includeNeutralDemand:
+                for flow_node in with_neut_graph_lookup.values():
+                    for t in flow_node.island.tile_set:
+                        inc_neut_flow_node_lookup.raw[t.tile_index] = flow_node
 
-        return IslandMaxFlowGraph(
-            final_root_no_neut_flow_nodes,
-            final_root_flow_nodes,
-            enemy_backfill_no_neut_flow_nodes,
-            enemy_backfill_flow_nodes,
-            backfill_neut_no_neut_edges,
-            backfill_neut_edges,
-            no_neut_flow_node_lookup,
-            inc_neut_flow_node_lookup,
-            no_neut_graph_lookup,
-            with_neut_graph_lookup,
-        )
+        with self.perf_timer.begin_move_event('OrTools IslandMaxFlowGraph ctor'):
+            result = IslandMaxFlowGraph(
+                final_root_no_neut_flow_nodes,
+                final_root_flow_nodes,
+                enemy_backfill_no_neut_flow_nodes,
+                enemy_backfill_flow_nodes,
+                backfill_neut_no_neut_edges,
+                backfill_neut_edges,
+                no_neut_flow_node_lookup,
+                inc_neut_flow_node_lookup,
+                no_neut_graph_lookup,
+                with_neut_graph_lookup,
+            )
+        return result

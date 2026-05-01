@@ -77,20 +77,6 @@ from ArmyTracker import ArmyTracker
 GATHER_SWITCH_POINT = 150
 
 
-def scale(inValue, inBottom, inTop, outBottom, outTop):
-    if inBottom > inTop:
-        raise RuntimeError("inBottom > inTop")
-    inValue = max(inBottom, inValue)
-    inValue = min(inTop, inValue)
-    numerator = (inValue - inBottom)
-    divisor = (inTop - inBottom)
-    if divisor == 0:
-        return outTop
-    valRatio = numerator / divisor
-    outVal = valRatio * (outTop - outBottom) + outBottom
-    return outVal
-
-
 class EklipZBot(object):
     def __init__(self):
         self.blocking_tile_info: typing.Dict[Tile, ThreatBlockInfo] = {}

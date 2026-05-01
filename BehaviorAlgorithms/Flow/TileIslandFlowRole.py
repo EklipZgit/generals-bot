@@ -42,7 +42,6 @@ class TileIslandFlowRole:
         self.borders_enemy: bool = borders_enemy
         self.are_all_borders_neutral: bool = are_all_borders_neutral
 
-    @property
     def is_neutral_sink(self, use_neutral_flow: bool) -> bool:
         """Convenience accessor — prefer the explicit fields for performance."""
         return self.is_neutral_sink_with_neut if use_neutral_flow else self.is_neutral_sink_no_neut

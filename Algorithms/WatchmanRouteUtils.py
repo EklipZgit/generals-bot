@@ -17,6 +17,8 @@ from MapMatrix import MapMatrix
 from Path import Path
 from base.client.map import MapBase
 from base.client.tile import Tile
+from itertools import permutations
+from itertools import combinations
 
 
 def get_watchman_path(map: MapBase, startTile: Tile, toDiscover: typing.Iterable[Tile], timeLimit: float = 1000.0, initialArmy: int = -1) -> Path | None:
@@ -793,7 +795,6 @@ class PivotIterativeWRP(PivotWRP):
 
 
 def mst_heuristic(remaining_tiles, start_tile, apsp):
-    from itertools import combinations
     if not remaining_tiles:
         return 0
 
@@ -809,7 +810,6 @@ def mst_heuristic(remaining_tiles, start_tile, apsp):
 
 
 def tsp_heuristic(remaining_tiles, start_tile, apsp):
-    from itertools import permutations
     if not remaining_tiles:
         return 0
 

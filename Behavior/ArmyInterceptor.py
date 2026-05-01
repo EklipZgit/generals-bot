@@ -21,8 +21,8 @@ DEBUG_BYPASS_BAD_INTERCEPTIONS = True
 TARGET_CAP_VALUE = 2.21
 OTHER_PARTY_CAP_VALUE = 0.5
 NEUTRAL_CAP_VALUE = 1.0
-GENERAL_CAP_VALUE = 25.0
-TARGET_CITY_FLAT_BONUS = 5
+GENERAL_CAP_VALUE = 8.0
+OWNED_CITY_CAP_VALUE_BONUS = 5
 # needs to be high enough to outperform normal expand, or normal expand will try to skip the intercept in favor of dodging the army for captures lmao
 RECAPTURE_VALUE = 2.21
 
@@ -633,6 +633,59 @@ class ArmyInterceptor(object):
 
         return sharedChokes
 
+    def _get_middlest_intercept_tiles_by_distance(
+        self,
+        interception: ArmyInterception
+    ) -> typing.Set[Tile]:
+        """
+        Returns the set of 'middlest' tiles at each distance from the threat.
+        For each distance in the threat's tileDistancesLookup, computes the
+        centroid (average x,y) of all tiles at that distance, then selects the
+        tile with the closest Manhattan distance to that centroid.
+        This reduces the number of intercept points considered while still
+        covering the threat's possible positions.
+
+        Example:
+            dist 0: [0,0] -> pick 0,0 (threat itself, always include)
+            dist 1: [0,1, 1,0] -> avg(0.5, 0.5) -> pick closest tile
+            dist 2: [0,2, 2,0, 1,1] -> avg(1, 1) -> pick tile closest to (1,1)
+            dist 3: [0,3, 1,2, 2,1, 3,0] -> avg(1.5, 1.5) -> pick closest tile
+            dist 6: [3,3] -> pick 3,3 (target, always include if single)
+        """
+        middlest_tiles: typing.Set[Tile] = set()
+
+        # Use the best enemy threat's tileDistancesLookup as the reference
+        best_threat = interception.best_enemy_threat.threat
+        if best_threat.armyAnalysis is None:
+            return middlest_tiles
+
+        tile_distances_lookup = best_threat.armyAnalysis.tileDistancesLookup
+
+        for dist, tiles in tile_distances_lookup.items():
+            if not tiles:
+                continue
+
+            if len(tiles) == 1:
+                # Always include single tiles (threat start, target, etc.)
+                middlest_tiles.add(tiles[0])
+            else:
+                # Compute average position (centroid) of all tiles at this distance
+                avg_x = sum(t.x for t in tiles) / len(tiles)
+                avg_y = sum(t.y for t in tiles) / len(tiles)
+
+                # Find tile closest to centroid by Manhattan distance
+                best_tile = tiles[0]
+                best_dist = abs(best_tile.x - avg_x) + abs(best_tile.y - avg_y)
+                for tile in tiles[1:]:
+                    tile_dist = abs(tile.x - avg_x) + abs(tile.y - avg_y)
+                    if tile_dist < best_dist:
+                        best_dist = tile_dist
+                        best_tile = tile
+
+                middlest_tiles.add(best_tile)
+
+        return middlest_tiles
+
     def _get_threats_army_amount(self, threats: typing.List[ThreatObj]) -> int:
         maxAmount = 0
         for threat in threats:
@@ -867,7 +920,7 @@ class ArmyInterceptor(object):
                         if isTarget:
                             # cityCaps += 1
                             # get a bonus point for the target losing city, too. Double the reward.
-                            val += TARGET_CITY_FLAT_BONUS
+                            val += OWNED_CITY_CAP_VALUE_BONUS
                             cityHoldTurns += cycleEnd - curTurn
                     if isTarget:
                         val += TARGET_CAP_VALUE
@@ -972,6 +1025,12 @@ class ArmyInterceptor(object):
         logbook.info(f'filtering out poor intercept points and setting search depths by intercept tile')
         self.filter_interception_best_points(interception, maxDepth, positionsByTurn=averageEnemyPositionByTurn)
 
+        # Get the "middlest" tiles at each distance - only consider intercept points at these tiles
+        # This reduces the search space while still covering all distances the threat can reach
+        middlest_tiles = self._get_middlest_intercept_tiles_by_distance(interception)
+        if self.log_debug:
+            logbook.info(f'Middlest tiles selected for intercept: {[str(t) for t in middlest_tiles]}')
+
         bestInterceptTable: typing.Dict[int, InterceptionOptionInfo] = {}
 
         logbook.info(f'getting intercept paths at maxDepth {maxDepth}, threatDistFromCommon {threatDistFromCommon}')
@@ -980,6 +1039,13 @@ class ArmyInterceptor(object):
         interceptInfo: InterceptPointTileInfo
         for tile, interceptInfo in interception.common_intercept_chokes.items():
             if tile.isCity and tile.isNeutral:
+                continue
+
+            # Only intercept at the "middlest" tiles for each distance
+            # This ensures we check all distances but only the most representative tile(s) at each
+            if tile not in middlest_tiles:
+                if self.log_debug:
+                    logbook.info(f'Skipping tile {str(tile)} - not a middlest tile for its distance')
                 continue
 
             turnsToIntercept = interceptInfo.max_delay_turns
@@ -1493,7 +1559,7 @@ class ArmyInterceptor(object):
             else:
                 enArmy += enemyTailNode.tile.army
                 if self.map.is_tile_friendly(enemyTailNode.tile):
-                    if enemyTailNode.tile.isGeneral:
+                    if enemyTailNode.tile.isGeneral and enArmy < 0:
                         econValueBlocked += GENERAL_CAP_VALUE
                     elif enemyTailNode.tile.isCity:
                         if not mainEconDamageComplete:
@@ -1501,7 +1567,8 @@ class ArmyInterceptor(object):
                             # reward the amount of the number of turns they'd hold the city till round end. Because they're capping OUR city, we lose 0.5 econ per turn and they gain 0.5 econ per turn so its 1 per turn. Really 2 per cityBonusTurn but idk if we care to get that granular.
                             econValueBlocked += cappedTurnsToRoundEnd
                             # base offset reward for preventing city capture
-                        econValueBlocked += TARGET_CITY_FLAT_BONUS
+                        if enArmy < 0:
+                            econValueBlocked += OWNED_CITY_CAP_VALUE_BONUS
                     if not mainEconDamageComplete:
                         econValueBlocked += TARGET_CAP_VALUE
                 elif enemyTailNode.tile.player >= 0:

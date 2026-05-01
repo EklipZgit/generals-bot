@@ -46,7 +46,7 @@ class FlowDirectionFinderABC(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def ensure_graph_data_available(self, islands: 'TileIslandBuilder'):
+    def ensure_graph_data_available(self, islands: 'TileIslandBuilder', allow_neutral_flow: bool = False):
         raise NotImplementedError()
 
     @abstractmethod
@@ -117,28 +117,31 @@ class FlowDirectionFinderABC(ABC):
             borders_fr = False
             borders_en = False
             for nb in island.border_islands:
-                if nb.team == target_team:
-                    borders_en = True
                 if nb.team == team:
                     borders_fr = True
+                    break
+            for nb in island.border_islands:
+                if nb.team == target_team:
+                    borders_en = True
+                    break
             are_all_borders_neut = not borders_fr and not borders_en
             is_neut = island.team == -1
 
             # with_neut sink: outskirt neutral islands not near friendly tiles
-            sink_with_neut = are_all_borders_neut and island.unique_id not in capacityLookup
+            sink_with_neut = is_neut and are_all_borders_neut and island.unique_id not in capacityLookup
 
             # no_neut sink: neutral islands not on the direct pathway corridor
-            sink_no_neut = False
-            if is_neut and not (borders_fr and borders_en):
-                pw = intergeneral_analysis.pathWayLookupMatrix.raw[island.tiles_by_army[0].tile_index]
-                sink_no_neut = True
-                if pw is not None:
-                    dist = pw.distance
-                    if (
-                        dist <= pathwayCutoff
-                        and intergeneral_analysis.bMap.raw[island.tiles_by_army[0].tile_index] <= neutEnDistCutoff
-                    ):
-                        sink_no_neut = False
+            sink_no_neut = sink_with_neut
+            # if is_neut and not (borders_fr and borders_en):
+            #     pw = intergeneral_analysis.pathWayLookupMatrix.raw[island.tiles_by_army[0].tile_index]
+            #     sink_no_neut = True
+            #     if pw is not None:
+            #         dist = pw.distance
+            #         if (
+            #             dist <= pathwayCutoff
+            #             and intergeneral_analysis.bMap.raw[island.tiles_by_army[0].tile_index] <= neutEnDistCutoff
+            #         ):
+            #             sink_no_neut = False
 
             result[island.unique_id] = TileIslandFlowRole(
                 island=island,
@@ -159,7 +162,7 @@ class FlowDirectionFinderABC(ABC):
             graph_lookup,
             graph_data,
             log_debug: bool = False,
-    ):
+    ) -> typing.Tuple[typing.List[IslandFlowEdge], typing.List[IslandFlowNode], typing.List[IslandFlowNode]]:
         backfill_neut_edges: typing.List[IslandFlowEdge] = []
         our_set = {i.unique_id for i in our_islands}
         target_set = {i.unique_id for i in target_islands}

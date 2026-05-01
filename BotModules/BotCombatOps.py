@@ -32,11 +32,22 @@ from Models.Move import Move
 from base.client.map import Tile
 from DangerAnalyzer import ThreatType, ThreatObj
 
+def scale(inValue, inBottom, inTop, outBottom, outTop):
+    if inBottom > inTop:
+        raise RuntimeError("inBottom > inTop")
+    inValue = max(inBottom, inValue)
+    inValue = min(inTop, inValue)
+    numerator = (inValue - inBottom)
+    divisor = (inTop - inBottom)
+    if divisor == 0:
+        return outTop
+    valRatio = numerator / divisor
+    outVal = valRatio * (outTop - outBottom) + outBottom
+    return outVal
+
 class BotCombatOps:
     @staticmethod
     def check_for_king_kills_and_races(bot, threat: ThreatObj | None, force: bool = False) -> typing.Tuple[Move | None, Path | None, float]:
-        from BotModules.BotTargeting import BotTargeting
-
         kingKillPath = None
         kingKillChance = 0.0
         alwaysCheckKingKillWithinRange = 5
@@ -1957,16 +1968,15 @@ class BotCombatOps:
     def check_for_attack_launch_move(bot, outLaunchPlanNegatives: typing.Set[Tile]) -> Move | None:
         if bot.target_player_gather_path is None and not bot.flanking:
             return None
-
-        cycleTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
-        cycleTurnsLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
+        #
+        # cycleTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
+        # cycleTurnsLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
 
         if not bot._map.is_low_cost_city_game and not BotTargeting.is_ffa_situation(bot) and bot.player.tileCount < 45:
             if len([t for t in bot.player.tiles if t.army > 1 and t not in bot.target_player_gather_targets]) > 0:
                 bot.info(f'Skipping launch because unused tiles')
                 return None
 
-        from BotModules.BotPathingUtils import BotPathingUtils
         path = BotPathingUtils.get_value_per_turn_subsegment(bot, bot.target_player_gather_path, 1.0, 0.25)
         origPathLength = path.length
 

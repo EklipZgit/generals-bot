@@ -21,7 +21,7 @@ from base.client.tile import Tile
 from base.viewer import PLAYER_COLORS
 from bot_ek0x45 import EklipZBot
 
-method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
+# method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
 # method = FlowGraphMethod.OrToolsSimpleMinCost
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
@@ -1759,4 +1759,15 @@ player_index=0
                     usedSet[tile] = opt
 
         if len(dupes) > 0:
-            raise AssertionError(f"Found duplicate tile use in options:\r\n  {'\r\n  '.join(dupes)}")
+            raise AssertionError(f"Found duplicate tile use in options:\r\n  {'\r\n  '.join(dupes)}")    
+    def test_should_create_a_plan_which_does_not_have_a_strange_22t_no_cap_thing_in_it(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_create_a_plan_which_does_not_have_a_strange_22t_no_cap_thing_in_it___wam3usG3Y---1--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        expander, optCol = self.run_army_flow_expansion_and_get_expander_and_collection(map, general, enemyGeneral, turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+        self.render_flow_expansion_debug(expander, optCol, renderAll=True)
+

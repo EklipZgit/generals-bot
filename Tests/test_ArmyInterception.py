@@ -2495,3 +2495,48 @@ setting bestInterceptTable[dist 1]:
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(playerMap.players[enemyGeneral.player].score, 81, 'should have killed the army no matter where it went')
+    
+    def test_should_not_overvalue_intercept_that_fails_to_capture_incoming_attack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_overvalue_intercept_that_fails_to_capture_incoming_attack___337AmCVkC---0--478.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 478, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=478)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '3,10->8,10->8,11->9,11->9,17')
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '9,17->9,11->8,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        # turns=11 for full
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertLess(general.army, 3)
+
+    
+    def test_should_still_intercept_from_general_to_prevent_captures_adjacent(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        for hasExtraArmy in [False, True]:
+            with self.subTest(hasExtraArmy=hasExtraArmy):
+                mapFile = 'GameContinuationEntries/should_still_intercept_from_general_to_prevent_captures_adjacent___Nx27dfJoJ---1--194.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 194, fill_out_tiles=True)
+                if hasExtraArmy:
+                    map.At(16, 15).army += 1
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=194)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, '16,15->16,16->14,16')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertOwned(general.player, playerMap.At(15, 16))

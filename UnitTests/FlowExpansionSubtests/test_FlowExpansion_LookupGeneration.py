@@ -21,7 +21,7 @@ from base.client.tile import Tile
 from base.viewer import PLAYER_COLORS
 from bot_ek0x45 import EklipZBot
 
-method = FlowGraphMethod.PyMaxflowBoykovKolmogorov
+method = FlowGraphMethod.OrToolsSimpleMinCost
 
 class FlowExpansionLookupGenerationTests(TestBase):
     """
@@ -423,8 +423,8 @@ aG1  a4   a1   b1   bG1
         # Verify gather functionality works (should gather from friendly tiles)
         # The border island is a1@col2 with 1 army - contributes 0 (1-1=0)
         first_gather = gather_entries[0]
-        self.assertEqual(first_gather.turns, 0, 'First gather at border takes 0 turns')
-        self.assertEqual(first_gather.gathered_army, 0, 'a1 border tile contributes 0 army (1-1=0)')
+        self.assertEqual(0, first_gather.turns, 'First gather at border takes 0 turns')
+        self.assertEqual(0, first_gather.gathered_army, 'a1 border tile contributes 0 army (1-1=0)')
 
         if debugMode:
             logbook.info(f"Generated {len(lookup_tables)} lookup tables for pull-through friendly excess source")

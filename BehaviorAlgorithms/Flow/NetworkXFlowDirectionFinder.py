@@ -110,9 +110,10 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
     ) -> 'IslandMaxFlowGraph':
         return self.build_flow_graph(islands, ourIslands, targetIslands, searchingPlayer, turns, blockGatherFromEnemyBorders, negativeTiles, includeNeutralDemand, method)
 
-    def ensure_graph_data_available(self, islands: 'TileIslandBuilder'):
+    def ensure_graph_data_available(self, islands: 'TileIslandBuilder', allow_neutral_flow: bool = False):
         if self.nx_graph_data is None or self.nx_graph_data_no_neut is None or self._last_built_graphs_turn < self.map.turn:
-            self.nx_graph_data = self.build_graph_data(islands, use_neutral_flow=True)
+            if allow_neutral_flow:
+                self.nx_graph_data = self.build_graph_data(islands, use_neutral_flow=True)
             self.nx_graph_data_no_neut = self.build_graph_data(islands, use_neutral_flow=False)
             self._last_built_graphs_turn = self.map.turn
 
@@ -125,21 +126,8 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         ourSet = {i.unique_id for i in islands.tile_islands_by_team_id[myTeam]}
         targetSet = {i.unique_id for i in islands.tile_islands_by_team_id[self.target_team]}
         logbook.info(f'build_graph_data entry: enemy_general={self.enemy_general!r} (player={getattr(self.enemy_general, "player", None)}) myTeam={myTeam} target_team={self.target_team} use_neutral_flow={use_neutral_flow}')
-        if self.enemy_general is None or (self.enemy_general.player >= 0 and self.map.is_player_on_team(self.enemy_general.player, myTeam)):
-            logbook.info(f'build_graph_data: enemy_general fallback triggered (was {self.enemy_general!r})')
-            try:
-                self.enemy_general = next(t for t in self.map.pathable_tiles if not t.discovered and self.map.is_tile_on_team(t, self.target_team))
-            except:
-                try:
-                    self.enemy_general = next(t for t in self.map.pathable_tiles if not t.discovered)
-                except:
-                    try:
-                        self.enemy_general = next(t for t in self.map.pathable_tiles if not t.visible)
-                    except:
-                        try:
-                            self.enemy_general = next(t for t in self.map.pathable_tiles if self.map.is_tile_on_team(t, self.target_team))
-                        except:
-                            self.enemy_general = next(t for t in self.map.pathable_tiles if not self.map.is_tile_on_team(t, self.team))
+        if self.enemy_general is None:
+            self.enemy_general = self.intergeneral_analysis.tileB
         logbook.info(f'build_graph_data: after fallback enemy_general={self.enemy_general!r}')
 
         if self.enemy_general is None or self.map.is_player_on_team(self.enemy_general.player, myTeam):
@@ -401,6 +389,8 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
     ) -> 'IslandMaxFlowGraph':
         if method is None:
             method = FlowGraphMethod.NetworkSimplex
+
+        self.ensure_graph_data_available(islands, allow_neutral_flow=True)
 
         withNeutFlowDict = self.compute_flow_dict(islands, self.nx_graph_data, method)
         noNeutFlowDict = self.compute_flow_dict(islands, self.nx_graph_data_no_neut, method)

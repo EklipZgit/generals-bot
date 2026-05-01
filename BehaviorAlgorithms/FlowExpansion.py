@@ -148,10 +148,11 @@ class ArmyFlowExpanderV2:
         self._networkx_finder: NetworkXFlowDirectionFinder | None = None  # Will be initialized when needed
         self._pymax_finder: PyMaxFlowDirectionFinder | None = None  # Will be initialized when needed
         self._ortools_finder: OrToolsFlowDirectionFinder | None = None  # Will be initialized when needed
-        self.use_backpressure_from_enemy_general: bool = True
+        self.use_backpressure_from_enemy_general: bool = False
         self.live_render_invalid_flow_config = None
         self._target_crossable_cache: set[int] = set()  # Cache for target-crossable islands
         self._allow_neut_only_flow: bool = False
+        self.bonus_capture_point_matrix: MapMatrixInterface[float] | None = None
 
     def get_expansion_options(
             self,
@@ -180,6 +181,7 @@ class ArmyFlowExpanderV2:
         if self.enemyGeneral is None:
             self.enemyGeneral = self.map.generals[targetPlayer]
         self.island_builder = islands
+        self.bonus_capture_point_matrix = bonusCapturePointMatrix
 
         # Phase 0: Build flow graph
         with self.perf_timer.begin_move_event('V2 phase0 _ensure_flow_graph_exists'):
@@ -291,10 +293,6 @@ class ArmyFlowExpanderV2:
         """
         self.island_builder = islands
         finder = self._get_flow_direction_finder(self.method)
-        finder.ensure_graph_data_available(islands)
-        # Some finders (PyMax) discover the enemy general lazily during graph build —
-        # propagate that discovery back so downstream phases see the same tile.
-        self.enemyGeneral = finder.enemy_general
 
         our_islands = islands.tile_islands_by_player[self.map.player_index]
         target_islands = islands.tile_islands_by_team_id[self.target_team]
@@ -307,7 +305,7 @@ class ArmyFlowExpanderV2:
             turns=50,  # TODO: Pass actual turns parameter
             blockGatherFromEnemyBorders=True,
             negativeTiles=None,
-            includeNeutralDemand=True,
+            includeNeutralDemand=self._allow_neut_only_flow,
             method=self.method,
         )
         self.enemyGeneral = finder.enemy_general
@@ -815,12 +813,18 @@ class ArmyFlowExpanderV2:
             return 0.0
         elif island.team == -1:
             # Neutral island: 1.0 per tile
-            return island.tile_count * 1.0
+            base_value = island.tile_count * 1.0
         elif island.team == self.target_team:
             # Enemy island: value per tile
-            return island.tile_count * ITERATIVE_EXPANSION_EN_CAP_VAL
+            base_value = island.tile_count * ITERATIVE_EXPANSION_EN_CAP_VAL
         else:
             return 0.0
+
+        if self.bonus_capture_point_matrix is not None:
+            for tile in island.tile_set:
+                base_value += self.bonus_capture_point_matrix.raw[tile.tile_index]
+
+        return base_value
 
     def _preprocess_flow_stream_tilecounts(
         self,
@@ -1218,8 +1222,11 @@ class ArmyFlowExpanderV2:
                 # For multi-tile islands, each tile contributes its full army; the "leave 1 behind"
                 # is implicit in the army movement mechanics, not subtracted here.
 
-                current_gathered_army += tile.army - 1
+                tile_contribution = tile.army - 1
 
+                current_gathered_army += tile_contribution
+
+                # if tile_contribution >= 0:
                 # Create entry for this exact turn count
                 lookup[current_turn] = FlowTurnsEntry(
                     turns=current_turn,

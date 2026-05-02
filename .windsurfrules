@@ -8,6 +8,8 @@
 6. You should ask me (the prompter) questions clarifying any assumptions you are unsure about rather than going down the wrong path.
 7. When asked to fix something, you are expected to try to reproduce it with a test first if at all possible. You should have assertions that fail before fixing the bug and seeing the assertions pass.
 8. We don't EVER do imports inside of functions. Always do imports at the top of the file and reorganize code if necessary to work around circular imports.
+9. Tests are run with unittest, not pytest.
+10. Do not EVER unstage or stash staged git changes. Don't ever stage git changes. The user will do all git staging and unstaging, you are allowed read-only git commands only.
 
 --- GetLogsForScopeByTurn.ps1 ---
 1. GetLogsForScopeByTurn.ps1 is a PowerShell script at the repo root that extracts per-turn log slices for a named scope from bot test output.

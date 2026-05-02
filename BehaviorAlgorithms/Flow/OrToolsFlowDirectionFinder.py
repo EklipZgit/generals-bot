@@ -659,7 +659,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         enemy_backfill_flow_nodes: typing.List[IslandFlowNode] = []
         final_root_flow_nodes: typing.List[IslandFlowNode] = []
 
-        with self.perf_timer.begin_move_event('OrTools build graph_lookups'):
+        with self.perf_timer.begin_move_event(f'OrTools build graph_lookups, {len(islands.all_tile_islands)} islands:'):
             for island in islands.all_tile_islands:
                 demand_no_neut = graph_data_no_neut.demand_lookup.get(island.unique_id, 0)
                 no_neut_graph_lookup[island.unique_id] = IslandFlowNode(island, demand_no_neut)

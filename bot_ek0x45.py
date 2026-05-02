@@ -338,7 +338,7 @@ class EklipZBot(object):
         self.expansion_force_no_global_visited: bool = False
         self.expansion_force_global_visited_stage_1: bool = True
         self.expansion_use_iterative_negative_tiles: bool = True
-        self.expansion_allow_leaf_moves: bool = True
+        self.expansion_allow_leaf_moves: bool = False
         self.expansion_use_leaf_moves_first: bool = False
         self.expansion_enemy_expansion_plan_inbound_penalty: float = 0.55
         self.expansion_single_iteration_time_cap: float = 0.03  # 0.1 did slightly better than 0.06, but revert to 0.06 if expansion takes too long
@@ -354,7 +354,7 @@ class EklipZBot(object):
         self.expansion_use_iterative_flow: bool = True
         self.expansion_use_legacy: bool = False
         self.expansion_use_tile_islands: bool = False
-        self.expansion_full_time_limit: float = 0.15
+        self.expansion_full_time_limit: float = 0.1
         """The full time limit for an optimal_expansion cycle. Will be cut short if it would run the move too long."""
 
         self.expansion_use_cutoff: bool = True
@@ -1131,7 +1131,10 @@ class EklipZBot(object):
                     logbook.info(f"savePath was {str(defenseSavePath)}")
                 else:
                     logbook.info("savePath was NONE")
-                self.info(f"    Delayed defense kingKillPath.  {str(kingKillPath)}")
+                threatInf = ''
+                if threat is not None:
+                    threatInf = f' @{threat.path.start.tile}->{threat.path.tail.tile}'
+                self.info(f"    Delayed defense kingKillPath{threatInf}.  {str(kingKillPath)}")
                 self.viewInfo.color_path(PathColorer(kingKillPath, 158, 158, 158, 255, 10, 200))
 
                 return Move(kingKillPath.start.tile, kingKillPath.start.next.tile)

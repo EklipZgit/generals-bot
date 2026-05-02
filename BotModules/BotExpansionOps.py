@@ -474,6 +474,8 @@ class BotExpansionOps:
                     flowExpander.use_debug_asserts = False
 
                     try:
+                        # Pass intercepts into FlowExpansion for integrated knapsacking
+                        intercepts_for_flow = [opt for opt in addlOptions if isinstance(opt, InterceptionOptionInfo)]
                         optCollection = flowExpander.get_expansion_options(
                             islands=bot.tileIslandBuilder,
                             asPlayer=bot.player.index,
@@ -484,6 +486,7 @@ class BotExpansionOps:
                             negativeTiles=expansionNegatives,
                             bonusCapturePointMatrix=bonusCapturePointMatrix,
                             cutoffTime=cutoffTime,
+                            additional_options=intercepts_for_flow,
                         )
                         bot.info(f'FE turns {remainingCycleTurns}')
                         for opt in optCollection.flow_plans:
@@ -545,6 +548,8 @@ class BotExpansionOps:
                     timeLimit = timeLimit - (time.perf_counter() - ogStart)
 
             islands = bot.tileIslandBuilder
+            # Skip knapsacking in ExpandUtils if FlowExpansion already handled it
+            flow_expansion_did_knapsacking = bot.expansion_use_iterative_flow and len(addlOptions) > 0
             expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
                 bot._map,
                 searchingPlayer=bot.player.index,
@@ -574,7 +579,8 @@ class BotExpansionOps:
                 bonusCapturePointMatrix=bonusCapturePointMatrix,
                 additionalOptionValues=addlOptions,
                 includeExtraGenAndCityArmy=includeExtraGenAndCityArmy,
-                perfTimer=bot.perf_timer)
+                perfTimer=bot.perf_timer,
+                skipKnapsacking=flow_expansion_did_knapsacking)
 
             path = expUtilPlan.selected_option
             otherPaths = expUtilPlan.all_paths
@@ -1134,6 +1140,7 @@ class BotExpansionOps:
 
     @staticmethod
     def check_launch_against_expansion_plan(bot, existingPlan: ExpansionPotential, expansionNegatives: typing.Set[Tile]) -> ExpansionPotential:
+        return existingPlan
         if bot.target_player_gather_path is None:
             return existingPlan
 

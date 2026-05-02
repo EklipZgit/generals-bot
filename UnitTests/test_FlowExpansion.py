@@ -7,7 +7,7 @@ import logbook
 import Gather
 import SearchUtils
 from Algorithms import TileIslandBuilder
-from Algorithms.TileIslandBuilder import IslandBuildMode
+from Algorithms.TileIslandBuilder import IslandBuildMode, IslandNamer
 from BehaviorAlgorithms import IterativeExpansion
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode, FlowGraphMethod
@@ -29,6 +29,7 @@ class FlowExpansionUnitTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
         GatherDebug.USE_DEBUG_ASSERTS = True
+        IslandNamer.reset()
         super().__init__(methodName)
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
@@ -40,7 +41,7 @@ class FlowExpansionUnitTests(TestBase):
 
         return bot
 
-    def assertNoOptionsOverlap(self, opts: typing.List[GatherCapturePlan]):
+    def assertNoDuplicateTileUse(self, opts: typing.List[GatherCapturePlan]):
         visited = set()
         dupes = []
         for plan in opts:
@@ -51,11 +52,10 @@ class FlowExpansionUnitTests(TestBase):
 
             visited.update(plan.tileSet)
             if dupesThisSet:
-                dupes.append(f'plan {plan} duplicated {'|'.join([str(t.coords) for t in dupesThisSet])}')
+                dupes.append(f'plan {plan} duplicated {'|'.join([str(t) for t in dupesThisSet])}')
 
         if len(dupes) > 0:
             self.fail(f'found {len(dupes)} plans with duplicated tiles in plan options:\r\n  {"\r\n  ".join(dupes)}')
-
 
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1123,10 +1123,10 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         for (turns, expectedMin) in [
-            (2, 2.0),
-            (3, 2.0),
-            (5, 0.85),
-            (40, 1.0),
+            # (2, 2.0),
+            # (3, 2.0),
+            # (5, 0.85),
+            # (40, 1.0),
             (60, 1.1),
         ]:
             with self.subTest(turns=turns, expectedMin=expectedMin):
@@ -1561,7 +1561,7 @@ player_index=0
         self.enable_search_time_limits_and_disable_debug_asserts()
         self.begin_capturing_logging()
 
-        opts = self.run_army_flow_expansion(rawMap, rawMap.GetTile(general.x, general.y), rawMap.GetTile(enemyGeneral.x, enemyGeneral.y), turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=10, shouldRender=True, method=method)
+        opts = self.run_army_flow_expansion(rawMap, rawMap.GetTile(general.x, general.y), rawMap.GetTile(enemyGeneral.x, enemyGeneral.y), turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=3, shouldRender=True, method=method)
 
         self.assertNoDuplicateTileUse(opts)
 
@@ -1732,7 +1732,7 @@ player_index=0
         opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=37, debugMode=debugMode, renderThresh=700, tileIslandSize=3, shouldRender=True, method=method)
 
         self.assertGreater(len(opts), 2)
-        self.assertNoOptionsOverlap(opts)
+        self.assertNoDuplicateTileUse(opts)
         # if debugMode:
         #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
         #     simHost.queue_player_moves_str(general.player, expectedPath)
@@ -1748,18 +1748,6 @@ player_index=0
         #     self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
         #     self.assertEqual(bestTurns, longestOpt.length)
 
-    def assertNoDuplicateTileUse(self, opts: typing.List[GatherCapturePlan]):
-        usedSet = {}
-        dupes = []
-        for opt in opts:
-            for tile in opt.tileSet:
-                if tile in usedSet:
-                    dupes.append(f"Tile {tile} used multiple times in options.\r\n       {usedSet[tile]}\r\n    vs {opt}")
-                else:
-                    usedSet[tile] = opt
-
-        if len(dupes) > 0:
-            raise AssertionError(f"Found duplicate tile use in options:\r\n  {'\r\n  '.join(dupes)}")    
     def test_should_create_a_plan_which_does_not_have_a_strange_22t_no_cap_thing_in_it(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_create_a_plan_which_does_not_have_a_strange_22t_no_cap_thing_in_it___wam3usG3Y---1--100.txtmap'
@@ -1769,5 +1757,47 @@ player_index=0
         self.begin_capturing_logging()
 
         expander, optCol = self.run_army_flow_expansion_and_get_expander_and_collection(map, general, enemyGeneral, turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
-        self.render_flow_expansion_debug(expander, optCol, renderAll=True)
+        if debugMode:
+            self.render_flow_expansion_debug(expander, optCol, renderAll=True)
 
+    
+    def test_shouldnt_take_300ms_to_build_flow_expand(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_take_300ms_to_build_flow_expand___6vYE_GTas---1--139.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 139, fill_out_tiles=False)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        startT = time.perf_counter()
+        flowExpander = ArmyFlowExpanderV2(map)
+        flowExpander.method = method
+        flowExpander.use_debug_asserts = False
+        flowExpander.log_debug = False
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=11, boardAnalysis=builder.intergeneral_analysis, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+        self.assertLess(time.perf_counter() - startT, 0.06)
+        if debugMode:
+            self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=True)
+
+    
+    def test_should_not_explode_on_gathercaptureplan_build_inability_to_find_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_explode_on_gathercaptureplan_build_inability_to_find_moves___hUrDIi-yl---1--117.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 117, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=117)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)

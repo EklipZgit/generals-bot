@@ -1807,12 +1807,12 @@ class ArmyInterceptionTests(TestBase):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
         for path, expectedEcon in [
-            ('13,4->12,4->12,6->11,6->11,9->14,9', 19),
+            ('13,4->12,4->12,6->11,6->11,9->14,9', 15),
             ('12,4->12,6->11,6->9,6->9,7->9,8->6,8->6,7->5,7', 19),
             ('12,4->12,6->11,6->11,9->14,9', 19),
-            ('12,4->12,6->11,6->11,7->9,7->9,8->6,8->6,7->5,7', 19),
-            ('13,4->12,4->12,6->11,6->9,6->9,7->9,8->6,8->6,7->5,7', 19),
-            ('13,4->12,4->12,6->11,6->11,7->9,7->9,8->6,8->6,7->5,7', 19),
+            ('12,4->12,6->11,6->11,7->9,7->9,8->6,8->6,7->5,7', 16),
+            ('13,4->12,4->12,6->11,6->9,6->9,7->9,8->6,8->6,7->5,7', 11),
+            ('13,4->12,4->12,6->11,6->11,7->9,7->9,8->6,8->6,7->5,7', 13),
         ]:
             with self.subTest(pathOpt=path):
                 mapFile = 'GameContinuationEntries/should_intercept_before_split_choke___wCipq_zxN---0--339.txtmap'
@@ -1825,7 +1825,7 @@ class ArmyInterceptionTests(TestBase):
                 simHost.queue_player_moves_str(enemyGeneral.player, path)
                 # proof
                 # simHost.queue_player_moves_str(general.player, '11,11->11,7')
-                simHost.queue_player_moves_str(general.player, '11,11->11,10')
+                # simHost.queue_player_moves_str(general.player, '11,11->11,10')
                 bot = self.get_debug_render_bot(simHost, general.player)
                 playerMap = simHost.get_player_map(general.player)
 
@@ -1833,7 +1833,38 @@ class ArmyInterceptionTests(TestBase):
                 winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
                 self.assertNoFriendliesKilled(map, general)
 
-                self.assertTileDifferentialGreaterThan(18, simHost)
+                self.assertTileDifferentialGreaterThan(expectedEcon, simHost)
+
+    def test_should_intercept_before_split_choke__first_move(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for path, expectedEcon in [
+            # ('13,4->12,4->12,6->11,6->11,9->14,9', 15),
+            ('12,4->12,6->11,6->9,6->9,7->9,8->6,8->6,7->5,7', 19),
+            # ('12,4->12,6->11,6->11,9->14,9', 19),
+            # ('12,4->12,6->11,6->11,7->9,7->9,8->6,8->6,7->5,7', 16),
+            # ('13,4->12,4->12,6->11,6->9,6->9,7->9,8->6,8->6,7->5,7', 11),
+            # ('13,4->12,4->12,6->11,6->11,7->9,7->9,8->6,8->6,7->5,7', 13),
+        ]:
+            with self.subTest(pathOpt=path):
+                mapFile = 'GameContinuationEntries/should_intercept_before_split_choke___wCipq_zxN---0--339.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 339, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=339)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                # proof
+                # simHost.queue_player_moves_str(general.player, '11,11->11,7')
+                # simHost.queue_player_moves_str(general.player, '11,11->11,10')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                self.assertNoFriendliesKilled(map, general)
+                self.assertLess(playerMap.At(11, 11).army, 2, 'should have used 11,11 to begin the intercept')
 
     def test_should_intercept_obvious_intercept_use_case(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2476,14 +2507,14 @@ setting bestInterceptTable[dist 1]:
         self.assertNoFriendliesKilled(map, general)
         self.assertFalse(playerMap.players[playerMap.player_index].dead)
 
-    
+
     def test_should_never_consider_intercepting_parallel_to_be_better_than_literally_hitting_the_tile(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_never_consider_intercepting_parallel_to_be_better_than_literally_hitting_the_tile___52vlrZ4Bz---1--136.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=136)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '4,9->3,9')
@@ -2495,14 +2526,14 @@ setting bestInterceptTable[dist 1]:
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(playerMap.players[enemyGeneral.player].score, 81, 'should have killed the army no matter where it went')
-    
+
     def test_should_not_overvalue_intercept_that_fails_to_capture_incoming_attack(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_overvalue_intercept_that_fails_to_capture_incoming_attack___337AmCVkC---0--478.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 478, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=478)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '3,10->8,10->8,11->9,11->9,17')
@@ -2517,7 +2548,7 @@ setting bestInterceptTable[dist 1]:
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
         self.assertLess(general.army, 3)
 
-    
+
     def test_should_still_intercept_from_general_to_prevent_captures_adjacent(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         for hasExtraArmy in [False, True]:

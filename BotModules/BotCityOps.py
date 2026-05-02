@@ -1337,7 +1337,7 @@ class BotCityOps:
             bot,
             [t for t in newTargets],
             maxTime=0.05,
-            gatherTurns=bot.timings.get_turns_left_in_cycle(bot._map.turn) % bot.win_condition_analyzer.recommended_city_defense_plan_turns,
+            gatherTurns=min(turnsLeft, bot.win_condition_analyzer.recommended_city_defense_plan_turns) if bot.win_condition_analyzer.recommended_city_defense_plan_turns > 0 else turnsLeft,
             useTrueValueGathered=True,
             priorityMatrix=BotGatherOps.get_gather_tiebreak_matrix(bot, ),
             negativeSet=negs)
@@ -1345,7 +1345,7 @@ class BotCityOps:
         numCaptures = BotGatherOps.get_number_of_captures_in_gather_tree(bot, gatherNodes)
 
         if valGathered / max(1, gatherTurns - numCaptures) < bot.player.standingArmy / bot.player.tileCount:
-            cycleTurns = bot.timings.get_turns_left_in_cycle(bot._map.turn) % 10
+            cycleTurns = min(turnsLeft, 10)
             # cycleTurns = max(bot.win_condition_analyzer.recommended_city_defense_plan_turns + 1, cycleTurns)
             bot.info(f'trying longer city preemptive defense turns {cycleTurns}')
             move, valGathered, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(

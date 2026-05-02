@@ -1862,11 +1862,20 @@ class ArmyInterceptor(object):
                         blockInfo = ThreatBlockInfo(chokeTile, blockAmount)
                         blockingTiles[chokeTile] = blockInfo
 
+                    # if the army is going through this tile AND still killing us, we cant waste time moving this tile at all,
+                    # we need to defense gather (and this can't be used for defense gather since threat already goes through it and still kills).
                     canDie = realThreatVal > 0 and threat.threatType == ThreatType.Kill
 
                     for moveable in chokeTile.movable:
                         # if moveable not in threat.armyAnalysis.shortestPathWay.tiles:
-                        if canDie or (moveable not in threat.path.tileSet and (moveable not in threat.armyAnalysis.shortestPathWay.tiles or threat.armyAnalysis.bMap.raw[moveable.tile_index] >= threat.armyAnalysis.bMap.raw[chokeTile.tile_index])):
+                        if (
+                            canDie
+                            or threat.armyAnalysis.bMap.raw[moveable.tile_index] > threat.armyAnalysis.bMap.raw[chokeTile.tile_index]
+                            or (
+                                moveable not in threat.path.tileSet
+                                and moveable not in threat.armyAnalysis.shortestPathWay.tiles
+                            )
+                        ):
                             blockInfo.add_blocked_destination(moveable)
 
                     if blockInfo.amount_needed_to_block < blockAmount:

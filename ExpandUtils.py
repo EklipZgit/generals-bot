@@ -89,6 +89,7 @@ def get_round_plan_with_expansion(
         includeExtraGenAndCityArmy: bool = False,
         threatBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None,
         perfTimer: PerformanceTimer | None = None,
+        skipKnapsacking: bool = False,
 ) -> RoundPlan:
     """
     Does 3 phases of knapsacking expansion paths:
@@ -98,6 +99,7 @@ def get_round_plan_with_expansion(
 
     @param additionalOptionValues: list(approxEconValue, approxTurns, path)
     @param includeExpansionSearch: use the (legacy, soon...?) expansion planner?
+    @param skipKnapsacking: if True, bypass cross/non-cross knapsacking (FlowExpansion already handled it)
     """
     if additionalOptionValues:
         additionalOptionValues = [v for v in additionalOptionValues if v.requiredDelay + v.length <= turns]
@@ -432,6 +434,51 @@ def get_round_plan_with_expansion(
                     if opt.length + opt.requiredDelay >= remainingTurns:
                         continue
                     valueOverrides[opt] = (opt.econValue, opt.length)
+
+        # Bypass knapsacking if FlowExpansion already handled it
+        if skipKnapsacking and additionalOptionValues:
+            with perfTimer.begin_move_event(f'skipKnapsacking - using {len(additionalOptionValues)} pre-knapsacked options'):
+                maxPaths = list(additionalOptionValues)
+                # Calculate total value from the options
+                totalValue = sum(int(opt.econValue * 10000) for opt in maxPaths)
+
+                with perfTimer.begin_move_event(f'find opt exp first move (skipKnapsacking)'):
+                    path = find_optimal_expansion_path_to_move_first(
+                        map,
+                        maxPaths,
+                        tryAvoidSet,
+                        originalNegativeTiles,
+                        postPathEvalFunction,
+                        remainingTurns,
+                        searchingPlayer,
+                        friendlyPlayers,
+                        territoryMap,
+                        valueOverrides)
+
+                    otherPaths = [p for p in maxPaths if p != path]
+                    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, originalNegativeTiles) / pa.length, reverse=True)]
+
+                with perfTimer.begin_move_event(f'_get_capture_counts (skipKnapsacking)'):
+                    totalTurns, enCaps, neutCaps, visited = _get_capture_counts(
+                        searchingPlayer,
+                        friendlyPlayers,
+                        targetPlayers,
+                        path,
+                        otherPaths,
+                        originalNegativeTiles,
+                        valueOverrides,
+                        leafMoves)
+
+                with perfTimer.begin_move_event(f'cleanup pre-return, render-prep (skipKnapsacking)'):
+                    if viewInfo is not None:
+                        _add_expansion_to_view_info(path, otherPaths, viewInfo, colors)
+
+                    tilesInKnapsackOtherThanCurrent = set()
+
+                    if path is not None:
+                        otherPaths.insert(0, path)
+                    plan = RoundPlan(enCaps, neutCaps, path, otherPaths, map.turn)
+                    return plan
 
         with perfTimer.begin_move_event(f'knapsack_multi_paths {len(valueOverrides)} ext, {len(multiPathDict)} multiPath, {len(pathsCrossingTiles)} crossed'):
             maxPaths, totalValue = knapsack_multi_paths(

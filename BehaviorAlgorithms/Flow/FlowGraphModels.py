@@ -20,6 +20,11 @@ if typing.TYPE_CHECKING:
 
 
 class IslandCompletionInfo(object):
+    __slots__ = (
+        'tiles_left',
+        'army_left',
+    )
+
     def __init__(self, island: TileIsland):
         self.tiles_left: int = island.tile_count
         self.army_left: int = island.sum_army
@@ -119,6 +124,14 @@ class FlowGraphMethod(Enum):
 
 
 class IslandFlowNode(object):
+    __slots__ = (
+        'island',
+        'desired_army',
+        'army_flow_received',
+        'flow_to',
+        'flow_from',
+    )
+
     def __init__(self, island: TileIsland, desiredArmy: int):
         self.island: TileIsland = island
         self.desired_army: int = desiredArmy
@@ -184,6 +197,11 @@ class IslandFlowNode(object):
 
 
 class IslandFlowEdge(object):
+    __slots__ = (
+        'source_flow_node',
+        'target_flow_node',
+        'edge_army',
+    )
     def __init__(self, sourceIslandFlowNode: IslandFlowNode, targetIslandFlowNode: IslandFlowNode, edgeArmy: int):
         self.source_flow_node: IslandFlowNode = sourceIslandFlowNode
         self.target_flow_node: IslandFlowNode = targetIslandFlowNode
@@ -201,6 +219,18 @@ class IslandFlowEdge(object):
 
 
 class IslandMaxFlowGraph(object):
+    __slots__ = (
+        'root_flow_nodes_no_neut',
+        'root_flow_nodes_inc_neut',
+        'enemy_backfill_nodes_no_neut',
+        'enemy_backfill_nodes_inc_neut',
+        'enemy_backfill_neut_dump_edges',
+        'enemy_backfill_neut_dump_edges_no_neut',
+        'flow_node_lookup_by_tile_no_neut',
+        'flow_node_lookup_by_tile_inc_neut',
+        'flow_node_lookup_by_island_no_neut',
+        'flow_node_lookup_by_island_inc_neut',
+    )
     def __init__(
         self,
         ourRootNoNeutFlowNodes: typing.List[IslandFlowNode],

@@ -203,6 +203,9 @@ class TileIslandBuilder(object):
         self.borders_by_island: typing.Dict[int, typing.Dict[int, typing.Set[Tile]]] = {}
         self._team_stats_by_player: typing.List[TeamStats] = []
         self._team_stats_by_team_id: typing.List[TeamStats] = []
+        # Cache previous turn values for reliable delta detection (tile.delta may be stale/reset)
+        self._prev_turn_army: MapMatrixInterface[int] = MapMatrix(self.map, 0)
+        self._prev_turn_player: MapMatrixInterface[int] = MapMatrix(self.map, -2)
         self.reset_for_rebuild()
         " -------------------------- ANYTHING YOU ADD TO THIS SECTION NEEDS TO BE COVERED IN reset_for_rebuild ---------------"
 
@@ -226,6 +229,8 @@ class TileIslandBuilder(object):
         self._team_stats_by_player = []
         self._team_stats_by_team_id = []
         self.borders_by_island = {}
+        self._prev_turn_army = MapMatrix(self.map, 0)
+        self._prev_turn_player = MapMatrix(self.map, -2)
 
     def recalculate_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
         start = time.perf_counter()
@@ -314,6 +319,11 @@ class TileIslandBuilder(object):
         if self.log_debug or self.use_debug_asserts:
             self.debug_verify_all_islands(context='recalculate_tile_islands')
 
+        # Initialize cache so first update_tile_islands has valid prev values
+        for tile in self.map.tiles_by_index:
+            self._prev_turn_army.raw[tile.tile_index] = tile.army
+            self._prev_turn_player.raw[tile.tile_index] = tile.player
+
         complete = time.perf_counter() - start
         logbook.info(f'islands all built in {complete:.5f}s')
 
@@ -339,12 +349,13 @@ class TileIslandBuilder(object):
         armyOnlyRefreshIslands: typing.Set[TileIsland] = set()
 
         for tile in self.map.tiles_by_index:
-            ownerChanged = tile.delta.oldOwner != tile.player
-            armyChanged = tile.delta.oldArmy != tile.army
+            # Use cached values for reliable delta detection (tile.delta may be stale/reset)
+            ownerChanged = self._prev_turn_player.raw[tile.tile_index] != tile.player
+            armyChanged = self._prev_turn_army.raw[tile.tile_index] != tile.army
+            self._prev_turn_player.raw[tile.tile_index] = tile.player
+            self._prev_turn_army.raw[tile.tile_index] = tile.army
             if not ownerChanged and not armyChanged:
-                # Fast path: delta says nothing changed. But the lookup island may be stale
-                # if the tile was silently reverted by fog-of-war (e.g. fill_out_tiles on
-                # one turn sets player=0, fog resets it to -1 the next turn without a delta).
+                # Fast path: nothing changed per our cached values
                 existingIsland = self.tile_island_lookup.raw[tile.tile_index]
                 if existingIsland is not None:
                     existingTeam = existingIsland.team if existingIsland.full_island is None else existingIsland.full_island.team
@@ -704,6 +715,11 @@ class TileIslandBuilder(object):
                 + ' | '.join(str(isl) for isl in borderAdjustedIslands)
             )
             self.debug_verify_all_islands(context='update_tile_islands', deletingIslandSet=impactedLeafIslands)
+
+        # Update cached values for next turn's delta detection
+        for tile in self.map.tiles_by_index:
+            self._prev_turn_army.raw[tile.tile_index] = tile.army
+            self._prev_turn_player.raw[tile.tile_index] = tile.player
 
         complete = time.perf_counter() - start
         logbook.info(f'islands updated in {complete:.5f}s')

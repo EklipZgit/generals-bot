@@ -628,7 +628,7 @@ aG1  a3   b1   bG1
 
         non_zero_gath = [e for e in lt.gather_entries_by_turn if e is not None and e.turns > 0]
         for e in non_zero_gath:
-            expected_turns = sum(n.island.tile_count for n in e.included_friendly_flow_nodes)
+            expected_turns = sum(n.island.tile_count for n in e.included_friendly_flow_nodes) - 1
             self.assertEqual(expected_turns, e.turns,
                              f'turns={e.turns} must match cumulative tile count={expected_turns}')
 

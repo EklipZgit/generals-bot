@@ -167,6 +167,22 @@ class TileIslandBuilderUnitTests(TestBase):
             self.assertIsNotNone(island.name, f'{island} should have a name set')
             self.assertNotEqual('', island.name, f'{island} should have a non-empty name set')
 
+    def assertAllIslandsSumArmyCorrect(self, builder: TileIslandBuilder):
+        """
+        Every island's sum_army must equal the sum of army values on its tiles.
+        This catches stale sum_army values that weren't updated during tile changes.
+        """
+        errors = []
+        for island in builder.all_tile_islands:
+            if island.child_islands is not None:
+                # Skip full_island parents - their sum_army is aggregate of children
+                continue
+            actual_sum = sum(t.army for t in island.tile_set)
+            if island.sum_army != actual_sum:
+                errors.append(f'{island} sum_army={island.sum_army} actual={actual_sum}')
+        if errors:
+            self.fail(f'sum_army mismatches found ({len(errors)}):\n' + '\n'.join(f'  {e}' for e in errors[:10]))
+
     def test_tile_islands_land_count_matches_tile_count(self):
         mapFile = 'GameContinuationEntries/should_recognize_army_collision_from_fog___BlpaDuBT2---b--136.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 136)
@@ -307,11 +323,15 @@ class TileIslandBuilderUnitTests(TestBase):
                 mapB, generalB, enemyGeneralB = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
 
                 self.begin_capturing_logging()
-                builderA = TileIslandBuilder(mapA)
+                analysisA = BoardAnalyzer(mapA, generalA)
+                analysisA.rebuild_intergeneral_analysis(enemyGeneralA, possibleSpawns=None)
+                builderA = TileIslandBuilder(mapA, analysisA.intergeneral_analysis)
                 builderA.recalculate_tile_islands(enemyGeneralA, mode=mode)
                 self.assertAllIslandsContiguous(builderA)
 
-                builderB = TileIslandBuilder(mapB)
+                analysisB = BoardAnalyzer(mapB, generalB)
+                analysisB.rebuild_intergeneral_analysis(enemyGeneralB, possibleSpawns=None)
+                builderB = TileIslandBuilder(mapB, analysisB.intergeneral_analysis)
                 builderB.recalculate_tile_islands(enemyGeneralB, mode=mode)
                 self.assertAllIslandsContiguous(builderB)
 
@@ -355,11 +375,15 @@ class TileIslandBuilderUnitTests(TestBase):
                 map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
 
                 self.begin_capturing_logging()
-                builderA = TileIslandBuilder(map)
+                analysis = BoardAnalyzer(map, general)
+                analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+                builderA = TileIslandBuilder(map, analysis.intergeneral_analysis)
                 builderA.recalculate_tile_islands(enemyGeneral, mode=mode)
                 self.assertAllIslandsContiguous(builderA)
 
-                builderB = TileIslandBuilder(map)
+                analysis = BoardAnalyzer(map, general)
+                analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+                builderB = TileIslandBuilder(map, analysis.intergeneral_analysis)
                 builderB.recalculate_tile_islands(enemyGeneral, mode=mode)
                 self.assertAllIslandsContiguous(builderB)
 
@@ -658,7 +682,9 @@ a2
 
     def assertUpdateMatchesRecalculate(self, map: MapBase, builder: TileIslandBuilder, enemyGeneral, mode: IslandBuildMode, debugMode: bool = False):
         """Builds a fresh recalculate on the same map state and checks every tile lands in the same island group."""
-        freshBuilder = TileIslandBuilder(map)
+        analysis = BoardAnalyzer(map, map.generals[map.player_index])
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        freshBuilder = TileIslandBuilder(map, analysis.intergeneral_analysis)
         freshBuilder.force_territory_borders_to_single_tile_islands = builder.force_territory_borders_to_single_tile_islands
         freshBuilder.break_apart_neutral_islands = builder.break_apart_neutral_islands
         freshBuilder.desired_tile_island_size = builder.desired_tile_island_size
@@ -768,6 +794,7 @@ a2   b2   b2   b2   b2
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_update_tile_islands__army_increment_clears_stale_border_refs_on_distant_island(self):
         """
@@ -833,6 +860,7 @@ a2   a2   a2   a2   a2
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_update_tile_islands__tile_capture_leaves_no_null_island_assignments(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -871,6 +899,7 @@ a2   a2   a2   b2
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         self.assertIsNotNone(builder.tile_island_lookup[capturedTile], 'captured tile should belong to an island after update')
         self.assertEqual(general.player, capturedTile.player, 'captured tile should now belong to general.player')
@@ -913,6 +942,7 @@ a2   a2   a2   b2
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_update_tile_islands__multiple_captures_leave_no_null_island_assignments(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -952,6 +982,7 @@ a2   a2   a2   b2   b2
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_update_tile_islands__ownership_change_splits_enemy_island_correctly(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -990,6 +1021,7 @@ aG1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         # Every tile that used to be in the same enemy island must still have a valid island
         for tile in map.tiles_by_index:
@@ -1027,6 +1059,7 @@ aG1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_update_tile_islands__ownership_change_on_real_map_matches_recalculate(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1059,6 +1092,7 @@ aG1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_update_tile_islands__army_increment_then_capture_leaves_no_null_islands(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1102,6 +1136,7 @@ a2   a2   a2   b3
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_update_tile_islands__stale_islands_not_in_all_tile_islands_after_capture(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1143,6 +1178,7 @@ a2   a2   a2   b2
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         # The captured tile should now have a friendly-team island in the lookup
         islandAfterCapture = builder.tile_island_lookup[capturedTile]
@@ -1216,6 +1252,7 @@ a1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         # Sibling neutral leaf islands must be the SAME objects with SAME tiles — they were not touched
         for siblingIsland, tilesBefore in siblingIslandObjects.items():
@@ -1287,6 +1324,7 @@ a1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         for remoteIsland, tilesBefore in remoteNeutralIslands.items():
             sampleTile = next(iter(tilesBefore))
@@ -1357,6 +1395,7 @@ a1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         largestNeutAfterUpdate = max(
             (isl for isl in builder.all_tile_islands if isl.team == -1),
@@ -1368,6 +1407,7 @@ a1
             f'largest was {largestNeutAfterUpdate.tile_count} tiles (cutoff={cutoff})'
         )
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_update_tile_islands__no_stale_border_island_references_after_neutral_rebuild_and_split(self):
         """
@@ -1413,6 +1453,7 @@ a1
         builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         # Verify the neutral blob was split into multiple leaf islands (precondition for the bug)
         cutoff = int(builder.desired_tile_island_size * 1.5)
@@ -1447,6 +1488,7 @@ a1
         # THE CRITICAL ASSERTION: no island must have a stale border_islands reference
         # to an island that was torn down and not re-registered.
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         # Additionally verify the friendly island's border_islands only contain live islands
         updatedFriendlyIsland = builder.tile_island_lookup[next(iter(friendlyIslandBorderingNeut.tile_set))]
@@ -1556,6 +1598,7 @@ a1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
 
         # Every pocket tile must now have an island
@@ -1582,6 +1625,7 @@ a1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
 
 
@@ -1645,6 +1689,7 @@ a1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         # The two captured tiles must have islands belonging to their new owners
         capturedByBlue = map.GetTile(16, 10)
@@ -1740,6 +1785,7 @@ a1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_army_increment_does_not_replace_solo_friendly_island(self):
         """
@@ -1778,6 +1824,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoLookupMismatches(builder)
 
         for tileIndex, islandBefore in soloFriendlyIslandsByTileIndex.items():
@@ -1824,6 +1871,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoLookupMismatches(builder)
 
         for tileIndex, islandBefore in enemyIslandsBefore.items():
@@ -1869,6 +1917,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoFullIslandCycles(builder)
 
@@ -1992,6 +2041,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoFullIslandCycles(builder)
 
@@ -2065,6 +2115,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_inter_island_army_move_only_updates_sum_army(self):
         """
@@ -2152,6 +2203,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     # -----------------------------------------------------------------------
     def test_capturing_solo_tile_enemy_island_does_not_rebuild_sibling_enemy_islands(self):
@@ -2210,6 +2262,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoFullIslandCycles(builder)
 
@@ -2271,6 +2324,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoFullIslandCycles(builder)
 
@@ -2325,6 +2379,7 @@ a1
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoLookupMismatches(builder)
 
         # Friendly islands more than 1 hop from the capture must be untouched
@@ -2857,6 +2912,7 @@ a2             bG1
         self.assertNoZombieIslands(builder)
         self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
         # THE CRITICAL ASSERTION: (0,3) now borders enemy at (1,3) and must be a solo island
         islandAfter = builder.tile_island_lookup.raw[borderTile.tile_index]
@@ -2867,3 +2923,73 @@ a2             bG1
             f'solo island (force_territory_borders_to_single_tile_islands), '
             f'but island still has {islandAfter.tile_count} tiles'
         )
+
+    def test_sum_army_mismatch_is_corrected_on_update(self):
+        """
+        Regression test for sum_army staleness bug.
+
+        Scenario:
+          - An island is created with sum_army=26 for a tile that currently has army=26
+          - Later, the tile's army changes to 17 (captured, combat, etc.)
+          - On the next update, the tile has no delta change (oldArmy == army)
+          - The island's sum_army should still be corrected to match the actual tile army
+
+        This test verifies that defensive recalculation in refreshIslands fixes staleness
+        even when no delta change is detected for a tile.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        # Simple 3-tile layout: friendly tile, enemy tile, neutral between them
+        # We'll manipulate the enemy tile's army directly to simulate staleness
+        testData = """
+|    |    |    |
+aG1       bG1
+a10       b26
+|    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+        self.assertAllIslandsContiguous(builder, debugMode)
+
+        # Get the enemy tile (position 2,1 in the grid - the b26 tile)
+        enemyTile = map.GetTile(2, 1)
+        self.assertEqual(enemyGeneral.player, enemyTile.player)
+        self.assertEqual(26, enemyTile.army)
+
+        enemyIsland = builder.tile_island_lookup.raw[enemyTile.tile_index]
+        self.assertIsNotNone(enemyIsland)
+        self.assertEqual(26, enemyIsland.sum_army, 'initial sum_army should match tile army')
+
+        # Reset deltas to simulate "clean state" at start of turn
+        self.reset_tile_deltas_to_current_state(map)
+
+        # Now simulate the army change happening WITHOUT a delta (e.g., from fog reveal,
+        # or from a previous turn's incomplete update that left sum_army stale)
+        # Directly manipulate the tile's army to simulate the true current state
+        enemyTile.army = 17  # Army decreased (e.g., due to combat or split)
+
+        # CRITICAL: Reset delta again so tile.delta.oldArmy == tile.army
+        # This simulates the scenario where the tile change was processed elsewhere
+        # or the delta was already consumed, but sum_army wasn't updated
+        self.reset_tile_deltas_to_current_state(map)
+        self.assertEqual(enemyTile.delta.oldArmy, enemyTile.army,
+                         'test fixture: tile should have no delta change after reset')
+
+        # The island still has stale sum_army=26
+        self.assertEqual(26, enemyIsland.sum_army,
+                         'precondition: island sum_army should still be stale (26)')
+
+        # Run update - it should correct the stale sum_army even without delta
+        builder.update_tile_islands(enemyGeneral)
+        self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+
+        # Verify sum_army is now correct
+        self.assertAllIslandsSumArmyCorrect(builder)
+        self.assertEqual(17, enemyIsland.sum_army,
+                         'sum_army should be corrected to match actual tile army (17)')

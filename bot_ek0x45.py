@@ -338,7 +338,7 @@ class EklipZBot(object):
         self.expansion_force_no_global_visited: bool = False
         self.expansion_force_global_visited_stage_1: bool = True
         self.expansion_use_iterative_negative_tiles: bool = True
-        self.expansion_allow_leaf_moves: bool = False
+        self.expansion_allow_leaf_moves: bool = True
         self.expansion_use_leaf_moves_first: bool = False
         self.expansion_enemy_expansion_plan_inbound_penalty: float = 0.55
         self.expansion_single_iteration_time_cap: float = 0.03  # 0.1 did slightly better than 0.06, but revert to 0.06 if expansion takes too long

@@ -1801,3 +1801,33 @@ player_index=0
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
+
+
+    def test_should_not_try_to_expand_1(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapData = """
+|    |    |
+aG1  a1    
+a1   b1   b1
+b1   b1   bG1
+|    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=2, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+        # if debugMode:
+        #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
+        #     simHost.queue_player_moves_str(general.player, expectedPath)
+        #
+        #     self.begin_capturing_logging()
+        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+
+        self.assertEqual(0, len(opts), 'should not find any valid options')

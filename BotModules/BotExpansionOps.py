@@ -25,7 +25,7 @@ from BotModules.BotRepetition import BotRepetition
 from BotModules.BotTargeting import BotTargeting
 from DangerAnalyzer import ThreatType
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
-from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
+from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, ITERATIVE_EXPANSION_EN_CAP_VAL
 from Interfaces import TilePlanInterface
 from MapMatrix import MapMatrix, MapMatrixInterface
 from Path import Path, MoveListPath
@@ -476,6 +476,16 @@ class BotExpansionOps:
                     try:
                         # Pass intercepts into FlowExpansion for integrated knapsacking
                         intercepts_for_flow = [opt for opt in addlOptions if isinstance(opt, InterceptionOptionInfo)]
+                        if bot.expansion_allow_leaf_moves:
+                            for leafMove in bot.captureLeafMoves:
+                                if leafMove.source.army - 1 <= leafMove.dest.army:
+                                    continue
+                                leafPath = Path(leafMove.source.army - leafMove.dest.army - 1)
+                                leafPath.add_next(leafMove.source)
+                                leafPath.add_next(leafMove.dest)
+                                leafPath.econValue = ITERATIVE_EXPANSION_EN_CAP_VAL if leafMove.dest.player != -1 else 1.0
+                                leafPath.econValue += bonusCapturePointMatrix.raw[leafMove.dest.tile_index]
+                                intercepts_for_flow.append(leafPath)
                         optCollection = flowExpander.get_expansion_options(
                             islands=bot.tileIslandBuilder,
                             asPlayer=bot.player.index,
@@ -567,7 +577,7 @@ class BotExpansionOps:
                 forceNoGlobalVisited=bot.expansion_force_no_global_visited,
                 forceGlobalVisitedStage1=bot.expansion_force_global_visited_stage_1,
                 useIterativeNegTiles=BotExpansionOps._should_use_iterative_negative_expand(bot),
-                allowLeafMoves=bot.expansion_allow_leaf_moves,
+                allowLeafMoves=bot.expansion_allow_leaf_moves and not bot.expansion_use_iterative_flow,
                 allowGatherPlanExtension=bot.expansion_allow_gather_plan_extension,
                 alwaysIncludeNonTerminatingLeavesInIteration=bot.expansion_always_include_non_terminating_leafmoves_in_iteration,
                 time_limit=timeLimit,

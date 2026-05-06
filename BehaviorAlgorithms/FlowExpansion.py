@@ -108,6 +108,19 @@ class FlowExpansionV2DebugSnapshot:
     pruned_vs_kept_choices: dict
 
 
+@dataclass
+class ExternalPlanOption:
+    """
+    Wrapper for external plan options (intercepts, etc.) to participate in MKCP.
+    These are not flow-based but need to be considered alongside flow options.
+    """
+    plan: typing.Any  # TilePlanInterface (InterceptionOptionInfo, etc.)
+    turns: int
+    econ_value: float
+    tile_set: frozenset  # Set of tiles for conflict detection
+    group_id: int  # Unique group ID for MKCP (mutually exclusive with other externals)
+
+
 class ArmyFlowExpanderV2:
     """
     V2 flow expansion implementation that eventually replaces ArmyFlowExpander.
@@ -167,7 +180,8 @@ class ArmyFlowExpanderV2:
             viewInfo: ViewInfo = None,
             bonusCapturePointMatrix: MapMatrixInterface[float] | None = None,
             perfTimer: PerformanceTimer | None = None,
-            cutoffTime: float | None = None
+            cutoffTime: float | None = None,
+            additional_options: typing.List[typing.Any] | None = None
     ) -> FlowExpansionPlanOptionCollection:
         """
         Main entry point - returns expansion options compatible with existing interface.
@@ -182,6 +196,11 @@ class ArmyFlowExpanderV2:
             self.enemyGeneral = self.map.generals[targetPlayer]
         self.island_builder = islands
         self.bonus_capture_point_matrix = bonusCapturePointMatrix
+
+        # Process additional_options (intercepts, etc.) into MKCP-compatible format
+        external_options: list[ExternalPlanOption] = []
+        if additional_options:
+            external_options = self._convert_additional_options_to_external(additional_options, turns)
 
         # Phase 0: Build flow graph
         with self.perf_timer.begin_move_event('V2 phase0 _ensure_flow_graph_exists'):
@@ -207,20 +226,25 @@ class ArmyFlowExpanderV2:
             self._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
         self.last_lookup_tables = lookup_tables
 
-        # Phase 4: Solve grouped knapsack for turn budget
+        # Phase 4: Solve grouped knapsack for turn budget (includes external options like intercepts)
         with self.perf_timer.begin_move_event('V2 phase4 _solve_grouped_knapsack'):
-            solution = self._solve_grouped_knapsack(lookup_tables, turns)
+            solution = self._solve_grouped_knapsack(lookup_tables, turns, external_options)
 
         if not self.use_simple_flow_stream_maximization:
             # Phase 6: Optional local post-optimization
             with self.perf_timer.begin_move_event('V2 phase6 _post_optimize_locally'):
-                solution = self._post_optimize_locally(solution, lookup_tables, turns)
+                solution = self._post_optimize_locally(solution, lookup_tables, turns, external_options)
 
         # Phase 5: Convert chosen entries into GatherCapturePlan objects
         with self.perf_timer.begin_move_event('V2 phase5 _materialize_plans'):
-            plans = self._materialize_plans(solution, lookup_tables)
+            plans = self._materialize_plans(solution, lookup_tables, external_options)
 
         result = FlowExpansionPlanOptionCollection()
+        total = 0
+        for plan in plans:
+            total += plan.length
+        if total > turns:
+            raise AssertionError(f'Requested {turns} but received {total} turns worth of plans.\r\n  {"\r\n    ".join(f"{opt}: {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: self.island_builder.intergeneral_analysis.aMap.raw[t2.tile_index]))}" for opt in plans)}')
         result.flow_plans = plans
         return result
 
@@ -1409,28 +1433,73 @@ class ArmyFlowExpanderV2:
 
         return best_gather
 
+    def _convert_additional_options_to_external(
+        self,
+        additional_options: typing.List[TilePlanInterface],
+        turns: int
+    ) -> list[ExternalPlanOption]:
+        """
+        Convert TilePlanInterface options (InterceptionOptionInfo, etc.) to ExternalPlanOption
+        for inclusion in the MKCP solver.
+        """
+        external_options: list[ExternalPlanOption] = []
+        group_id = 1000000  # Start external groups at high number to avoid collision with flow groups
+
+        for opt in additional_options:
+            if opt is None:
+                continue
+            # Skip options that exceed turn budget
+            total_turns = opt.length + opt.requiredDelay
+            if total_turns > turns:
+                continue
+
+            # Skip options with no economic value
+            if opt.econValue <= 0:
+                continue
+
+            # Get tile set for conflict detection
+            tile_set = frozenset(opt.tileSet)
+
+            external_options.append(ExternalPlanOption(
+                plan=opt,
+                turns=total_turns,
+                econ_value=opt.econValue,
+                tile_set=tile_set,
+                group_id=group_id
+            ))
+            group_id += 1
+
+        return external_options
+
     def _solve_grouped_knapsack(
         self,
         lookup_tables: list[FlowArmyTurnsLookupTable],
-        turn_budget: int
+        turn_budget: int,
+        external_options: list[ExternalPlanOption] | None = None
     ) -> dict:
         """
-        Phase 4: Solve grouped knapsack for turn budget, respecting friendly-tile mutex.
+        Phase 4: Solve grouped knapsack for turn budget, respecting tile-use mutex.
+
+        Includes external options (intercepts, etc.) alongside flow-based options.
 
         ===========================================================================
-        Multi-pair friendly-tile mutex problem
+        Multi-pair tile mutex problem
         ===========================================================================
-        Different border pairs can share friendly tiles in their gather chains
-        (e.g. a passthrough tile that the max-flow solution forwards army through
-        toward both target T1 and target T2 produces two pairs F->T1 and F->T2
-        whose gather chains both consume F's army). The base MCKP treats every
-        candidate (gather_turns, capture_turns) item as independent and can
-        therefore double-spend the same friendly tile across two chosen items,
-        producing duplicate-tile-use plans.
+        Different border pairs can share tiles in two ways:
+        (a) Friendly gather chains — a passthrough tile that the max-flow solution
+            forwards army through toward both target T1 and target T2 produces two
+            pairs F->T1 and F->T2 whose gather chains both consume F's army.
+        (b) Target capture chains — a downstream neutral/enemy island (e.g. 2064)
+            can appear in the capture stream of two different border pairs (e.g.
+            2041->2011 and 2036->2009), causing _materialize_plans to assign the
+            same physical tiles to both plans.
+        The base MCKP treats every candidate item as independent and can therefore
+        double-spend the same tile across two chosen items.
 
         Required behaviour: among items chosen from DIFFERENT border-pair groups,
-        no two may share a friendly island in their gather chains. Items WITHIN
-        the same group are already mutex via standard MCKP.
+        no two may share a friendly island in their gather chains OR a target island
+        in their capture chains. Items WITHIN the same group are already mutex via
+        standard MCKP.
 
         ===========================================================================
         Approaches considered
@@ -1468,23 +1537,60 @@ class ArmyFlowExpanderV2:
             within a group entirely.
         ===========================================================================
         """
-        items: list[EnrichedFlowTurnsEntry] = []
+        items: list[EnrichedFlowTurnsEntry | ExternalPlanOption] = []
         groups: list[int] = []
         weights: list[int] = []
         values: list[int] = []
         # Per-item set of friendly island ids consumed by the gather chain.
         # Used by the conflict-repair pass below.
         friendly_island_sets: list[frozenset[int]] = []
+        # Per-item set of target island ids consumed by the capture chain.
+        # Two items from different groups that share a target island would
+        # produce duplicate tile captures and must also be treated as conflicts.
+        target_island_sets: list[frozenset[int]] = []
+        # Per-item tile set for external options (for tile-based conflict detection)
+        external_tile_sets: list[frozenset] = []
+        # Track which items are external options (index -> True)
+        is_external_item: dict[int, bool] = {}
 
         forest = Algorithms.FastDisjointSet()
 
         goodLookupTables = []
-        for lookup_table in lookup_tables:
+        # Pre-compute the union of all friendly gather-chain island IDs for each
+        # lookup table.  Two border pairs that share ANY gather-chain island must
+        # end up in the same MCKP group so the solver naturally enforces the
+        # mutex rather than relying on the post-solve conflict-repair loop.
+        table_friendly_union: dict[int, set[int]] = {}  # index -> set of island ids
+        for idx, lookup_table in enumerate(lookup_tables):
             if not lookup_table.enriched_capture_entries:
                 continue
 
             forest.merge(lookup_table.border_pair.friendly_island_id, lookup_table.border_pair.target_island_id)
             goodLookupTables.append(lookup_table)
+
+            union: set[int] = set()
+            for enriched in lookup_table.enriched_capture_entries:
+                for n in enriched.gather_entry.included_friendly_flow_nodes:
+                    union.add(n.island.unique_id)
+            table_friendly_union[idx] = union
+
+        # Merge groups for any two border pairs that share a gather-chain island.
+        # Build an island-id -> table-index map (first table that owns the island
+        # wins; subsequent tables sharing it get merged into that group).
+        island_to_table_idx: dict[int, int] = {}
+        for idx, lookup_table in enumerate(lookup_tables):
+            if idx not in table_friendly_union:
+                continue
+            for iid in table_friendly_union[idx]:
+                if iid in island_to_table_idx:
+                    # Another table already claimed this island — merge the groups.
+                    other_idx = island_to_table_idx[iid]
+                    forest.merge(
+                        lookup_table.border_pair.friendly_island_id,
+                        lookup_tables[other_idx].border_pair.friendly_island_id,
+                    )
+                else:
+                    island_to_table_idx[iid] = idx
 
         subsets = forest.subsets()
         groupIdx = 0
@@ -1510,10 +1616,32 @@ class ArmyFlowExpanderV2:
                 friendly_island_sets.append(frozenset(
                     n.island.unique_id for n in enriched.gather_entry.included_friendly_flow_nodes
                 ))
+                target_island_sets.append(frozenset(
+                    n.island.unique_id for n in enriched.capture_entry.included_target_flow_nodes
+                ))
+                external_tile_sets.append(frozenset())  # Flow items have no external tile set
                 if self.log_debug:
                     logbook.info(f"  MKCP item: group={group_idx} weight={enriched.combined_turn_cost} "
                                  f"value={int(1000 * enriched.capture_entry.econ_value)} "
                                  f"(gather={enriched.gather_entry.turns}, capture={enriched.capture_entry.turns})")
+
+        # Add external options (intercepts, etc.) to MKCP with unique group IDs
+        if external_options:
+            for ext_opt in external_options:
+                idx = len(items)
+                items.append(ext_opt)
+                groups.append(ext_opt.group_id)
+                weights.append(ext_opt.turns)
+                values.append(int(1000 * ext_opt.econ_value))
+                # External options don't have island-based gather/capture chains
+                friendly_island_sets.append(frozenset())
+                target_island_sets.append(frozenset())
+                # But they do have tile sets for conflict detection
+                external_tile_sets.append(ext_opt.tile_set)
+                is_external_item[idx] = True
+                if self.log_debug:
+                    logbook.info(f"  MKCP external item: group={ext_opt.group_id} weight={ext_opt.turns} "
+                                 f"value={int(1000 * ext_opt.econ_value)} type={type(ext_opt.plan).__name__}")
 
         if not items:
             return {}
@@ -1525,7 +1653,7 @@ class ArmyFlowExpanderV2:
         blacklist: set[int] = set()
         max_iterations = 32  # bounded; each iteration blacklists >= 1 item.
 
-        chosen_items: list[EnrichedFlowTurnsEntry] = []
+        chosen_items: list[EnrichedFlowTurnsEntry | ExternalPlanOption] = []
         max_value = 0
         for iteration in range(max_iterations):
             active_idx = [i for i in range(len(items)) if i not in blacklist]
@@ -1550,23 +1678,72 @@ class ArmyFlowExpanderV2:
                 noLog=not self.log_debug, longRuntimeThreshold=10.0
             )
 
-            # Detect cross-group friendly-island conflicts among chosen items.
+            # Detect cross-group conflicts among chosen items.
             # Two items conflict iff they belong to different groups (intra-group
-            # mutex is already enforced by MCKP) AND their gather chains share at
-            # least one friendly island.
-            conflicts: list[tuple[EnrichedFlowTurnsEntry, EnrichedFlowTurnsEntry]] = []
+            # mutex is already enforced by MCKP) AND either:
+            #   (a) their gather chains share a friendly island, OR
+            #   (b) their capture chains share a target island
+            #   (c) for external options: their tile sets overlap (tile-based conflict)
+            # Case (b) catches the scenario where a downstream target island
+            # (e.g. island 2064) appears in the capture stream of two different
+            # border pairs, producing duplicate tile captures in materialization.
+            conflicts: list[tuple] = []
             n = len(chosen_items)
             chosen_orig_idx = [item_to_index[id(c)] for c in chosen_items]
+
+            # Helper to safely get external tile set
+            def _get_external_tiles(idx: int) -> frozenset:
+                if is_external_item.get(idx, False):
+                    # Map from item index to external_options index
+                    ext_idx = sum(1 for k in range(idx) if is_external_item.get(k, False))
+                    if ext_idx < len(external_options):
+                        return external_options[ext_idx].tile_set
+                return frozenset()
+
             for i in range(n):
                 gi = groups[chosen_orig_idx[i]]
                 fi = friendly_island_sets[chosen_orig_idx[i]]
-                if not fi:
-                    continue
+                ti = target_island_sets[chosen_orig_idx[i]]
+                is_ext_i = is_external_item.get(chosen_orig_idx[i], False)
+                ext_tiles_i = _get_external_tiles(chosen_orig_idx[i])
                 for j in range(i + 1, n):
                     if groups[chosen_orig_idx[j]] == gi:
                         continue
                     fj = friendly_island_sets[chosen_orig_idx[j]]
-                    if fi & fj:
+                    tj = target_island_sets[chosen_orig_idx[j]]
+                    is_ext_j = is_external_item.get(chosen_orig_idx[j], False)
+                    ext_tiles_j = _get_external_tiles(chosen_orig_idx[j])
+
+                    # Island-based conflicts (flow vs flow)
+                    island_conflict = (fi & fj) or (ti & tj)
+
+                    # Tile-based conflicts for external options
+                    tile_conflict = False
+                    if is_ext_i or is_ext_j:
+                        # Two external options: check tile overlap directly
+                        if ext_tiles_i and ext_tiles_j:
+                            tile_conflict = bool(ext_tiles_i & ext_tiles_j)
+                        # External vs Flow: check if external tiles belong to flow's islands
+                        # This requires island_builder to be available
+                        if self.island_builder is not None:
+                            if is_ext_i and not is_ext_j and ext_tiles_i:
+                                # Item i is external, item j is flow - check if i's tiles are in j's islands
+                                flow_islands_j = fj | tj
+                                for tile in ext_tiles_i:
+                                    tile_island = self.island_builder.tile_island_lookup.raw[tile.tile_index]
+                                    if tile_island is not None and tile_island.unique_id in flow_islands_j:
+                                        tile_conflict = True
+                                        break
+                            elif is_ext_j and not is_ext_i and ext_tiles_j:
+                                # Item j is external, item i is flow - check if j's tiles are in i's islands
+                                flow_islands_i = fi | ti
+                                for tile in ext_tiles_j:
+                                    tile_island = self.island_builder.tile_island_lookup.raw[tile.tile_index]
+                                    if tile_island is not None and tile_island.unique_id in flow_islands_i:
+                                        tile_conflict = True
+                                        break
+
+                    if island_conflict or tile_conflict:
                         conflicts.append((chosen_items[i], chosen_items[j]))
 
             if not conflicts:
@@ -1591,13 +1768,25 @@ class ArmyFlowExpanderV2:
             #              dropping the heavier (higher-absolute-value) chain.
             #
             # Ties on density: compare absolute econ_value, then weight.
-            current_chosen_weight = sum(c.combined_turn_cost for c in chosen_items)
+            def _get_item_weight(item):
+                if isinstance(item, ExternalPlanOption):
+                    return item.turns
+                return item.combined_turn_cost
+
+            def _get_item_value(item):
+                if isinstance(item, ExternalPlanOption):
+                    return item.econ_value
+                return item.capture_entry.econ_value
+
+            current_chosen_weight = sum(_get_item_weight(c) for c in chosen_items)
             newly_blacklisted = 0
             for item_a, item_b in conflicts:
-                wa = max(item_a.combined_turn_cost, 1)
-                wb = max(item_b.combined_turn_cost, 1)
-                da = item_a.capture_entry.econ_value / wa
-                db = item_b.capture_entry.econ_value / wb
+                wa = max(_get_item_weight(item_a), 1)
+                wb = max(_get_item_weight(item_b), 1)
+                va = _get_item_value(item_a)
+                vb = _get_item_value(item_b)
+                da = va / wa
+                db = vb / wb
 
                 # Density-based default loser
                 if da < db:
@@ -1606,22 +1795,24 @@ class ArmyFlowExpanderV2:
                     default_loser, default_winner = item_b, item_a
                 else:
                     # density tie — fall back to absolute value, then weight
-                    if item_a.capture_entry.econ_value < item_b.capture_entry.econ_value:
+                    if va < vb:
                         default_loser, default_winner = item_a, item_b
-                    elif item_a.capture_entry.econ_value > item_b.capture_entry.econ_value:
+                    elif va > vb:
                         default_loser, default_winner = item_b, item_a
                     else:
                         default_loser, default_winner = (
-                            (item_a, item_b) if item_a.combined_turn_cost < item_b.combined_turn_cost
+                            (item_a, item_b) if _get_item_weight(item_a) < _get_item_weight(item_b)
                             else (item_b, item_a)
                         )
 
                 # Exception: if dropping the default loser is the heavier item AND
                 # doing so leaves total weight below capacity, swap — keep the heavier.
-                heavier = item_a if item_a.combined_turn_cost > item_b.combined_turn_cost else item_b
+                weight_a = _get_item_weight(item_a)
+                weight_b = _get_item_weight(item_b)
+                heavier = item_a if weight_a > weight_b else item_b
                 lighter = item_b if heavier is item_a else item_a
                 if (default_loser is heavier and heavier is not lighter and
-                        current_chosen_weight - heavier.combined_turn_cost < turn_budget):
+                        current_chosen_weight - _get_item_weight(heavier) < turn_budget):
                     loser = lighter
                 else:
                     loser = default_loser
@@ -1634,7 +1825,7 @@ class ArmyFlowExpanderV2:
             if self.log_debug:
                 logbook.info(
                     f"Conflict-repair iter {iteration}: detected {len(conflicts)} cross-group "
-                    f"friendly-island conflicts, blacklisted {newly_blacklisted} items "
+                    f"tile conflicts (friendly-gather or target-capture), blacklisted {newly_blacklisted} items "
                     f"(total blacklisted: {len(blacklist)})"
                 )
 
@@ -1650,7 +1841,7 @@ class ArmyFlowExpanderV2:
                 )
 
         if self.log_debug:
-            total_weight = sum(it.combined_turn_cost for it in chosen_items)
+            total_weight = sum(_get_item_weight(it) for it in chosen_items)
             logbook.info(f"Grouped knapsack: budget={turn_budget}, best_weight={total_weight}, best_value={max_value}, "
                          f"chosen_groups={len(chosen_items)}, repair_iterations={iteration if chosen_items else 0}, "
                          f"blacklisted={len(blacklist)}")
@@ -1658,8 +1849,20 @@ class ArmyFlowExpanderV2:
         # Build solution dict keyed by border_pair for easy lookup
         # Use object identity (is) not equality (==) because EnrichedFlowTurnsEntry is a dataclass
         # and two entries from different border pairs could have the same field values
-        solution: dict[FlowBorderPairKey, EnrichedFlowTurnsEntry] = {}
-        for enriched in chosen_items:
+        solution: dict[FlowBorderPairKey | str, EnrichedFlowTurnsEntry | ExternalPlanOption] = {}
+        for chosen_item in chosen_items:
+            # Handle external options (intercepts, etc.)
+            if isinstance(chosen_item, ExternalPlanOption):
+                # Store external options with a special key
+                solution[f"external_{chosen_item.group_id}"] = chosen_item
+                if self.log_debug:
+                    logbook.info(f"Grouped knapsack solution: EXTERNAL group={chosen_item.group_id} "
+                                 f"weight={chosen_item.turns}, value={chosen_item.econ_value:.2f}, "
+                                 f"type={type(chosen_item.plan).__name__}")
+                continue
+
+            # Handle flow-based entries
+            enriched = chosen_item
             # Find the lookup table this enriched entry belongs to using identity check
             found = False
             for lookup_table in lookup_tables:
@@ -1681,7 +1884,8 @@ class ArmyFlowExpanderV2:
         self,
         baseline_solution: dict,
         lookup_tables: list[FlowArmyTurnsLookupTable],
-        turn_budget: int
+        turn_budget: int,
+        external_options: list[ExternalPlanOption] | None = None
     ) -> dict:
         """
         Phase 6: Optional post-optimization path.
@@ -1696,8 +1900,9 @@ class ArmyFlowExpanderV2:
     def _materialize_plans(
         self,
         solution: dict,
-        lookup_tables: list[FlowArmyTurnsLookupTable]
-    ) -> list[GatherCapturePlan]:
+        lookup_tables: list[FlowArmyTurnsLookupTable],
+        external_options: list[ExternalPlanOption] | None = None
+    ) -> list:
         """
         Phase 5: Convert chosen lookup entries into GatherCapturePlan objects.
 
@@ -1705,6 +1910,7 @@ class ArmyFlowExpanderV2:
         - reconstruct chosen gather/capture island sets
         - derive concrete tile paths / moves
         - populate plan metrics consistently with old tests
+        - include selected external options (intercepts, etc.) in the output
         """
         if not solution:
             return []
@@ -1713,16 +1919,56 @@ class ArmyFlowExpanderV2:
         asPlayer = self.friendlyGeneral.player
         plan_errors: list[tuple] = []  # Collect all errors for aggregated reporting
 
-        for border_pair, enriched in solution.items():
+        # Track which external options were selected
+        selected_external_ids: set[str] = set()
+
+        for key, item in solution.items():
+            # Handle external options (intercepts, etc.)
+            if isinstance(item, ExternalPlanOption):
+                selected_external_ids.add(key)
+                # External options are already TilePlanInterface (e.g., InterceptionOptionInfo)
+                # Return them directly without materialization
+                plans.append(item.plan)
+                if self.log_debug:
+                    logbook.info(f"_materialize_plans: including external option {type(item.plan).__name__} "
+                                 f"turns={item.turns} value={item.econ_value:.2f}")
+                continue
+
+            # Handle flow-based entries
+            enriched = item
+            border_pair = key
             capture_entry = enriched.capture_entry
             gather_entry = enriched.gather_entry
 
             # Reconstruct gather tile set from included friendly flow nodes.
             # When gather.turns==0 (no upstream gather needed), seed from the border pair's
             # own friendly island so we always have at least one root tile.
+            # If the gather entry marks an incomplete island (only some of its tiles were
+            # planned), restrict that island to just the planned tile count so that
+            # plan._turns = len(gathing) + len(capping) - 1 matches combined_turn_cost.
+            #
+            # For partial gathers, we must select tiles closest to the capture border
+            # (not by army value) to maintain physical connectivity with capture tiles.
             gathing: set = set()
+
+            # First pass: collect all full islands and determine border adjacency
+            # for partial island tile selection
+            capture_island_ids = {n.island.unique_id for n in capture_entry.included_target_flow_nodes}
             for flow_node in gather_entry.included_friendly_flow_nodes:
-                gathing.update(flow_node.island.tile_set)
+                island = flow_node.island
+                if (gather_entry.incomplete_friendly_island_id is not None and
+                        island.unique_id == gather_entry.incomplete_friendly_island_id):
+                    tiles_to_gather = island.tile_count - gather_entry.incomplete_friendly_tile_count
+                    if tiles_to_gather <= 0:
+                        continue
+                    # For partial gather, select tiles closest to capture islands
+                    # to maintain physical connectivity
+                    partial_gather_tiles = self._select_partial_gather_tiles(
+                        island, capture_island_ids, tiles_to_gather
+                    )
+                    gathing.update(partial_gather_tiles)
+                else:
+                    gathing.update(island.tile_set)
             if not gathing and self.island_builder is not None:
                 fr_island = self.island_builder.tile_islands_by_unique_id.get(border_pair.friendly_island_id)
                 if fr_island is not None:
@@ -1886,7 +2132,8 @@ class ArmyFlowExpanderV2:
             error_summary.append(f"{'='*80}\n")
             logbook.error("\n".join(error_summary))
 
-            # If any plans failed, this is a critical error - raise an exception with all details
+            # Always fail immediately if any plan has errors. ALWAYS. DONT FUCKING CHANGE THIS ASSHOLE.
+            # We should never be unable to produce a plan.
             if len(plan_errors) > 0:
                 all_errors_str = "\n\n".join([
                     f"{details['border_pair']}: {details['exception_type']}: {details['exception']}"
@@ -1970,6 +2217,96 @@ class ArmyFlowExpanderV2:
             logbook.info(
                 f'_select_partial_capture_tiles: island {island.unique_id} '
                 f'(tiles={island.tile_count}) -> capturing {len(selected)} tiles: '
+                f'{" | ".join(f"{t.x},{t.y}" for t in sorted(selected, key=lambda t: (t.x, t.y)))}'
+            )
+
+        return selected
+
+    def _select_partial_gather_tiles(
+        self,
+        island,
+        capture_island_ids: set[int],
+        tiles_to_gather: int
+    ) -> set:
+        """
+        Select a subset of tiles from a gather island for partial gather.
+
+        Strategy:
+        1. Find tiles in the island that are adjacent to capture islands
+           (these are the "exit points" toward the capture)
+        2. Build distance map from exit points within the island using BFS
+        3. Select tiles_to_gather closest tiles, prioritizing path connectivity
+
+        This ensures we gather tiles on the path to the capture border,
+        not random tiles deep in the island interior that would be disconnected.
+
+        Args:
+            island: The friendly island being partially gathered
+            capture_island_ids: Set of island unique_ids that are capture targets
+            tiles_to_gather: Number of tiles to select from this island
+
+        Returns:
+            Set of tiles to include in the gather plan
+        """
+        if tiles_to_gather >= island.tile_count:
+            return set(island.tile_set)
+
+        if tiles_to_gather <= 0:
+            return set()
+
+        # Find tiles in the island that are adjacent to capture islands
+        # These form the "exit points" toward the capture
+        exit_points = set()
+        for tile in island.tile_set:
+            for neighbor in tile.movable:
+                # Check if neighbor belongs to a capture island
+                neighbor_island = self.island_builder.tile_island_lookup.raw[neighbor.tile_index]
+                if neighbor_island is not None and neighbor_island.unique_id in capture_island_ids:
+                    exit_points.add(tile)
+                    break
+
+        if not exit_points:
+            logbook.info(f'NO DIRECT ADJACENCY TO CAPTURE...? {island}')
+            # No direct adjacency to capture - use tiles closest to island border
+            # (tiles that have neighbors outside this island)
+            for tile in island.tile_set:
+                for neighbor in tile.movable:
+                    neighbor_island = self.island_builder.tile_island_lookup.get(neighbor)
+                    if neighbor_island is None or neighbor_island.unique_id != island.unique_id:
+                        exit_points.add(tile)
+                        break
+
+        if not exit_points:
+            raise AssertionError(f'NO exit_points...? {island}')
+            # Fallback: use all tiles as entry points
+            exit_points = set(island.tile_set)
+
+        # Build distance map from exit points within the island
+        # using BFS to find the shortest path through the island
+        queue = deque()
+        distances = {}
+
+        for exit_tile in exit_points:
+            queue.append((exit_tile, 0))
+            distances[exit_tile] = 0
+
+        while queue:
+            tile, dist = queue.popleft()
+            for neighbor in tile.movable:
+                if neighbor in island.tile_set and neighbor not in distances:
+                    distances[neighbor] = dist + 1
+                    queue.append((neighbor, dist + 1))
+
+        # Sort island tiles by distance (closest to capture first)
+        sorted_tiles = sorted(island.tile_set, key=lambda t: distances.get(t, float('inf')))
+
+        # Select the closest tiles up to tiles_to_gather
+        selected = set(sorted_tiles[:tiles_to_gather])
+
+        if self.log_debug:
+            logbook.info(
+                f'_select_partial_gather_tiles: island {island.unique_id} '
+                f'(tiles={island.tile_count}) -> gathering {len(selected)} tiles: '
                 f'{" | ".join(f"{t.x},{t.y}" for t in sorted(selected, key=lambda t: (t.x, t.y)))}'
             )
 

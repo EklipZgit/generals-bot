@@ -409,4 +409,8 @@ class BotRendering:
 
         data.append(bot.opponent_tracker.dump_to_string_data())
 
+        # Serialize island_ids if tileIslandBuilder exists
+        if bot.tileIslandBuilder is not None:
+            data.append(BotSerialization.convert_island_builder_to_string(bot, bot.tileIslandBuilder))
+
         return '\n'.join(data)

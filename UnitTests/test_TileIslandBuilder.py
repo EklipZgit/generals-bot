@@ -2993,3 +2993,30 @@ a10       b26
         self.assertAllIslandsSumArmyCorrect(builder)
         self.assertEqual(17, enemyIsland.sum_army,
                          'sum_army should be corrected to match actual tile army (17)')
+
+    def test_should_not_rebuild_neutral_islands_in_between_normal_turns(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_rebuild_neutral_islands_in_between_normal_turns___qzA-rHHcb---1--52.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 52, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=52)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '10,5->10,4')
+        simHost.queue_player_leafmoves(enemyGeneral.player, 1)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        islandShouldHaveId341 = bot.tileIslandBuilder.tile_island_lookup.raw[map.At(9, 2).tile_index]
+        islandShouldHaveId369 = bot.tileIslandBuilder.tile_island_lookup.raw[map.At(0, 0).tile_index]
+        islandShouldNotChange1Id = bot.tileIslandBuilder.tile_island_lookup.raw[map.At(16, 7).tile_index].unique_id
+        islandShouldNotChange2Id = bot.tileIslandBuilder.tile_island_lookup.raw[map.At(16, 17).tile_index].unique_id
+        self.assertEqual(341, islandShouldHaveId341.unique_id, 'tile island loader should preserve the island ids')
+        self.assertEqual(369, islandShouldHaveId369.unique_id, 'tile island loader should preserve the island ids')
+        playerMap = simHost.get_player_map(general.player)
+
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertEqual(islandShouldNotChange1Id, bot.tileIslandBuilder.tile_island_lookup.raw[map.At(16, 7).tile_index].unique_id, 'none of these islands have any reason to be rebuilt after this move')
+        self.assertEqual(islandShouldNotChange2Id, bot.tileIslandBuilder.tile_island_lookup.raw[map.At(16, 17).tile_index].unique_id, 'none of these islands have any reason to be rebuilt after this move')
+        self.assertEqual(369, bot.tileIslandBuilder.tile_island_lookup.raw[map.At(0, 0).tile_index].unique_id, 'none of these islands have any reason to be rebuilt after this move')

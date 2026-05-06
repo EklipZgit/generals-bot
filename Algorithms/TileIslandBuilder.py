@@ -139,6 +139,12 @@ class TileIsland(object):
     def shortIdent(self) -> str:
         return f'({self.unique_id} {next(iter(self.tile_set))})'
 
+    def include_tile(self, tile: Tile):
+        self.tile_set.add(tile)
+        self.tiles_by_army.append(tile)
+        self.sum_army += tile.army
+        self.tile_count += 1
+
 
 class IslandNamer(object):
     letterStart: int = ord('A')
@@ -725,10 +731,9 @@ class TileIslandBuilder(object):
         logbook.info(f'islands updated in {complete:.5f}s')
 
     def _get_leaf_islands_for_island(self, island: TileIsland) -> typing.List[TileIsland]:
-        if island.full_island is not None:
-            island = island.full_island
-        if island.child_islands is not None:
-            return island.child_islands.copy()
+        # Just return the single island that changed - the island splitting/merging
+        # logic already handles finding affected islands correctly. Full islands are
+        # just aggregate containers and don't affect actual island topology.
         return [island]
 
     def debug_verify_island(self, island: TileIsland, deletingIslandSet: typing.Set[TileIsland], sourceLabel: str) -> typing.List[str]:
@@ -1387,6 +1392,39 @@ class TileIslandBuilder(object):
 
         return island
 
+    def _build_full_island_from_tile(self, startTile: Tile, player: int) -> TileIsland:
+        teamId = self.teams[player]
+        teammates = self.map.get_teammates(player)
+
+        tilesInIsland = []
+
+        if startTile.isCity or startTile.isGeneral:
+            tilesInIsland.append(startTile)
+
+        if len(teammates) > 1:
+            def foreachFunc(tile: Tile) -> bool:
+                if tile.player in teammates:
+                    tilesInIsland.append(tile)
+                    return False
+                return True
+        else:
+            def foreachFunc(tile: Tile) -> bool:
+                if tile.player == player and not tile.isObstacle:
+                    tilesInIsland.append(tile)
+                    return False
+                return True
+
+        SearchUtils.breadth_first_foreach_fast_no_neut_cities(
+            self.map,
+            [startTile],
+            maxDepth=1000,
+            foreachFunc=foreachFunc
+        )
+
+        island = TileIsland(tilesInIsland, teamId, tileCount=len(tilesInIsland))
+        island.name = '&' + IslandNamer.get_letter()
+        return island
+
     def _build_island_borders(self, island: TileIsland):
         # Remove this island from all its current neighbors' border_islands first
         # to prevent stale back-references when island shape changes
@@ -1731,6 +1769,70 @@ class TileIslandBuilder(object):
                 return True
 
         return False
+
+    def rebuild_islands_from_ids(self, islandIdMatrix: MapMatrixInterface[int]):
+        self.reset_for_rebuild()
+        maxId = 0
+        for (tile_idx, tile) in enumerate(self.map.tiles_by_index):
+            id = islandIdMatrix.raw[tile_idx]
+            if not id:
+                continue
+
+            maxId = max(id, maxId)
+
+            tileTeam = self.teams[tile.player]
+
+            existingIsland = self.tile_islands_by_unique_id.get(id, None)
+            if existingIsland is None:
+                existingIsland = TileIsland([tile], tileTeam, 1, tile.army, id)
+                existingIsland.name = IslandNamer.get_letter()
+                self.tile_islands_by_unique_id[id] = existingIsland
+                self.all_tile_islands.add(existingIsland)
+                self.tile_islands_by_team_id[tileTeam].append(existingIsland)
+                self.tile_islands_by_player[tile.player].append(existingIsland)
+            else:
+                existingIsland.include_tile(tile)
+
+            self.tile_island_lookup.raw[tile_idx] = existingIsland
+            logbook.info(f'tile {tile} is loading as island {id} ({existingIsland.unique_id})')
+
+        # don't create overlapping unique ids with the ones we loaded.
+        IslandNamer.curInt = maxId + 1000
+
+        # Sort all islands' tiles_by_army since they were inserted in arbitrary order
+        for island in self.all_tile_islands:
+            island.tiles_by_army = sorted(island.tile_set, key=lambda t: t.army, reverse=True)
+
+        # Build all island border lists
+        for island in self.all_tile_islands:
+            self._build_island_borders(island)
+
+        # Generate full islands
+        for island in self.all_tile_islands:
+            if island.full_island is not None:
+                continue
+
+            fullIsland = self._build_full_island_from_tile(island.tiles_by_army[0], island.tiles_by_army[0].player)
+            fullIsland.child_islands = []
+            for tile in fullIsland.tile_set:
+                childIsland = self.tile_island_lookup.raw[tile.tile_index]
+                if childIsland.full_island is not None:
+                    continue
+
+                childIsland.full_island = fullIsland
+                fullIsland.child_islands.append(childIsland)
+
+        # Generate full islands
+        for island in self.all_tile_islands:
+            # I think below is right but double check it shouldn't have 'minus island.tile_count' at the end
+            island.tile_count_all_adjacent_friendly = island.full_island.tile_count
+            island.sum_army_all_adjacent_friendly = island.full_island.sum_army
+
+        # Initialize cache so first update_tile_islands has valid prev values
+        for tile in self.map.tiles_by_index:
+            self._prev_turn_army.raw[tile.tile_index] = tile.army
+            self._prev_turn_player.raw[tile.tile_index] = tile.player
+
 
 class SetHolder(object):
     def __init__(self):

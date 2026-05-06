@@ -152,6 +152,7 @@ class TestBase(unittest.TestCase):
         map.player_index = general.player
         map.friendly_team = map.team_ids_by_player_index[general.player]
         map.generals[general.player] = general
+
         map.resume_data = data
 
         map.distance_mapper = DistanceMapperImpl(map)

@@ -475,7 +475,7 @@ class BotExpansionOps:
 
                     try:
                         # Pass intercepts into FlowExpansion for integrated knapsacking
-                        intercepts_for_flow = [opt for opt in addlOptions if isinstance(opt, InterceptionOptionInfo)]
+                        additionalOptionsToInclude = [opt for opt in addlOptions if isinstance(opt, InterceptionOptionInfo)]
                         if bot.expansion_allow_leaf_moves:
                             for leafMove in bot.captureLeafMoves:
                                 if leafMove.source.army - 1 <= leafMove.dest.army:
@@ -485,7 +485,7 @@ class BotExpansionOps:
                                 leafPath.add_next(leafMove.dest)
                                 leafPath.econValue = ITERATIVE_EXPANSION_EN_CAP_VAL if leafMove.dest.player != -1 else 1.0
                                 leafPath.econValue += bonusCapturePointMatrix.raw[leafMove.dest.tile_index]
-                                intercepts_for_flow.append(leafPath)
+                                additionalOptionsToInclude.append(leafPath)
                         optCollection = flowExpander.get_expansion_options(
                             islands=bot.tileIslandBuilder,
                             asPlayer=bot.player.index,
@@ -496,7 +496,7 @@ class BotExpansionOps:
                             negativeTiles=expansionNegatives,
                             bonusCapturePointMatrix=bonusCapturePointMatrix,
                             cutoffTime=cutoffTime,
-                            additional_options=intercepts_for_flow,
+                            additional_options=additionalOptionsToInclude,
                         )
                         bot.info(f'FE turns {remainingCycleTurns}')
                         for opt in optCollection.flow_plans:

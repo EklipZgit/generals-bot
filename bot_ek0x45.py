@@ -1751,6 +1751,11 @@ class EklipZBot(object):
             cities_in_play = self.cityAnalyzer.cities_in_play if self.cityAnalyzer is not None else None
             self.board_analysis.rebuild_intergeneral_analysis(self.targetPlayerExpectedGeneralLocation, self.armyTracker.valid_general_positions_by_player, cities_in_play)
 
+        # Rebuild islands from serialized data if available (overrides the recalculate_tile_islands done in init)
+        if 'island_ids' in resume_data:
+            island_id_matrix = BotSerialization.convert_string_to_island_id_matrix(self, resume_data['island_ids'])
+            self.tileIslandBuilder.rebuild_islands_from_ids(island_id_matrix)
+
         self.opponent_tracker.load_from_map_data(resume_data)
         if self.targetPlayer >= 0:
             self._lastTargetPlayerCityCount = self.opponent_tracker.get_current_team_scores_by_player(self.targetPlayer).cityCount

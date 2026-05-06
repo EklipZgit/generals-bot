@@ -16,7 +16,6 @@ Bot state data is below the second |  |  |  |  |  | and is ignored when loading 
 import pathlib
 import typing
 
-from Algorithms.TileIslandBuilder import TileIslandBuilder
 from Army import Army
 from Path import Path
 from SearchUtils import count
@@ -98,7 +97,7 @@ class TextMapLoader(object):
         return mapData
 
     @staticmethod
-    def dump_map_to_string(map: MapBase, island_builder=None) -> str:
+    def dump_map_to_string(map: MapBase) -> str:
         maxWidth = 0
         vals = []
         for row in map.grid:
@@ -168,109 +167,7 @@ class TextMapLoader(object):
         if len(mods) > 0:
             lines.append(f'modifiers={",".join(mods)}')
 
-        # Serialize island information if provided
-        if island_builder is not None:
-            lines.append(TextMapLoader._serialize_islands(map, island_builder))
-
         return '\n'.join([line.rstrip() for line in lines])
-
-    @staticmethod
-    def _serialize_islands(map: MapBase, island_builder) -> str:
-        """
-        Serialize island unique_ids per tile.
-        Format: island_ids=row0_id0,id1,...;row1_id0,id1,...;...
-        Only non-None island ids are stored (as positive integers).
-        Tiles with no island are stored as 'x'.
-        """
-        rows = []
-        for y in range(map.rows):
-            tile_ids = []
-            for x in range(map.cols):
-                tile = map.grid[y][x]
-                island = island_builder.tile_island_lookup.raw[tile.tile_index]
-                if island is not None:
-                    tile_ids.append(str(island.unique_id))
-                else:
-                    tile_ids.append('x')
-            rows.append(','.join(tile_ids))
-        return f'island_ids={";".join(rows)}'
-
-    @staticmethod
-    def parse_island_ids_from_data(mapData: typing.Dict[str, str]) -> typing.List[typing.List[int | None]]:
-        """
-        Parse island_ids from map data and return a 2D grid of island unique_ids.
-        Returns None for tiles with no island ('x').
-        """
-        if 'island_ids' not in mapData:
-            return None
-
-        island_id_str = mapData['island_ids']
-        rows = island_id_str.split(';')
-        result = []
-        for row in rows:
-            tile_ids = []
-            for id_str in row.split(','):
-                if id_str == 'x':
-                    tile_ids.append(None)
-                else:
-                    tile_ids.append(int(id_str))
-            result.append(tile_ids)
-        return result
-
-    @staticmethod
-    def rebuild_islands_from_ids(map: MapBase, island_id_grid: typing.List[typing.List[int | None]], island_builder: TileIslandBuilder):
-        """
-        Rebuild islands from parsed island_id grid.
-
-        Groups tiles by island unique_id and reconstructs TileIsland objects
-        with the original unique_ids preserved.
-        """
-        from Algorithms.TileIslandBuilder import TileIsland
-
-        # Group tiles by island id
-        tiles_by_island_id: typing.Dict[int, typing.Set[Tile]] = {}
-        for y in range(map.rows):
-            for x in range(map.cols):
-                island_id = island_id_grid[y][x]
-                if island_id is not None:
-                    if island_id not in tiles_by_island_id:
-                        tiles_by_island_id[island_id] = set()
-                    tiles_by_island_id[island_id].add(map.grid[y][x])
-
-        # Clear existing islands
-        island_builder.all_tile_islands.clear()
-        island_builder.tile_islands_by_unique_id.clear()
-        for player_list in island_builder.tile_islands_by_player:
-            player_list.clear()
-        for team_list in island_builder.tile_islands_by_team_id:
-            team_list.clear()
-
-        # Rebuild islands with original unique_ids
-        for island_id, tile_set in tiles_by_island_id.items():
-            # Determine team from first tile
-            first_tile = next(iter(tile_set))
-            team = island_builder.teams[first_tile.player] if first_tile.player >= 0 else -1
-
-            # Create island with preserved unique_id
-            island = TileIsland(tile_set, team, -1, -1, overrideUniqueId=island_id)
-            island_builder.all_tile_islands.add(island)
-            island_builder.tile_islands_by_unique_id[island_id] = island
-
-            # Update lookup
-            for tile in tile_set:
-                island_builder.tile_island_lookup.raw[tile.tile_index] = island
-
-            # Add to player/team lists
-            if first_tile.player >= 0:
-                island_builder.tile_islands_by_player[first_tile.player].append(island)
-            if team >= 0:
-                island_builder.tile_islands_by_team_id[team].append(island)
-
-        # Rebuild borders
-        for island in island_builder.all_tile_islands:
-            island_builder._build_island_borders(island)
-
-        return island_builder
 
     @staticmethod
     def __apply_text_tile_to_tile(tile: Tile, text_tile: str):

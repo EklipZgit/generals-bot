@@ -145,3 +145,33 @@ class BotSerialization:
         y = tileIndex // bot._map.cols
         x = tileIndex % bot._map.cols
         return x, y
+
+    @staticmethod
+    def convert_island_builder_to_string(bot, island_builder) -> str:
+        """
+        Serialize island unique_ids per tile as a flat list in tile_index order.
+        Format: island_ids=id0,id1,id2,... (index = tile_index)
+        None values are stored as empty string '' like other serialization methods.
+        This format can be directly loaded into a MapMatrix[int | None].raw field.
+        """
+        tile_ids = []
+        for tile in bot._map.tiles_by_index:
+            island = island_builder.tile_island_lookup.raw[tile.tile_index]
+            tile_ids.append(str(island.unique_id) if island is not None else '')
+        return f'island_ids={",".join(tile_ids)}'
+
+    @staticmethod
+    def convert_string_to_island_id_matrix(bot, data: str) -> MapMatrixInterface[int | None]:
+        """
+        Parse island_ids string and return a MapMatrix of island unique_ids.
+        Returns None for tiles with no island (empty string).
+        The format is a flat comma-separated list in tile_index order.
+        """
+        matrix = MapMatrix(bot._map, None)
+        values = data.split(',')
+        for tile_idx, id_str in enumerate(values):
+            if id_str == '':
+                matrix.raw[tile_idx] = None
+            else:
+                matrix.raw[tile_idx] = int(id_str)
+        return matrix

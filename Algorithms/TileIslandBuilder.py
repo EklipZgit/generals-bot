@@ -221,7 +221,7 @@ class TileIslandBuilder(object):
         """If True, any tile that borders a different teams territory will be a single-tile-island. Useful for algorithms that dont safely deal with skews along borders between islands."""
 
         self.log_debug: bool = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
-        self.use_debug_asserts: bool = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
+        self.use_debug_asserts: bool = True
 
     def reset_for_rebuild(self):
         self.tile_island_lookup = MapMatrix(self.map, None)
@@ -323,7 +323,7 @@ class TileIslandBuilder(object):
             logbook.info('recalculate_tile_islands POST-BUILD: all non-obstacle tiles have islands (no None)')
 
         if self.log_debug or self.use_debug_asserts:
-            self.debug_verify_all_islands(context='recalculate_tile_islands')
+            self.debug_verify_all_islands(context='recalculate_tile_islands', mode=mode)
 
         # Initialize cache so first update_tile_islands has valid prev values
         for tile in self.map.tiles_by_index:
@@ -383,33 +383,46 @@ class TileIslandBuilder(object):
                         pairedIsland = self.tile_island_lookup.raw[pairedTile.tile_index]
                         if pairedIsland is not None:
                             if pairedIsland is existingIsland:
-                                # Intra-island move: army moved within the same island.
-                                # sum_army and tile topology are unchanged — nothing to rebuild.
-                                armyMoveHandledTiles.add(tile)
-                                armyMoveHandledTiles.add(pairedTile)
-                                newArmy = sum(t.army for t in existingIsland.tile_set)
-                                if self.use_debug_asserts and newArmy != sum(t.army for t in existingIsland.tile_set):
-                                    logbook.warning(f'INTRA sum_army update tile={tile} paired={pairedTile} island={existingIsland} old={existingIsland.sum_army} new={newArmy} tiles={[(str(t), t.army) for t in existingIsland.tile_set]}')
-                                existingIsland.sum_army = newArmy
-                                existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
-                                existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
-                                continue
+                                canHandleIntraMoveInPlace = True
+                                if existingTeam == self.friendly_team and mode == IslandBuildMode.GroupByArmy and existingIsland.tile_count > 1:
+                                    firstArmy = next(iter(existingIsland.tile_set)).army
+                                    if any(t.army != firstArmy for t in existingIsland.tile_set):
+                                        canHandleIntraMoveInPlace = False
+                                if canHandleIntraMoveInPlace:
+                                    # Intra-island move: army moved within the same island.
+                                    # sum_army and tile topology are unchanged — nothing to rebuild.
+                                    armyMoveHandledTiles.add(tile)
+                                    armyMoveHandledTiles.add(pairedTile)
+                                    newArmy = sum(t.army for t in existingIsland.tile_set)
+                                    if self.use_debug_asserts and newArmy != sum(t.army for t in existingIsland.tile_set):
+                                        logbook.warning(f'INTRA sum_army update tile={tile} paired={pairedTile} island={existingIsland} old={existingIsland.sum_army} new={newArmy} tiles={[(str(t), t.army) for t in existingIsland.tile_set]}')
+                                    existingIsland.sum_army = newArmy
+                                    existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
+                                    existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
+                                    continue
                             elif pairedIsland.team == existingIsland.team:
-                                # Inter-island move: army moved between two islands of the same team.
-                                # Tile topology is unchanged; only sum_army needs updating on both islands.
-                                armyMoveHandledTiles.add(tile)
-                                armyMoveHandledTiles.add(pairedTile)
-                                newExistArmy = sum(t.army for t in existingIsland.tile_set)
-                                newPairedArmy = sum(t.army for t in pairedIsland.tile_set)
-                                if self.use_debug_asserts:
-                                    logbook.info(f'INTER sum_army update tile={tile} paired={pairedTile} existIsland={existingIsland} old={existingIsland.sum_army} new={newExistArmy} | pairedIsland={pairedIsland} old={pairedIsland.sum_army} new={newPairedArmy}')
-                                existingIsland.sum_army = newExistArmy
-                                existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
-                                existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
-                                pairedIsland.sum_army = newPairedArmy
-                                pairedIsland.tiles_by_army = sorted(pairedIsland.tile_set, key=lambda t: t.army, reverse=True)
-                                pairedIsland.sum_army_all_adjacent_friendly = max(pairedIsland.sum_army_all_adjacent_friendly, pairedIsland.sum_army)
-                                continue
+                                canHandleInterMoveInPlace = True
+                                if existingTeam == self.friendly_team and mode == IslandBuildMode.GroupByArmy:
+                                    if existingIsland.tile_count > 1 and any(t.army != tile.army for t in existingIsland.tile_set if t is not tile):
+                                        canHandleInterMoveInPlace = False
+                                    if pairedIsland.tile_count > 1 and any(t.army != pairedTile.army for t in pairedIsland.tile_set if t is not pairedTile):
+                                        canHandleInterMoveInPlace = False
+                                if canHandleInterMoveInPlace:
+                                    # Inter-island move: army moved between two islands of the same team.
+                                    # Tile topology is unchanged; only sum_army needs updating on both islands.
+                                    armyMoveHandledTiles.add(tile)
+                                    armyMoveHandledTiles.add(pairedTile)
+                                    newExistArmy = sum(t.army for t in existingIsland.tile_set)
+                                    newPairedArmy = sum(t.army for t in pairedIsland.tile_set)
+                                    if self.use_debug_asserts:
+                                        logbook.info(f'INTER sum_army update tile={tile} paired={pairedTile} existIsland={existingIsland} old={existingIsland.sum_army} new={newExistArmy} | pairedIsland={pairedIsland} old={pairedIsland.sum_army} new={newPairedArmy}')
+                                    existingIsland.sum_army = newExistArmy
+                                    existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
+                                    existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
+                                    pairedIsland.sum_army = newPairedArmy
+                                    pairedIsland.tiles_by_army = sorted(pairedIsland.tile_set, key=lambda t: t.army, reverse=True)
+                                    pairedIsland.sum_army_all_adjacent_friendly = max(pairedIsland.sum_army_all_adjacent_friendly, pairedIsland.sum_army)
+                                    continue
 
             if tile in armyMoveHandledTiles:
                 continue
@@ -505,7 +518,15 @@ class TileIslandBuilder(object):
             )
         )
 
-        if len(changedTiles) == 0:
+        forceBorderSoloViolations = self._collect_force_border_solo_violating_leaf_islands()
+        if forceBorderSoloViolations:
+            impactedLeafIslands.update(forceBorderSoloViolations)
+            for island in forceBorderSoloViolations:
+                affectedTeams.add(island.team)
+
+        if len(changedTiles) == 0 and len(impactedLeafIslands) == 0:
+            if self.use_debug_asserts:
+                self.debug_verify_all_islands(context='update_tile_islands:no_changes', mode=mode)
             complete = time.perf_counter() - start
             logbook.info(f'islands updated in {complete:.5f}s')
             return
@@ -516,15 +537,13 @@ class TileIslandBuilder(object):
                 # borders a different team must be extracted as a solo tile (force_territory_borders).
                 if self.force_territory_borders_to_single_tile_islands:
                     for adj in tile.movable:
-                        if adj.isObstacle or adj.player < 0:
+                        if adj.isObstacle:
                             continue
                         adjIsland = self.tile_island_lookup.raw[adj.tile_index]
                         if adjIsland is None or adjIsland.tile_count <= 1:
                             continue
                         adjTeam = adjIsland.team if adjIsland.full_island is None else adjIsland.full_island.team
-                        if adjTeam == -1:
-                            continue
-                        # adj is in a multi-tile owned island. Re-check whether it must now be solo.
+                        # adj is in a multi-tile island. Re-check whether it must now be solo.
                         if self.must_tile_be_solo(adj, adjTeam):
                             impactedLeafIslands.update(self._get_leaf_islands_for_island(adjIsland))
                             affectedTeams.add(adjTeam)
@@ -555,6 +574,8 @@ class TileIslandBuilder(object):
         impactedTiles.update(noIslandChangedTiles)
 
         if len(impactedTiles) == 0:
+            if self.use_debug_asserts:
+                self.debug_verify_all_islands(context='update_tile_islands:no_impacted_tiles', mode=mode)
             complete = time.perf_counter() - start
             logbook.info(f'islands updated in {complete:.5f}s')
             return
@@ -720,7 +741,7 @@ class TileIslandBuilder(object):
                 + f'\n  border-adjusted ({len(borderAdjustedIslands)}): '
                 + ' | '.join(str(isl) for isl in borderAdjustedIslands)
             )
-            self.debug_verify_all_islands(context='update_tile_islands', deletingIslandSet=impactedLeafIslands)
+            self.debug_verify_all_islands(context='update_tile_islands', deletingIslandSet=impactedLeafIslands, mode=mode)
 
         # Update cached values for next turn's delta detection
         for tile in self.map.tiles_by_index:
@@ -735,6 +756,19 @@ class TileIslandBuilder(object):
         # logic already handles finding affected islands correctly. Full islands are
         # just aggregate containers and don't affect actual island topology.
         return [island]
+
+    def _collect_force_border_solo_violating_leaf_islands(self) -> typing.Set[TileIsland]:
+        violatingIslands: typing.Set[TileIsland] = set()
+        if not self.force_territory_borders_to_single_tile_islands:
+            return violatingIslands
+        for island in self.all_tile_islands:
+            if island.child_islands is not None or island.tile_count <= 1:
+                continue
+            for tile in island.tile_set:
+                if self.must_tile_be_solo(tile, island.team):
+                    violatingIslands.add(island)
+                    break
+        return violatingIslands
 
     def debug_verify_island(self, island: TileIsland, deletingIslandSet: typing.Set[TileIsland], sourceLabel: str) -> typing.List[str]:
         """
@@ -958,7 +992,7 @@ class TileIslandBuilder(object):
 
         return errors
 
-    def debug_verify_all_islands(self, context: str = '', deletingIslandSet: typing.Set[TileIsland] | None = None):
+    def debug_verify_all_islands(self, context: str = '', deletingIslandSet: typing.Set[TileIsland] | None = None, mode: IslandBuildMode | None = None):
         """
         Iterates every island reachable via all lookup tables and index structures, calls
         debug_verify_island on each, aggregates all errors, and raises AssertionError with
@@ -1062,6 +1096,46 @@ class TileIslandBuilder(object):
                 allErrors.append(
                     f'[{context}:borders_by_island uid={uid}] key present but island not in tile_islands_by_unique_id (stale entry)'
                 )
+
+        if mode == IslandBuildMode.GroupByArmy:
+            for island in self.all_tile_islands:
+                if island.team != self.friendly_team or island.tile_count <= 1:
+                    continue
+                expectedArmy = next(iter(island.tile_set)).army
+                for tile in sorted(island.tile_set, key=lambda t: (t.x, t.y)):
+                    if tile.army != expectedArmy:
+                        allErrors.append(
+                            f'[{context}:group_by_army id={island.unique_id}/{island.name}] '
+                            f'friendly island has mixed army values; tile {tile} army={tile.army} '
+                            f'expected={expectedArmy}; island tiles='
+                            + ' | '.join(f'{t}a{t.army}' for t in sorted(island.tile_set, key=lambda t: (t.x, t.y)))
+                        )
+
+        if self.force_territory_borders_to_single_tile_islands:
+            for island in self.all_tile_islands:
+                if island.tile_count <= 1:
+                    continue
+                for border in island.border_islands:
+                    if border.team != island.team:
+                        allErrors.append(
+                            f'[{context}:force_border_solo id={island.unique_id}/{island.name}] '
+                            f'island tile_count={island.tile_count} but borders different-team island '
+                            f'{border.unique_id}/{border.name} team={border.team}; tile_set='
+                            + ' | '.join(str(t) for t in sorted(island.tile_set, key=lambda t: (t.x, t.y)))
+                        )
+                for tile in sorted(island.tile_set, key=lambda t: (t.x, t.y)):
+                    for movable in tile.movable:
+                        if movable.isObstacle:
+                            continue
+                        movableTeam = self.teams[movable.player]
+                        if movableTeam != island.team:
+                            allErrors.append(
+                                f'[{context}:force_border_solo id={island.unique_id}/{island.name}] '
+                                f'island tile_count={island.tile_count} but tile {tile} borders '
+                                f'different-team tile {movable} team={movableTeam}; tile_set='
+                                + ' | '.join(str(t) for t in sorted(island.tile_set, key=lambda t: (t.x, t.y)))
+                            )
+                            break
 
         if allErrors:
             raise AssertionError(
@@ -1279,6 +1353,8 @@ class TileIslandBuilder(object):
                     continue
                 adjIsland = leafIslandByTile.get(adj)
                 if adjIsland is None or adjIsland.tile_count >= 4 or adjIsland.unique_id in seenIslands:
+                    continue
+                if self.force_territory_borders_to_single_tile_islands and any(self.must_tile_be_solo(islandTile, team) for islandTile in adjIsland.tile_set):
                     continue
                 seenIslands.add(adjIsland.unique_id)
                 matchingIslands.append(adjIsland)
@@ -1832,6 +1908,9 @@ class TileIslandBuilder(object):
         for tile in self.map.tiles_by_index:
             self._prev_turn_army.raw[tile.tile_index] = tile.army
             self._prev_turn_player.raw[tile.tile_index] = tile.player
+
+        if self.use_debug_asserts:
+            self.debug_verify_all_islands(context='rebuild_islands_from_ids')
 
 
 class SetHolder(object):

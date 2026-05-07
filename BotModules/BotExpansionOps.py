@@ -501,7 +501,7 @@ class BotExpansionOps:
                         bot.info(f'FE turns {remainingCycleTurns}')
                         for opt in optCollection.flow_plans:
                             bot.info(f'FE: {opt}  {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: bot.board_analysis.intergeneral_analysis.aMap.raw[t2.tile_index]))}')
-                        addlOptions.extend(optCollection.flow_plans)
+                        addlOptions = list(optCollection.flow_plans)
                         bot.last_flow_expander = flowExpander
                         bot.last_flow_opt_collection = optCollection
                     except Exception as flowEx:

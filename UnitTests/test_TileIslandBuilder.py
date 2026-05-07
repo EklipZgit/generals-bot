@@ -1233,10 +1233,11 @@ a1
         self.assertIsNotNone(capturedIslandBefore, 'captured tile should belong to an island before update')
         self.assertEqual(-1, capturedIslandBefore.team, 'captured tile should be neutral before update')
 
-        # All neutral leaf islands that do NOT contain the captured tile are "siblings" — they must survive
+        # Neutral leaf islands that do NOT contain or border the captured tile are "siblings" — they must survive
         siblingIslandsBefore = {
             isl for isl in builder.all_tile_islands
             if isl.team == -1 and capturedTile not in isl.tile_set
+            and not any(capturedTile in tile.movable or tile in capturedTile.movable for tile in isl.tile_set)
         }
         self.assertGreater(len(siblingIslandsBefore), 1, 'fixture should have multiple neutral leaf islands')
         siblingIslandObjects = {isl: frozenset(isl.tile_set) for isl in siblingIslandsBefore}
@@ -1254,13 +1255,13 @@ a1
         self.assertNoBorderIslandsStale(builder)
         self.assertAllIslandsSumArmyCorrect(builder)
 
-        # Sibling neutral leaf islands must be the SAME objects with SAME tiles — they were not touched
+        # Non-border sibling neutral leaf islands must be the SAME objects with SAME tiles — they were not touched
         for siblingIsland, tilesBefore in siblingIslandObjects.items():
             currentIsland = builder.tile_island_lookup[next(iter(tilesBefore))]
             self.assertIs(
                 siblingIsland, currentIsland,
                 f'sibling neutral leaf island {siblingIsland} should be the same object after update '
-                f'(only the directly-changed leaf should be torn down)'
+                f'(only the directly-changed leaf and force-border-solo neighbours should be torn down)'
             )
             self.assertEqual(
                 tilesBefore, frozenset(siblingIsland.tile_set),
@@ -2117,6 +2118,55 @@ a1
         self.assertNoBorderIslandsStale(builder)
         self.assertAllIslandsSumArmyCorrect(builder)
 
+    def test_intra_island_army_move_rebuilds_group_by_army_island_when_armies_diverge(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        testData = """
+|    |    |    |    |    |    |    |
+aG1  a2   a2   a2   a2   a2   a2
+a2   a2   a2   a2   a2   a2   a2
+a2   a2   a3   a3   a2   a2   a2
+a2   a2   a2   a2   a2   a2   a2
+a2   a2   a2   a2   a2   a2   a2
+a2   a2   a2   a2   a2        bG1
+|    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 172)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        tileFrom = map.GetTile(2, 2)
+        tileTo = map.GetTile(3, 2)
+        islandBefore = builder.tile_island_lookup.raw[tileFrom.tile_index]
+        self.assertIs(islandBefore, builder.tile_island_lookup.raw[tileTo.tile_index], 'fixture: move endpoints must start in the same island')
+        self.assertEqual(general.player, tileFrom.player, 'fixture: source tile should be friendly')
+        self.assertEqual(general.player, tileTo.player, 'fixture: destination tile should be friendly')
+        self.assertEqual(3, tileFrom.army, 'fixture: source tile should start with army 3')
+        self.assertEqual(3, tileTo.army, 'fixture: destination tile should start with army 3')
+        self.assertGreater(islandBefore.tile_count, 1, 'fixture: endpoints must start on a multi-tile GroupByArmy island')
+
+        self.mark_tile_army_incremented(tileFrom, -2)
+        self.mark_tile_army_incremented(tileTo, 2)
+        tileFrom.delta.toTile = tileTo
+        tileTo.delta.fromTile = tileFrom
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
+
     def test_inter_island_army_move_only_updates_sum_army(self):
         """
         When army moves from one island to an adjacent island of the same team (inter-island
@@ -2202,6 +2252,56 @@ a1
         )
         self.assertAllIslandsContiguous(builder, debugMode)
         self.assertNoZombieIslands(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
+
+    def test_inter_island_army_move_rebuilds_group_by_army_island_when_dest_army_changes(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        testData = """
+|    |    |    |    |    |    |    |
+aG1
+     a2   a2   a2   a2   a2
+     a2   a2   a2   a2   a2
+     a2   a2   a4   a2   a2
+     a2   a2   a2   a2   a2
+     a2   a2   a2   a2   a2
+                         bG1
+|    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 104)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        tileFrom = map.GetTile(3, 3)
+        tileTo = map.GetTile(3, 2)
+        islandToBefore = builder.tile_island_lookup.raw[tileTo.tile_index]
+        self.assertEqual(general.player, tileFrom.player, 'fixture: source tile should be friendly')
+        self.assertEqual(general.player, tileTo.player, 'fixture: destination tile should be friendly')
+        self.assertEqual(4, tileFrom.army, 'fixture: source tile should start with army 4')
+        self.assertEqual(2, tileTo.army, 'fixture: destination tile should start with army 2')
+        self.assertIsNotNone(islandToBefore, 'fixture: destination tile must start on an island')
+        self.assertGreater(islandToBefore.tile_count, 1, 'fixture: destination tile must start on a multi-tile GroupByArmy island')
+
+        self.mark_tile_army_incremented(tileFrom, -3)
+        self.mark_tile_army_incremented(tileTo, 3)
+        tileFrom.delta.toTile = tileTo
+        tileTo.delta.fromTile = tileFrom
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
         self.assertNoBorderIslandsStale(builder)
         self.assertAllIslandsSumArmyCorrect(builder)
 
@@ -2923,6 +3023,112 @@ a2             bG1
             f'solo island (force_territory_borders_to_single_tile_islands), '
             f'but island still has {islandAfter.tile_count} tiles'
         )
+
+    def test_update_tile_islands__friendly_tiles_bordering_neutral_remain_solo_after_army_update(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        testData = """
+|    |    |    |    |
+aG1            bG1
+a2   a2   a2
+|    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.force_territory_borders_to_single_tile_islands = False
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        changedTile = map.GetTile(0, 1)
+        neutralBorderTiles = [
+            map.GetTile(1, 1),
+            map.GetTile(2, 1),
+        ]
+
+        islandBefore = builder.tile_island_lookup.raw[neutralBorderTiles[0].tile_index]
+        self.assertIsNotNone(islandBefore, 'fixture: neutral-border friendly tile must belong to an island before update')
+        self.assertGreater(islandBefore.tile_count, 1, 'fixture: neutral-border friendly tiles must start grouped before force-border rebuild')
+        for tile in neutralBorderTiles:
+            self.assertTrue(
+                any(adj.player == -1 for adj in tile.movable),
+                f'fixture: {tile} must border neutral land'
+            )
+
+        builder.force_territory_borders_to_single_tile_islands = True
+        self.mark_tile_army_incremented(changedTile, 1)
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
+
+        for tile in neutralBorderTiles:
+            islandAfter = builder.tile_island_lookup.raw[tile.tile_index]
+            self.assertIsNotNone(islandAfter, f'{tile} must still belong to an island after update')
+            self.assertEqual(
+                1, islandAfter.tile_count,
+                f'{tile} borders neutral land and must be a solo island after update_tile_islands, '
+                f'but island still has {islandAfter.tile_count} tiles: {islandAfter.tile_set}'
+            )
+
+    def test_update_tile_islands__capture_with_army_change_does_not_merge_forced_solo_neighbors(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        testData = """
+|    |    |    |    |    |    |
+                         bG1
+
+aG1  b1   b4   b1
+          b1
+|    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 28)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        capturedTile = map.GetTile(2, 1)
+        sourceTile = map.GetTile(2, 2)
+        rightBorderTile = map.GetTile(3, 2)
+        bottomBorderTile = map.GetTile(2, 3)
+        self.assertEqual(-1, capturedTile.player, 'fixture: captured tile should start neutral')
+        self.assertEqual(general.player, sourceTile.player, 'fixture: source tile should start friendly')
+        self.assertEqual(4, sourceTile.army, 'fixture: source tile should start with army 4')
+        self.assertEqual(general.player, rightBorderTile.player, 'fixture: right tile should start friendly')
+        self.assertEqual(general.player, bottomBorderTile.player, 'fixture: bottom tile should start friendly')
+
+        self.mark_tile_captured(capturedTile, general.player, 3)
+        sourceTile.delta.oldOwner = sourceTile.player
+        sourceTile.delta.newOwner = sourceTile.player
+        sourceTile.delta.oldArmy = sourceTile.army
+        sourceTile.army = 1
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
 
     def test_sum_army_mismatch_is_corrected_on_update(self):
         """

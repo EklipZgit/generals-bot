@@ -1644,7 +1644,7 @@ player_index=0
 C41  a2
 b2   a3
 a2   aG2
-|    |  
+|    |
 player_index=0
 """
         for turns, bestTurns, planCount, bestEcon, expectedPath in [
@@ -1760,7 +1760,7 @@ player_index=0
         if debugMode:
             self.render_flow_expansion_debug(expander, optCol, renderAll=True)
 
-    
+
     def test_shouldnt_take_300ms_to_build_flow_expand(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/shouldnt_take_300ms_to_build_flow_expand___6vYE_GTas---1--139.txtmap'
@@ -1784,14 +1784,14 @@ player_index=0
         if debugMode:
             self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=True)
 
-    
+
     def test_should_not_explode_on_gathercaptureplan_build_inability_to_find_moves(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_explode_on_gathercaptureplan_build_inability_to_find_moves___hUrDIi-yl---1--117.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 117, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=117)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1807,7 +1807,7 @@ player_index=0
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
 |    |    |
-aG1  a1    
+aG1  a1
 a1   b1   b1
 b1   b1   bG1
 |    |    |
@@ -1831,3 +1831,69 @@ player_index=0
         #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
 
         self.assertEqual(0, len(opts), 'should not find any valid options')
+    def test_should_not_fail_to_produce_a_GCP(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_fail_to_produce_a_GCP___6NZ3PpIvT---1--141.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 141, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=141)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+    def test_should_not_attempt_to_expand_a_1_to_a_neutral(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_attempt_to_expand_a_1_to_a_neutral___6NZ3PpIvT---1--64.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 64, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=64)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+    def test_should_not_produce_disconnected_tile_set_again(self):
+        """
+        REGRESSION TEST: FlowExpansion must not produce disconnected tile sets.
+
+        This is a duplicate of the TileIslandBuilder test scenario that was failing
+        with disconnected tile errors. The flow expansion should never produce
+        a gather tile set that includes tiles from islands that aren't physically
+        connected to each other.
+
+        Previously failing scenario:
+        - Border pair 296->232
+        - Disconnected tiles: 4,14 (tile from one island not connected to the rest)
+
+        The fix ensures _select_partial_gather_tiles considers adjacency to
+        BOTH capture islands AND other friendly islands in the gather chain.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_rebuild_neutral_islands_in_between_normal_turns___qzA-rHHcb---1--52.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 52, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=52)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '10,5->10,4')
+        simHost.queue_player_leafmoves(enemyGeneral.player, 1)
+        bot = self.get_debug_render_bot(simHost, general.player)
+
+        # This should NOT raise an AssertionError about disconnected tiles
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)

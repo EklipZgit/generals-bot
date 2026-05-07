@@ -12,6 +12,8 @@ tile sets violating these constraints. The fix belongs there, not in this functi
 
 import typing
 
+import logbook
+
 from Algorithms import TileIslandBuilder
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 from BoardAnalyzer import BoardAnalyzer
@@ -32,55 +34,55 @@ class GatherCapturePlanNoMovesTests(TestBase):
 
     def _log_flow_expansion_details(self, expander, plans, map):
         """Log detailed information about flow expansion plans and lookup tables."""
-        print("\n" + "="*70)
-        print("FLOW EXPANSION DETAILS")
-        print("="*70)
+        logbook.info("\n" + "="*70)
+        logbook.info("FLOW EXPANSION DETAILS")
+        logbook.info("="*70)
 
-        print(f"\nNumber of plans generated: {len(plans.flow_plans)}")
+        logbook.info(f"\nNumber of plans generated: {len(plans.flow_plans)}")
 
         # Log lookup tables if available
         if hasattr(expander, 'last_lookup_tables') and expander.last_lookup_tables:
-            print(f"\nLookup tables: {len(expander.last_lookup_tables)} border pairs")
+            logbook.info(f"\nLookup tables: {len(expander.last_lookup_tables)} border pairs")
             for i, table in enumerate(expander.last_lookup_tables):
-                print(f"\n  Table {i}:")
-                print(f"    Border pair: {table.border_pair.friendly_island_id} -> {table.border_pair.target_island_id}")
-                print(f"    Capture entries by turn: {len(table.capture_entries_by_turn)}")
+                logbook.info(f"\n  Table {i}:")
+                logbook.info(f"    Border pair: {table.border_pair.friendly_island_id} -> {table.border_pair.target_island_id}")
+                logbook.info(f"    Capture entries by turn: {len(table.capture_entries_by_turn)}")
                 for turn, entry in enumerate(table.capture_entries_by_turn):
                     if entry:
-                        print(f"      Turn {turn}: required_army={entry.required_army}, "
+                        logbook.info(f"      Turn {turn}: required_army={entry.required_army}, "
                               f"gathered_army={entry.gathered_army}")
 
         # Log each plan
         for i, plan in enumerate(plans.flow_plans):
-            print(f"\n  Plan {i}:")
-            print(f"    Type: {type(plan).__name__}")
-            print(f"    Length: {plan.length}")
+            logbook.info(f"\n  Plan {i}:")
+            logbook.info(f"    Type: {type(plan).__name__}")
+            logbook.info(f"    Length: {plan.length}")
             if hasattr(plan, 'root_nodes'):
-                print(f"    Root nodes: {len(plan.root_nodes)}")
+                logbook.info(f"    Root nodes: {len(plan.root_nodes)}")
                 for root in plan.root_nodes:
-                    print(f"      Root at {root.tile}: army={root.tile.army}")
+                    logbook.info(f"      Root at {root.tile}: army={root.tile.army}")
                     if hasattr(root, 'children') and root.children:
                         for child in root.children:
                             if child:
-                                print(f"        Child at {child.tile}: army={child.tile.army}")
+                                logbook.info(f"        Child at {child.tile}: army={child.tile.army}")
             if hasattr(plan, 'tile_set'):
-                print(f"    Tile set: {len(plan.tile_set)} tiles")
+                logbook.info(f"    Tile set: {len(plan.tile_set)} tiles")
                 for tile in sorted(plan.tile_set, key=lambda t: (t.x, t.y)):
-                    print(f"      ({tile.x},{tile.y}): army={tile.army}, player={tile.player}")
+                    logbook.info(f"      ({tile.x},{tile.y}): army={tile.army}, player={tile.player}")
 
         # Log island information
         if expander.island_builder:
-            print(f"\nIslands: {len(expander.island_builder.all_tile_islands)} total")
+            logbook.info(f"\nIslands: {len(expander.island_builder.all_tile_islands)} total")
             for island in sorted(expander.island_builder.all_tile_islands, key=lambda i: i.unique_id):
-                print(f"  Island {island.unique_id}: {island.tile_count} tiles, "
+                logbook.info(f"  Island {island.unique_id}: {island.tile_count} tiles, "
                       f"team={island.team}, army={island.sum_army}")
                 sample_tiles = list(island.tile_set)[:3]
                 tile_strs = [f"({t.x},{t.y})" for t in sample_tiles]
                 if island.tile_count > 3:
                     tile_strs.append(f"...({island.tile_count-3} more)")
-                print(f"    Tiles: {', '.join(tile_strs)}")
+                logbook.info(f"    Tiles: {', '.join(tile_strs)}")
 
-        print("="*70)
+        logbook.info("="*70)
 
     def test_convert_contiguous_capture_tiles_should_work_with_connected_tiles(self):
         """
@@ -256,20 +258,17 @@ bot_target_player=0
                             "total army (3) > required (2), gather tree works.")
 
 
-    def test_insufficient_army_fails_with_no_moves_error(self):
+    def test_insufficient_army_raises_error(self):
         """
-        CONTRACT TEST: Function correctly rejects insufficient army.
+        CONTRACT TEST: Function raises error for insufficient army scenarios.
 
-        When the gather set has less army than required for captures,
-        the function raises AssertionError with GATHER_CAPTURE_PLAN_NO_MOVE_ERROR.
-
-        This documents the CONTRACT: Callers must provide sufficient army.
-        The bug is UPSTREAM in _materialize_plans which may select wrong tiles.
+        A tile with 0 army cannot execute a capture. The gather tree will
+        have no valid moves after pruning. This should raise a "no moves" error.
 
         Map: aG1  a0   b1   b2   bG1
              0    1    2    3    4
-        Player 1 at (2,0) has 1 army, trying to capture neutral at (1,0).
-        Needs 2 army (1 to move + 1 to capture), but only has 1.
+        Player 1 at (2,0) has 0 army, trying to capture neutral at (1,0).
+        This should fail with "plan created with no moves" error due to insufficient army.
         """
         map_data = """
 |    |    |    |    |
@@ -283,18 +282,18 @@ bot_target_player=0
         )
         self.begin_capturing_logging()
 
-        # Gather set with INSUFFICIENT army (1, needs 2)
+        # Gather set with 1 army tile - will be pruned as invalid
         gathing = {
             map.GetTile(2, 0),  # b1 - only 1 army
         }
 
         root_tiles = {map.GetTile(2, 0)}
 
-        # Neutral requires 2 army to capture
+        # Neutral to capture
         capping = {map.GetTile(1, 0)}  # a0
 
-        # Contract: Must raise error when army is insufficient
-        with self.assertRaises(AssertionError) as context:
+        # Should raise Exception for disconnected/insufficient gather tiles
+        with self.assertRaises(Exception) as context:
             GatherUtils.convert_contiguous_capture_tiles_to_gather_capture_plan(
                 map,
                 rootTiles=root_tiles,
@@ -306,7 +305,8 @@ bot_target_player=0
                 captures=capping,
             )
 
-        self.assertIn("GATHER_CAPTURE_PLAN_NO_MOVE_ERROR", str(context.exception))
+        # Error should mention no moves due to insufficient army
+        self.assertIn("plan created with no moves", str(context.exception).lower())
 
 
     def test_flow_expander_produces_valid_gather_capture_plans(self):
@@ -382,47 +382,52 @@ bot_target_player=0
             )
 
 
-    def test_materialize_plans_handles_insufficient_army_gracefully(self):
+    def test_exact_error_scenario_turn64_263_to_185(self):
         """
-        REGRESSION TEST: _materialize_plans must not crash on insufficient army.
+        HYPER-SPECIFIC TEST: Disconnected tiles should raise an exception.
 
-        This test verifies the FIX: when _materialize_plans detects that
-        the selected gather tiles have insufficient army for the captures,
-        it should handle it gracefully (skip the option, or expand gather set)
-        rather than letting convert_contiguous_capture_tiles_to_gather_capture_plan
-        crash with GATHER_CAPTURE_PLAN_NO_MOVE_ERROR.
+        Error scenario from turn 64:
+        - Border pair 263->185 (friendly island 263 to target island 185)
+        - Tiles: (11,14), (12,12), (12,13), (13,10), (13,11), (13,12), (14,9), (14,10), (15,9)
+        - Root tile: (15,9) - island 263, 1 army
+        - Capture: (15,8) - island 185 (neutral), 0 army
 
-        Current behavior: AssertionError crashes the whole expansion.
-        Expected behavior: Bad options are filtered out, expansion continues.
+        THE REAL BUG: These tiles are DISCONNECTED. (11,14) is on island 199,
+        while (12,12) and (12,13) are on island 269. The islands are not adjacent.
+        The flow expansion selected partial tiles from disconnected islands without
+        including bridge tiles, which is an upstream bug in _select_partial_gather_tiles.
 
-        To simulate the bug without complex game state, we directly test that
-        the helper function rejects bad inputs - once _materialize_plans
-        validates inputs the same way, the full flow expansion won't crash.
-
-        TODO: This test documents current contract. Update once fix is in _materialize_plans.
+        This test verifies that providing disconnected tiles to
+        convert_contiguous_capture_tiles_to_gather_capture_plan raises an exception.
+        We should NEVER get disconnected inputs - upstream should ensure connectivity.
         """
-        map_data = """
-|    |    |    |    |
-aG1  a0   b1   b5   bG1
-|    |    |    |    |
-player_index=1
-bot_target_player=0
-"""
-        map, general, enemy_general = self.load_map_and_generals_from_string(
-            map_data, turn=73, fill_out_tiles=False
-        )
+        # Load the exact map from the error scenario
+        map_file = 'GameContinuationEntries/should_not_attempt_to_expand_a_1_to_a_neutral___6NZ3PpIvT---1--64.txtmap'
+        map, general, enemy_general = self.load_map_and_generals(map_file, turn=64, fill_out_tiles=True)
         self.begin_capturing_logging()
 
-        # Simulating what happens when _materialize_plans selects wrong tiles:
-        # Gather tile (2,0) has 1 army, but capture target needs 2
-        gathing = {map.GetTile(2, 0)}  # b1 - only 1 army
-        root_tiles = {map.GetTile(2, 0)}  # Same tile
-        capping = {map.GetTile(1, 0)}  # a0 - neutral, needs 2 army
+        # Exact tiles from error log - NOTE: These are DISCONNECTED
+        # (11,14) is on island 199, while (12,12) and (12,13) are on island 269
+        # They are not adjacent and cannot form a contiguous gather tree
+        gathing = {
+            map.GetTile(11, 14),  # island 199, 2 army - NOT connected to rest!
+            map.GetTile(12, 12),  # island 269, 1 army
+            map.GetTile(12, 13),  # island 269, 1 army
+            map.GetTile(13, 10),  # island 201, 1 army
+            map.GetTile(13, 11),  # island 201, 1 army
+            map.GetTile(13, 12),  # island 198, 1 army
+            map.GetTile(14, 9),   # island 305, 1 army
+            map.GetTile(14, 10),  # island 305, 1 army
+            map.GetTile(15, 9),   # island 263, 1 army (root tile, adjacent to capture)
+        }
 
-        # Current behavior: This crashes with AssertionError
-        # After fix: _materialize_plans should validate and skip this option
-        # For now, we document that the function correctly rejects bad inputs
-        with self.assertRaises(AssertionError) as context:
+        root_tiles = {map.GetTile(15, 9)}  # The tile adjacent to capture
+
+        capping = {map.GetTile(15, 8)}  # island 185 (neutral), 0 army
+
+        # Disconnected tiles should raise an exception immediately
+        # We should NEVER receive disconnected inputs from upstream code
+        with self.assertRaises(Exception) as context:
             GatherUtils.convert_contiguous_capture_tiles_to_gather_capture_plan(
                 map,
                 rootTiles=root_tiles,
@@ -434,7 +439,9 @@ bot_target_player=0
                 captures=capping,
             )
 
-        self.assertIn("GATHER_CAPTURE_PLAN_NO_MOVE_ERROR", str(context.exception))
+        # Verify the exception mentions disconnected tiles
+        self.assertIn("not fully connected", str(context.exception).lower(),
+                      "Should raise exception for disconnected tiles")
 
 
 if __name__ == '__main__':

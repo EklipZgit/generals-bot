@@ -2747,18 +2747,18 @@ def find_optimal_expansion_path_to_move_first(
         thisVt = thisVal / thisTurns
         thisUncertainty = pathUncertaintyRatings[p]
 
-        if thisUncertainty > maxUncertainty or (thisUncertainty == maxUncertainty and thisVt > maxVt):
+        if thisVt > maxVt or (thisVt == maxVt and thisUncertainty > maxUncertainty):
             if p not in waitingPaths:
-                logbook.info(f'    path uncert{thisUncertainty:.2f} v{thisVal:.2f} > uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
+                logbook.info(f'    path vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} > vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
                 path = p
                 maxVal = thisVal
                 maxVt = thisVt
                 maxUncertainty = thisUncertainty
             else:
                 logbook.info(
-                    f'    waiting on city path uncert{thisUncertainty:.2f} v{thisVal:.2f} > uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} because path_has_cities_and_should_wait')
+                    f'    waiting on city path vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} > vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} because path_has_cities_and_should_wait')
         else:
-            logbook.info(f'    -path uncert{thisUncertainty:.2f} v{thisVal:.2f} < uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)}')
+            logbook.info(f'    -path vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} < vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)}')
 
     return path
 

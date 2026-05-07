@@ -450,7 +450,7 @@ def convert_contiguous_capture_tiles_to_gather_capture_plan(
     # rootNodes = build_mst_from_root_and_contiguous_tiles(map, rootTiles, tiles, ignoreTiles=captures)
 
     allTiles = tiles.union(captures)
-    rootNodes = build_capture_mst_from_root_and_contiguous_tiles(map, allTiles, searchingPlayer=searchingPlayer, allowedReconnectTiles=allowedReconnectTiles)  #, ignoreTiles=ignore
+    rootNodes = build_capture_mst_from_root_and_contiguous_tiles(map, allTiles, searchingPlayer=searchingPlayer, allowedReconnectTiles=allowedReconnectTiles, allowReconnection=False)  #, ignoreTiles=ignore
 
     plan = GatherCapturePlan.build_from_root_nodes(
         map,
@@ -484,35 +484,32 @@ def convert_contiguous_capture_tiles_to_gather_capture_plan(
         root_nodes_str = "\n".join(root_nodes_info) if root_nodes_info else "  (no root nodes)"
 
         error_msg = (
-            f"\n{'='*80}\n"
-            f"GATHER_CAPTURE_PLAN_NO_MOVE_ERROR\n"
-            f"{'='*80}\n"
-            f"Plan created with no moves (get_first_move() returned None)\n"
-            f"\nPARAMETERS:\n"
-            f"  map.turn: {map.turn}\n"
-            f"  searchingPlayer: {searchingPlayer}\n"
-            f"  useTrueValueGathered: {useTrueValueGathered}\n"
-            f"  includeGatherPriorityAsEconValues: {includeGatherPriorityAsEconValues}\n"
-            f"  includeCapturePriorityAsEconValues: {includeCapturePriorityAsEconValues}\n"
-            f"\nTILES ({len(tiles)} total):\n"
-            f"  {tiles_str}\n"
-            f"\nROOT_TILES ({len(list(rootTiles)) if rootTiles else 0} total):\n"
-            f"  {root_tiles_str}\n"
-            f"\nCAPTURES ({len(captures) if captures else 0} total):\n"
-            f"  {captures_str}\n"
-            f"\nROOT_NODES ({len(rootNodes)} total):\n"
-            f"{root_nodes_str}\n"
-            f"\nPLAN STATE:\n"
-            f"  root_nodes count: {len(plan.root_nodes)}\n"
-            f"  has_more_moves: {plan.has_more_moves}\n"
-            f"  gathered_army: {plan.gathered_army}\n"
-            f"  _turns: {plan._turns}\n"
             f"\nTo reproduce, create a unit test with:\n"
             f"  mapData = \"\"\"\n"
             f"  [paste the map dump here - you can get it from Sim/GameSimulator.py output]\n"
             f"  \"\"\"\n"
             f"  Then call convert_contiguous_capture_tiles_to_gather_capture_plan with the tiles above.\n"
-            f"{'='*80}\n"
+            f"GATHER_CAPTURE_PLAN_NO_MOVE_ERROR\n"
+            f"Plan created with no moves (get_first_move() returned None)\n"
+            f"PARAMETERS:\n"
+            f"  map.turn: {map.turn}\n"
+            f"  searchingPlayer: {searchingPlayer}\n"
+            f"  useTrueValueGathered: {useTrueValueGathered}\n"
+            f"  includeGatherPriorityAsEconValues: {includeGatherPriorityAsEconValues}\n"
+            f"  includeCapturePriorityAsEconValues: {includeCapturePriorityAsEconValues}\n"
+            f"PLAN STATE:\n"
+            f"  root_nodes count: {len(plan.root_nodes)}\n"
+            f"  has_more_moves: {plan.has_more_moves}\n"
+            f"  gathered_army: {plan.gathered_army}\n"
+            f"  _turns: {plan._turns}\n"
+            f"TILES ({len(tiles)} total):\n"
+            f"  {tiles_str}\n"
+            f"ROOT_TILES ({len(list(rootTiles)) if rootTiles else 0} total):\n"
+            f"  {root_tiles_str}\n"
+            f"CAPTURES ({len(captures) if captures else 0} total):\n"
+            f"  {captures_str}\n"
+            f"ROOT_NODES ({len(rootNodes)} total):\n"
+            f"{root_nodes_str}\n"
         )
         raise AssertionError(error_msg)
 
@@ -730,7 +727,7 @@ def build_capture_mst_from_root_and_contiguous_tiles_old(map: MapBase, tiles: Ti
     return roots
 
 
-def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing.Set[Tile], searchingPlayer: int, ignoreTiles: typing.Iterable[Tile] | None = None, allowedReconnectTiles: typing.Set[Tile] | None = None) -> typing.List[GatherTreeNode]:
+def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing.Set[Tile], searchingPlayer: int, ignoreTiles: typing.Iterable[Tile] | None = None, allowedReconnectTiles: typing.Set[Tile] | None = None, allowReconnection: bool = False) -> typing.List[GatherTreeNode]:
     """Does NOT calculate values.
 
     @param allowedReconnectTiles: if provided, the disconnected-input A* reconnect
@@ -760,14 +757,13 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing
     #     for memberIdx in islandSet:
     #         mm.raw[memberIdx] = islandSet
 
-    for tile in tiles:
-        if teams[tile.player] != searchingTeam:
-            continue
-        # army -= 1
-        qq.appendleft((tile, 0))
+    # Start BFS from ONE tile to check connectivity of the entire set
+    # If the tiles are connected, this one tile should be able to reach all others
+    start_tile = next(iter(tiles))
+    qq.appendleft((start_tile, 0))
 
     if not qq:
-        raise Exception(f'build_capture_mst_from_root_and_contiguous_tiles cannot be used when there are no friendly tiles to searchingPlayer {searchingPlayer} included. \r\ntiles {" | ".join([f"{t.x},{t.y}" for t in sorted(tiles)])}')
+        raise Exception(f'build_capture_mst_from_root_and_contiguous_tiles cannot be used when there are no tiles provided. \r\ntiles {" | ".join([f"{t.x},{t.y}" for t in sorted(tiles)])}')
         # randTile = next(iter(tiles))
         # logbook.info(f'build_capture_mst_from_root_and_contiguous_tiles using randTile {randTile} as distance seed because no friendly tile found....?')
         # qq.appendleft((randTile, 0))
@@ -793,11 +789,17 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing
             if movable in tiles:
                 qq.appendleft((movable, dist + 1))
 
+    if DebugHelper.IS_DEBUGGING:
+        logbook.info(f"DEBUG: BFS completed. Total tiles: {len(tiles)}, Unvisited: {len(unvisited)}")
     if unvisited:
+        if DebugHelper.IS_DEBUGGING:
+            logbook.info(f"DEBUG: UNVISITED TILES: {[f'{t.x},{t.y}' for t in sorted(unvisited)]}")
         logbook.warning(f'the input tiles were not fully connected to one another. disconnected tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(unvisited)])}')
-        if GatherDebug.USE_DEBUG_ASSERTS:
+        if GatherDebug.USE_DEBUG_ASSERTS or not allowReconnection:
+            if DebugHelper.IS_DEBUGGING:
+                logbook.info(f"DEBUG: RAISING CONNECTIVITY EXCEPTION")
             raise Exception(f'the input tiles were not fully connected to one another. disconnected tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(unvisited)])}')
-
+        # Reconnection logic for disconnected tiles - not raising, so reconnect
         frTiles = [t for t in tiles if t.player == searchingPlayer]
         goal = next(iter(unvisited))
         if allowedReconnectTiles is not None:
@@ -846,17 +848,21 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing
             if addPath is None:
                 raise Exception(f'Unable to recover disconnected inputs, aStar find was unable to find a path to reconnect.')
             tiles.update(addPath.tileList)
-        return build_capture_mst_from_root_and_contiguous_tiles(map, tiles, searchingPlayer, ignoreTiles, allowedReconnectTiles)
+        # Recursively call with reconnected tiles
+        return build_capture_mst_from_root_and_contiguous_tiles(map, tiles, searchingPlayer, ignoreTiles, allowedReconnectTiles, allowReconnection)
+    else:
+        if DebugHelper.IS_DEBUGGING:
+            logbook.info(f"DEBUG: ALL TILES VISITED - CONNECTIVITY CHECK PASSED")
 
-    if GatherDebug.USE_DEBUG_ASSERTS:
-        for tile in tiles:
-            dist = dists.raw[tile.tile_index]
-            if dist is None:
-                if GatherDebug.USE_DEBUG_ASSERTS:
-                    logbook.info(f'{tile} had dist None???? build_capture_mst_from_root_and_contiguous_tiles inputs: '
-                                 f'\r\n    searchingPlayer {searchingPlayer}'
-                                 f'\r\n    tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(tiles)])}')
-                dists.raw[tile.tile_index] = maxDist
+    # MST building code - runs when tiles are connected (either originally or after reconnection)
+    for tile in tiles:
+        dist = dists.raw[tile.tile_index]
+        if dist is None:
+            if GatherDebug.USE_DEBUG_ASSERTS:
+                logbook.info(f'{tile} had dist None???? build_capture_mst_from_root_and_contiguous_tiles inputs: '
+                             f'\r\n    searchingPlayer {searchingPlayer}'
+                             f'\r\n    tiles {" | ".join([f"{t.x},{t.y}" for t in sorted(tiles)])}')
+            dists.raw[tile.tile_index] = maxDist
 
     q: SearchUtils.HeapQueue[typing.Tuple[float, int, Tile, Tile | None, GatherTreeNode | None, int]] = SearchUtils.HeapQueue()
 
@@ -893,7 +899,6 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing
         node = visitedNodes.raw[tile.tile_index]
         if node is not None:
             continue
-        # logbook.info(f'popped ({thing}) {tile} <- {fromTile}  ({army}a)')
         # if fromDepth > maxDepth:
         #     break
 
@@ -918,8 +923,10 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing
                     nextArmy = army + t.army
                 nextArmy -= 1
 
+                dist_t = dists.raw[t.tile_index]
+                priority = (thing - dist_t) / 2 if dist_t is not None else thing / 2
                 # TODO thing - 0.5??? This works for straight lines but wtf does it output for diverged capture paths...?
-                q.put(((thing - dists.raw[t.tile_index]) / 2, nextArmy, t, tile, node, fromDepth + 1))
+                q.put((priority, nextArmy, t, tile, node, fromDepth + 1))
 
     roots = []
     # q2 = deque()
@@ -942,7 +949,20 @@ def build_capture_mst_from_root_and_contiguous_tiles(map: MapBase, tiles: typing
     #     elif r.toTile is None:
     #         roots.append(r)
 
+    if DebugHelper.IS_DEBUGGING:
+        logbook.info(f'[MST_DEBUG] Returning {len(roots)} roots, {len(nodes)} total nodes')
+        for root in roots:
+            _log_tree_structure(root, "  ")
+
     return roots
+
+
+def _log_tree_structure(node: GatherTreeNode, indent: str = ""):
+    """Recursively log tree structure for debugging."""
+    child_count = len(node.children) if node.children else 0
+    logbook.info(f'[MST_DEBUG]{indent}{node.tile} (army={node.tile.army}, player={node.tile.player}, children={child_count})')
+    for child in node.children:
+        _log_tree_structure(child, indent + "  ")
 
 
 def _prune_bad(curNode: GatherTreeNode, searchingTeam: int, teams: typing.List[int], nodeLookup: typing.Dict[Tile, GatherTreeNode]):

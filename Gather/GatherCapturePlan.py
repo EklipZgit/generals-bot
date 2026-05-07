@@ -313,6 +313,7 @@ class GatherCapturePlan(TilePlanInterface):
         """
         if cloneNodes:
             rootNodes = GatherTreeNode.clone_nodes(rootNodes)
+
         plan = GatherCapturePlan(
             [],  # we dont pass the root nodes in because we're going to hand-calculate all the values and dont want it doing weird stuff.
             map,
@@ -343,6 +344,7 @@ class GatherCapturePlan(TilePlanInterface):
             )
 
         #prunes invalid gather nodes.
+        # TODO we should never produce invalid gather nodes really.
         rootNodes = GatherPrune.prune_mst_to_army(rootNodes, 1000000000, searchingPlayer, map.team_ids_by_player_index, map.turn, viewInfo)
         plan.root_nodes = rootNodes
 

@@ -21,6 +21,7 @@ from Interfaces import MapMatrixInterface
 from PerformanceTimer import PerformanceTimer
 
 if typing.TYPE_CHECKING:
+    from Algorithms import TileIsland
     from Algorithms import TileIslandBuilder
     from BoardAnalyzer import BoardAnalyzer
     from Interfaces import TileSet
@@ -1235,7 +1236,7 @@ class ArmyFlowExpanderV2:
 
             # Process each tile individually (like capture lookup)
             i = 0
-            for tile in island.tiles_by_army:
+            for tile in reversed(island.tiles_by_army):
                 if current_turn > max_turns:
                     break
                 i += 1
@@ -1249,6 +1250,11 @@ class ArmyFlowExpanderV2:
                 tile_contribution = tile.army - 1
 
                 current_gathered_army += tile_contribution
+
+                # We don't need a lookup entry for bad gathers. It cant be more useful than the shorter one, so skip for this level.
+                if tile_contribution <= 0:
+                    current_turn += 1
+                    continue
 
                 # if tile_contribution >= 0:
                 # Create entry for this exact turn count
@@ -1954,6 +1960,15 @@ class ArmyFlowExpanderV2:
             # First pass: collect all full islands and determine border adjacency
             # for partial island tile selection
             capture_island_ids = {n.island.unique_id for n in capture_entry.included_target_flow_nodes}
+            # Also get IDs of other friendly islands in the gather chain for connectivity
+            friendly_island_ids = {n.island.unique_id for n in gather_entry.included_friendly_flow_nodes}
+
+            if self.log_debug:
+                logbook.info(f'[GATHER_DEBUG] border_pair {border_pair.friendly_island_id}->{border_pair.target_island_id}')
+                logbook.info(f'  friendly_flow_nodes: {[n.island.unique_id for n in gather_entry.included_friendly_flow_nodes]}')
+                logbook.info(f'  incomplete_friendly_island_id: {gather_entry.incomplete_friendly_island_id}')
+                logbook.info(f'  incomplete_friendly_tile_count: {gather_entry.incomplete_friendly_tile_count}')
+
             for flow_node in gather_entry.included_friendly_flow_nodes:
                 island = flow_node.island
                 if (gather_entry.incomplete_friendly_island_id is not None and
@@ -1962,12 +1977,19 @@ class ArmyFlowExpanderV2:
                     if tiles_to_gather <= 0:
                         continue
                     # For partial gather, select tiles closest to capture islands
+                    # AND tiles adjacent to other friendly islands in the chain
                     # to maintain physical connectivity
                     partial_gather_tiles = self._select_partial_gather_tiles(
-                        island, capture_island_ids, tiles_to_gather
+                        island, capture_island_ids, tiles_to_gather,
+                        other_friendly_island_ids=friendly_island_ids - {island.unique_id},
+                        connected_tiles=gathing
                     )
+                    if self.log_debug:
+                        logbook.info(f'  island {island.unique_id}: partial gather {len(partial_gather_tiles)}/{island.tile_count} tiles: {sorted([(t.x, t.y) for t in partial_gather_tiles])}')
                     gathing.update(partial_gather_tiles)
                 else:
+                    if self.log_debug:
+                        logbook.info(f'  island {island.unique_id}: full gather {len(island.tile_set)} tiles')
                     gathing.update(island.tile_set)
             if not gathing and self.island_builder is not None:
                 fr_island = self.island_builder.tile_islands_by_unique_id.get(border_pair.friendly_island_id)
@@ -1997,7 +2019,7 @@ class ArmyFlowExpanderV2:
                     # Select tiles closest to friendly territory (the border)
                     # Build a distance map from friendly tiles (gathered or border)
                     partial_capture_tiles = self._select_partial_capture_tiles(
-                        island, gathing, tiles_to_capture
+                        island, gathing | capping, tiles_to_capture
                     )
                     capping.update(partial_capture_tiles)
                 else:
@@ -2018,30 +2040,6 @@ class ArmyFlowExpanderV2:
 
             root_tiles = all_border_tiles if all_border_tiles else gathing
 
-            # Build the reconnect whitelist: this plan's own (gather ∪ capture ∪ root)
-            # tiles, PLUS the full tile_set of any partially-captured/gathered islands
-            # so bridge tiles *inside the same partial island* (e.g. when
-            # _select_partial_capture_tiles picks a deep tile like (13,1) from a 13-tile
-            # island and the shortest route from the border into that tile passes through
-            # other same-island tiles (13,2), (13,3) etc.) can be used for reconnect
-            # without pulling in tiles owned by OTHER plans. Partial-island tiles are
-            # logically claimed by this plan even if not all are in the capping set.
-            allowed_reconnect_tiles: set = set(gathing)
-            allowed_reconnect_tiles.update(capping)
-            allowed_reconnect_tiles.update(root_tiles)
-            if (capture_entry.incomplete_target_island_id is not None
-                    and self.island_builder is not None):
-                partial_island = self.island_builder.tile_islands_by_unique_id.get(
-                    capture_entry.incomplete_target_island_id)
-                if partial_island is not None:
-                    allowed_reconnect_tiles.update(partial_island.tile_set)
-            if (gather_entry.incomplete_friendly_island_id is not None
-                    and self.island_builder is not None):
-                partial_fr_island = self.island_builder.tile_islands_by_unique_id.get(
-                    gather_entry.incomplete_friendly_island_id)
-                if partial_fr_island is not None:
-                    allowed_reconnect_tiles.update(partial_fr_island.tile_set)
-
             if self.log_debug:
                 logbook.info(
                     f'_materialize_plans: {border_pair.friendly_island_id}->{border_pair.target_island_id} '
@@ -2061,22 +2059,7 @@ class ArmyFlowExpanderV2:
                 logbook.info(f'  capping tiles: {" | ".join(f"{t.x},{t.y}" for t in sorted(capping, key=lambda t: (t.x, t.y)))}')
                 logbook.info(f'  root_tiles: {" | ".join(f"{t.x},{t.y}" for t in sorted(root_tiles, key=lambda t: (t.x, t.y)))}')
 
-            # Suppress USE_DEBUG_ASSERTS so the built-in A* reconnect path in
-            # build_capture_mst_from_root_and_contiguous_tiles runs instead of raising
-            # when intermediate path tiles are missing from our reconstructed tile sets.
-            _prev_asserts = Gather.GatherDebug.USE_DEBUG_ASSERTS
-            Gather.GatherDebug.USE_DEBUG_ASSERTS = False
             try:
-                # Restrict the materializer's MST A* reconnect to ONLY this plan's
-                # own (gather ∪ capture ∪ root) tiles. Without this restriction,
-                # convert_contiguous_capture_tiles_to_gather_capture_plan -> build_capture_mst_
-                # from_root_and_contiguous_tiles falls back to an *unrestricted* a_star_find
-                # which happily routes through tiles already allocated to other border pairs,
-                # producing cross-plan duplicate-tile use in the final option set. If a plan's
-                # own tile set is disconnected under this restriction, the materializer raises
-                # and we aggregate the error below — that is the correct outcome (the caller
-                # needs to include the bridge tile in its plan rather than silently steal one
-                # from another plan).
                 plan = Gather.convert_contiguous_capture_tiles_to_gather_capture_plan(
                     self.map,
                     rootTiles=root_tiles,
@@ -2086,7 +2069,6 @@ class ArmyFlowExpanderV2:
                     priorityMatrix=None,
                     useTrueValueGathered=False,
                     captures=capping,
-                    allowedReconnectTiles=allowed_reconnect_tiles,
                 )
                 plan._turns = len(gathing) + len(capping) - 1
             except Exception as ex:
@@ -2105,8 +2087,6 @@ class ArmyFlowExpanderV2:
                 if self.log_debug:
                     logbook.info(f'_materialize_plans: skipping border pair {border_pair.friendly_island_id}->{border_pair.target_island_id} (plan build failed): {ex}')
                 continue
-            finally:
-                Gather.GatherDebug.USE_DEBUG_ASSERTS = _prev_asserts
 
             plans.append(plan)
 
@@ -2191,27 +2171,23 @@ class ArmyFlowExpanderV2:
             # No direct adjacency - use tiles closest to any friendly tile
             entry_points = set(island.tile_set)
 
-        # Build distance map from entry points within the island
+        # Build a connected component from one entry point within the island
         # using BFS to find the shortest path through the island
         queue = deque()
         distances = {}
+        selected = set()
 
-        for entry in entry_points:
-            queue.append((entry, 0))
-            distances[entry] = 0
+        entry = min(entry_points, key=lambda t: (t.x, t.y))
+        queue.append((entry, 0))
+        distances[entry] = 0
 
-        while queue:
+        while queue and len(selected) < tiles_to_capture:
             tile, dist = queue.popleft()
+            selected.add(tile)
             for neighbor in tile.movable:
                 if neighbor in island.tile_set and neighbor not in distances:
                     distances[neighbor] = dist + 1
                     queue.append((neighbor, dist + 1))
-
-        # Sort island tiles by distance (closest first)
-        sorted_tiles = sorted(island.tile_set, key=lambda t: distances.get(t, float('inf')))
-
-        # Select the closest tiles up to tiles_to_capture
-        selected = set(sorted_tiles[:tiles_to_capture])
 
         if self.log_debug:
             logbook.info(
@@ -2223,10 +2199,12 @@ class ArmyFlowExpanderV2:
         return selected
 
     def _select_partial_gather_tiles(
-        self,
-        island,
-        capture_island_ids: set[int],
-        tiles_to_gather: int
+            self,
+            island: 'TileIsland',
+            capture_island_ids: set[int],
+            tiles_to_gather: int,
+            other_friendly_island_ids: set[int] | None = None,
+            connected_tiles: set['Tile'] | None = None
     ) -> set:
         """
         Select a subset of tiles from a gather island for partial gather.
@@ -2234,8 +2212,10 @@ class ArmyFlowExpanderV2:
         Strategy:
         1. Find tiles in the island that are adjacent to capture islands
            (these are the "exit points" toward the capture)
-        2. Build distance map from exit points within the island using BFS
-        3. Select tiles_to_gather closest tiles, prioritizing path connectivity
+        2. ALSO find tiles adjacent to other friendly islands in the chain
+           (to maintain connectivity through the gather path)
+        3. Build distance map from exit points within the island using BFS
+        4. Select tiles_to_gather closest tiles, prioritizing path connectivity
 
         This ensures we gather tiles on the path to the capture border,
         not random tiles deep in the island interior that would be disconnected.
@@ -2244,6 +2224,7 @@ class ArmyFlowExpanderV2:
             island: The friendly island being partially gathered
             capture_island_ids: Set of island unique_ids that are capture targets
             tiles_to_gather: Number of tiles to select from this island
+            other_friendly_island_ids: Set of other friendly island IDs in the gather chain
 
         Returns:
             Set of tiles to include in the gather plan
@@ -2256,14 +2237,27 @@ class ArmyFlowExpanderV2:
 
         # Find tiles in the island that are adjacent to capture islands
         # These form the "exit points" toward the capture
+        connected_exit_points = set()
         exit_points = set()
         for tile in island.tile_set:
             for neighbor in tile.movable:
-                # Check if neighbor belongs to a capture island
                 neighbor_island = self.island_builder.tile_island_lookup.raw[neighbor.tile_index]
-                if neighbor_island is not None and neighbor_island.unique_id in capture_island_ids:
-                    exit_points.add(tile)
-                    break
+                if neighbor_island is not None:
+                    if connected_tiles is not None and neighbor in connected_tiles:
+                        connected_exit_points.add(tile)
+                        break
+                    # Check if neighbor is a capture island
+                    if neighbor_island.unique_id in capture_island_ids:
+                        exit_points.add(tile)
+                        break
+                    # ALSO check if neighbor is another friendly island in the chain
+                    if (other_friendly_island_ids is not None and
+                            neighbor_island.unique_id in other_friendly_island_ids):
+                        exit_points.add(tile)
+                        break
+
+        if connected_exit_points:
+            exit_points = connected_exit_points
 
         if not exit_points:
             logbook.info(f'NO DIRECT ADJACENCY TO CAPTURE...? {island}')
@@ -2285,29 +2279,28 @@ class ArmyFlowExpanderV2:
         # using BFS to find the shortest path through the island
         queue = deque()
         distances = {}
+        selected = set()
 
-        for exit_tile in exit_points:
-            queue.append((exit_tile, 0))
-            distances[exit_tile] = 0
+        exit_tile = min(exit_points, key=lambda t: (t.x, t.y))
+        queue.append((exit_tile, 0))
+        distances[exit_tile] = 0
 
-        while queue:
+        while queue and len(selected) < tiles_to_gather:
             tile, dist = queue.popleft()
+            selected.add(tile)
             for neighbor in tile.movable:
                 if neighbor in island.tile_set and neighbor not in distances:
                     distances[neighbor] = dist + 1
                     queue.append((neighbor, dist + 1))
-
-        # Sort island tiles by distance (closest to capture first)
-        sorted_tiles = sorted(island.tile_set, key=lambda t: distances.get(t, float('inf')))
-
-        # Select the closest tiles up to tiles_to_gather
-        selected = set(sorted_tiles[:tiles_to_gather])
 
         if self.log_debug:
             logbook.info(
                 f'_select_partial_gather_tiles: island {island.unique_id} '
                 f'(tiles={island.tile_count}) -> gathering {len(selected)} tiles: '
                 f'{" | ".join(f"{t.x},{t.y}" for t in sorted(selected, key=lambda t: (t.x, t.y)))}'
+            )
+            logbook.info(
+                f'  exit_points={len(exit_points)}, other_friendly_ids={other_friendly_island_ids}, capture_ids={capture_island_ids}'
             )
 
         return selected

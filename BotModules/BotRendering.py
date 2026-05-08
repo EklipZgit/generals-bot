@@ -165,8 +165,12 @@ class BotRendering:
                         else:
                             bot.viewInfo.topRightGridText[tile] = island.name
 
-        if bot.info_render_flow_expand and bot.last_flow_expander is not None and bot.last_flow_opt_collection is not None:
-            BotRendering.render_flow_expand_in_view_info(bot)
+        if bot.last_flow_expander is not None and bot.last_flow_opt_collection is not None:
+            if bot.info_render_flow_expand:
+                BotRendering.render_flow_expand_in_view_info(bot)
+            else:
+                if bot.last_flow_expander.log_debug:
+                    logbook.warning('FLOW_RENDER_SKIPPED info_render_flow_expand=False')
 
     @staticmethod
     def render_flow_expand_in_view_info(bot):
@@ -213,7 +217,19 @@ class BotRendering:
 
         flowGraph = expander.flow_graph
         if flowGraph is not None:
+            arrowsBefore = len(vi.arrows)
             ArmyFlowExpander.add_flow_graph_to_view_info(flowGraph, vi, lastRun=expander.last_run, noLog=True)
+            arrowsAfter = len(vi.arrows)
+            noNeutRoots = len(flowGraph.root_flow_nodes_no_neut)
+            noNeutEdges = sum(len(node.flow_to) for node in flowGraph.root_flow_nodes_no_neut)
+            incNeutRoots = len(flowGraph.root_flow_nodes_inc_neut)
+            incNeutEdges = sum(len(node.flow_to) for node in flowGraph.root_flow_nodes_inc_neut)
+            if expander.log_debug:
+                logbook.warning(
+                    f'FLOW_RENDER_GRAPH rootsNoNeut={noNeutRoots} rootEdgesNoNeut={noNeutEdges} '
+                    f'rootsIncNeut={incNeutRoots} rootEdgesIncNeut={incNeutEdges} '
+                    f'arrowsAdded={arrowsAfter - arrowsBefore} arrowsTotal={arrowsAfter}'
+                )
 
         expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True)
 
@@ -397,13 +413,21 @@ class BotRendering:
 
         tempSet = set()
         neutDiscSet = set()
+        lastMovedTiles: typing.Dict[Tile, int] = {}
         for tile in bot._map.get_all_tiles():
             if tile.isTempFogPrediction:
                 tempSet.add(tile)
             if tile.discoveredAsNeutral:
                 neutDiscSet.add(tile)
+            # Serialize lastMovedTurn for tiles that moved recently (within last 5 turns)
+            if tile.lastMovedTurn >= bot._map.turn - 5 and tile.lastMovedTurn >= 0:
+                lastMovedTiles[tile] = tile.lastMovedTurn
         data.append(f'TempFogTiles={BotSerialization.convert_tile_set_to_string(bot, tempSet)}')
         data.append(f'DiscoveredNeutral={BotSerialization.convert_tile_set_to_string(bot, neutDiscSet)}')
+        # Serialize lastMovedTurn as tile_index:turn pairs
+        if lastMovedTiles:
+            lastMovedStr = ','.join(f'{t.tile_index}:{turn}' for t, turn in lastMovedTiles.items())
+            data.append(f'LastMovedTiles={lastMovedStr}')
 
         data.append(f'Armies={TextMapLoader.dump_armies(bot._map, bot.armyTracker.armies)}')
 

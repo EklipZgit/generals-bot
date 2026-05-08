@@ -180,10 +180,23 @@ class FlowDirectionFinderABC(ABC):
                 if target_flow_amount == 0:
                     continue
 
+                flow_diag_islands = getattr(graph_data, 'flow_diag_island_ids', set())
+                if log_debug and (
+                    abs(node_id) in flow_diag_islands
+                    or abs(target_node_id) in flow_diag_islands
+                    or abs(node_id) in graph_data.fake_nodes
+                    or abs(target_node_id) in graph_data.fake_nodes
+                ):
+                    source_desc = 'None' if source_node is None else f'{source_node.island.unique_id}:team{source_node.island.team}:army{source_node.island.sum_army}:tiles{source_node.island.tile_count}'
+                    logbook.warning(
+                        f'FLOW_DIAG_BUILD_NODE_EDGE raw_node={node_id} is_throughput={is_throughput} '
+                        f'target={target_node_id} amount={target_flow_amount} source={source_desc}'
+                    )
+
                 if is_throughput and source_node:
                     if target_node_id != -node_id:
                         raise Exception(f'input node flowed to something other than output node...?  {source_node} ({target_flow_amount}a) -> {target_node_id}')
-                    if source_node.island is target_general_island:
+                    if log_debug and source_node.island is target_general_island:
                         logbook.info(
                             f'Flow THROUGH EN GEN of {target_flow_amount} ?? sourceNode.army_flow_received was {source_node.army_flow_received} (now {source_node.army_flow_received + target_flow_amount})')
                     source_node.army_flow_received += target_flow_amount
@@ -194,10 +207,10 @@ class FlowDirectionFinderABC(ABC):
                     target_set.discard(target_node_id)
                 target_node = graph_lookup.get(target_node_id, None)
                 if target_node is None:
-                    if source_node.island is target_general_island:
+                    if log_debug and source_node is not None and source_node.island is target_general_island:
                         logbook.info(
                             f'Flow from EN GEN of {target_flow_amount} to fake node {target_node_id} -- we overflow the enemy land? sourceNode.army_flow_received was {source_node.army_flow_received}')
-                    else:
+                    elif log_debug:
                         logbook.info(f'Flow of {target_flow_amount} to fake node {target_node_id} from {source_node}')
                     continue
 
@@ -210,20 +223,31 @@ class FlowDirectionFinderABC(ABC):
                     if source_node.island is target_general_island:
                         edge = IslandFlowEdge(source_node, target_node, target_flow_amount)
                         backfill_neut_edges.append(edge)
-                        logbook.info(
-                            f'NEUT SINK EN GEN FLOW of {target_flow_amount} to fake node {target_node_id} -- we overflow the enemy land? sourceNode.army_flow_received was {source_node.army_flow_received} (now {source_node.army_flow_received - target_flow_amount})')
+                        if log_debug:
+                            logbook.info(
+                                f'NEUT SINK EN GEN FLOW of {target_flow_amount} to fake node {target_node_id} -- we overflow the enemy land? sourceNode.army_flow_received was {source_node.army_flow_received} (now {source_node.army_flow_received - target_flow_amount})')
                         source_node.army_flow_received -= target_flow_amount
                         continue
 
                 if source_node is None:
                     if target_node.island is target_general_island:
-                        logbook.info(f'Flow TO EN GEN from fake node {node_id} of {target_flow_amount} -- we DONT overflow enemy land, targetNode.army_flow_received (en gen backpressure) was {target_node.army_flow_received} (now {target_node.army_flow_received - target_flow_amount})')
+                        if log_debug:
+                            logbook.info(f'Flow TO EN GEN from fake node {node_id} of {target_flow_amount} -- we DONT overflow enemy land, targetNode.army_flow_received (en gen backpressure) was {target_node.army_flow_received} (now {target_node.army_flow_received - target_flow_amount})')
                         target_node.army_flow_received -= target_flow_amount
-                    else:
+                    elif log_debug:
                         logbook.info(f'Flow from fake node {node_id} of {target_flow_amount} to {target_node}')
                     continue
 
                 source_node.set_flow_to(target_node, target_flow_amount)
+                if log_debug and (
+                    source_node.island.unique_id in flow_diag_islands
+                    or target_node.island.unique_id in flow_diag_islands
+                ):
+                    logbook.warning(
+                        f'FLOW_DIAG_FLOW_NODE_EDGE {source_node.island.unique_id}(team={source_node.island.team},army={source_node.island.sum_army}) '
+                        f'-> {target_node.island.unique_id}(team={target_node.island.team},army={target_node.island.sum_army}) '
+                        f'amount={target_flow_amount} source_received={source_node.army_flow_received} target_received={target_node.army_flow_received}'
+                    )
                 if log_debug:
                     logbook.info(f'FOUND FLOW EDGE {source_node} ({target_flow_amount}a) -> {target_node}')
                     # DIAGNOSTIC: Trace island 190 flow specifically

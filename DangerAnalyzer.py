@@ -431,89 +431,52 @@ class DangerAnalyzer(object):
             searchArmyAmount -= general.army - 1
 
         defendableFromPlayers = set()
-        for player in self.map.players:
-            if player.dead:
-                continue
-            if player.index in self.map.teammates or player.index == self.map.player_index:
-                continue
-            if len(self.playerTiles[player.index]) == 0 or player.tileCount <= 2:
-                continue
+        if not requireMovement:
+            for player in self.map.players:
+                if player.dead:
+                    continue
+                if player.index in self.map.teammates or player.index == self.map.player_index:
+                    continue
+                if len(self.playerTiles[player.index]) == 0 or player.tileCount <= 2:
+                    continue
 
-            if self.map.is_player_on_team_with(self.map.player_index, player.index):
-                continue
+                if self.map.is_player_on_team_with(self.map.player_index, player.index):
+                    continue
 
-            oppEcon = player.tileCount + player.cityCount * 25
-            usEcon = genPlayer.tileCount + genPlayer.cityCount * 25
-            if oppEcon > usEcon * 1.25 and player.score > genPlayer.score * 0.9 and isFfaMode:
-                continue
+                oppEcon = player.tileCount + player.cityCount * 25
+                usEcon = genPlayer.tileCount + genPlayer.cityCount * 25
+                if oppEcon > usEcon * 1.25 and player.score > genPlayer.score * 0.9 and isFfaMode:
+                    continue
 
-            if player.score > genPlayer.score * 1.25 and oppEcon > usEcon * 1.0 and isFfaMode:
-                continue
+                if player.score > genPlayer.score * 1.25 and oppEcon > usEcon * 1.0 and isFfaMode:
+                    continue
 
-            defendableFromPlayers.add(player.index)
+                defendableFromPlayers.add(player.index)
 
-            curNegs = negativeTilesToUse.copy()
-            if player.general is not None:
-                curNegs.add(player.general)
+                curNegs = negativeTilesToUse.copy()
+                if player.general is not None:
+                    curNegs.add(player.general)
 
-            if requireMovement:
-                # we only run the other large-tile scan for movement based flagging
-                continue
+                if self.defenseless_modifier:
+                    curNegs.update(t for t in targets if t.isGeneral)
 
-            if self.defenseless_modifier:
-                curNegs.update(t for t in targets if t.isGeneral)
-
-            path = dest_breadth_first_target(
-                map=self.map,
-                goalList=targets,
-                targetArmy=searchArmyAmount,
-                maxTime=0.05,
-                maxDepth=depth,
-                negativeTiles=curNegs,
-                searchingPlayer=player.index,
-                dontEvacCities=False,
-                # ignoreGoalArmy=defenseless,
-                dupeThreshold=3,
-                noLog=True)
-
-            if path:
-                armiesAlreadyInPath = []
-                skipPath = False
-                for tile in path.tileList:
-                    armyInPath = armies.get(tile, None)
-                    if armyInPath and armyInPath.entangledArmies and tile not in curNegs:
-                        armyKey = armyInPath.name, armyInPath.player
-                        if armyKey in armiesAlreadyInPath:
-                            curNegs.add(tile)
-                            skipPath = True
-                        armiesAlreadyInPath.append(armyKey)
-                if skipPath:
-                    path = None
-
-            if (path is not None
-                    and (curThreat is None
-                         or path.length < curThreat.length
-                         or (path.length == curThreat.length and path.value > curThreat.value))):
-                # If there is NOT another path to our target that doesn't hit the same tile next to our target,
-                # then we can use one extra turn on defense gathering to that 'saveTile'.
-                lastTile = path.tail.prev.tile
-                altPath = dest_breadth_first_target(
+                path = dest_breadth_first_target(
                     map=self.map,
-                    goalList=[path.tail.tile],
+                    goalList=targets,
                     targetArmy=searchArmyAmount,
                     maxTime=0.05,
-                    maxDepth=path.length + 5,
+                    maxDepth=depth,
                     negativeTiles=curNegs,
                     searchingPlayer=player.index,
                     dontEvacCities=False,
-                    dupeThreshold=5,
-                    # ignoreGoalArmy=generalOnly and self.defenseless_modifier,
-                    skipTiles=[lastTile])
+                    # ignoreGoalArmy=defenseless,
+                    dupeThreshold=3,
+                    noLog=True)
 
-                if altPath:
+                if path:
                     armiesAlreadyInPath = []
                     skipPath = False
-                    for tile in altPath.tileList:
+                    for tile in path.tileList:
                         armyInPath = armies.get(tile, None)
                         if armyInPath and armyInPath.entangledArmies and tile not in curNegs:
                             armyKey = armyInPath.name, armyInPath.player
@@ -522,13 +485,57 @@ class DangerAnalyzer(object):
                                 skipPath = True
                             armiesAlreadyInPath.append(armyKey)
                     if skipPath:
-                        altPath = None
-                if altPath is None or altPath.length > path.length:
-                    saveTile = lastTile
-                    logbook.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
-                logbook.info(f"dest BFS found KILL against our target:\n{str(path)}")
-                curThreat = path
-                depth = path.length + 1
+                        path = None
+
+                if (path is not None
+                        and (curThreat is None
+                            or path.length < curThreat.length
+                            or (path.length == curThreat.length and path.value > curThreat.value))):
+                    # If there is NOT another path to our target that doesn't hit the same tile next to our target,
+                    # then we can use one extra turn on defense gathering to that 'saveTile'.
+                    lastTile = path.tail.prev.tile
+                    altPath = dest_breadth_first_target(
+                        map=self.map,
+                        goalList=[path.tail.tile],
+                        targetArmy=searchArmyAmount,
+                        maxTime=0.05,
+                        maxDepth=path.length + 5,
+                        negativeTiles=curNegs,
+                        searchingPlayer=player.index,
+                        dontEvacCities=False,
+                        dupeThreshold=5,
+                        # ignoreGoalArmy=generalOnly and self.defenseless_modifier,
+                        skipTiles=[lastTile])
+
+                    if altPath:
+                        armiesAlreadyInPath = []
+                        skipPath = False
+                        for tile in altPath.tileList:
+                            armyInPath = armies.get(tile, None)
+                            if armyInPath and armyInPath.entangledArmies and tile not in curNegs:
+                                armyKey = armyInPath.name, armyInPath.player
+                                if armyKey in armiesAlreadyInPath:
+                                    curNegs.add(tile)
+                                    skipPath = True
+                                armiesAlreadyInPath.append(armyKey)
+                        if skipPath:
+                            altPath = None
+                    if altPath is None or altPath.length > path.length:
+                        saveTile = lastTile
+                        logbook.info(f"saveTile blocks path to our king: {saveTile.x},{saveTile.y}")
+                    logbook.info(f"dest BFS found KILL against our target:\n{str(path)}")
+                    curThreat = path
+                    depth = path.length + 1
+        else:
+            # When requireMovement=True, we check all enemy players with visible armies
+            for player in self.map.players:
+                if player.dead:
+                    continue
+                if player.index in self.map.teammates or player.index == self.map.player_index:
+                    continue
+                if self.map.is_player_on_team_with(self.map.player_index, player.index):
+                    continue
+                defendableFromPlayers.add(player.index)
 
         for armyTile, army in armies.items():
             # if this is an army in the fog that isn't on a tile owned by that player, lets see if we need to path it.
@@ -556,7 +563,9 @@ class DangerAnalyzer(object):
 
             startTiles = {}
             startTiles[armyTile] = ((0, 0, 0, 0, armyTile.x, armyTile.y, 0.5), 0)
-            goalFunc = lambda tile, prio: tile in targets and prio[3] < 0
+            # For threat detection, we want prio[3] >= 0 (enough army to capture the target)
+            # prio[3] is the army delta - positive means we have enough army to capture
+            goalFunc = lambda tile, prio: tile in targets and prio[3] >= 0
             path = breadth_first_dynamic(
                 self.map,
                 startTiles,

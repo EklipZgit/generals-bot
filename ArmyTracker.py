@@ -2329,6 +2329,9 @@ class ArmyTracker(object):
         return None
 
     def get_emergence_max_depth_to_general_or_none(self, player: int, tile: Tile, unaccountedForDelta: int = -1):
+        # TODO if we take into account the worst case amount of army they guaranteed have left on their tiles from OpponentTracker
+        #  eg in test test_because_of_opponent_tracker_registering_max_possible_emergence_pulling_ALL_army_off_of_general_should_limit_gen_spawn we limit to dist 10
+        #  but really we know they have at minimum 2x 2s left in that test so we could actually limit to 6 since 2 army can't be on the general from that knowledge.
         if unaccountedForDelta == -1:
             unaccountedForDelta = abs(tile.delta.armyDelta)
         armyPlayerObj = self.map.players[player]

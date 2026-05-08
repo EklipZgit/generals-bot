@@ -3080,6 +3080,7 @@ AttributeError: 'Map' object has no attribute 'grid'
         oldBaseValue = self.walled_city_base_value
         self.walled_city_base_value = wallCityArmy
         Tile.PATHABLE_CITY_THRESHOLD = wallCityArmy + 1
+        Tile.recalc_all_derived(self.tiles_by_index)
         if oldBaseValue is None or wallCityArmy > oldBaseValue:
             self.update_reachable()
 

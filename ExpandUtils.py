@@ -22,6 +22,15 @@ USE_DEBUG_LOGGING = False
 ENEMY_TILE_CAP_VALUE = 2.2
 
 
+def _format_plan_first_move_for_log(plan: TilePlanInterface | None) -> str:
+    if plan is None:
+        return 'None'
+    move = plan.get_first_move()
+    if move is None:
+        return 'None'
+    return f'{move.source}->{move.dest} srcArmy={move.source.army} destPlayer={move.dest.player} destArmy={move.dest.army}'
+
+
 class RoundPlan(object):
     def __init__(
             self,
@@ -439,6 +448,12 @@ def get_round_plan_with_expansion(
         if skipKnapsacking and additionalOptionValues:
             with perfTimer.begin_move_event(f'skipKnapsacking - using {len(additionalOptionValues)} pre-knapsacked options'):
                 maxPaths = list(additionalOptionValues)
+                if logStuff:
+                    for opt in maxPaths:
+                        logbook.warning(
+                            f'EXP_SELECT_CANDIDATE first={_format_plan_first_move_for_log(opt)} '
+                            f'len={opt.length} delay={opt.requiredDelay} value={opt.econValue:.2f} plan={opt}'
+                        )
                 # Calculate total value from the options
                 totalValue = sum(int(opt.econValue * 10000) for opt in maxPaths)
 
@@ -454,6 +469,11 @@ def get_round_plan_with_expansion(
                         friendlyPlayers,
                         territoryMap,
                         valueOverrides)
+                    if logStuff:
+                        logbook.warning(
+                            f'EXP_SELECT_CHOSEN first={_format_plan_first_move_for_log(path)} '
+                            f'plan={path}'
+                        )
 
                     otherPaths = [p for p in maxPaths if p != path]
                     otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, originalNegativeTiles) / pa.length, reverse=True)]
@@ -478,6 +498,12 @@ def get_round_plan_with_expansion(
                     if path is not None:
                         otherPaths.insert(0, path)
                     plan = RoundPlan(enCaps, neutCaps, path, otherPaths, map.turn)
+                    if logStuff:
+                        logbook.warning(
+                            f'EXP_ROUNDPLAN_RETURN first={_format_plan_first_move_for_log(plan.selected_option)} '
+                            f'enCaps={enCaps} neutCaps={neutCaps} totalTurns={totalTurns} '
+                            f'options={len(otherPaths)}'
+                        )
                     return plan
 
         with perfTimer.begin_move_event(f'knapsack_multi_paths {len(valueOverrides)} ext, {len(multiPathDict)} multiPath, {len(pathsCrossingTiles)} crossed'):

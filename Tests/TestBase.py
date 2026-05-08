@@ -63,6 +63,7 @@ class TestBase(unittest.TestCase):
         self._initialized: bool = False
         self._logging_handler = StreamHandler(sys.stderr, logbook.INFO)  #  format_string=LOG_FORMATTER
         self._logging_handler.formatter = BotLogging._CompactFormatter(logbook.handlers.DEFAULT_FORMAT_STRING)
+        self.map: MapBase = None
         ArmyInterceptor.DEBUG_BYPASS_BAD_INTERCEPTIONS = False
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
@@ -293,6 +294,14 @@ class TestBase(unittest.TestCase):
                     # if not tile.isGeneral:
                     #     self.map.reset_wrong_undiscovered_fog_guess(tile)
 
+            if f'LastMovedTiles' in gameData:
+                lastMovedData = gameData[f'LastMovedTiles']
+                for tileTurnPair in lastMovedData.split(','):
+                    if ':' in tileTurnPair:
+                        tileIdx, turn = tileTurnPair.split(':')
+                        tile = map.GetTile(int(tileIdx) % map.cols, int(tileIdx) // map.cols)
+                        tile.lastMovedTurn = int(turn)
+
             armies = TextMapLoader.load_armies(map, gameData)
 
             for player in map.players:
@@ -423,6 +432,8 @@ class TestBase(unittest.TestCase):
                     recalc_player_stats()
 
         map.scores = [Score(p.index, p.score, p.tileCount, p.dead) for p in map.players]
+
+        self.map = map
 
         return map, general, enemyGen
 
@@ -950,7 +961,11 @@ class TestBase(unittest.TestCase):
         x, y = coords
         self.assertIn(map.GetTile(x, y), container)
 
-    def assertOwned(self, player: int, tile: Tile, reason: str | None = None):
+    def assertOwned(self, player: int, tile: Tile | int, reason: str | None = None):
+        if isinstance(tile, int):
+            x, y = player, tile
+            player = self.map.player_index
+            tile = self.map.At(x, y)
         if not reason:
             reason = f'expected player {player} to own {tile}'
         self.assertEqual(player, tile.player, reason)

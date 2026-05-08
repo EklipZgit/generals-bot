@@ -46,38 +46,38 @@ Player information card readout:
 {Army} on {TileCount} ({CityCount}) [{TargetPriority*}]
 
     *Target Priority is used to select which player to consider the current main opponent during an FFA
-    
+
 Information area:
 Top line
     -> The THING the bot is currently doing, basically the evaluation that led to a move selection.
 C{CycleInterval} Q{QuickExpandTurns} g{Gather/AttackSplitTurn} L{LaunchTiming} Off{Offset} ({CurrentCycleTurn})
 
-black arrows 
+black arrows
     -> intended gather lines
-red arrows 
+red arrows
     -> considered gather lines that were trimmed
 green chevrons
     -> the AI'p current army movement path (used when launching timing attacks or attacks against cities etc).
 yellow chevrons
     -> indicate a calculated kill-path against an enemy general that was found during other operations and took priority.
-pink chevrons 
+pink chevrons
     -> intended tile-expansion path
-blue chevrons 
+blue chevrons
     -> intended general hunt heuristic exploration path
-red chevrons 
+red chevrons
     -> enemy threat path against general
-little colored square in tile top right 
+little colored square in tile top right
     -> AI evaluates that this tile is probably enemy territory. Uses knowledge that it has about historical empty tiles
         to eliminate tiles bridged by current-or-previous neutral tiles. This is used when predicting enemy general location
         based on armies appearing from fog of war.
-red Xs 
+red Xs
     -> tiles evaluated in a specific search that happened that turn. The more often a tile is evaluated, the darker the red X.
-little green lines between tiles 
+little green lines between tiles
     ->
 purple outline inside tiles
     -> Indicates this tile is calculated to be a 'choke' tile on the set of tiles in the shortest path between generals.
         This means that an attacking army from the enemy general must cross this tile, or take a less optimal path at least
-        two tiles longer. This lets the AI optimize defense 1-2 turns later than it would otherwise need to 
+        two tiles longer. This lets the AI optimize defense 1-2 turns later than it would otherwise need to
         when attempting to intercept attacks.
 
 
@@ -1661,23 +1661,30 @@ class GeneralsViewer(object):
 
     def _draw_arrows(self):
         combinationLookup = {}
-        for fromX, fromY, toX, toY, label, color, alpha, isBidir in self._viewInfo.arrows:
+        for arrow in self._viewInfo.arrows:
+            if len(arrow) == 8:
+                fromX, fromY, toX, toY, label, color, alpha, isBidir = arrow
+                labelAlpha = None
+            else:
+                fromX, fromY, toX, toY, label, color, alpha, isBidir, labelAlpha = arrow
             key = (round(fromX, 3), round(fromY, 3), round(toX, 3), round(toY, 3), isBidir)
-            existLabel, existColor, existAlpha, existCount = combinationLookup.get(key, (label, (0, 0, 0), 0, 0))
+            existLabel, existColor, existAlpha, existLabelAlpha, existCount = combinationLookup.get(key, (label, (0, 0, 0), 0, 0, 0))
 
             if existLabel != label:
                 label = label + " | " + existLabel
 
             colorSums = (existColor[0] + color[0], existColor[1] + color[1], existColor[2] + color[2])
 
-            combinationLookup[key] = (label, colorSums, existAlpha + alpha, existCount + 1)
+            combinedLabelAlpha = alpha if labelAlpha is None else labelAlpha
+            combinationLookup[key] = (label, colorSums, existAlpha + alpha, existLabelAlpha + combinedLabelAlpha, existCount + 1)
 
-        for (fromX, fromY, toX, toY, isBidir), (label, colorSum, alphaSum, count) in combinationLookup.items():
+        for (fromX, fromY, toX, toY, isBidir), (label, colorSum, alphaSum, labelAlphaSum, count) in combinationLookup.items():
             trueColor = (colorSum[0] // count, colorSum[1] // count, colorSum[2] // count)
             trueAlpha = alphaSum // count
-            self.draw_arrow_between(fromX, fromY, toX, toY, label, trueColor, trueAlpha, isBidir)
+            trueLabelAlpha = labelAlphaSum // count
+            self.draw_arrow_between(fromX, fromY, toX, toY, label, trueColor, trueAlpha, isBidir, trueLabelAlpha)
 
-    def draw_arrow_between(self, fromX: float, fromY: float, toX: float, toY: float, label: str | None, color: typing.Tuple[int, int, int], alpha: int, isBidir: bool):
+    def draw_arrow_between(self, fromX: float, fromY: float, toX: float, toY: float, label: str | None, color: typing.Tuple[int, int, int], alpha: int, isBidir: bool, labelAlpha: int | None = None):
         trueFromX, trueFromY = self.getTopLeftTileFloats(fromX, fromY)
         trueToX, trueToY = self.getTopLeftTileFloats(toX, toY)
 
@@ -1685,9 +1692,26 @@ class GeneralsViewer(object):
         toVec = Vector2(trueToX + self.cellWidthOverTwo, trueToY + self.cellHeightOverTwo)
 
         r, g, b = color
-        self._draw_arrow_raw(self._screen, fromVec, toVec, Color(r, g, b, alpha), body_width=2, head_width=7, head_height=11, label=label)
+        arrowSurface, surfaceOffset = self._get_arrow_alpha_surface(fromVec, toVec)
+        self._draw_arrow_raw(arrowSurface, fromVec - surfaceOffset, toVec - surfaceOffset, Color(r, g, b, alpha), body_width=2, head_width=7, head_height=11)
+        self._screen.blit(arrowSurface, surfaceOffset)
         if isBidir:
-            self._draw_arrow_raw(self._screen, toVec, fromVec, Color(r, g, b, alpha), body_width=2, head_width=7, head_height=11)
+            arrowSurface, surfaceOffset = self._get_arrow_alpha_surface(toVec, fromVec)
+            self._draw_arrow_raw(arrowSurface, toVec - surfaceOffset, fromVec - surfaceOffset, Color(r, g, b, alpha), body_width=2, head_width=7, head_height=11)
+            self._screen.blit(arrowSurface, surfaceOffset)
+        if label:
+            textAlpha = alpha if labelAlpha is None else labelAlpha
+            self._draw_arrow_label(fromVec, toVec, Color(r, g, b, textAlpha), label)
+
+    def _get_arrow_alpha_surface(self, fromVec: pygame.Vector2, toVec: pygame.Vector2) -> typing.Tuple[pygame.Surface, pygame.Vector2]:
+        padding = 12
+        minX = int(min(fromVec.x, toVec.x)) - padding
+        minY = int(min(fromVec.y, toVec.y)) - padding
+        maxX = int(max(fromVec.x, toVec.x)) + padding
+        maxY = int(max(fromVec.y, toVec.y)) + padding
+        width = max(1, maxX - minX)
+        height = max(1, maxY - minY)
+        return pygame.Surface((width, height), pygame.SRCALPHA), pygame.Vector2(minX, minY)
 
     def _draw_arrow_raw(
             self,
@@ -1754,24 +1778,28 @@ class GeneralsViewer(object):
             pygame.draw.polygon(surface, color, body_verts)
 
         if label:
-            # original line was flat, so to do the same rotation on the text start flat
-            color.a = (color.a + 255) // 2
-            labelThing = self._smallFont.render(label, True, color)
-            # fontAngle = (angle + 360) % 180
-            fontAngle = (angle) % 180
-            # fontAngle = angle
-            heightOffset = self._smallFontWidth
-            point = pygame.Vector2(0, -heightOffset)
-            point.rotate_ip(fontAngle)
-            # point += translation
-            midPoint = (start + end) / 2
-            point += midPoint
+            self._draw_arrow_label(start, end, color, label)
 
-            # translation = pygame.transform.rotozoom(labelThing, fontAngle, 1.0)
-            translation = labelThing
-            # print(-angle)
-            self._screen.blit(translation,
-                              (point.x, point.y))
-            self._screen.blit(translation,
-                              (point.x, point.y))
+    def _draw_arrow_label(
+            self,
+            start: pygame.Vector2,
+            end: pygame.Vector2,
+            color: pygame.Color,
+            label: str
+    ):
+        arrow = start - end
+        angle = arrow.angle_to(pygame.Vector2(0, -1))
+        labelThing = self._smallFont.render(label, True, color)
+        fontAngle = (angle) % 180
+        heightOffset = self._smallFontWidth
+        point = pygame.Vector2(0, -heightOffset)
+        point.rotate_ip(fontAngle)
+        midPoint = (start + end) / 2
+        point += midPoint
+
+        translation = labelThing
+        self._screen.blit(translation,
+                          (point.x, point.y))
+        self._screen.blit(translation,
+                          (point.x, point.y))
 

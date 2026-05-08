@@ -1674,13 +1674,8 @@ class ArmyInterceptor(object):
 
             tilesAtDist = best_enemy_threat.armyAnalysis.tileDistancesLookup.get(i, None)
             directIntercept = False
-            # if lastAtDist:
-            #     if len(lastAtDist) == 1 and tile == lastAtDist[0]:
-            #         directIntercept = True
-            #         bestCaseInterceptTurn = min(bestCaseInterceptTurn, i)
-            #         worstCaseInterceptTurn = min(i, worstCaseInterceptTurn)
-            #     elif tile in lastAtDist:
-            #
+
+
             if i == 0:
                 if tilesAtDist and len(tilesAtDist) == 1:
                     if node.next is not None and node.next.tile == tilesAtDist[0] and node.next.next is None:
@@ -1690,6 +1685,7 @@ class ArmyInterceptor(object):
 
             elif tilesAtDist and i > 0:
                 allInMovable = len(tilesAtDist) < 4
+                foundAtDist = False
                 for t in tilesAtDist:
                     if tile in t.movable:
                         # + 2 because of chase moves...?
@@ -1698,12 +1694,20 @@ class ArmyInterceptor(object):
                             offs += 1
                         bestCaseInterceptTurn = min(bestCaseInterceptTurn, i + offs)
                     elif t == tile:
+                        foundAtDist = True
                         if len(tilesAtDist) == 1:
                             directIntercept = True
                             worstCaseInterceptTurn = min(i, worstCaseInterceptTurn)
                         bestCaseInterceptTurn = min(bestCaseInterceptTurn, i)
                     elif allInMovable:  # short circuit the adjacents check early if we've already failed the all-in-movable test.
                         allInMovable = False
+
+                # If we didn't find the tile at this distance but it's in the threat path,
+                # use the threat's distance map to calculate correct intercept turn
+                if not foundAtDist and tile in best_enemy_threat.path.tileSet:
+                    threatDist = best_enemy_threat.armyAnalysis.bMap[tile]
+                    if threatDist > 0:
+                        bestCaseInterceptTurn = min(bestCaseInterceptTurn, threatDist)
 
                 if allInMovable:
                     offs = 1
@@ -1793,9 +1797,13 @@ class ArmyInterceptor(object):
         #             logbook.error(f'found no connection to the threat path wtf for {interceptPath.tail.tile} -> threat {best_enemy_threat.path}')
 
         movesToThisPoint = turnsLeftInCycle - turnsLeft
+        armyPostCollision = armyAccumulatedByInterceptPath - enPhysicalArmy
 
-        logbook.info(f'We expect to intercept int{interceptPath.tail.tile} {armyAccumulatedByInterceptPath}a -> enIntP{enInterceptPointPathNode.tile} {enPhysicalArmy}a after {movesToThisPoint} turns with {turnsLeft} left in cycle.'
-                     f'\r\n     bestCaseInterceptTurn {bestCaseInterceptTurn}, worstCaseInterceptTurn {worstCaseInterceptTurn}')
+        logbook.info(f'We expect to intercept threat @{best_enemy_threat.path.start.tile} -> {best_enemy_threat.path.tail.tile} at {enInterceptPointPathNode.tile} after {movesToThisPoint} turns with {turnsLeft} left in cycle and {armyPostCollision} army post-collision.'
+                     f'\r\n     bestCaseInterceptTurn {bestCaseInterceptTurn}, worstCaseInterceptTurn {worstCaseInterceptTurn} (us: {armyAccumulatedByInterceptPath}a, them: {enPhysicalArmy}a at {enInterceptPointPathNode.tile})')
+
+        if bestCaseInterceptTurn == 1000:
+            logbook.warning(f'INTERCEPT UNREACHABLE: threat @{best_enemy_threat.path.start.tile} -> {best_enemy_threat.path.tail.tile}, our intercept path ends at {interceptPath.tail.tile} which was never found on threat path tileSet {best_enemy_threat.path.tileSet}')
 
         bestCaseInterceptTurn = min(bestCaseInterceptTurn, worstCaseInterceptTurn)
         return turnsLeft, armyAccumulatedByInterceptPath, bestCaseInterceptTurn, worstCaseInterceptTurn, enInterceptPointPathNode, enPhysicalArmy

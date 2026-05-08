@@ -18,6 +18,7 @@ from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionF
 from BehaviorAlgorithms.Flow.OrToolsFlowDirectionFinder import OrToolsFlowDirectionFinder
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpanderLastRun, FlowExpansionPlanOptionCollection, ITERATIVE_EXPANSION_EN_CAP_VAL
 from Interfaces import MapMatrixInterface
+from MapMatrix import MapMatrix
 from PerformanceTimer import PerformanceTimer
 
 if typing.TYPE_CHECKING:
@@ -122,6 +123,18 @@ class ExternalPlanOption:
     group_id: int  # Unique group ID for MKCP (mutually exclusive with other externals)
 
 
+def get_tile_army_mapmatrix(map: MapBase) -> MapMatrix:
+    """
+    Build a MapMatrix[int] where each entry is the current tile.army for that tile.
+    Useful as a baseline army_override_matrix for ArmyFlowExpanderV2, allowing callers
+    to override specific tiles (e.g. predicted fog armies) before passing it in.
+    """
+    matrix: MapMatrix = MapMatrix(map, 0)
+    for tile in map.get_all_tiles():
+        matrix.raw[tile.tile_index] = tile.army
+    return matrix
+
+
 class ArmyFlowExpanderV2:
     """
     V2 flow expansion implementation that eventually replaces ArmyFlowExpander.
@@ -167,6 +180,8 @@ class ArmyFlowExpanderV2:
         self._target_crossable_cache: set[int] = set()  # Cache for target-crossable islands
         self._allow_neut_only_flow: bool = False
         self.bonus_capture_point_matrix: MapMatrixInterface[float] | None = None
+        self.army_override_matrix: MapMatrixInterface[int] | None = None
+        """If set, per-tile army amounts read from this matrix instead of tile.army during lookup table generation."""
 
     def get_expansion_options(
             self,
@@ -182,7 +197,8 @@ class ArmyFlowExpanderV2:
             bonusCapturePointMatrix: MapMatrixInterface[float] | None = None,
             perfTimer: PerformanceTimer | None = None,
             cutoffTime: float | None = None,
-            additional_options: typing.List[typing.Any] | None = None
+            additional_options: typing.List[typing.Any] | None = None,
+            army_override_matrix: MapMatrixInterface[int] | None = None
     ) -> FlowExpansionPlanOptionCollection:
         """
         Main entry point - returns expansion options compatible with existing interface.
@@ -197,6 +213,8 @@ class ArmyFlowExpanderV2:
             self.enemyGeneral = self.map.generals[targetPlayer]
         self.island_builder = islands
         self.bonus_capture_point_matrix = bonusCapturePointMatrix
+        if army_override_matrix is not None:
+            self.army_override_matrix = army_override_matrix
 
         # Process additional_options (intercepts, etc.) into MKCP-compatible format
         external_options: list[ExternalPlanOption] = []
@@ -205,7 +223,7 @@ class ArmyFlowExpanderV2:
 
         # Phase 0: Build flow graph
         with self.perf_timer.begin_move_event('V2 phase0 _ensure_flow_graph_exists'):
-            self._ensure_flow_graph_exists(islands)
+            self._ensure_flow_graph_exists(islands, turns)
 
         # Phase 1 / 1.5: Enumerate border pairs and compute stream ordering metadata
         with self.perf_timer.begin_move_event('V2 phase1 _detect_target_crossable + _enumerate_border_pairs'):
@@ -248,6 +266,12 @@ class ArmyFlowExpanderV2:
             raise AssertionError(f'Requested {turns} but received {total} turns worth of plans.\r\n  {"\r\n    ".join(f"{opt}: {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: self.island_builder.intergeneral_analysis.aMap.raw[t2.tile_index]))}" for opt in plans)}')
         result.flow_plans = plans
         return result
+
+    def _get_tile_army(self, tile: Tile) -> int:
+        """Returns the army amount for a tile, using army_override_matrix if set."""
+        if self.army_override_matrix is not None:
+            return self.army_override_matrix.raw[tile.tile_index]
+        return tile.army
 
     def _get_networkx_finder(self) -> NetworkXFlowDirectionFinder:
         """Lazily construct the NetworkX-backed flow direction finder."""
@@ -308,7 +332,7 @@ class ArmyFlowExpanderV2:
             return self._get_ortools_finder()
         return self._get_networkx_finder()
 
-    def _ensure_flow_graph_exists(self, islands: TileIslandBuilder) -> None:
+    def _ensure_flow_graph_exists(self, islands: TileIslandBuilder, turns: int) -> None:
         """Build or reuse the flow graph using whichever finder backs self.method.
 
         This used to be hardcoded to NetworkXFlowDirectionFinder; it now mirrors
@@ -327,7 +351,7 @@ class ArmyFlowExpanderV2:
             our_islands,
             target_islands,
             self.map.player_index,
-            turns=50,  # TODO: Pass actual turns parameter
+            turns=turns,
             blockGatherFromEnemyBorders=True,
             negativeTiles=None,
             includeNeutralDemand=self._allow_neut_only_flow,
@@ -404,6 +428,17 @@ class ArmyFlowExpanderV2:
                 continue
 
             friendly_node = flow_lookup[friendly_island.unique_id]
+
+            # This replaces the BFS below for now until I figure out why the BFS was necessary lol
+            for edge in friendly_node.flow_to:
+                dest = edge.target_flow_node
+                if self.log_debug:
+                    logbook.info(f"    BFS: {friendly_node.island.unique_id} -> {dest.island.unique_id} (team={dest.island.team})")
+                if dest.island.unique_id == target_island.unique_id:
+                    if self.log_debug:
+                        logbook.info(f"    BFS FOUND PATH to {target_island.unique_id}")
+                    return True
+            continue
 
             if self.log_debug:
                 logbook.info(f"  Starting BFS from friendly node {friendly_island.unique_id}, flow_to={[e.target_flow_node.island.unique_id for e in friendly_node.flow_to]}")
@@ -570,7 +605,7 @@ class ArmyFlowExpanderV2:
         border_pair: FlowBorderPairKey,
         flow_graph: IslandMaxFlowGraph,
         target_crossable_islands: set[int],
-        turn_budget: int = 50,
+        turn_budget: int,
     ) -> BorderPairStreamPotential:
         """Phase 1: Build directional stream traversals for a border pair"""
 
@@ -978,7 +1013,7 @@ class ArmyFlowExpanderV2:
         border_pairs: list[FlowBorderPairKey],
         flow_graph: IslandMaxFlowGraph,
         target_crossable_islands: set[int],
-        turn_budget: int = 50,
+        turn_budget: int,
     ) -> list[FlowArmyTurnsLookupTable]:
         """
         Phase 2: Build per-border gather/capture lookup tables.
@@ -1001,12 +1036,12 @@ class ArmyFlowExpanderV2:
 
             # Generate capture lookup table
             capture_lookup = self._generate_capture_lookup_table(
-                border_pair, target_contribs, stream_data
+                border_pair, target_contribs, stream_data, turn_budget
             )
 
             # Generate gather lookup table
             gather_lookup = self._generate_gather_lookup_table(
-                border_pair, friendly_contribs, stream_data
+                border_pair, friendly_contribs, stream_data, turn_budget
             )
 
             # Build prefix tables (best entries up to each turn)
@@ -1045,6 +1080,7 @@ class ArmyFlowExpanderV2:
         border_pair: FlowBorderPairKey,
         target_contributions: list[FlowStreamIslandContribution],
         stream_data: BorderPairStreamPotential,
+        turn_budget: int,
         prio_mat: MapMatrixInterface[float] | None = None,
     ) -> list[FlowTurnsEntry | None]:
         """
@@ -1059,7 +1095,7 @@ class ArmyFlowExpanderV2:
             list[FlowTurnsEntry | None]: The generated capture lookup table.
         """
         # Start with the border crossing (turn 0 = border state, turn 1 = first target island)
-        max_turns = 50  # TODO: Make this configurable
+        max_turns = turn_budget
         lookup: typing.List[FlowTurnsEntry | None] = [None] * (max_turns + 1)
 
         current_turn = 0
@@ -1104,12 +1140,12 @@ class ArmyFlowExpanderV2:
 
                 if contrib.is_crossing:
                     # Target-crossable friendly island: only turn cost, no econ value
-                    current_army_cost -= tile.army
+                    current_army_cost -= self._get_tile_army(tile)
                 else:
                     if prio_mat is not None:
                         current_econ_value += prio_mat.raw[tile.tile_index]
                     # Regular capture (enemy or neutral)
-                    current_army_cost += tile.army
+                    current_army_cost += self._get_tile_army(tile)
 
                     if island.team == self.target_team:
                         # Enemy island capture
@@ -1150,7 +1186,8 @@ class ArmyFlowExpanderV2:
         self,
         border_pair: FlowBorderPairKey,
         friendly_contributions: list[FlowStreamIslandContribution],
-        stream_data: BorderPairStreamPotential
+        stream_data: BorderPairStreamPotential,
+        turn_budget: int,
     ) -> list[FlowTurnsEntry | None]:
         """
         Generate gather lookup table for a border pair.
@@ -1159,7 +1196,7 @@ class ArmyFlowExpanderV2:
         partial gathers - gathering from only some tiles of an island rather than
         the entire island at once.
         """
-        max_turns = 50  # TODO: Make this configurable
+        max_turns = turn_budget
         lookup: typing.List[FlowTurnsEntry | None] = [None] * (max_turns + 1)
 
         current_turn = 0
@@ -1247,7 +1284,7 @@ class ArmyFlowExpanderV2:
                 # For multi-tile islands, each tile contributes its full army; the "leave 1 behind"
                 # is implicit in the army movement mechanics, not subtracted here.
 
-                tile_contribution = tile.army - 1
+                tile_contribution = self._get_tile_army(tile) - 1
 
                 current_gathered_army += tile_contribution
 
@@ -1274,7 +1311,7 @@ class ArmyFlowExpanderV2:
                 if self.log_debug:
                     logbook.info(
                         f"GATHERS: {border_pair.friendly_island_id}->{border_pair.target_island_id}  (cur {island.unique_id}) - Adding gather entry @{tile} for turn {current_turn} with gathered army {int(current_gathered_army)}, "
-                        f"tile contribution {tile.army - 1:.2f}, incomplete {lookup[current_turn].incomplete_friendly_tile_count}")
+                        f"tile contribution {self._get_tile_army(tile) - 1:.2f}, incomplete {lookup[current_turn].incomplete_friendly_tile_count}")
 
                 current_turn += 1
 

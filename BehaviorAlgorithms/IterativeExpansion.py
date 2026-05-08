@@ -2221,7 +2221,8 @@ class ArmyFlowExpander(object):
             else:
                 viewInfo.add_info_line_opt_log(ArmyFlowExpander._get_flow_graph_summary_line(flowGraph.root_flow_nodes_no_neut, flowGraph.enemy_backfill_nodes_no_neut, flowGraph.flow_node_lookup_by_island_no_neut, 'NO neut'), noLog=noLog)
             ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.enemy_backfill_nodes_no_neut, Colors.WHITE_PURPLE)
-            ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.root_flow_nodes_no_neut, Colors.BLACK)
+            ArmyFlowExpander._include_enemy_general_backpressure_with_colors(viewInfo, flowGraph.flow_node_lookup_by_island_no_neut, Colors.WHITE_PURPLE, noLog=noLog)
+            ArmyFlowExpander._include_friendly_flow_with_colors(viewInfo, flowGraph.flow_node_lookup_by_island_no_neut, Colors.BLACK, noLog=noLog)
 
         if withNeut:
             ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.root_flow_nodes_inc_neut, Colors.DARK_PURPLE)
@@ -2303,8 +2304,75 @@ class ArmyFlowExpander(object):
                 destX = sum(allDestX) / len(allDestX)
                 destY = sum(allDestY) / len(allDestY)
 
-                viewInfo.draw_diagonal_arrow_between_xy(sourceX, sourceY, destX, destY, label=f'{destinationEdge.edge_army}', color=sourceColor)
+                viewInfo.draw_diagonal_arrow_between_xy(sourceX, sourceY, destX, destY, label=f'{destinationEdge.edge_army}', color=sourceColor, alpha=179, labelAlpha=255)
                 q.append(destinationEdge.target_flow_node)
+
+    @staticmethod
+    def _include_friendly_flow_with_colors(viewInfo, flow_node_lookup: typing.Dict[int, IslandFlowNode], sourceColor, noLog: bool = False):
+        friendly_sources = []
+        for flowNode in flow_node_lookup.values():
+            if flowNode.island.team == viewInfo.map.team_ids_by_player_index[viewInfo.map.player_index] and flowNode.flow_to:
+                friendly_sources.append(flowNode)
+        if not noLog:
+            logbook.warning(
+                f'FLOW_RENDER_FRIENDLY_SOURCES sources={len(friendly_sources)} '
+                f'edges={sum(len(flowNode.flow_to) for flowNode in friendly_sources)} '
+                f'ids={[flowNode.island.unique_id for flowNode in friendly_sources]}'
+            )
+        ArmyFlowExpander._include_flow_with_colors(viewInfo, friendly_sources, sourceColor)
+
+    @staticmethod
+    def _include_enemy_general_backpressure_with_colors(viewInfo, flow_node_lookup: typing.Dict[int, IslandFlowNode], sourceColor, noLog: bool = False):
+        enemy_general_node = None
+        for flow_node in flow_node_lookup.values():
+            if any(tile.isGeneral for tile in flow_node.island.tile_set):
+                enemy_general_node = flow_node
+                break
+        if enemy_general_node is None:
+            if not noLog:
+                logbook.warning('FLOW_RENDER_BACKPRESSURE enemy_general_node=None')
+            return
+        arrowsBefore = len(viewInfo.arrows)
+        if enemy_general_node.army_flow_received >= 0:
+            if not noLog:
+                logbook.warning(
+                    f'FLOW_RENDER_BACKPRESSURE enemy_general={enemy_general_node.island.unique_id} '
+                    f'army_flow_received={enemy_general_node.army_flow_received} flow_from={len(enemy_general_node.flow_from)} '
+                    f'skipped_non_negative=True arrowsAdded=0'
+                )
+            return
+
+        q: typing.Deque[IslandFlowNode] = deque()
+        visited = set()
+        q.append(enemy_general_node)
+        while q:
+            flowNode: IslandFlowNode = q.popleft()
+            if flowNode.island.unique_id in visited:
+                continue
+            visited.add(flowNode.island.unique_id)
+
+            allDestX = [t.x for t in flowNode.island.tile_set]
+            allDestY = [t.y for t in flowNode.island.tile_set]
+            destX = sum(allDestX) / len(allDestX)
+            destY = sum(allDestY) / len(allDestY)
+
+            for sourceEdge in flowNode.flow_from:
+                source_node = sourceEdge.source_flow_node
+                if source_node is None or source_node.island.unique_id in visited:
+                    continue
+                allSourceX = [t.x for t in source_node.island.tile_set]
+                allSourceY = [t.y for t in source_node.island.tile_set]
+                sourceX = sum(allSourceX) / len(allSourceX)
+                sourceY = sum(allSourceY) / len(allSourceY)
+
+                viewInfo.draw_diagonal_arrow_between_xy(destX, destY, sourceX, sourceY, label=f'BP{sourceEdge.edge_army}', color=sourceColor, alpha=179, labelAlpha=255)
+                q.append(source_node)
+        if not noLog:
+            logbook.warning(
+                f'FLOW_RENDER_BACKPRESSURE enemy_general={enemy_general_node.island.unique_id} '
+                f'army_flow_received={enemy_general_node.army_flow_received} flow_from={len(enemy_general_node.flow_from)} '
+                f'visited={len(visited)} arrowsAdded={len(viewInfo.arrows) - arrowsBefore}'
+            )
 
     @staticmethod
     def add_nx_flow_precursor_graph_to_view_info(digraph: nx.DiGraph, islandBuilder: TileIslandBuilder, viewInfo: ViewInfo):

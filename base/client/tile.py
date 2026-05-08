@@ -111,12 +111,12 @@ class TileDelta(object):
 
         self.armyDelta = 0
         """
-        UNEXPLAINED BY GAME ENGINE army delta. So this will be 0 for a tile that was not interacted with whether army bonus, 
+        UNEXPLAINED BY GAME ENGINE army delta. So this will be 0 for a tile that was not interacted with whether army bonus,
         city bonus, general bonus, etc. If it matches what would be expected on a turn update, then it is 0.
 
-        Positive means friendly army was moved ON to this tile (or army bonuses happened), 
+        Positive means friendly army was moved ON to this tile (or army bonuses happened),
         negative means army moved off or was attacked for not full damage OR was captured by opp.
-        This includes city/turn25 army bonuses, so should ALWAYS be 0 UNLESS a player interacted 
+        This includes city/turn25 army bonuses, so should ALWAYS be 0 UNLESS a player interacted
         with the tile (or the tile was just discovered?). A capped neutral tile will have a negative army delta.
         """
 
@@ -240,6 +240,14 @@ class Tile(object):
         'isDesert',
         'isSwamp',
         'overridePathable',
+        # Cached derived booleans - updated by _recalc_derived() after any mutation
+        'isNeutral',
+        'isUndiscoveredObstacle',
+        'isNotPathable',
+        'isPathable',
+        'isObstacle',
+        'isCostlyNeutral',
+        'isCostlyNeutralCity',
     )
 
     def __init__(
@@ -331,8 +339,32 @@ class Tile(object):
         self.overridePathable: bool | None = None
         """Override whether this tile is pathable, for wonky custom games where there are large neutral city walloffs and stuff."""
 
+        self.isNeutral: bool
+        """True if neutral and not a mountain or undiscovered obstacle"""
+
+        self.isUndiscoveredObstacle: bool
+        """True if not discovered and is a map obstacle/mountain and not predicted to be a city"""
+
+        self.isNotPathable: bool
+        """True if mountain or undiscovered obstacle, but NOT for discovered neutral city"""
+
+        self.isPathable: bool
+        """False if mountain or undiscovered obstacle, True for all other tiles INCLUDING for discovered neutral cities"""
+
+        self.isObstacle: bool
+        """True if mountain, undiscovered obstacle, or discovered neutral city"""
+
+        self.isCostlyNeutral: bool
+        """True if neutral that costs more than 10"""
+
+        self.isCostlyNeutralCity: bool
+        """True if neutral city that costs more than 10"""
+
         self.tile_index: int = tileIndex
         self._hash_key = hash((self.x, self.y))
+        self._recalc_derived()
+
+    _DERIVED_SLOTS: typing.FrozenSet[str] = frozenset(('isNeutral', 'isUndiscoveredObstacle', 'isNotPathable', 'isPathable', 'isObstacle', 'isCostlyNeutral', 'isCostlyNeutralCity'))
 
     # # NO SLOTS VERSON
     # def __getstate__(self) -> typing.Dict[str, typing.Any]:
@@ -350,7 +382,7 @@ class Tile(object):
 
     # SLOTS VERSION
     def __getstate__(self) -> typing.Dict[str, typing.Any]:
-        state = { slot: getattr(self, slot) for slot in self.__slots__ }
+        state = { slot: getattr(self, slot) for slot in self.__slots__ if slot not in Tile._DERIVED_SLOTS }
         # if len(self.movable) > 0 and not isinstance(self.movable[0], int):
 
         try:
@@ -373,43 +405,23 @@ class Tile(object):
         # self.movable = []
         # self.adjacents = []
         # self.visibleTo = []
+        self._recalc_derived()
 
-    @property
-    def isNeutral(self) -> bool:
-        """True if neutral and not a mountain or undiscovered obstacle"""
-        return self._player == -1
-
-    @property
-    def isUndiscoveredObstacle(self) -> bool:
-        """True if not discovered and is a map obstacle/mountain and not predicted to be a city"""
-        return self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity and not self.isMountain
-
-    @property
-    def isNotPathable(self) -> bool:
-        """True if mountain or undiscovered obstacle, but NOT for discovered neutral city"""
+    def _recalc_derived(self):
+        """Recompute all cached derived boolean state. Call after any mutation to tile, army, _player, isCity, isMountain, discovered, or overridePathable."""
+        self.isNeutral = self._player == -1
+        _undiscObs = self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity and not self.isMountain
+        self.isUndiscoveredObstacle = _undiscObs
         if self.overridePathable is not None:
-            return not self.overridePathable
-        return self.isMountain or self.isUndiscoveredObstacle
-
-    @property
-    def isCostlyNeutralCity(self) -> bool:
-        """True if neutral city that costs more than 10"""
-        return self.isCity and self.player == -1 and self.army > Tile.PATHABLE_CITY_THRESHOLD
-
-    @property
-    def isCostlyNeutral(self) -> bool:
-        """True if neutral that costs more than 10"""
-        return self.player == -1 and self.army > Tile.PATHABLE_CITY_THRESHOLD
-
-    @property
-    def isPathable(self) -> bool:
-        """False if mountain or undiscovered obstacle, True for all other tiles INCLUDING for discovered neutral cities"""
-        return not self.isNotPathable
-
-    @property
-    def isObstacle(self) -> bool:
-        """True if mountain, undiscovered obstacle, or discovered neutral city"""
-        return self.isMountain or (self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity) or self.isCostlyNeutral
+            _notPathable = not self.overridePathable
+        else:
+            _notPathable = self.isMountain or _undiscObs
+        self.isNotPathable = _notPathable
+        self.isPathable = not _notPathable
+        _costly = self.isNeutral and self.army > Tile.PATHABLE_CITY_THRESHOLD
+        self.isCostlyNeutral = _costly
+        self.isCostlyNeutralCity = self.isCity and _costly
+        self.isObstacle = self.isMountain or _undiscObs or _costly
 
     @property
     def movableNoObstacles(self) -> typing.Generator[Tile, None, None]:
@@ -439,10 +451,14 @@ class Tile(object):
         # TODO why is any of this tile setter shit here at all?
         if value >= 0 and self.visible:
             self.tile = value
-        elif value == -1 and self.army == 0 and not self.isNotPathable and not self.isCity and not self.isMountain:
+        isNotPathable = self.isMountain or (self.tile == TILE_OBSTACLE and not self.discovered and not self.isCity and not self.isMountain)
+        if self.overridePathable is not None:
+            isNotPathable = not self.overridePathable
+        elif value == -1 and self.army == 0 and not isNotPathable and not self.isCity and not self.isMountain:
             self.tile = TILE_EMPTY  # this whole thing seems wrong, needs to be updated carefully with tests as the delta logic seems to rely on it...
 
         self._player = value
+        self._recalc_derived()
 
     # @property
     # def army(self) -> int:
@@ -713,6 +729,7 @@ class Tile(object):
 
         self.delta.unexplainedDelta = self.delta.armyDelta
 
+        self._recalc_derived()
         return armyMovedHere
 
     def set_disconnected_neutral(self):
@@ -731,6 +748,8 @@ class Tile(object):
             self.isGeneral = False
             self.isCity = True
 
+        self._recalc_derived()
+
     def reset_wrong_undiscovered_fog_guess(self):
         """
         DO NOT call this for discovered-neutral-cities that were fog-guessed as captured, or they will be 'undiscovered' again.
@@ -747,6 +766,13 @@ class Tile(object):
         self._player = -1
         self.isGeneral = False
         self.delta = TileDelta()
+        self._recalc_derived()
+
+    @staticmethod
+    def recalc_all_derived(tiles_by_index: typing.List[Tile]):
+        """Call after changing Tile.PATHABLE_CITY_THRESHOLD to refresh cached derived state on every tile."""
+        for tile in tiles_by_index:
+            tile._recalc_derived()
 
     @classmethod
     def get_move_half_amount(cls, army: int) -> int:

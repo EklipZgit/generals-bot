@@ -1649,7 +1649,7 @@ class OpponentTracker(object):
 
         return ourStats.cityCount - byNumber >= enStats.cityCount
 
-    def winning_on_economy(self, byRatio: float = 1.0, cityValue: int = 25, againstPlayer: int = -2, offset: int = 0) -> bool:
+    def winning_on_economy(self, byRatio: float = 1.0, cityValue: int = 35, againstPlayer: int = -2, offset: int = 0) -> bool:
         """
 
         @param byRatio:

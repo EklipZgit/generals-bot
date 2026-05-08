@@ -84,6 +84,21 @@ class DirectOrToolsGraphBuilder(object):
     def __init__(self):
         self.log_debug: bool = False
 
+    def _format_island_tiles(self, island: 'TileIsland') -> str:
+        return '|'.join(str(t) for t in island.tiles_by_army[:8])
+
+    def _format_island_for_flow_diag(self, island: 'TileIsland', demand: int | None = None, supply: int | None = None) -> str:
+        demand_text = '' if demand is None else f' demand={demand}'
+        supply_text = '' if supply is None else f' ort_supply={supply}'
+        border_text = '|'.join(
+            f'{b.unique_id}:team{b.team}:{b.tile_count}t:{b.sum_army}a:{self._format_island_tiles(b)}'
+            for b in sorted(island.border_islands, key=lambda i: i.unique_id)
+        )
+        return (
+            f'id={island.unique_id} team={island.team} tiles={island.tile_count} army={island.sum_army}'
+            f'{demand_text}{supply_text} topTiles={self._format_island_tiles(island)} borders=[{border_text}]'
+        )
+
     def build(
         self,
         islands: 'TileIslandBuilder',
@@ -135,6 +150,7 @@ class DirectOrToolsGraphBuilder(object):
         all_node_ids: typing.Set[int] = set()
 
         with perf_timer.begin_move_event('OrTools build phase1 demands'):
+            flow_diag_islands: typing.Set[int] = set()
             for island in islands.all_tile_islands:
                 cost = island.tile_count - 1
                 demand = island.tile_count - island.sum_army
@@ -164,6 +180,25 @@ class DirectOrToolsGraphBuilder(object):
                 # Output port has zero supply (no demand attr in NX)
                 node_supply_map[-island.unique_id] = 0
 
+                borders_target = any(b.team == target_team for b in island.border_islands)
+                borders_friendly = any(b.team == team for b in island.border_islands)
+                if self.log_debug:
+                    if (
+                        island is target_general_island
+                        or island is friendly_general_island
+                        or island.team == team and borders_target
+                        or island.team == target_team and borders_friendly
+                    ):
+                        flow_diag_islands.add(island.unique_id)
+                        for border_island in island.border_islands:
+                            if border_island.team == team or border_island.team == target_team:
+                                flow_diag_islands.add(border_island.unique_id)
+                if self.log_debug and island.unique_id in flow_diag_islands:
+                    logbook.warning(
+                        f'FLOW_DIAG_PHASE1 use_neutral_flow={use_neutral_flow} '
+                        f'{self._format_island_for_flow_diag(island, demand, node_supply_map[island.unique_id])}'
+                    )
+
                 all_node_ids.add(island.unique_id)
                 all_node_ids.add(-island.unique_id)
 
@@ -191,6 +226,13 @@ class DirectOrToolsGraphBuilder(object):
                     arc_costs.append(1)
                     all_node_ids.add(src)
                     all_node_ids.add(dst)
+                    if self.log_debug and (island.unique_id in flow_diag_islands or movable_island.unique_id in flow_diag_islands):
+                        logbook.warning(
+                            f'FLOW_DIAG_BORDER_EDGE use_neutral_flow={use_neutral_flow} '
+                            f'{island.unique_id}(team={island.team},army={island.sum_army},tiles={island.tile_count}) '
+                            f'-> {movable_island.unique_id}(team={movable_island.team},army={movable_island.sum_army},tiles={movable_island.tile_count}) '
+                            f'arc={src}->{dst} cost=1 cap=100000'
+                        )
 
                 if use_neutral_flow:
                     sink_flag = role.is_neutral_sink_with_neut
@@ -298,6 +340,19 @@ class DirectOrToolsGraphBuilder(object):
         result.friendly_army_supply = friendly_army_supply
         result.enemy_army_demand = enemy_army_demand
         result.enemy_general_demand = enemy_general_demand
+        result.flow_diag_island_ids = flow_diag_islands
+        if self.log_debug:
+            diag_supplies = []
+            for island_id in sorted(flow_diag_islands):
+                if island_id in node_supply_map:
+                    diag_supplies.append(f'{island_id}:in_supply={node_supply_map[island_id]} out_supply={node_supply_map.get(-island_id, 0)} demand={demands.get(island_id)}')
+            logbook.warning(
+                f'FLOW_DIAG_GRAPH_SUMMARY use_neutral_flow={use_neutral_flow} '
+                f'friendly_army_supply={friendly_army_supply} enemy_army_demand={enemy_army_demand} '
+                f'enemy_general_demand={enemy_general_demand} cumulative_demand={cumulative_demand} '
+                f'fake_node={fake_node} target_general_island={target_general_island.unique_id} '
+                f'friendly_general_island={friendly_general_island.unique_id} diag_supplies=[{" | ".join(diag_supplies)}]'
+            )
         return result
 
     # Delegate classify_islands_for_flow to the ABC mixin
@@ -451,6 +506,7 @@ class OrToolsFlowComputer(object):
             flow_dict: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
             fake_nodes = graph_data.fake_nodes
             idx_to_node = graph_data.idx_to_node
+            flow_diag_islands = getattr(graph_data, 'flow_diag_island_ids', set())
 
             solution_flows = smcf.flows(all_arcs)
 
@@ -473,6 +529,17 @@ class OrToolsFlowComputer(object):
                         f'  OrTools arc {arc_idx}: {from_orig} -> {to_orig} '
                         f'flow={flow_amount} from_fake={from_is_fake} to_fake={to_is_fake}'
                     )
+                if self.log_debug and (
+                    abs(from_orig) in flow_diag_islands
+                    or abs(to_orig) in flow_diag_islands
+                    or from_is_fake
+                    or to_is_fake
+                ):
+                    logbook.warning(
+                        f'FLOW_DIAG_SOLVED_ARC arc={arc_idx} {from_orig}->{to_orig} flow={flow_amount} '
+                        f'cost={int(graph_data.unit_costs[arc_idx])} cap={int(graph_data.capacities[arc_idx])} '
+                        f'from_fake={from_is_fake} to_fake={to_is_fake}'
+                    )
 
                 if not from_is_fake and not to_is_fake:
                     flow_dict[from_orig][to_orig] = flow_dict[from_orig].get(to_orig, 0) + flow_amount
@@ -486,8 +553,15 @@ class OrToolsFlowComputer(object):
                     logbook.info(f'    ignored arc (fake-node handling)')
 
             if self.log_debug:
-                non_zero = {src: dict(tgts) for src, tgts in flow_dict.items() if tgts}
-                logbook.info(f'OrTools flow_dict={non_zero}')
+                diag_flow_dict = {}
+                for src, targets in flow_dict.items():
+                    if abs(src) in flow_diag_islands:
+                        diag_flow_dict[src] = dict(targets)
+                        continue
+                    diag_targets = {dst: amount for dst, amount in targets.items() if abs(dst) in flow_diag_islands}
+                    if diag_targets:
+                        diag_flow_dict[src] = diag_targets
+                logbook.warning(f'FLOW_DIAG_FLOW_DICT touching_diag_islands={diag_flow_dict}')
 
         return dict(flow_dict)
 

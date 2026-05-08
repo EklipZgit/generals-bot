@@ -1629,6 +1629,67 @@ a1
         self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
 
+    def test_update_tile_islands__capture_rebuilds_unchanged_newly_reachable_none_island_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        testData = """
+|    |    |    |    |    |    |
+aG1  a46  C43
+M    M    M
+                         bG1
+|    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 176)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        capturedCity = map.GetTile(2, 0)
+        newlyReachableTiles = {map.GetTile(3, 0), map.GetTile(4, 0), map.GetTile(5, 0)}
+        self.assertTrue(capturedCity.isCity, 'fixture: captured tile should be a city')
+        self.assertEqual(-1, capturedCity.player, 'fixture: captured city should start neutral')
+        for tile in newlyReachableTiles:
+            self.assertFalse(tile.isObstacle, f'fixture: newly reachable tile {tile} should be pathable')
+            self.assertEqual(-1, tile.player, f'fixture: newly reachable tile {tile} should start neutral')
+
+        islandsToEvict = {
+            builder.tile_island_lookup.raw[tile.tile_index]
+            for tile in newlyReachableTiles
+            if builder.tile_island_lookup.raw[tile.tile_index] is not None
+        }
+        for island in islandsToEvict:
+            builder._remove_leaf_island(island)
+
+        for tile in newlyReachableTiles:
+            tile.discovered = True
+            self.assertIsNone(
+                builder.tile_island_lookup.raw[tile.tile_index],
+                f'fixture: newly reachable tile {tile} should have no island before update'
+            )
+
+        self.mark_tile_captured(capturedCity, general.player, 3)
+        sourceTile = map.GetTile(1, 0)
+        self.mark_tile_army_incremented(sourceTile, -45)
+        sourceTile.delta.toTile = capturedCity
+        capturedCity.delta.fromTile = sourceTile
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
+        self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
+
 
     def test_shouldnt_create_broken_islands_after_captures(self):
         """

@@ -91,6 +91,22 @@ class BotDefense:
         if bot.dangerAnalyzer.fastestCityThreat is not None and bot.dangerAnalyzer.fastestCityThreat.turns > -1:
             threats.append(bot.dangerAnalyzer.fastestCityThreat)
 
+        logbook.info(f'DEFENSE THREATS: threats count={len(threats)}')
+
+        # If a city threat's target is on the general threat's shortest path, prioritize it
+        # Defending the city first blocks the threat earlier and saves the city
+        generalThreat = bot.dangerAnalyzer.fastestThreat
+        if generalThreat is not None and len(threats) > 1:
+            pathTiles = set(generalThreat.armyAnalysis.shortestPathWay.tiles)
+            for i, threat in enumerate(threats):
+                if threat.path.tail.tile.isCity and threat.path.tail.tile in pathTiles:
+                    # Move city threat to front so it gets defended first
+                    if i > 0:
+                        threats.pop(i)
+                        threats.insert(0, threat)
+                        bot.viewInfo.add_info_line(f'Prioritizing city defense at {threat.path.tail.tile} - city is on general threat path')
+                    break
+
         negativeTilesIncludingThreat = outputDefenseCriticalTileSet.copy()
 
         for threat in threats:

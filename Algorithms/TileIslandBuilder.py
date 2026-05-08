@@ -346,6 +346,7 @@ class TileIslandBuilder(object):
         changedOwnerTiles: typing.Set[Tile] = set()
         impactedLeafIslands: typing.Set[TileIsland] = set()
         noIslandChangedTiles: typing.Set[Tile] = set()
+        neutralCapturedCityTiles: typing.Set[Tile] = set()
         affectedTeams: typing.Set[int] = set()
         # Tiles whose army delta is fully handled by an intra/inter-island army move update
         # (no teardown required — just sum_army already patched in-place).
@@ -356,8 +357,10 @@ class TileIslandBuilder(object):
 
         for tile in self.map.tiles_by_index:
             # Use cached values for reliable delta detection (tile.delta may be stale/reset)
-            ownerChanged = self._prev_turn_player.raw[tile.tile_index] != tile.player
-            armyChanged = self._prev_turn_army.raw[tile.tile_index] != tile.army
+            previousPlayer = self._prev_turn_player.raw[tile.tile_index]
+            previousArmy = self._prev_turn_army.raw[tile.tile_index]
+            ownerChanged = previousPlayer != tile.player
+            armyChanged = previousArmy != tile.army
             self._prev_turn_player.raw[tile.tile_index] = tile.player
             self._prev_turn_army.raw[tile.tile_index] = tile.army
             if not ownerChanged and not armyChanged:
@@ -431,6 +434,8 @@ class TileIslandBuilder(object):
             if ownerChanged:
                 changedOwnerTiles.add(tile)
                 affectedTeams.add(self.teams[tile.delta.oldOwner])
+                if tile.isCity and previousPlayer == -1:
+                    neutralCapturedCityTiles.add(tile)
             if armyChanged:
                 changedArmyTiles.add(tile)
             affectedTeams.add(self.teams[tile.player])
@@ -524,7 +529,26 @@ class TileIslandBuilder(object):
             for island in forceBorderSoloViolations:
                 affectedTeams.add(island.team)
 
-        if len(changedTiles) == 0 and len(impactedLeafIslands) == 0:
+        # Only run this when one of the updated tiles is a captured neutral city with an adjacent pathable tile that has no island.
+        shouldCollectNewlyPathableNoneIslands = False
+        for tile in neutralCapturedCityTiles:
+            x, y = tile.x, tile.y
+            for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if 0 <= nx < self.map.cols and 0 <= ny < self.map.rows:
+                    adj = self.map.grid[ny][nx]
+                    if adj in self.map.pathable_tiles and self.tile_island_lookup.raw[adj.tile_index] is None:
+                        shouldCollectNewlyPathableNoneIslands = True
+                        break
+            if shouldCollectNewlyPathableNoneIslands:
+                break
+
+        if shouldCollectNewlyPathableNoneIslands:
+            for tile in self.map.pathable_tiles:
+                if self.tile_island_lookup.raw[tile.tile_index] is None:
+                    noIslandChangedTiles.add(tile)
+                    affectedTeams.add(self.teams[tile.player])
+
+        if len(changedTiles) == 0 and len(impactedLeafIslands) == 0 and len(noIslandChangedTiles) == 0:
             if self.use_debug_asserts:
                 self.debug_verify_all_islands(context='update_tile_islands:no_changes', mode=mode)
             complete = time.perf_counter() - start
@@ -1847,6 +1871,15 @@ class TileIslandBuilder(object):
         return False
 
     def rebuild_islands_from_ids(self, islandIdMatrix: MapMatrixInterface[int]):
+        # for _diag_tile in self.map.tiles_by_index:
+        #     logbook.info(
+        #         f'DIAG_TILE {_diag_tile} idx={_diag_tile.tile_index} id={islandIdMatrix.raw[_diag_tile.tile_index]}'
+        #         f' pl={_diag_tile.player} army={_diag_tile.army} tile={_diag_tile.tile}'
+        #         f' isMtn={_diag_tile.isMountain} isCity={_diag_tile.isCity} disc={_diag_tile.discovered}'
+        #         f' isObs={_diag_tile.isObstacle} isPath={_diag_tile.isPathable} isNeut={_diag_tile.isNeutral}'
+        #         f' isCostlyNeut={_diag_tile.isCostlyNeutral} overridePath={_diag_tile.overridePathable}'
+        #         f' PCT={_diag_tile.PATHABLE_CITY_THRESHOLD}'
+        #     )
         self.reset_for_rebuild()
         maxId = 0
         for (tile_idx, tile) in enumerate(self.map.tiles_by_index):
@@ -1892,6 +1925,16 @@ class TileIslandBuilder(object):
             fullIsland.child_islands = []
             for tile in fullIsland.tile_set:
                 childIsland = self.tile_island_lookup.raw[tile.tile_index]
+                # if childIsland is None:
+                #     logbook.error(
+                #         f'DIAG rebuild_islands_from_ids: tile {tile} (idx={tile.tile_index}) in fullIsland.tile_set has NO lookup entry.'
+                #         f' tile.player={tile.player} tile.army={tile.army} tile.tile={tile.tile}'
+                #         f' isMountain={tile.isMountain} isCity={tile.isCity} discovered={tile.discovered}'
+                #         f' isObstacle={tile.isObstacle} isPathable={tile.isPathable} isNeutral={tile.isNeutral}'
+                #         f' isCostlyNeutral={tile.isCostlyNeutral} overridePathable={tile.overridePathable}'
+                #         f' PATHABLE_CITY_THRESHOLD={tile.PATHABLE_CITY_THRESHOLD}'
+                #         f' | fullIsland start={island.tiles_by_army[0]} player={island.tiles_by_army[0].player}'
+                #     )
                 if childIsland.full_island is not None:
                     continue
 

@@ -182,6 +182,7 @@ class TextMapLoader(object):
                 tile.army = 0
                 tile.tile = TILE_EMPTY
                 tile.player = -1
+                tile._recalc_derived()
                 return
             case 'M':
                 tile.army = 0
@@ -190,6 +191,7 @@ class TextMapLoader(object):
                 tile.isMountain = True
                 if 'D' in text_tile:
                     tile.discovered = True
+                tile._recalc_derived()
                 return
             case 'O':
                 tile.army = 0
@@ -199,6 +201,7 @@ class TextMapLoader(object):
                 tile.isObservatory = True
                 if 'D' in text_tile:
                     tile.discovered = True
+                tile._recalc_derived()
                 return
             case 'L':
                 tile.army = 0
@@ -208,6 +211,7 @@ class TextMapLoader(object):
                 tile.isLookout = True
                 if 'D' in text_tile:
                     tile.discovered = True
+                tile._recalc_derived()
                 return
             case 'a':
                 player = 0
@@ -279,6 +283,7 @@ class TextMapLoader(object):
             tile.army = army
 
         tile.turn_captured = 0
+        tile._recalc_derived()
 
     @staticmethod
     def get_map_raw_string_from_file(file_path_from_tests_folder):
@@ -485,3 +490,4 @@ class TextMapLoader(object):
 
         for tile in map.get_all_tiles():
             tile.turn_captured = 0
+        Tile.recalc_all_derived(map.tiles_by_index)

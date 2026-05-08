@@ -28,3 +28,4 @@ pandas
 tqdm
 setuptools
 PyMaxflow
+arraydeque

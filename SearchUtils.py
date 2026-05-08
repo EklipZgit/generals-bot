@@ -14,6 +14,7 @@ import math
 import typing
 import time
 from collections import deque
+# from arraydeque import ArrayDeque as deque
 
 from heapq_max import heappush_max, heappop_max
 
@@ -3447,16 +3448,18 @@ def breadth_first_foreach(
     iter = 0
     depthEvaluated = 0
     dist = 0
+
+    skipFunc = lambda t, d: False
+    if not bypassDefaultSkip:
+        skipFunc = lambda t, d: (t.isMountain or (not t.discovered and t.isNotPathable)) and d > 0
+
     while frontier:
         iter += 1
 
-        (current, dist) = frontier.pop()
-        if current.tile_index in globalVisited:
-            continue
+        (current, dist) = frontier.popleft()
         if dist > maxDepth:
             break
-        globalVisited.add(current.tile_index)
-        if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
+        if skipFunc(current, dist):
             continue
 
         if foreachFunc(current):
@@ -3464,7 +3467,9 @@ def breadth_first_foreach(
 
         newDist = dist + 1
         for nextTile in current.movable:  # new spots to try
-            frontier.appendleft((nextTile, newDist))
+            if nextTile.tile_index not in globalVisited:
+                globalVisited.add(nextTile.tile_index)
+                frontier.append((nextTile, newDist))
     if not noLog:
         logbook.info(
             f"Completed breadth_first_foreach. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
@@ -3520,11 +3525,8 @@ def breadth_first_foreach_with_state(
         iter += 1
 
         (current, dist, state) = frontier.pop()
-        if current.tile_index in globalVisited:
-            continue
         if dist > maxDepth:
             break
-        globalVisited.add(current.tile_index)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)) and dist > 0:
             continue
 
@@ -3534,7 +3536,9 @@ def breadth_first_foreach_with_state(
 
         newDist = dist + 1
         for next in current.movable:  # new spots to try
-            frontier.appendleft((next, newDist, nextState))
+            if next.tile_index not in globalVisited:
+                globalVisited.add(next.tile_index)
+                frontier.appendleft((next, newDist, nextState))
     if not noLog:
         logbook.info(
             f"Completed breadth_first_foreach_with_state: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
@@ -3603,7 +3607,8 @@ def breadth_first_foreach_with_state_and_start_dist(
 
         newDist = dist + 1
         for next in current.movable:  # new spots to try
-            frontier.put((newDist, nextState, next))
+            if next.tile_index not in globalVisited:
+                frontier.put((newDist, nextState, next))
     if not noLog:
         logbook.info(
             f"Completed breadth_first_foreach_with_state_and_start_dist: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
@@ -3656,11 +3661,8 @@ def breadth_first_foreach_dist(
         iter += 1
 
         (current, dist) = frontier.pop()
-        if current.tile_index in globalVisited:
-            continue
         if dist > maxDepth:
             break
-        globalVisited.add(current.tile_index)
         if not bypassDefaultSkip and (current.isMountain or (not current.discovered and current.isNotPathable)):
             continue
 
@@ -3669,7 +3671,9 @@ def breadth_first_foreach_dist(
 
         newDist = dist + 1
         for nextTile in current.movable:  # new spots to try
-            frontier.appendleft((nextTile, newDist))
+            if nextTile.tile_index not in globalVisited:
+                frontier.appendleft((nextTile, newDist))
+                globalVisited.add(nextTile.tile_index)
     if not noLog:
         logbook.info(
             f"Completed breadth_first_foreach_dist. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
@@ -3706,17 +3710,17 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
         (current, dist) = frontier.pop()
         if current.isNotPathable:
             continue
-        if current.tile_index in globalVisited:
-            continue
         if dist > maxDepth:
             break
-        globalVisited.add(current.tile_index)
 
         if foreachFunc(current, dist):
             continue
 
         newDist = dist + 1
         for nextTile in current.movable:  # new spots to try
+            if nextTile.tile_index in globalVisited:
+                continue
+            globalVisited.add(nextTile.tile_index)
             frontier.appendleft((nextTile, newDist))
 
 
@@ -3748,11 +3752,8 @@ def breadth_first_foreach_dist_fast_with_start_dist_incl_neut_cities(
         (current, dist, depth) = frontier.pop()
         if current.isNotPathable:
             continue
-        if current.tile_index in globalVisited:
-            continue
         if depth > maxDepth:
             break
-        globalVisited.add(current.tile_index)
 
         if foreachFunc(current, dist):
             continue
@@ -3760,6 +3761,9 @@ def breadth_first_foreach_dist_fast_with_start_dist_incl_neut_cities(
         newDist = dist + 1
         newDepth = depth + 1
         for n in current.movable:  # new spots to try
+            if n.tile_index in globalVisited:
+                continue
+            globalVisited.add(n.tile_index)
             frontier.appendleft((n, newDist, newDepth))
 
 

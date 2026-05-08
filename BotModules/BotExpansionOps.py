@@ -10,7 +10,7 @@ import SearchUtils
 import logbook
 
 from ArmyAnalyzer import ArmyAnalyzer
-from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
+from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, get_tile_army_mapmatrix
 from BotModules.BotDefenseQueries import BotDefenseQueries
 from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotStateQueries import BotStateQueries
@@ -375,8 +375,21 @@ class BotExpansionOps:
         expansionNegStr = " | ".join([str(t) for t in expansionNegatives])
         if path:
             pathMove = path.get_first_move()
+            if bot.last_flow_expander is not None and bot.last_flow_expander.log_debug:
+                logbook.warning(
+                    f'BOT_EXP_EXEC_CANDIDATE selected_first={pathMove} '
+                    f'srcArmy={pathMove.source.army if pathMove is not None else None} '
+                    f'destPlayer={pathMove.dest.player if pathMove is not None else None} '
+                    f'destArmy={pathMove.dest.army if pathMove is not None else None} '
+                    f'path={path} allPaths={len(allPaths)} includesIntercept={bot.expansion_plan.includes_intercept}'
+                )
             inLaunchSplit = bot.timings.in_launch_split(bot._map.turn)
             if pathMove.source.isGeneral and not inLaunchSplit and len(allPaths) > 1 and not bot.expansion_plan.includes_intercept:
+                if bot.last_flow_expander is not None and bot.last_flow_expander.log_debug:
+                    logbook.warning(
+                        f'BOT_EXP_EXEC_SWAP_GENERAL_SOURCE old_first={pathMove} '
+                        f'new_first={allPaths[1].get_first_move()} old_path={path} new_path={allPaths[1]}'
+                    )
                 path = allPaths[1]
 
             move = path.get_first_move()
@@ -384,10 +397,20 @@ class BotExpansionOps:
                 bot.viewInfo.add_info_line(f'because we\'re all in, will NOT move-half...')
                 move.move_half = False
             if BotPathingUtils.is_move_safe_valid(bot, move):
+                if bot.last_flow_expander is not None and bot.last_flow_expander.log_debug:
+                    logbook.warning(
+                        f'BOT_EXP_EXEC_RETURN move={move} srcArmy={move.source.army} '
+                        f'destPlayer={move.dest.player} destArmy={move.dest.army} path={path}'
+                    )
                 bot.info(
                     f"EXP {path.econValue:.2f}/{path.length}t {move} neg ({expansionNegStr})")
                 return move
             else:
+                if bot.last_flow_expander is not None and bot.last_flow_expander.log_debug:
+                    logbook.warning(
+                        f'BOT_EXP_EXEC_UNSAFE move={move} srcArmy={move.source.army} '
+                        f'destPlayer={move.dest.player} destArmy={move.dest.army} path={path}'
+                    )
                 bot.info(
                     f"NOT SAFE EXP {path.econValue:.2f}/{path.length}t {move} neg ({expansionNegStr})")
 
@@ -474,6 +497,43 @@ class BotExpansionOps:
                     flowExpander.use_debug_asserts = False
 
                     try:
+                        # Build army override matrix; override the last connected fog tile on the
+                        # intergeneral path with the predicted fog army amount and reward econ value.
+                        armyOverrideMatrix = get_tile_army_mapmatrix(bot._map)
+                        bonusCapturePointMatrixForFlow = bonusCapturePointMatrix
+                        opponentCycleStats = bot.opponent_tracker.get_current_cycle_stats_by_player(bot.targetPlayer)
+                        if (
+                            bot.target_player_gather_path is not None
+                            and opponentCycleStats is not None
+                            and opponentCycleStats.approximate_fog_army_available_total > 0
+                        ):
+                            # Walk from the enemy-general end (tail) toward our general (start).
+                            # Find the last non-visible tile before the first visible tile —
+                            # i.e., the fog-boundary tile closest to our side.
+                            lastFogTile = None
+                            for pathTile in reversed(bot.target_player_gather_path.tileList):
+                                if not pathTile.visible:
+                                    lastFogTile = pathTile
+                                elif lastFogTile is not None:
+                                    # We've crossed from fog into visible; stop here.
+                                    break
+                            if lastFogTile is not None:
+                                predictedArmy = opponentCycleStats.approximate_fog_army_available_total
+                                armyOverrideMatrix.raw[lastFogTile.tile_index] = predictedArmy
+                                # Clone the bonus matrix so we don't mutate the shared one
+                                bonusCapturePointMatrixForFlow = MapMatrix(bot._map, 0.0)
+                                for i in range(len(bonusCapturePointMatrix.raw)):
+                                    bonusCapturePointMatrixForFlow.raw[i] = bonusCapturePointMatrix.raw[i]
+                                bonusCapturePointMatrixForFlow.raw[lastFogTile.tile_index] = float(remainingCycleTurns)
+                                logbook.info(
+                                    f'FE fog override: tile ({lastFogTile.x},{lastFogTile.y}) '
+                                    f'army={predictedArmy} econ={remainingCycleTurns}'
+                                )
+                                bot.info(f'FE enemy fog of {predictedArmy} on tile {lastFogTile} val {remainingCycleTurns}')
+                                bot.viewInfo.add_targeted_tile(lastFogTile, TargetStyle.PURPLE)
+                                bot.viewInfo.bottomLeftGridText.raw[lastFogTile.tile_index] = str(predictedArmy)
+                                bot.viewInfo.bottomMidLeftGridText.raw[lastFogTile.tile_index] = str(remainingCycleTurns)
+
                         # Pass intercepts into FlowExpansion for integrated knapsacking
                         additionalOptionsToInclude = [opt for opt in addlOptions if isinstance(opt, InterceptionOptionInfo)]
                         if bot.expansion_allow_leaf_moves:
@@ -494,11 +554,11 @@ class BotExpansionOps:
                             boardAnalysis=bot.board_analysis,
                             territoryMap=bot.territories.territoryMap,
                             negativeTiles=expansionNegatives,
-                            bonusCapturePointMatrix=bonusCapturePointMatrix,
+                            bonusCapturePointMatrix=bonusCapturePointMatrixForFlow,
                             cutoffTime=cutoffTime,
                             additional_options=additionalOptionsToInclude,
+                            army_override_matrix=armyOverrideMatrix,
                         )
-                        bot.info(f'FE turns {remainingCycleTurns}')
                         for opt in optCollection.flow_plans:
                             bot.info(f'FE: {opt}  {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: bot.board_analysis.intergeneral_analysis.aMap.raw[t2.tile_index]))}')
                         addlOptions = list(optCollection.flow_plans)
@@ -594,6 +654,17 @@ class BotExpansionOps:
 
             path = expUtilPlan.selected_option
             otherPaths = expUtilPlan.all_paths
+            firstMoveText = 'None'
+            if path is not None:
+                firstMove = path.get_first_move()
+                if firstMove is not None:
+                    firstMoveText = f'{firstMove.source}->{firstMove.dest} srcArmy={firstMove.source.army} destPlayer={firstMove.dest.player} destArmy={firstMove.dest.army}'
+            if bot.last_flow_expander is not None and bot.last_flow_expander.log_debug:
+                logbook.warning(
+                    f'BOT_EXP_SELECTED first={firstMoveText} '
+                    f'path={path} options={len(otherPaths)} '
+                    f'enCaps={expUtilPlan.en_tiles_captured} neutCaps={expUtilPlan.neut_tiles_captured}'
+                )
 
             bot.viewInfo.add_stats_line(f'EXP AVAIL {expUtilPlan.turns_used} {expUtilPlan.cumulative_econ_value:.2f} - (en{expUtilPlan.en_tiles_captured} neut{expUtilPlan.neut_tiles_captured})')
 
@@ -1919,9 +1990,12 @@ class BotExpansionOps:
 
         if (
                 (bot._map.remainingPlayers != 2 and not bot._map.is_2v2)
-                or bot.opponent_tracker.winning_on_economy(byRatio=1.35, cityValue=4, offset=bot.behavior_pre_gather_greedy_leaves_offset)
                 or bot.approximate_greedy_turns_avail <= 0
         ):
+            return None
+
+        if (bot.opponent_tracker.winning_on_economy(byRatio=1.35, cityValue=5, offset=bot.behavior_pre_gather_greedy_leaves_offset)):
+            bot.viewInfo.add_info_line(f'Skipping expansion quick capture due to massively winning on tiles')
             return None
 
         negativeTiles = defenseCriticalTileSet.copy()
@@ -2061,6 +2135,11 @@ class BotExpansionOps:
         if bot.targetPlayer != -1 and not bot.armyTracker.seen_player_lookup[bot.targetPlayer]:
             searchingForFirstContact = True
 
+        discoveredTargetTileCount = 0
+        if bot.targetPlayerObj is not None:
+            discoveredTargetTileCount = len(bot.targetPlayerObj.tiles)
+        searchingForEnemyLand = bot.targetPlayer != -1 and discoveredTargetTileCount < max(10, bot.player.tileCount // 5)
+
         if numEnGenPos > 5:
             bot.info(f'filtering down valid general set')
             avgDist = sum(bot.board_analysis.intergeneral_analysis.aMap.raw[t.tile_index] for t in genPosesToConsider) / len(genPosesToConsider)
@@ -2191,6 +2270,18 @@ class BotExpansionOps:
 
             if tile.player == -1 and tgPlayerTerritoryDists.raw[tile.tile_index] < 2:
                 bonus += 0.02
+
+            if searchingForEnemyLand and (isNeutral or isTarget):
+                fogContactBonus = 0.0
+                if not tile.discovered:
+                    fogContactBonus += 0.12
+                if bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer].raw[tile.tile_index]:
+                    fogContactBonus += 0.18
+                if enDist < genDist:
+                    fogContactBonus += min(0.25, (genDist - enDist) / max(10, bot.board_analysis.inter_general_distance))
+                if anyFlankVis:
+                    fogContactBonus += 0.08
+                bonus += fogContactBonus
 
             if tile.isCity:
                 cityScore = bot.cityAnalyzer.city_scores.get(tile, None)

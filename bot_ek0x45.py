@@ -1742,10 +1742,12 @@ class EklipZBot(object):
 
         if 'PATHABLE_CITY_THRESHOLD' in resume_data:
             Tile.PATHABLE_CITY_THRESHOLD = int(resume_data['PATHABLE_CITY_THRESHOLD'])
+            Tile.recalc_all_derived(self._map.tiles_by_index)
             self._map.distance_mapper.recalculate()
             self._map.update_reachable()
         else:
             Tile.PATHABLE_CITY_THRESHOLD = 5  # old replays, no cities were ever pathable.
+            Tile.recalc_all_derived(self._map.tiles_by_index)
 
         if self.targetPlayerExpectedGeneralLocation:
             cities_in_play = self.cityAnalyzer.cities_in_play if self.cityAnalyzer is not None else None
@@ -1754,6 +1756,7 @@ class EklipZBot(object):
         # Rebuild islands from serialized data if available (overrides the recalculate_tile_islands done in init)
         if 'island_ids' in resume_data:
             island_id_matrix = BotSerialization.convert_string_to_island_id_matrix(self, resume_data['island_ids'])
+            Tile.recalc_all_derived(self._map.tiles_by_index)
             self.tileIslandBuilder.rebuild_islands_from_ids(island_id_matrix)
 
         self.opponent_tracker.load_from_map_data(resume_data)
@@ -1915,7 +1918,7 @@ class EklipZBot(object):
         self._map.notify_tile_captures.append(lambda tile: BotEventHandlers.handle_tile_captures(self, tile))
         self._map.notify_tile_discovered.append(lambda tile: BotEventHandlers.handle_tile_discovered(self, tile))
         self._map.notify_tile_vision_changed.append(lambda tile: BotEventHandlers.handle_tile_vision_change(self, tile))
-        self._map.notify_player_captures.append(lambda playerIndex: BotEventHandlers.handle_player_captures(self, playerIndex))
+        self._map.notify_player_captures.append(lambda capturee, capturer: BotEventHandlers.handle_player_captures(self, capturee, capturer))
         if self.territories is None:
             self.territories = TerritoryClassifier(self._map)
 

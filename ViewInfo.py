@@ -106,8 +106,8 @@ class ViewInfo(object):
         self.lastMoveDuration = 0.0
         self.addlTimingsLineText: str = ""
         self.infoLines: typing.List[str] = []
-        self.arrows: typing.List[typing.Tuple[float, float, float, float, str, typing.Tuple[int, int, int], int, bool]] = []
-        """(from, to, label, color, alpha, isBidirectional)"""
+        self.arrows: typing.List[typing.Tuple[float, float, float, float, str, typing.Tuple[int, int, int], int, bool, int | None]] = []
+        """(from, to, label, color, alpha, isBidirectional, labelAlpha)"""
         self.statsLines: typing.List[str] = []
 
     @staticmethod
@@ -242,7 +242,8 @@ class ViewInfo(object):
             color: typing.Tuple[int, int, int] | TargetStyle | int | None = None,
             alpha: int = 255,
             bidir: bool = False,
-            colorFloor: int = 90
+            colorFloor: int = 90,
+            labelAlpha: int | None = None
     ):
         """
         color can be a tuple of ints, a targetstyle, or an int seed to use for the random color
@@ -277,7 +278,7 @@ class ViewInfo(object):
 
             color = colorFloor + r % colorRem, colorFloor + g % colorRem, colorFloor + b % colorRem
 
-        self.arrows.append((fromX, fromY, toX, toY, label, color, alpha, bidir))
+        self.arrows.append((fromX, fromY, toX, toY, label, color, alpha, bidir, labelAlpha))
 
     def draw_diagonal_arrow_between(
             self,
@@ -287,7 +288,8 @@ class ViewInfo(object):
             color: typing.Tuple[int, int, int] | TargetStyle | int | None = None,
             alpha: int = 255,
             bidir: bool = False,
-            colorFloor: int = 90
+            colorFloor: int = 90,
+            labelAlpha: int | None = None
     ):
         """
         color can be a tuple of ints, a targetstyle, or an int seed to use for the random color
@@ -301,7 +303,7 @@ class ViewInfo(object):
         @return:
         """
 
-        self.draw_diagonal_arrow_between_xy(fromTile.x, fromTile.y, toTile.x, toTile.y, label, color, alpha, bidir, colorFloor)
+        self.draw_diagonal_arrow_between_xy(fromTile.x, fromTile.y, toTile.x, toTile.y, label, color, alpha, bidir, colorFloor, labelAlpha)
 
     def add_info_multi_line(self, inputStr: str, lineLenChars: int = 80, childLineIndent: int = 2):
         subsLineStart = ''

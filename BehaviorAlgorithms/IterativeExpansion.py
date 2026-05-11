@@ -2179,8 +2179,8 @@ class ArmyFlowExpander(object):
             path = Path.from_move(move)
             viewInfo.color_path(PathColorer(
                 path,
-                min(255, 100 + 10 * i), max(0, 200 - 10 * i), 100,
-                255,
+                max(0, 150 - 10 * i), 200, min(255, 150 + 10 * i),
+                185,
                 0, 0
             ))
             i += 1

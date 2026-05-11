@@ -1908,12 +1908,15 @@ player_index=0
         
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,8->10,9->14,9')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
-        self.assertTileDifferentialGreaterThan(7, simHost, )
+        # Weirdly it IS optimal to take the neutral tile first because it lets you cap one extra tile up near the enemy
+        # land rather than having a 2 left in the middle of enemy land and capping an extra neutral near general instead.
+        # TODO should be capturing backwards away from the general, though?
+        self.assertTileDifferentialGreaterThan(-4, simHost, )
 

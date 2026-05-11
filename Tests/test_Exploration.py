@@ -2,6 +2,7 @@ import typing
 
 import EarlyExpandUtils
 from BotHost import BotHostBase
+from BotModules.BotExplorationOps import BotExplorationOps
 from Models import Move
 from Sim.GameSimulator import GameSimulator, GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
@@ -43,7 +44,7 @@ class ExplorationTests(TestBase):
 
         self.begin_capturing_logging()
         badPathStartTile = self.get_player_tile(15, 6, simHost.sim, general.player)
-        path = simHost.bot_hosts[general.player].eklipz_bot.explore_target_player_undiscovered(negTiles)
+        path = BotExplorationOps.explore_target_player_undiscovered(simHost.bot_hosts[general.player].eklipz_bot, negTiles)
 
         if path is not None:
             self.assertNotEquals(badPathStartTile, path.start.tile)

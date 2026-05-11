@@ -12,12 +12,13 @@ import logbook
 import Algorithms
 import DebugHelper
 import SearchUtils
-from Algorithms import FastDisjointSet
 from ArmyAnalyzer import ArmyAnalyzer
-from BoardAnalyzer import BoardAnalyzer
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import MapBase, Tile, TeamStats
+
+if typing.TYPE_CHECKING:
+    from ViewInfo import ViewInfo
 
 
 class TileIsland(object):
@@ -1810,32 +1811,34 @@ class TileIslandBuilder(object):
 
         return borderLookup
 
-    def add_tile_islands_to_view_info(self, viewInfo, printIslandInfoLines: bool = False, renderIslandNames: bool = True):
-        if renderIslandNames:
+    def add_tile_islands_to_view_info(self, viewInfo: ViewInfo, printIslandInfoLines: bool = False, renderIslandNames: bool = True, renderIslandColors: bool = True):
+        if renderIslandNames and (DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE or viewInfo.map.turn % 50 == 0):
             viewInfo.add_info_line('ISLAND NAME PREFIXES:')
             viewInfo.add_info_line('!  forced solo during breakup')
             viewInfo.add_info_line('+  remaining after solo\'d')
             viewInfo.add_info_line('*  rebuild pending army tiles')
             viewInfo.add_info_line('%  rebuild contiguous to base tile')
         for island in sorted(self.all_tile_islands, key=lambda i: (i.team, i.unique_id)):
-            _rng = random.Random(hash(island.unique_id))
-            color = (_rng.randint(0, 255), _rng.randint(0, 255), _rng.randint(0, 255))
-            zoneAlph = 80
-            divAlph = 200
-            if island.team == -1:
-                zoneAlph //= 2
-                divAlph //= 2
+            if renderIslandColors:
+                _rng = random.Random(hash(island.unique_id))
+                color = (_rng.randint(0, 255), _rng.randint(0, 255), _rng.randint(0, 255))
+                zoneAlph = 80
+                divAlph = 200
+                if island.team == -1:
+                    zoneAlph //= 2
+                    divAlph //= 2
 
-            viewInfo.add_map_zone(island.tile_set, color, alpha=zoneAlph)
-            viewInfo.add_map_division(island.tile_set, color, alpha=divAlph)
+                viewInfo.add_map_zone(island.tile_set, color, alpha=zoneAlph)
+                viewInfo.add_map_division(island.tile_set, color, alpha=divAlph)
 
             if island.name and renderIslandNames:
                 for tile in island.tile_set:
-                    if viewInfo.bottomRightGridText.raw[tile.tile_index]:
-                        viewInfo.midRightGridText.raw[tile.tile_index] = island.name
+                    tIndex = tile.tile_index
+                    if viewInfo.bottomRightGridText.raw[tIndex]:
+                        viewInfo.midRightGridText.raw[tIndex] = island.name
                     else:
-                        viewInfo.bottomRightGridText.raw[tile.tile_index] = island.name
-                    viewInfo.topRightGridText.raw[tile.tile_index] = island.unique_id
+                        viewInfo.bottomRightGridText.raw[tIndex] = island.name
+                    viewInfo.topRightGridText.raw[tIndex] = str(island.unique_id)
 
 
             if printIslandInfoLines:

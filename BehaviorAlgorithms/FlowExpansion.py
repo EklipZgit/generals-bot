@@ -369,6 +369,25 @@ class ArmyFlowExpanderV2:
     ) -> list[FlowBorderPairKey]:
         """Phase 1: Enumerate valid friendly-target border pairs"""
         border_pairs = []
+        diag_tile_positions = {(13, 5), (13, 4), (12, 5), (12, 4)}
+        diag_island_ids = set()
+        if self.log_debug:
+            for x, y in diag_tile_positions:
+                tile = self.map.GetTile(x, y)
+                tile_island = islands.tile_island_lookup.raw[tile.tile_index]
+                tile_team = tile_island.team if tile_island is not None else self._diag_tile_team(tile)
+                if tile_island is not None:
+                    diag_island_ids.add(tile_island.unique_id)
+                    logbook.warning(
+                        f"FE_DIAG_TILE {x},{y}: player={tile.player} team={tile_team} army={tile.army} "
+                        f"island={tile_island.unique_id} islandTeam={tile_island.team} "
+                        f"tileCount={tile_island.tile_count} sumArmy={tile_island.sum_army} "
+                        f"tiles={sorted((t.x, t.y) for t in tile_island.tile_set)}"
+                    )
+                else:
+                    logbook.warning(
+                        f"FE_DIAG_TILE {x},{y}: player={tile.player} team={tile_team} army={tile.army} island=None"
+                    )
 
         for friendly_island in islands.tile_islands_by_team_id[my_team]:
             if friendly_island.unique_id in target_crossable_islands:
@@ -391,6 +410,13 @@ class ArmyFlowExpanderV2:
                     target_island_id=target_island.unique_id
                 )
                 border_pairs.append(border_pair)
+                if self.log_debug and (friendly_island.unique_id in diag_island_ids or target_island.unique_id in diag_island_ids):
+                    logbook.warning(
+                        f"FE_DIAG_BORDER_PAIR added {friendly_island.unique_id}->{target_island.unique_id}: "
+                        f"friendly={friendly_island} target={target_island} "
+                        f"targetTeam={target_island.team} targetTiles={sorted((t.x, t.y) for t in target_island.tile_set)} "
+                        f"flowSupported=True"
+                    )
                 if self.log_debug:
                     logbook.info(f"Added border pair: friendly {friendly_island} -> target {target_island}")
 
@@ -1030,9 +1056,17 @@ class ArmyFlowExpanderV2:
             stream_data = self._build_border_pair_stream_data(border_pair, flow_graph, target_crossable_islands, turn_budget)
             if stream_data is None:
                 continue
+            diag_relevant = self.log_debug and self._is_diag_border_pair(border_pair, stream_data)
 
             # Get ordered contributions for this border pair
             friendly_contribs, target_contribs = self._preprocess_flow_stream_tilecounts(stream_data, border_pair)
+            if diag_relevant:
+                logbook.warning(
+                    f"FE_DIAG_STREAM {border_pair.friendly_island_id}->{border_pair.target_island_id}: "
+                    f"friendlyStream={[self._diag_island_summary(n.island) for n in stream_data.friendly_stream]} "
+                    f"targetStream={[self._diag_island_summary(n.island) for n in stream_data.target_stream]} "
+                    f"targetContribs={[self._diag_contribution_summary(c) for c in target_contribs]}"
+                )
 
             # Generate capture lookup table
             capture_lookup = self._generate_capture_lookup_table(
@@ -1067,6 +1101,12 @@ class ArmyFlowExpanderV2:
             )
 
             lookup_tables.append(lookup_table)
+            if diag_relevant:
+                logbook.warning(
+                    f"FE_DIAG_LOOKUP {border_pair.friendly_island_id}->{border_pair.target_island_id}: "
+                    f"captureEntries={[self._diag_entry_summary(e) for e in capture_lookup if e is not None and e.turns <= 10]} "
+                    f"gatherEntries={[self._diag_entry_summary(e) for e in gather_lookup if e is not None and e.turns <= 10]}"
+                )
 
             if self.log_debug:
                 logbook.info(f"Generated lookup table for border pair {border_pair.friendly_island_id}->{border_pair.target_island_id}: "
@@ -1074,6 +1114,52 @@ class ArmyFlowExpanderV2:
                              f"gather_entries={len([e for e in gather_lookup if e is not None])}")
 
         return lookup_tables
+
+    def _is_diag_border_pair(
+            self,
+            border_pair: FlowBorderPairKey,
+            stream_data: BorderPairStreamPotential | None = None
+    ) -> bool:
+        diag_tile_positions = {(13, 5), (13, 4), (12, 5), (12, 4)}
+        diag_island_ids = set()
+        if self.island_builder is None:
+            return False
+        for x, y in diag_tile_positions:
+            tile = self.map.GetTile(x, y)
+            tile_island = self.island_builder.tile_island_lookup.raw[tile.tile_index]
+            if tile_island is not None:
+                diag_island_ids.add(tile_island.unique_id)
+        if border_pair.friendly_island_id in diag_island_ids or border_pair.target_island_id in diag_island_ids:
+            return True
+        if stream_data is None:
+            return False
+        return any(n.island.unique_id in diag_island_ids for n in stream_data.friendly_stream + stream_data.target_stream)
+
+    def _diag_tile_team(self, tile) -> int:
+        if tile.player < 0:
+            return -1
+        return self.map.team_ids_by_player_index[tile.player]
+
+    def _diag_island_summary(self, island) -> str:
+        return (
+            f"{island.unique_id}:team{island.team}:tc{island.tile_count}:army{island.sum_army}:"
+            f"{sorted((t.x, t.y) for t in island.tile_set)}"
+        )
+
+    def _diag_contribution_summary(self, contribution: FlowStreamIslandContribution) -> str:
+        return (
+            f"{contribution.island_id}:friendly{contribution.is_friendly}:cross{contribution.is_crossing}:"
+            f"tiles{contribution.tile_count}:army{contribution.army_amount}:score{contribution.sort_score:.3f}"
+        )
+
+    def _diag_entry_summary(self, entry: FlowTurnsEntry) -> str:
+        return (
+            f"t{entry.turns}:req{entry.required_army}:econ{entry.econ_value:.2f}:gath{entry.gathered_army}:"
+            f"targets{[n.island.unique_id for n in entry.included_target_flow_nodes]}:"
+            f"friends{[n.island.unique_id for n in entry.included_friendly_flow_nodes]}:"
+            f"incT{entry.incomplete_target_island_id}/{entry.incomplete_target_tile_count}:"
+            f"incF{entry.incomplete_friendly_island_id}/{entry.incomplete_friendly_tile_count}"
+        )
 
     def _generate_capture_lookup_table(
         self,
@@ -1444,6 +1530,23 @@ class ArmyFlowExpanderV2:
 
             # Store enriched captures in the lookup table
             lookup_table.enriched_capture_entries = enriched_captures
+            if self.log_debug and self._is_diag_lookup_table(lookup_table):
+                logbook.warning(
+                    f"FE_DIAG_ENRICHED {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
+                    f"{[self._diag_enriched_summary(e) for e in enriched_captures]}"
+                )
+
+    def _is_diag_lookup_table(self, lookup_table: FlowArmyTurnsLookupTable) -> bool:
+        if self.island_builder is None:
+            return False
+        return self._is_diag_border_pair(lookup_table.border_pair)
+
+    def _diag_enriched_summary(self, entry: EnrichedFlowTurnsEntry) -> str:
+        return (
+            f"cost{entry.combined_turn_cost}:density{entry.combined_value_density:.3f}:"
+            f"cap[{self._diag_entry_summary(entry.capture_entry)}]:"
+            f"gath[{self._diag_entry_summary(entry.gather_entry)}]"
+        )
 
     def _find_minimum_gather_support(
         self,
@@ -1647,6 +1750,12 @@ class ArmyFlowExpanderV2:
 
         for lookup_table in sorted(goodLookupTables, key=lambda t: groupLookup[t.border_pair.friendly_island_id]):
             group_idx = groupLookup[lookup_table.border_pair.friendly_island_id]
+            diag_lookup = self.log_debug and self._is_diag_lookup_table(lookup_table)
+            if diag_lookup:
+                logbook.warning(
+                    f"FE_DIAG_MKCP_GROUP {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
+                    f"group={group_idx} subset={subsets[group_idx]}"
+                )
             if self.log_debug:
                 logbook.info(f"MKCP group {group_idx}: border pair {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id} "
                              f"with {len(lookup_table.enriched_capture_entries)} entries. Group {group_idx} has {len(subsets[group_idx])} lookup tables.")
@@ -1663,6 +1772,16 @@ class ArmyFlowExpanderV2:
                     n.island.unique_id for n in enriched.capture_entry.included_target_flow_nodes
                 ))
                 external_tile_sets.append(frozenset())  # Flow items have no external tile set
+                if diag_lookup:
+                    logbook.warning(
+                        f"FE_DIAG_MKCP_ITEM {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
+                        f"group={group_idx} weight={enriched.combined_turn_cost} "
+                        f"value={int(1000 * enriched.capture_entry.econ_value)} "
+                        f"econ={enriched.capture_entry.econ_value:.2f} "
+                        f"density={enriched.combined_value_density:.3f} "
+                        f"targets={[n.island.unique_id for n in enriched.capture_entry.included_target_flow_nodes]} "
+                        f"friends={[n.island.unique_id for n in enriched.gather_entry.included_friendly_flow_nodes]}"
+                    )
                 if self.log_debug:
                     logbook.info(f"  MKCP item: group={group_idx} weight={enriched.combined_turn_cost} "
                                  f"value={int(1000 * enriched.capture_entry.econ_value)} "
@@ -1911,6 +2030,13 @@ class ArmyFlowExpanderV2:
             for lookup_table in lookup_tables:
                 if any(enriched is e for e in lookup_table.enriched_capture_entries):
                     solution[lookup_table.border_pair] = enriched
+                    if self.log_debug and self._is_diag_lookup_table(lookup_table):
+                        logbook.warning(
+                            f"FE_DIAG_MKCP_CHOSEN {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
+                            f"weight={enriched.combined_turn_cost} value={enriched.capture_entry.econ_value:.2f} "
+                            f"targets={[self._diag_island_summary(n.island) for n in enriched.capture_entry.included_target_flow_nodes]} "
+                            f"friends={[self._diag_island_summary(n.island) for n in enriched.gather_entry.included_friendly_flow_nodes]}"
+                        )
                     if self.log_debug:
                         logbook.info(f"Grouped knapsack solution: {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id} "
                                      f"(gather={enriched.gather_entry.turns}, capture={enriched.capture_entry.turns}, "
@@ -2108,6 +2234,16 @@ class ArmyFlowExpanderV2:
                     captures=capping,
                 )
                 plan._turns = len(gathing) + len(capping) - 1
+                if self.log_debug and self._is_diag_border_pair(border_pair):
+                    first_move = plan.get_first_move() if plan.get_move_list() else None
+                    logbook.warning(
+                        f"FE_DIAG_MATERIALIZED {border_pair.friendly_island_id}->{border_pair.target_island_id}: "
+                        f"econ={plan.econValue:.2f} turns={plan.length} "
+                        f"gathing={sorted((t.x, t.y) for t in gathing)} "
+                        f"capping={sorted((t.x, t.y) for t in capping)} "
+                        f"rootTiles={sorted((t.x, t.y) for t in root_tiles)} "
+                        f"firstMove={first_move}"
+                    )
             except Exception as ex:
                 # Collect error for aggregated reporting
                 error_details = {

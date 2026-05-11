@@ -576,7 +576,7 @@ class BotCombatOps:
                 if bot.all_in_city_behind or bot._map.remainingPlayers == 2:
                     targets.extend(bot.targetPlayerObj.cities)
 
-            msg = f'allin g AT tg gen{andTargs}, {hitGeneralInTurns}t, {str([str(t) for t in targets])}'
+            msg = f'allin g AT tg gen{andTargs}, in {hitGeneralInTurns}t, {str([str(t) for t in targets])}'
 
             with bot.perf_timer.begin_move_event(f'pcst {msg}. self.all_in_army_advantage_cycle {bot.all_in_army_advantage_cycle}, self.all_in_army_advantage_counter {bot.all_in_army_advantage_counter}'):
                 gathNeg = defenseCriticalTileSet.copy()

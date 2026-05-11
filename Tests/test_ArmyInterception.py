@@ -2571,3 +2571,38 @@ setting bestInterceptTable[dist 1]:
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertOwned(general.player, playerMap.At(15, 16))
+    
+    def test_should_intercept_when_better_than_taking_neutrals_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_when_better_than_taking_neutrals_wtf___ouF0W0tnh---1--92.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 92, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '3,7->3,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        self.assertOwned(3, 9)
+
+    
+    def test_should_not_play_weird_intercept_moves_over_just_capturing_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_play_weird_intercept_moves_over_just_capturing_threat___ouF0W0tnh---1--322.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 322, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=322)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,12->5,12')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        self.assertOwned(5, 12)

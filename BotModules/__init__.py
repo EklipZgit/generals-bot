@@ -12,7 +12,6 @@ _EXPORTS = {
     'BotDefenseQueries': 'BotDefenseQueries',
     'BotGatherOps': 'BotGatherOps',
     'BotExpansionOps': 'BotExpansionOps',
-    'BotExpansionQueries': 'BotExpansionQueries',
     'BotExplorationOps': 'BotExplorationOps',
     'BotCombatOps': 'BotCombatOps',
     'BotCombatQueries': 'BotCombatQueries',

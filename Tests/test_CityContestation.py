@@ -1156,3 +1156,23 @@ class CityContestationTests(TestBase):
         self.assertTileDifferentialGreaterThan(10, simHost)
 
 
+    
+    def test_should_finish_recapturing_own_cities_what_the_fuck(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_finish_recapturing_own_cities_what_the_fuck___RpwloecEO---1--487.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 487, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=487)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,15->12,15->13,15z  12,15->12,14')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(12, 14)
+        self.assertOwned(13, 15)

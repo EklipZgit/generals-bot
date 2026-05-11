@@ -159,6 +159,8 @@ class DirectOrToolsGraphBuilder(object):
                     has_nx_demand_attr = True
                     cumulative_demand += demand
                     friendly_army_supply += island.sum_army - island.tile_count
+                    if island.tiles_by_army[0].army == 1:
+                        cost *= 2
                 elif island.team == target_team:
                     has_nx_demand_attr = True
                     demand = island.sum_army + island.tile_count

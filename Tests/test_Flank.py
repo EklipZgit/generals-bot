@@ -1,6 +1,8 @@
 import logbook
 
 import SearchUtils
+from BotModules.BotExpansionOps import BotExpansionOps
+from BotModules.BotExplorationOps import BotExplorationOps
 from Directives import Timings
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
@@ -113,7 +115,7 @@ class FlankTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         def moveChecker():
-            move = bot.find_flank_defense_move(set())
+            move = BotExplorationOps.find_flank_defense_move(bot, set())
             if move is not None:
                 allVis = True
                 for t in move.dest.adjacents:

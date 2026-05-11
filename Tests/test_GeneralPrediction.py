@@ -1448,3 +1448,40 @@ class GeneralPredictionTests(TestBase):
         self.assertTileNearOtherTile(map, map.GetTile(2, 2), bot.targetPlayerExpectedGeneralLocation, 5)
 
         self.assertTileNearOtherTile(map, map.GetTile(2, 2), bot.target_player_gather_path.tail.tile, 5)
+
+    def test_because_of_opponent_tracker_registering_max_possible_emergence_pulling_ALL_army_off_of_general_should_limit_gen_spawn(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/because_of_opponent_tracker_registering_max_possible__actual___AXNDhHg4Q---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+
+        simMapFile = 'GameContinuationEntries/because_of_opponent_tracker_registering_max_possible___AXNDhHg4Q---1--137.txtmap'
+        rawMap, _ = self.load_map_and_general(simMapFile, respect_undiscovered=True, turn=137)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,16->9,16')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        armyInFog = playerMap.players[enemyGeneral.player].standingArmy - playerMap.players[enemyGeneral.player].visibleStandingArmy
+        rawStandingArmyLimit = bot.armyTracker.get_emergence_max_depth_to_general_or_none(
+            enemyGeneral.player,
+            playerMap.GetTile(9, 16),
+            useOpponentKnownFogTileArmy=False)
+        adjustedStandingArmyLimit = bot.armyTracker.get_emergence_max_depth_to_general_or_none(enemyGeneral.player, playerMap.GetTile(9, 16))
+        self.assertEqual(4, armyInFog)
+        self.assertEqual(2, bot.armyTracker._get_known_non_general_fog_tile_extra_army(enemyGeneral.player))
+        self.assertEqual(rawStandingArmyLimit - 4, adjustedStandingArmyLimit)
+
+        emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(8, 17)]
+        self.assertGreater(emergence, 70, 'should have VERY high confidence here that the enemy general is right behind this because we had to reduce city army to 1')
+
+        emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(8, 16)]
+        self.assertGreater(emergence, 70, 'should have VERY high confidence here that the enemy general is right behind this because we had to reduce city army to 1')
+
+        badEmergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(6, 10)]
+        self.assertLess(badEmergence, 2, 'should have dropped all other emergences for the most part')

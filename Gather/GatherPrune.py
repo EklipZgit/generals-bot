@@ -9,8 +9,10 @@ import SearchUtils
 from Interfaces import MapMatrixInterface
 from Models import GatherTreeNode, Move
 from . import GatherDebug
-from ViewInfo import ViewInfo
 from base.client.tile import Tile
+
+if typing.TYPE_CHECKING:
+    from ViewInfo import ViewInfo
 
 VERBOSE_DEBUG_LOGGING_ENABLED = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
 

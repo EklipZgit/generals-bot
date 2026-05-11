@@ -1158,7 +1158,7 @@ class EklipZBot(object):
                 return dangerTileKillMove  # already logged to info
 
         with self.perf_timer.begin_move_event('Flank defense / Vision expansion HIGH PRI'):
-            flankDefMove = BotDefense.find_flank_defense_move(self, defenseCriticalTileSet, highPriority=True)
+            flankDefMove = BotExplorationOps.find_flank_defense_move(self, defenseCriticalTileSet, highPriority=True)
             if flankDefMove:
                 return flankDefMove
 
@@ -1326,7 +1326,7 @@ class EklipZBot(object):
             if WinCondition.DefendEconomicLead in self.win_condition_analyzer.viable_win_conditions:
                 expNegs.update(self.win_condition_analyzer.defend_cities)
                 expNegs.update(self.win_condition_analyzer.contestable_cities)
-            largeArmyExpContinuationMove = BotExpansionOps.try_get_enemy_territory_exploration_continuation_move(self, expNegs)
+            largeArmyExpContinuationMove = BotExplorationOps.try_get_enemy_territory_exploration_continuation_move(self, expNegs)
 
         if largeArmyExpContinuationMove is not None and not BotRepetition.detect_repetition(self, largeArmyExpContinuationMove):
             # already logged
@@ -1342,7 +1342,7 @@ class EklipZBot(object):
             if foundMove:
                 return move  # already logged
 
-        exploreMove = BotExpansionOps.try_find_exploration_move(self, defenseCriticalTileSet)
+        exploreMove = BotExplorationOps.try_find_exploration_move(self, defenseCriticalTileSet)
         if exploreMove is not None:
             return exploreMove  # already logged
 
@@ -1394,7 +1394,7 @@ class EklipZBot(object):
                 return move
 
         with self.perf_timer.begin_move_event('Flank defense / Vision expansion low pri'):
-            flankDefMove = BotDefense.find_flank_defense_move(self, defenseCriticalTileSet, highPriority=False)
+            flankDefMove = BotExplorationOps.find_flank_defense_move(self, defenseCriticalTileSet, highPriority=False)
             if flankDefMove:
                 return flankDefMove
 
@@ -1922,7 +1922,7 @@ class EklipZBot(object):
         if self.territories is None:
             self.territories = TerritoryClassifier(self._map)
 
-        self.armyTracker = ArmyTracker(self._map, self.perf_timer)
+        self.armyTracker = ArmyTracker(self._map, self.perf_timer, self.opponent_tracker)
         self.armyTracker.notify_unresolved_army_emerged.append(lambda tile: BotEventHandlers.handle_tile_vision_change(self, tile))
         self.armyTracker.notify_army_moved.append(lambda move: BotEventHandlers.handle_army_moved(self, move))
         self.armyTracker.notify_army_moved.append(self.opponent_tracker.notify_army_moved)

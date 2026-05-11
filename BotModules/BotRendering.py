@@ -173,7 +173,7 @@ class BotRendering:
                     logbook.warning('FLOW_RENDER_SKIPPED info_render_flow_expand=False')
 
     @staticmethod
-    def render_flow_expand_in_view_info(bot):
+    def render_flow_expand_in_view_info(bot: EklipZBot):
         expander = bot.last_flow_expander
         optCollection = bot.last_flow_opt_collection
         vi: ViewInfo = bot.viewInfo
@@ -193,11 +193,10 @@ class BotRendering:
                 else:
                     first.add(tile)
 
-        for tile in dupes:
-            vi.add_targeted_tile(tile, TargetStyle.GRAY, radiusReduction=-1)
+        if len(dupes) > 0:
+            vi.add_targeted_tiles_with_legend(dupes, 'GRAY = DUPLICATE FLOW OPTION TILES', TargetStyle.GRAY, radiusReduction=-1, )
         if dupes:
-            vi.add_info_line('GRAY = DUPLICATE FLOW OPTION TILES:')
-            vi.add_info_line(f'|'.join(f'{t.x},{t.y}' for t in dupes))
+            vi.add_info_line('FE DUPE: ' + f'|'.join(f'{t.x},{t.y}' for t in dupes))
 
         if optsSorted:
             try:
@@ -230,8 +229,8 @@ class BotRendering:
                     f'rootsIncNeut={incNeutRoots} rootEdgesIncNeut={incNeutEdges} '
                     f'arrowsAdded={arrowsAfter - arrowsBefore} arrowsTotal={arrowsAfter}'
                 )
-
-        expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True)
+        if not bot.info_render_tile_islands:
+            expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True, renderIslandColors=False)
 
     @staticmethod
     def mark_tile(bot, tile, alpha=100):

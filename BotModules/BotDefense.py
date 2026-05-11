@@ -11,8 +11,6 @@ from BotModules.BotCityCaptureControl import BotCityCaptureControl
 from BotModules.BotCombatQueries import BotCombatQueries
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotComms import BotComms
-from BotModules.BotExpansionQueries import BotExpansionQueries
-from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotRepetition import BotRepetition
@@ -75,6 +73,8 @@ class BotDefense:
             raceEnemyKingKillPath: Path | None,
             raceChance: float
     ) -> typing.Tuple[Move | None, Path | None]:
+        # this is not called often enough for this to matter and the circular reference here is hell
+        from BotModules.BotExplorationOps import BotExplorationOps
         move: Move | None = None
 
         outputDefenseCriticalTileSet = defenseCriticalTileSet
@@ -1578,6 +1578,8 @@ class BotDefense:
         genSet.update(bot.player.tiles)
 
         genTargs = []
+        if bot.general is None:
+            raise AssertionError("bot general was None somehow?")
         genTargs.append(bot.general)
 
         for teammate in bot._map.teammates:
@@ -1930,7 +1932,7 @@ class BotDefense:
             bot.viewInfo.add_info_line(f'DEF ECON BASED ON CYCLE BEHAVIOR')
             bot.defend_economy = True
             if not wasDefending:
-                bot.currently_forcing_out_of_play_gathers = True
+                # bot.currently_forcing_out_of_play_gathers = True
                 bot.timings = BotTimings.get_timings(bot, )
             return True
 
@@ -2215,95 +2217,6 @@ class BotDefense:
         return bestMove
 
     @staticmethod
-    def _get_vision_expanding_available_move(bot, coreNegs: typing.Set[Tile], pathToCheckForVisionOf: Path | None = None) -> Move | None:
-        bestWeighted = 3
-        bestMove = None
-
-        if pathToCheckForVisionOf is None:
-            pathToCheckForVisionOf = bot.sketchiest_potential_inbound_flank_path
-        if pathToCheckForVisionOf is None:
-            return None
-
-        hidden = {t for t in pathToCheckForVisionOf.tileList if not t.visible}
-
-        alreadyInExpPlan = not hidden.isdisjoint(bot.expansion_plan.plan_tiles)
-
-        if bot.timings.get_turn_in_cycle(bot._map.turn) >= 6 and not alreadyInExpPlan:
-            return None
-
-        if alreadyInExpPlan:
-            lastNonVisibleTile = None
-            lenWithFog = 0
-            for dist, t in enumerate(pathToCheckForVisionOf.tileList):
-                if not t.visible:
-                    lastNonVisibleTile = t
-                    lenWithFog = dist
-
-            fullDist = lenWithFog + bot.board_analysis.intergeneral_analysis.aMap[lastNonVisibleTile]
-            midDist = fullDist // 2
-            closestToMid = None
-            closestToMidDist = 100000
-            cutoff = BotTargeting.get_median_tile_value(bot, 85) + 2
-            for p in bot.expansion_plan.all_paths:
-                if not isinstance(p, Path):
-                    continue
-                if (p.value > 10 or p.length > 10 or (p.length > 5 and p.econValue / p.length < 1.5)) and not bot.is_all_in_army_advantage and not bot.is_winning_gather_cyclic and not bot.defend_economy:
-                    continue
-
-                if bot.likely_kill_push and p.length > 2:
-                    continue
-
-                if p.start.tile in bot.target_player_gather_path.tileSet or p.start.tile.isCity or p.start.tile.isGeneral:
-                    continue
-
-                intersection = hidden.intersection(p.tileList)
-                if len(intersection) > 0:
-                    for t in intersection:
-                        tDist = abs(bot.board_analysis.intergeneral_analysis.aMap[t] - bot.board_analysis.intergeneral_analysis.bMap[t])
-                        if tDist < closestToMidDist:
-                            closestToMid = p
-                            closestToMidDist = tDist
-
-            if closestToMid is not None:
-                move = closestToMid.get_first_move()
-                bot.info(f'EXP plan included vision expansion {move}')
-                bot.curPath = closestToMid
-                return move
-
-        if bot.timings.get_turn_in_cycle(bot._map.turn) >= 6:
-            return None
-
-        for leafMove in bot.captureLeafMoves:
-            if leafMove.dest.isSwamp:
-                continue
-            dist = bot._map.get_distance_between(bot.general, leafMove.dest)
-
-            if leafMove.source in coreNegs:
-                continue
-
-            revealed = 0
-            anyFog = False
-            for t in leafMove.dest.adjacents:
-                if not t.discovered and t.player != -1:
-                    revealed += 2
-                if t in bot.board_analysis.flankable_fog_area_matrix:
-                    anyFog = True
-
-            if not anyFog or revealed == 0:
-                continue
-
-            weighted = dist + revealed
-            if dist < 2 or weighted < bestWeighted:
-                continue
-            bestMove = leafMove
-            bestWeighted = weighted
-
-        if bestMove is not None:
-            bot.info(f'vision expansion leaf {str(bestMove)}')
-
-        return bestMove
-
-    @staticmethod
     def _get_flank_vision_defense_move_internal(bot, flankThreatPath: Path, negativeTiles: typing.Set[Tile], atDist: int) -> Move | None:
         included = set()
         for tile in flankThreatPath.tileList[:(flankThreatPath.length * 5) // 6]:
@@ -2380,111 +2293,6 @@ class BotDefense:
 
         if move is not None:
             return move
-
-        return None
-
-    @staticmethod
-    def find_flank_defense_move(bot, defenseCriticalTileSet: typing.Set[Tile], highPriority: bool = False) -> Move | None:
-        pathToCheck = bot.sketchiest_potential_inbound_flank_path
-
-        if bot.enemy_attack_path is not None and bot.likely_kill_push:
-            bot.info(f'~~risk threat - replacing flank with risk threat BC likely_kill_push')
-            pathToCheck = bot.enemy_attack_path
-        elif BotTargeting.is_ffa_situation(bot):
-            return None
-
-        checkFlank = pathToCheck is not None and (
-                pathToCheck.tail.tile in bot.board_analysis.flank_danger_play_area_matrix
-                or pathToCheck.tail.tile in bot.board_analysis.core_play_area_matrix
-        )
-
-        if pathToCheck:
-            pathToCheck = pathToCheck.get_subsegment_excluding_trailing_visible()
-
-        coreNegs = defenseCriticalTileSet.copy()
-        coreNegs.update(bot.win_condition_analyzer.defend_cities)
-        coreNegs.update(bot.win_condition_analyzer.contestable_cities)
-
-        if highPriority and pathToCheck:
-            winningMassivelyOnArmy = bot.opponent_tracker.winning_on_army(byRatio=1.4) and bot.opponent_tracker.winning_on_economy(byRatio=1.15)
-            winningMassivelyOnEcon = bot.opponent_tracker.winning_on_army(byRatio=1.1) and bot.opponent_tracker.winning_on_economy(byRatio=1.4)
-            winningInTheMiddle = bot.opponent_tracker.winning_on_army(byRatio=1.25) and bot.opponent_tracker.winning_on_economy(byRatio=1.05, offset=-25)
-            winningByEnoughToBeSuperCareful = winningMassivelyOnArmy or winningMassivelyOnEcon or winningInTheMiddle
-
-            flankIsCloserThanThreeFifths = bot.distance_from_general(pathToCheck.tail.tile) < 3 * bot.shortest_path_to_target_player.length // 5
-            if winningByEnoughToBeSuperCareful and flankIsCloserThanThreeFifths:
-                turns = 3 + (bot.timings.get_turns_left_in_cycle(bot._map.turn) + 1) % 4
-                with bot.perf_timer.begin_move_event(f'superCareful flank gath {turns}t'):
-                    startTiles = pathToCheck.convert_to_dist_dict(offset=0 - pathToCheck.length)
-                    for t in list(startTiles.keys()):
-                        if t.isSwamp or SearchUtils.any_where(t.movable, lambda m: m.isSwamp):
-                            startTiles.pop(t)
-                    move = None
-                    if len(startTiles) > 0:
-                        move, valGathered, turnsUsed, nodes = BotGatherOps.get_gather_to_target_tiles(
-                            bot,
-                            startTiles,
-                            maxTime=0.002,
-                            gatherTurns=turns,
-                            negativeSet=defenseCriticalTileSet,
-                            targetArmy=1,
-                            useTrueValueGathered=True,
-                            includeGatherTreeNodesThatGatherNegative=False,
-                            maximizeArmyGatheredPerTurn=True,
-                            priorityMatrix=BotExpansionQueries.get_expansion_weight_matrix(bot, mult=10))
-
-                    if move:
-                        forcedHalf = False
-                        if 4 < valGathered <= move.source.army // 2 and not BotPathingUtils.is_move_towards_enemy(bot, move):
-                            move.move_half = True
-                            forcedHalf = True
-                        bot.info(f'superCareful flank gath for {turns}t: {move} ({valGathered} in {turnsUsed}t). Half {forcedHalf}')
-                        return move
-
-                leafMove = BotDefense._get_vision_expanding_available_move(bot, coreNegs, pathToCheck)
-                if leafMove is not None:
-                    return leafMove
-
-            return None
-
-        if BotStateQueries.is_still_ffa_and_non_dominant(bot):
-            return None
-
-        leafMove = BotDefense._get_vision_expanding_available_move(bot, coreNegs, pathToCheck)
-        if leafMove is not None:
-            return leafMove
-
-        if not checkFlank:
-            return None
-
-        if checkFlank:
-            leafMove = BotDefense._get_flank_defense_leafmove(bot, pathToCheck, coreNegs)
-            if leafMove is not None:
-                bot.info(f'LEAF proactive flank vision defense {str(leafMove)}')
-                return leafMove
-
-        negs = coreNegs.copy()
-        negs.update([
-            firstMove.source
-            for p in bot.expansion_plan.all_paths
-            for firstMove in [p.get_first_move()]
-            if firstMove is not None and firstMove.source.delta.armyDelta == 0
-        ])
-        flankDefMove = BotDefense._get_flank_vision_defense_move_internal(bot,
-            pathToCheck,
-            negs,
-            atDist=bot.board_analysis.within_flank_danger_play_area_threshold)
-        if flankDefMove is not None:
-            bot.info(f'proactive flank vision defense {str(flankDefMove)}')
-            return flankDefMove
-
-        flankDefMove = BotDefense._get_flank_vision_defense_move_internal(bot,
-            pathToCheck,
-            coreNegs,
-            atDist=bot.board_analysis.within_flank_danger_play_area_threshold)
-        if flankDefMove is not None:
-            bot.info(f'No exp negs proactive flank vision defense {str(flankDefMove)}')
-            return flankDefMove
 
         return None
 

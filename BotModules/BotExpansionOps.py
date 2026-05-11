@@ -12,7 +12,6 @@ import logbook
 from ArmyAnalyzer import ArmyAnalyzer
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, get_tile_army_mapmatrix
 from BotModules.BotDefenseQueries import BotDefenseQueries
-from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotTimings import BotTimings
 from BotModules.BotPathingUtils import BotPathingUtils
@@ -1136,90 +1135,6 @@ class BotExpansionOps:
         return bestRevealedPath
 
     @staticmethod
-    def explore_target_player_undiscovered(bot, negativeTiles: typing.Set[Tile] | None, onlyHuntGeneral: bool | None = None, maxTime: float | None = None) -> Path | None:
-        if negativeTiles:
-            negativeTiles = negativeTiles.copy()
-        if bot._map.turn < 50 or bot.targetPlayer == -1:
-            return None
-
-        turnInCycle = bot.timings.get_turn_in_cycle(bot._map.turn)
-        exploringUnknown = bot._map.generals[bot.targetPlayer] is None
-
-        genPlayer = bot._map.players[bot.general.player]
-        behindOnCities = genPlayer.cityCount < bot._map.players[bot.targetPlayer].cityCount
-
-        if not BotStateQueries.is_all_in(bot, ):
-            if bot.explored_this_turn:
-                logbook.info("(skipping new exploration because already explored this turn)")
-                return None
-            if not bot.finishing_exploration and behindOnCities:
-                logbook.info("(skipping new exploration because behind on cities and wasn't finishing exploration)")
-                return None
-
-        enGenPositions = bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer]
-
-        for player in bot._map.players:
-            if not player.dead and player.team == bot.targetPlayerObj.team and player.index != bot.targetPlayer:
-                enGenPositions = enGenPositions.copy()
-                for i, val in enumerate(bot.armyTracker.valid_general_positions_by_player[player.index].raw):
-                    enGenPositions.raw[i] = enGenPositions.raw[i] or val
-
-        if onlyHuntGeneral is None:
-            onlyHuntGeneral = bot.armyTracker.has_perfect_information_of_player_cities(bot.targetPlayer)
-
-        if onlyHuntGeneral:
-            for tile in bot._map.get_all_tiles():
-                if not bot._map.is_tile_friendly(tile) and not enGenPositions[tile]:
-                    negativeTiles.add(tile)
-
-        bot.explored_this_turn = True
-        turns = bot.timings.cycleTurns - turnInCycle - 7
-        minArmy = max(12, int(genPlayer.standingArmy ** 0.75) - 10)
-        bot.info(f"Forcing explore to t{turns} and minArmy to {minArmy}")
-        if BotStateQueries.is_all_in(bot, ) and not bot.is_all_in_army_advantage and not bot.all_in_city_behind:
-            turns = 15
-            minArmy = int(genPlayer.standingArmy ** 0.83) - 10
-            bot.info(f"Forcing explore to t{turns} and minArmy to {minArmy} because BotStateQueries.is_all_in(self, )")
-        elif turns < 6:
-            logbook.info(f"Forcing explore turns to minimum of 5, was {turns}")
-            turns = 5
-        elif turnInCycle < 6 and exploringUnknown:
-            logbook.info(f"Forcing explore turns to minimum of 6, was {turns}")
-            turns = 6
-
-        if bot._map.turn < 100:
-            return None
-
-        path = BotExplorationOps.get_optimal_exploration(bot, turns, negativeTiles, minArmy=minArmy, maxTime=maxTime)
-        if path:
-            logbook.info(f"Oh no way, explore found a path lol? {str(path)}")
-            tilesRevealed = set()
-            score = 0
-            node = path.start
-            while node is not None:
-                if not node.tile.discovered and bot.armyTracker.emergenceLocationMap[bot.targetPlayer][node.tile] > 0 and (not onlyHuntGeneral or enGenPositions.raw[node.tile.tile_index]):
-                    score += bot.armyTracker.emergenceLocationMap[bot.targetPlayer][node.tile] ** 0.5
-                for adj in node.tile.adjacents:
-                    if not adj.discovered and (not onlyHuntGeneral or enGenPositions[adj]):
-                        tilesRevealed.add(adj)
-                node = node.next
-            revealedPerMove = len(tilesRevealed) / path.length
-            scorePerMove = score / path.length
-            bot.viewInfo.add_info_line(
-                f"hunting tilesRevealed {len(tilesRevealed)} ({revealedPerMove:.2f}), Score {score} ({scorePerMove:.2f}), path.length {path.length}")
-            if ((revealedPerMove > 0.5 and scorePerMove > 4)
-                    or (revealedPerMove > 0.8 and scorePerMove > 1)
-                    or revealedPerMove > 1.5):
-                bot.finishing_exploration = True
-                bot.info(
-                    f"NEW hunting, search turns {turns}, minArmy {minArmy}, allIn {bot.is_all_in_losing} finishingExp {bot.finishing_exploration} ")
-                return path
-            else:
-                logbook.info("path wasn't good enough, discarding")
-
-        return None
-
-    @staticmethod
     def check_launch_against_expansion_plan(bot, existingPlan: ExpansionPotential, expansionNegatives: typing.Set[Tile]) -> ExpansionPotential:
         return existingPlan
         if bot.target_player_gather_path is None:
@@ -1661,89 +1576,6 @@ class BotExpansionOps:
         return bot.expansion_use_iterative_negative_tiles
 
     @staticmethod
-    def try_find_exploration_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
-        genPlayer = bot._map.players[bot.general.player]
-
-        largeTileThresh = 15 * genPlayer.standingArmy / genPlayer.tileCount
-        haveLargeTilesStill = len(SearchUtils.where(genPlayer.tiles, lambda tile: tile.army > largeTileThresh)) > 0
-        logbook.info(
-            "Will stop finishingExploration if we don't have tiles larger than {:.1f}. Have larger tiles? {}".format(
-                largeTileThresh, haveLargeTilesStill))
-
-        demolishingTargetPlayer = (bot.opponent_tracker.winning_on_army(1.5, useFullArmy=False, againstPlayer=bot.targetPlayer)
-                                   and bot.opponent_tracker.winning_on_economy(1.5, cityValue=10, againstPlayer=bot.targetPlayer))
-
-        allInAndKnowsGenPosition = (
-                (bot.is_all_in_army_advantage or bot.all_in_losing_counter > bot.targetPlayerObj.tileCount // 3)
-                and bot.targetPlayerExpectedGeneralLocation.isGeneral
-                and not bot.all_in_city_behind
-        )
-        targetPlayer = bot._map.players[bot.targetPlayer]
-        stillDontKnowAboutEnemyCityPosition = len(targetPlayer.cities) + 1 < targetPlayer.cityCount
-        stillHaveSomethingToSearchFor = (
-                (BotStateQueries.is_all_in(bot, ) or bot.finishing_exploration or demolishingTargetPlayer)
-                and (not bot.targetPlayerExpectedGeneralLocation.isGeneral or stillDontKnowAboutEnemyCityPosition)
-        )
-
-        logbook.info(
-            f"stillDontKnowAboutEnemyCityPosition: {stillDontKnowAboutEnemyCityPosition}, allInAndKnowsGenPosition: {allInAndKnowsGenPosition}, stillHaveSomethingToSearchFor: {stillHaveSomethingToSearchFor}")
-        if not allInAndKnowsGenPosition and stillHaveSomethingToSearchFor and not bot.defend_economy:
-            undiscNeg = defenseCriticalTileSet.copy()
-
-            if (
-                    bot.all_in_city_behind
-                    or (
-                    bot.is_all_in_army_advantage
-                    and bot.opponent_tracker.winning_on_economy(byRatio=0.8, cityValue=50)
-            )
-            ):
-                path = BM.BotCityOps.BotCityOps.get_quick_kill_on_enemy_cities(bot, defenseCriticalTileSet)
-                if path is not None:
-                    bot.info(f'ALL IN ARMY ADVANTAGE CITY CONTEST {str(path)}')
-                    return BotPathingUtils.get_first_path_move(bot, path)
-
-                for contestedCity in bot.cityAnalyzer.owned_contested_cities:
-                    undiscNeg.add(contestedCity)
-
-            timeCap = 0.03
-            if allInAndKnowsGenPosition:
-                timeCap = 0.06
-
-            bot.viewInfo.add_info_line(
-                f"exp: unknownEnCity: {stillDontKnowAboutEnemyCityPosition}, allInAgainstGen: {allInAndKnowsGenPosition}, stillSearch: {stillHaveSomethingToSearchFor}")
-            with bot.perf_timer.begin_move_event('Attempt to fin/cont exploration'):
-                for city in bot._map.players[bot.general.player].cities:
-                    undiscNeg.add(city)
-
-                if bot.target_player_gather_path is not None:
-                    halfTargetPath = bot.target_player_gather_path.get_subsegment(
-                        bot.target_player_gather_path.length // 2)
-                    undiscNeg.add(bot.general)
-                    for tile in halfTargetPath.tileList:
-                        undiscNeg.add(tile)
-                path = BotExpansionOps.explore_target_player_undiscovered(bot, undiscNeg, maxTime=timeCap)
-                if path is not None:
-                    bot.viewInfo.color_path(PathColorer(path, 120, 150, 127, 200, 12, 100))
-                    if not BotPathingUtils.is_path_moving_mostly_away(bot, path, bot.board_analysis.intergeneral_analysis.bMap):
-                        valueSubsegment = BotPathingUtils.get_value_per_turn_subsegment(bot, path, minLengthFactor=0)
-                        if valueSubsegment.length != path.length:
-                            logbook.info(f"BAD explore_target_player_undiscovered")
-                            bot.info(
-                                f"WHOAH, tried to make a bad exploration path...? Fixed with {str(valueSubsegment)}")
-                            path = valueSubsegment
-                        move = BotPathingUtils.get_first_path_move(bot, path)
-                        if not BotRepetition.detect_repetition(bot, move, 7, 2):
-                            if bot.is_all_in_army_advantage:
-                                bot.all_in_army_advantage_counter -= 2
-                            return move
-                        else:
-                            bot.info('bypassed hunting due to repetitions.')
-                    else:
-                        bot.info(f'IGNORING BAD HUNTING PATH BECAUSE MOVES AWAY FROM GEN APPROX')
-
-        return None
-
-    @staticmethod
     def _add_expansion_threat_negs(bot, negs: typing.Set[Tile]):
         logbook.info(f'starting expansion threat negs: {[t for t in negs]}')
         if bot.threat is None:
@@ -1908,41 +1740,6 @@ class BotExpansionOps:
 
     @staticmethod
     def try_gather_tendrils_towards_enemy(bot, turns: int | None = None) -> Move | None:
-        return None
-
-    @staticmethod
-    def try_get_enemy_territory_exploration_continuation_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
-        if bot.targetPlayer == -1:
-            return None
-
-        if BotStateQueries.is_all_in(bot, ):
-            path = BotExpansionOps.explore_target_player_undiscovered(bot, defenseCriticalTileSet, onlyHuntGeneral=True)
-            if path is not None:
-                bot.info(f'all-in exploration move...? {str(path)}')
-                return BotPathingUtils.get_first_path_move(bot, path)
-            return None
-
-        if bot.timings.get_turns_left_in_cycle(bot._map.turn) < 42:
-            return None
-
-        if bot.armyTracker.has_perfect_information_of_player_cities_and_general(bot.targetPlayer):
-            return None
-
-        armyCutoff = 4 + 4 * int(bot.player.standingArmy / bot.player.tileCount)
-        if bot.defend_economy:
-            armyCutoff *= 2
-            armyCutoff += 10
-
-        logbook.info(f'EN TERRITORY CONT EXP, armyCutoff {armyCutoff}')
-        move = BotExpansionOps._get_expansion_plan_exploration_move(bot, armyCutoff, defenseCriticalTileSet)
-
-        if move is not None:
-            BotExpansionOps.try_find_expansion_move(bot, defenseCriticalTileSet, timeLimit=BotTimings.get_remaining_move_time(bot))
-            move = BotExpansionOps._get_expansion_plan_exploration_move(bot, armyCutoff, defenseCriticalTileSet)
-            if move is not None:
-                bot.info(f'EN TERRITORY CONT EXP! {move} - armyCutoff {armyCutoff}')
-                return move
-
         return None
 
     @staticmethod

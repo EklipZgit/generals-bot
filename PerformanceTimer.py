@@ -64,42 +64,38 @@ class MoveTimer(object):
     def get_events_organized_longest_to_shortest(self, limit: int = 15, indentSize: int = 3) -> typing.List[str]:
         largestN = list(sorted(self.event_list, key=lambda e: e.get_duration(), reverse=True))[0:limit]
 
-        byParent: typing.Dict[str, typing.List[MoveEvent]] = {}
+        byParent: typing.Dict[MoveEvent | None, typing.List[MoveEvent]] = {}
 
         for event in largestN:
-            parentName = ''
-            if event.parent is not None:
-                parentName = event.parent.event_name
-
-            underParent = byParent.get(parentName, None)
+            underParent = byParent.get(event.parent, None)
             if underParent is None:
                 underParent = []
-                byParent[parentName] = underParent
+                byParent[event.parent] = underParent
 
             underParent.append(event)
 
         # these are now grouped in longest to shortest order, under their parent move events.
 
-        output = self._dump_events_recurse(parentEventName='', eventLookupByParent=byParent, curIndentation='', indentSize=indentSize)
+        output = self._dump_events_recurse(parentEvent=None, eventLookupByParent=byParent, curIndentation='', indentSize=indentSize)
         return output
 
     def _dump_events_recurse(
             self,
-            parentEventName: str,
-            eventLookupByParent: typing.Dict[str, typing.List[MoveEvent]],
+            parentEvent: MoveEvent | None,
+            eventLookupByParent: typing.Dict[MoveEvent | None, typing.List[MoveEvent]],
             curIndentation: str,
             indentSize: int
     ) -> typing.List[str]:
         output = []
-        if parentEventName not in eventLookupByParent:
+        if parentEvent not in eventLookupByParent:
             return output
 
         nextIndentation = curIndentation + (' ' * indentSize)
 
-        for event in eventLookupByParent[parentEventName]:
+        for event in eventLookupByParent[parentEvent]:
             dur = f'{event.get_duration():.4f}'.lstrip('0')
             output.append(f'{curIndentation}{dur} {event.event_name}')
-            output.extend(self._dump_events_recurse(event.event_name, eventLookupByParent, nextIndentation, indentSize))
+            output.extend(self._dump_events_recurse(event, eventLookupByParent, nextIndentation, indentSize))
 
         return output
 

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import itertools
+import typing
 
 import DebugHelper
 import SearchUtils
@@ -22,6 +23,9 @@ from SearchUtils import *
 from Path import Path
 from base.client.map import Tile, TILE_OBSTACLE, TileDelta, Player, MODIFIER_TORUS, MAX_ALLY_SPAWN_DISTANCE, MIN_ALLY_SPAWN_DISTANCE
 
+if typing.TYPE_CHECKING:
+    from Strategy.OpponentTracker import OpponentTracker
+
 
 class PlayerAggressionTracker(object):
     def __init__(self, index):
@@ -29,7 +33,7 @@ class PlayerAggressionTracker(object):
 
 
 class ArmyTracker(object):
-    def __init__(self, map: MapBase, perfTimer: PerformanceTimer | None = None):
+    def __init__(self, map: MapBase, perfTimer: PerformanceTimer | None = None, opponentTracker: OpponentTracker | None = None):
         self.connectedByPlayer: typing.List[TileSet] = [set() for p in map.players]
         self.coreConnectedByPlayer: typing.List[TileSet] = [set() for p in map.players]
         """Connected by player except with ends trimmed to just the core of the graph."""
@@ -39,6 +43,7 @@ class ArmyTracker(object):
             self.perf_timer = PerformanceTimer()
         self.player_moves_this_turn: typing.Set[int] = set()
         self.map: MapBase = map
+        self.opponent_tracker: OpponentTracker | None = opponentTracker
         self.general: Tile = map.generals[map.player_index]
 
         self.armies: typing.Dict[Tile, Army] = {}
@@ -142,6 +147,9 @@ class ArmyTracker(object):
         if 'perf_timer' in state:
             del state['perf_timer']
 
+        if 'opponent_tracker' in state:
+            del state['opponent_tracker']
+
         # if '_boardAnalysis' in state:
         #     del state['_boardAnalysis']
 
@@ -151,6 +159,7 @@ class ArmyTracker(object):
         self.__dict__.update(state)
         self.notify_unresolved_army_emerged = []
         self.notify_army_moved = []
+        self.opponent_tracker = None
 
     # distMap used to determine how to move armies under fog
     def scan_movement_and_emergences(
@@ -1310,7 +1319,7 @@ class ArmyTracker(object):
             valFunc,
             maxTurns=depthLimit,
             maxDepth=depthLimit,
-            maxTime=0.004,
+            maxTime=1.0,
             noNeutralCities=not allowVisionlessObstaclesAndCities,
             noNeutralUndiscoveredObstacles=not allowVisionlessObstaclesAndCities,
             priorityFunc=prioFunc,
@@ -2177,7 +2186,7 @@ class ArmyTracker(object):
             goalFunc=goalFunc,
             prioFunc=lambda t: (not t.visible, t.player == army.player, t.army if t.player == army.player else 0 - t.army),
             skipTiles=skip,
-            maxTime=0.1,
+            maxTime=1.0,
             maxDepth=23,
             noNeutralCities=army.tile.army < 150,
             searchingPlayer=army.player,
@@ -2266,7 +2275,7 @@ class ArmyTracker(object):
             valueFunc=valueFunc,
             priorityFunc=prioFunc,
             skipTiles=skip,
-            maxTime=0.1,
+            maxTime=1.0,
             maxDepth=30,
             noNeutralCities=army.tile.army < 150,
             searchingPlayer=army.player,
@@ -2302,16 +2311,17 @@ class ArmyTracker(object):
         if tile.delta.discovered and not tile.army > self.track_threshold and not unaccountedForDelta > self.track_threshold and len(self.map.players[player].tiles) > 4:
             return None
 
-        depthLimit = self.get_emergence_max_depth_to_general_or_none(player, tile, unaccountedForDelta)
+        depthLimit = self.get_emergence_max_depth_to_general_or_none(player, tile, unaccountedForDelta, useOpponentKnownFogTileArmy=False)
+        generalDepthLimit = self.get_emergence_max_depth_to_general_or_none(player, tile, unaccountedForDelta)
 
         if tile not in self.skip_emergence_tile_pathings:
             sourceFogArmyPath = self.find_fog_source(player, tile, unaccountedForDelta, depthLimit=depthLimit)
             if sourceFogArmyPath is not None:
                 self.unaccounted_tile_diffs.pop(tile, 0)
                 # we can only depth-limit when we found SOME fog army path...
-                if depthLimit is not None and depthLimit < 60 and tile.delta.toTile is None:
-                    maxDistToGen = depthLimit
-                    logbook.info(f'WHOO LIMITING GENERAL BY {depthLimit} from {tile} BASED ON SHEER STANDING ARMY EMERGENCE')
+                if generalDepthLimit is not None and generalDepthLimit < 60 and tile.delta.toTile is None:
+                    maxDistToGen = generalDepthLimit
+                    logbook.info(f'WHOO LIMITING GENERAL BY {generalDepthLimit} from {tile} BASED ON SHEER STANDING ARMY EMERGENCE')
 
                     self._limit_general_position_to_within_tile_and_distance(player, tile, maxDistToGen, alsoIncreaseEmergence=True, skipIfLongerThanExisting=True, emergenceAmount=unaccountedForDelta)
 
@@ -2328,7 +2338,7 @@ class ArmyTracker(object):
 
         return None
 
-    def get_emergence_max_depth_to_general_or_none(self, player: int, tile: Tile, unaccountedForDelta: int = -1):
+    def get_emergence_max_depth_to_general_or_none(self, player: int, tile: Tile, unaccountedForDelta: int = -1, useOpponentKnownFogTileArmy: bool = True):
         # TODO if we take into account the worst case amount of army they guaranteed have left on their tiles from OpponentTracker
         #  eg in test test_because_of_opponent_tracker_registering_max_possible_emergence_pulling_ALL_army_off_of_general_should_limit_gen_spawn we limit to dist 10
         #  but really we know they have at minimum 2x 2s left in that test so we could actually limit to 6 since 2 army can't be on the general from that knowledge.
@@ -2337,10 +2347,25 @@ class ArmyTracker(object):
         armyPlayerObj = self.map.players[player]
         depthLimit = None
         armyInFog = armyPlayerObj.standingArmy - armyPlayerObj.visibleStandingArmy
+        if useOpponentKnownFogTileArmy:
+            armyInFog = max(0, armyInFog - self._get_known_non_general_fog_tile_extra_army(player))
         if unaccountedForDelta > 2 * armyInFog - 4:
             depthLimit = self._calculate_maximum_general_distance_for_raw_fog_standing_army(armyPlayerObj, armyInFog)
 
         return depthLimit
+
+    def _get_known_non_general_fog_tile_extra_army(self, player: int) -> int:
+        if self.opponent_tracker is None:
+            return 0
+
+        fogTileCountDict = self.opponent_tracker.get_player_fog_tile_count_dict(player)
+        extraArmy = 0
+        for tileArmy, tileCount in fogTileCountDict.items():
+            if tileArmy <= 1:
+                continue
+            extraArmy += (tileArmy - 1) * tileCount
+
+        return extraArmy
 
     def add_need_to_track_city(self, city: Tile):
         logbook.info(f'armytracker tracking updated city for next scan: {str(city)}')
@@ -3861,23 +3886,48 @@ class ArmyTracker(object):
                 tilesToConvertToAddTo.add(tile)
 
         numFillTilesNeeded = numTilesToFillIn
-        # missingCities = self.get_team_missing_city_count_by_player()
+        deferredVisionEdgeTileSet: typing.Set[Tile] = set()
+        deferVisionBaseline: typing.Set[Tile] = set()
+
+        def deferForeach(t: Tile):
+            deferVisionBaseline.add(t)
+            if t.discovered and t.player != -1 and t.visible and self.map.team_ids_by_player_index[t.player] != self.map.friendly_team:
+                return True
+            return False
+
+        SearchUtils.breadth_first_foreach_fast_no_neut_cities(self.map, self.map.players[self.map.player_index].tiles, 5, deferForeach)
+
+        def is_vision_edge_tile(tile: Tile) -> bool:
+            return tile in deferVisionBaseline
+
+        def add_deferred_vision_edge_tiles_if_needed():
+            for deferredTile in deferredVisionEdgeTileSet:
+                if len(tilesToConvertToAddTo) >= numFillTilesNeeded:
+                    return
+                tilesToConvertToAddTo.add(deferredTile)
 
         def findFunc(tile: Tile, army: float, dist: int) -> bool:
             if len(tilesToConvertToAddTo) >= numFillTilesNeeded:
                 return True
 
             if tile.player == -1 and tile not in tilesToConvertToAddTo and not tile.isSwamp:
+                if is_vision_edge_tile(tile):
+                    if tile not in deferredVisionEdgeTileSet and tile not in connectedDark:
+                        deferredVisionEdgeTileSet.add(tile)
+                    return False
                 tilesToConvertToAddTo.add(tile)
 
             return False
 
         # TODO add breadth_first_foreach_terminating and use that instead so we dont waste time building unused paths in exchange for not fully looping
         fakePath = SearchUtils.breadth_first_find_queue(self.map, connectedDark, findFunc, skipTiles=skips, noNeutralCities=True, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+        add_deferred_vision_edge_tiles_if_needed()
         if fakePath is None:
-            logbook.error(f'unable to fill the requested {numFillTilesNeeded} numTilesToFillIn {numTilesToFillIn} tiles from {connectedDark}, (skips {skips}) allowing neutral cities...?')
-            fakePath = SearchUtils.breadth_first_find_queue(self.map, connectedDark, findFunc, skipTiles=skips, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
-            if fakePath is None:
+            if len(tilesToConvertToAddTo) < numFillTilesNeeded:
+                logbook.error(f'unable to fill the requested {numFillTilesNeeded} numTilesToFillIn {numTilesToFillIn} tiles from {connectedDark}, (skips {skips}) allowing neutral cities...?')
+                fakePath = SearchUtils.breadth_first_find_queue(self.map, connectedDark, findFunc, skipTiles=skips, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+                add_deferred_vision_edge_tiles_if_needed()
+            if fakePath is None and len(tilesToConvertToAddTo) < numFillTilesNeeded:
                 # then we couldn't fully build the set?
                 conDark = set(connectedDark)
                 logbook.error(f'unable to fully build {numFillTilesNeeded} numFillTilesNeeded, {numTilesToFillIn} numTilesToFillIn the set of tiles...? '

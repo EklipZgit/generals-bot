@@ -359,7 +359,7 @@ class BotExpansionOps:
                     bot.curPath = moveListPath
                     bot.city_expand_plan = None
 
-                    bot.info(f'PBPLAN {moveListPath}')
+                    bot.info(f'F25PLAN {moveListPath}')
                     return move
 
         BotExpansionOps._add_expansion_threat_negs(bot, expansionNegatives)

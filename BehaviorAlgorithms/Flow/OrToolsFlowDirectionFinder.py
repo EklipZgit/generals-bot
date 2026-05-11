@@ -19,7 +19,7 @@ if typing.TYPE_CHECKING:
     from Algorithms import TileIslandBuilder, TileIsland
     from ArmyAnalyzer import ArmyAnalyzer
     from base.client.map import MapBase, Tile
-    from Interfaces import TileSet
+    from Interfaces import MapMatrixInterface, TileSet
 
 
 class OrToolsGraphData(object):
@@ -110,6 +110,7 @@ class DirectOrToolsGraphBuilder(object):
         enemy_general: 'Tile',
         use_backpressure_from_enemy_general: bool,
         use_neutral_flow: bool,
+        army_override_matrix: 'MapMatrixInterface[int] | None',
         perf_timer: 'PerformanceTimer',
     ) -> OrToolsGraphData:
         """
@@ -119,6 +120,11 @@ class DirectOrToolsGraphBuilder(object):
 
         target_general_island = islands.tile_island_lookup.raw[enemy_general.tile_index]
         fr_general_island = islands.tile_island_lookup.raw[friendly_general.tile_index]
+
+        def _get_island_army_sum(island: 'TileIsland') -> int:
+            if army_override_matrix is None:
+                return island.sum_army
+            return sum(army_override_matrix.raw[tile.tile_index] for tile in island.tile_set)
 
         # ----------------------------------------------------------------
         # Phase 1: per-island demands (mirrors _determine_initial_demands...)
@@ -151,19 +157,26 @@ class DirectOrToolsGraphBuilder(object):
 
         with perf_timer.begin_move_event('OrTools build phase1 demands'):
             flow_diag_islands: typing.Set[int] = set()
+            flow_diag_tile_positions = {(8, 6), (9, 6), (10, 6)}
+            for x, y in flow_diag_tile_positions:
+                tile = map_obj.GetTile(x, y)
+                tile_island = islands.tile_island_lookup.raw[tile.tile_index]
+                if tile_island is not None:
+                    flow_diag_islands.add(tile_island.unique_id)
             for island in islands.all_tile_islands:
+                island_army_sum = _get_island_army_sum(island)
                 cost = island.tile_count - 1
-                demand = island.tile_count - island.sum_army
+                demand = island.tile_count - island_army_sum
                 has_nx_demand_attr = False
                 if island.team == team:
                     has_nx_demand_attr = True
                     cumulative_demand += demand
-                    friendly_army_supply += island.sum_army - island.tile_count
+                    friendly_army_supply += island_army_sum - island.tile_count
                     if island.tiles_by_army[0].army == 1:
                         cost *= 2
                 elif island.team == target_team:
                     has_nx_demand_attr = True
-                    demand = island.sum_army + island.tile_count
+                    demand = island_army_sum + island.tile_count
                     cumulative_demand += demand
                     enemy_army_demand += demand
                 elif island.team == -1:
@@ -171,7 +184,7 @@ class DirectOrToolsGraphBuilder(object):
                     if not role.is_neutral_sink_no_neut or use_neutral_flow:
                         has_nx_demand_attr = True
                         cumulative_demand += demand
-                        cost *= 2
+                        cost = max(1, cost) * 2
 
                 demands[island.unique_id] = demand
 
@@ -187,7 +200,7 @@ class DirectOrToolsGraphBuilder(object):
                 if self.log_debug:
                     if (
                         island is target_general_island
-                        or island is friendly_general_island
+                        or island is fr_general_island
                         or island.team == team and borders_target
                         or island.team == target_team and borders_friendly
                     ):
@@ -253,17 +266,21 @@ class DirectOrToolsGraphBuilder(object):
             # fakeNode supply = -(-cumulativeDemand) = cumulativeDemand (balances the graph)
             node_supply_map[fake_node] = cumulative_demand
             all_node_ids.add(fake_node)
+            fake_node_excess_supply = max(0, cumulative_demand)
+            fake_node_enemy_general_fallback_capacity = fake_node_excess_supply // 4
+            fake_node_friendly_general_fallback_capacity = fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
 
             # Edges to/from neutral sinks
             neut_sink_weight = 10 if use_neutral_flow else 0
-            for neut_sink_id in neut_sinks:
-                isl = islands.tile_islands_by_unique_id[neut_sink_id]
-                capacity = isl.tile_count
-                arc_starts.append(fake_node)
-                arc_ends.append(neut_sink_id)
-                arc_caps.append(capacity)
-                arc_costs.append(neut_sink_weight)
-                all_node_ids.add(neut_sink_id)
+            if use_neutral_flow:
+                for neut_sink_id in neut_sinks:
+                    isl = islands.tile_islands_by_unique_id[neut_sink_id]
+                    capacity = isl.tile_count
+                    arc_starts.append(fake_node)
+                    arc_ends.append(neut_sink_id)
+                    arc_caps.append(capacity)
+                    arc_costs.append(neut_sink_weight)
+                    all_node_ids.add(neut_sink_id)
 
             # Backpressure weight mirrors NX builder
             backpressure_weight = 0 if use_backpressure_from_enemy_general else 10000
@@ -285,15 +302,15 @@ class DirectOrToolsGraphBuilder(object):
             # fakeNode → targetGeneralIsland.unique_id
             arc_starts.append(fake_node)
             arc_ends.append(target_general_island.unique_id)
-            arc_caps.append(1000000)
+            arc_caps.append(fake_node_enemy_general_fallback_capacity)
             arc_costs.append(backpressure_weight)
             all_node_ids.add(target_general_island.unique_id)
 
             # fakeNode → frGeneralIsland.unique_id
             arc_starts.append(fake_node)
             arc_ends.append(fr_general_island.unique_id)
-            arc_caps.append(1000000)
-            arc_costs.append(1000)
+            arc_caps.append(fake_node_friendly_general_fallback_capacity)
+            arc_costs.append(10000)
             all_node_ids.add(fr_general_island.unique_id)
 
         # ----------------------------------------------------------------
@@ -353,7 +370,7 @@ class DirectOrToolsGraphBuilder(object):
                 f'friendly_army_supply={friendly_army_supply} enemy_army_demand={enemy_army_demand} '
                 f'enemy_general_demand={enemy_general_demand} cumulative_demand={cumulative_demand} '
                 f'fake_node={fake_node} target_general_island={target_general_island.unique_id} '
-                f'friendly_general_island={friendly_general_island.unique_id} diag_supplies=[{" | ".join(diag_supplies)}]'
+                f'friendly_general_island={fr_general_island.unique_id} diag_supplies=[{" | ".join(diag_supplies)}]'
             )
         return result
 
@@ -551,6 +568,10 @@ class OrToolsFlowComputer(object):
                     flow_dict[from_orig][to_orig] = flow_dict[from_orig].get(to_orig, 0) + flow_amount
                     continue
 
+                if from_is_fake and not to_is_fake:
+                    flow_dict[from_orig][to_orig] = flow_dict[from_orig].get(to_orig, 0) + flow_amount
+                    continue
+
                 if self.log_debug:
                     logbook.info(f'    ignored arc (fake-node handling)')
 
@@ -593,6 +614,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         self.use_backpressure_from_enemy_general: bool = use_backpressure
         self.friendly_general: 'Tile' = friendly_general
         self.invalid_flow_renderer = invalid_flow_renderer
+        self.army_override_matrix: 'MapMatrixInterface[int] | None' = None
 
         self._intergeneral_analysis: 'ArmyAnalyzer' = intergeneral_analysis
         self._nx_finder: NetworkXFlowDirectionFinder | None = None
@@ -681,6 +703,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
             enemy_general,
             self.use_backpressure_from_enemy_general,
             use_neutral_flow,
+            self.army_override_matrix,
             perf_timer=self.perf_timer,
         )
 

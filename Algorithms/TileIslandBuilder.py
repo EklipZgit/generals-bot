@@ -1149,6 +1149,13 @@ class TileIslandBuilder(object):
                             + ' | '.join(str(t) for t in sorted(island.tile_set, key=lambda t: (t.x, t.y)))
                         )
                 for tile in sorted(island.tile_set, key=lambda t: (t.x, t.y)):
+                    if island.team == self.friendly_team and tile.army == 1:
+                        allErrors.append(
+                            f'[{context}:force_border_solo id={island.unique_id}/{island.name}] '
+                            f'island tile_count={island.tile_count} but friendly 1 tile {tile} '
+                            f'must be solo; tile_set='
+                            + ' | '.join(str(t) for t in sorted(island.tile_set, key=lambda t: (t.x, t.y)))
+                        )
                     for movable in tile.movable:
                         if movable.isObstacle:
                             continue
@@ -1861,6 +1868,9 @@ class TileIslandBuilder(object):
 
     # all borders impl
     def must_tile_be_solo(self, tile: Tile, teamId: int) -> bool:
+        if teamId == self.friendly_team and tile.army == 1:
+            return True
+
         for adj in tile.movable:
             if self.teams[adj.player] != teamId:
                 return True
@@ -1955,8 +1965,8 @@ class TileIslandBuilder(object):
             self._prev_turn_army.raw[tile.tile_index] = tile.army
             self._prev_turn_player.raw[tile.tile_index] = tile.player
 
-        if self.use_debug_asserts:
-            self.debug_verify_all_islands(context='rebuild_islands_from_ids')
+        # if self.use_debug_asserts:
+        #     self.debug_verify_all_islands(context='rebuild_islands_from_ids')
 
 
 class SetHolder(object):

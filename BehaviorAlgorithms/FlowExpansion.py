@@ -317,6 +317,7 @@ class ArmyFlowExpanderV2:
                 self.friendlyGeneral,
                 self.live_render_invalid_flow_config,
             )
+        self._ortools_finder.army_override_matrix = self.army_override_matrix
         self._ortools_finder.configure(self.team, self.target_team, self.enemyGeneral)
         return self._ortools_finder
 
@@ -1815,6 +1816,16 @@ class ArmyFlowExpanderV2:
         blacklist: set[int] = set()
         max_iterations = 32  # bounded; each iteration blacklists >= 1 item.
 
+        def _get_item_weight(item):
+            if isinstance(item, ExternalPlanOption):
+                return item.turns
+            return item.combined_turn_cost
+
+        def _get_item_value(item):
+            if isinstance(item, ExternalPlanOption):
+                return item.econ_value
+            return item.capture_entry.econ_value
+
         chosen_items: list[EnrichedFlowTurnsEntry | ExternalPlanOption] = []
         max_value = 0
         for iteration in range(max_iterations):
@@ -1930,16 +1941,6 @@ class ArmyFlowExpanderV2:
             #              dropping the heavier (higher-absolute-value) chain.
             #
             # Ties on density: compare absolute econ_value, then weight.
-            def _get_item_weight(item):
-                if isinstance(item, ExternalPlanOption):
-                    return item.turns
-                return item.combined_turn_cost
-
-            def _get_item_value(item):
-                if isinstance(item, ExternalPlanOption):
-                    return item.econ_value
-                return item.capture_entry.econ_value
-
             current_chosen_weight = sum(_get_item_weight(c) for c in chosen_items)
             newly_blacklisted = 0
             for item_a, item_b in conflicts:

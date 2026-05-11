@@ -1976,3 +1976,78 @@ bot_target_player=1
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(14, simHost, 'if capped enemy tiles whole round, would still have to make like 3 neutral moves bc not enough army, so go from -16 to +15')
+    
+    def test_should_prefer_expanding_into_enemy_territory(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prefer_expanding_into_enemy_territory___UCtSMmRDT---1--66.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 66, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=66)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_leafmoves(enemyGeneral.player, 15)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+    
+    def test_should_use_f25_piggyback_to_effectively_capture_nearby_enemy_land_not_just_neutral(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_use_f25_piggyback_to_effectively_capture_nearby_enemy_land_not_just_neutral___f7V_QKag3---0--87.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 87, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=87)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '13,4->12,4->12,8->11,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=13)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(3, simHost, 'should find a good plan')
+        # self.assertOwned(11, 8)
+        # it actually likes skipping 12,8 to waste an extra move to send army from general follow ups later interestingly?
+        # self.assertOwned(12, 8)
+        self.assertOwned(12, 7)
+        self.assertOwned(12, 6)
+
+
+    def test_should_use_f25_piggyback_to_effectively_capture_nearby_enemy_land_not_just_neutral__one_further(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_use_f25_piggyback_to_effectively_capture_nearby_enemy_land_not_just_neutral___f7V_QKag3---0--87.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 87, fill_out_tiles=True)
+        map.At(12, 6).player = general.player
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=87)
+        rawMap.At(12, 6).player = general.player
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '13,4->12,4->12,8->11,8->11,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=13)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(5, simHost, 'immediately capping enemy followed by neutrals nets 6')
+        # self.assertOwned(11, 8)
+        # it actually likes skipping 12,8 to waste an extra move to send army from general follow ups later interestingly?
+        # self.assertOwned(12, 8)
+        self.assertOwned(12, 7)
+        self.assertOwned(12, 6)

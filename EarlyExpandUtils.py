@@ -5,6 +5,7 @@ import logbook
 import time
 import typing
 
+import DebugHelper
 import Gather
 import SearchUtils
 from Models import Move, GatherTreeNode
@@ -223,7 +224,7 @@ def get_start_expand_captures(
             f'result of curTurn {curTurn}: newCapped {numCapped}, capped {len(alreadyVisited)}, enCapped {len(enCapped)}, final genArmy {curGenArmy}')
 
     # return numCapped
-    return len(alreadyVisited)
+    return len(alreadyVisited) + len(enCapped) * 1.2
 
 
 def __evaluate_plan_value(
@@ -611,6 +612,9 @@ def _sub_optimize_first_25_specific_wasted(
         curTurn = turn
         capped = EMPTY_COMBINATION
 
+        if DebugHelper.IS_DEBUGGING:
+            cutoff_time = time.perf_counter() + 1000.0
+
         if time.perf_counter() > cutoff_time:
             return capped, pathList
 
@@ -658,6 +662,9 @@ def _sub_optimize_first_25_specific_wasted(
             for tile in path1.tileList:
                 if tile in visited_set and tile != general:
                     allow_wasted_moves -= 1
+                # we get more wasted moves when we capture enemy tiles because we spend more army per.
+                elif tile.player >= 0:
+                    allow_wasted_moves += 1
                 visited_set.add(tile)
 
             curAttemptGenArmy = 1
@@ -1057,6 +1064,11 @@ def _optimize_25_launch_segment(
     searchingPlayer = map.player_index
     friendlyPlayers = map.get_teammates(searchingPlayer)
 
+    # necessary to allow us to reach enemy land over our own land.
+    repeatsCutoff = 0
+    if map.turn > 50:
+        repeatsCutoff = turns_left // 4
+
     if gen_army <= 1:
         if not no_log:
             logbook.info('RETURNING NONE from _optimize_25_launch_segment, gen_army <= 1')
@@ -1065,17 +1077,17 @@ def _optimize_25_launch_segment(
     i = SearchUtils.Counter(0)
 
     def value_func(currentTile: Tile, priorityObject, pathList: typing.List[Tile] = []):
-        _, currentGenDist, _, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist, armyLeft = priorityObject
+        _, currentGenDist, _, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist, armyLeft, cur_force_wasted_moves = priorityObject
         # currentGenDist = 0 - negCurrentGenDist
         # higher better
-        tileValue = 0 - tile_weight_map[currentTile]
+        tileValue = 0 - tile_weight_map.raw[currentTile.tile_index]
 
-        repeatsVal = repeats - force_wasted_moves
-        # not necessary because of the below return
-        # repeatsVal = 0 - abs(repeats - force_wasted_moves)
-        # skip any path that wastes less moves than allowed.
-        if repeatsVal > 0:
-            return None
+        # repeatsVal = repeats - cur_force_wasted_moves
+        # # not necessary because of the below return
+        repeatsVal = 0 - abs(repeats - cur_force_wasted_moves)
+        # # skip any path that wastes less moves than allowed.
+        # if repeatsVal > repeatsCutoff:
+        #     return None
 
         # skip any path that is all repeats.
         if repeats == len(pathList) - 1:
@@ -1108,7 +1120,7 @@ def _optimize_25_launch_segment(
 
     # must always prioritize the tiles furthest from general first, to make sure we dequeue in the right order
     def prio_func(nextTile: Tile, currentPriorityObject, pathList: typing.List[typing.Tuple[Tile, typing.Any]] = []):
-        repeatAvoider, _, closerToEnemyNeg, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist, armyLeft = currentPriorityObject
+        repeatAvoider, _, closerToEnemyNeg, pathCappedNeg, negAdjWeight, repeats, cappedAdj, maxGenDist, armyLeft, cur_force_wasted_moves = currentPriorityObject
         if nextTile.isGeneral:
             return None
 
@@ -1124,7 +1136,9 @@ def _optimize_25_launch_segment(
             elif nextTile.player == -1:
                 pathCappedNeg -= 1
             elif nextTile.player not in friendlyPlayers:
-                pathCappedNeg -= 2
+                pathCappedNeg -= 2.2
+                repeats -= 1
+                cur_force_wasted_moves -= 1
                 armyLeft -= nextTile.army
             else:
                 armyLeft += nextTile.army
@@ -1145,7 +1159,7 @@ def _optimize_25_launch_segment(
         closerToEnemyNeg = tile_weight_map.raw[nextTile.tile_index]
 
         # 0 is best value we'll get, after which more repeat tiles become 'bad' again
-        repeatAvoider = abs(force_wasted_moves - repeats)
+        repeatAvoider = abs(cur_force_wasted_moves - repeats)
         if nextTile.isSwamp:
             repeatAvoider += 4
         if nextTile.isDesert and not visited:
@@ -1188,11 +1202,11 @@ def _optimize_25_launch_segment(
             repeatAvoider += 1
 
         if debug_view_info:
-            debug_view_info.midRightGridText[nextTile] = adjWeight
+            debug_view_info.midRightGridText.raw[nextTile.tile_index] = adjWeight
 
         maxGenDist = max(maxGenDist, distToGen)
 
-        priObj = repeatAvoider, distToGen, closerToEnemyNeg, pathCappedNeg, 0 - adjWeight, repeats, cappedAdj, maxGenDist, armyLeft
+        priObj = repeatAvoider, distToGen, closerToEnemyNeg, pathCappedNeg, 0 - adjWeight, repeats, cappedAdj, maxGenDist, armyLeft, cur_force_wasted_moves
 
         return priObj
 
@@ -1203,11 +1217,11 @@ def _optimize_25_launch_segment(
             nextTile: Tile,
             currentPriorityObject,
             pathList: typing.List[typing.Tuple[Tile, typing.Any]] = []):
-        _, genDist, _, pathCappedNeg, _, repeats, cappedAdj, maxGenDist, armyLeft = currentPriorityObject
+        _, genDist, _, pathCappedNeg, _, repeats, cappedAdj, maxGenDist, armyLeft, cur_force_wasted_moves = currentPriorityObject
         if skip_tiles is not None and nextTile in skip_tiles:
             return True
 
-        if repeats - force_wasted_moves > 0:
+        if repeats - cur_force_wasted_moves > repeatsCutoff:
             return True
 
         # if nextTile.player in friendlyPlayers:
@@ -1233,7 +1247,7 @@ def _optimize_25_launch_segment(
 
         return armyLeft <= 0
 
-    startVals: typing.Dict[Tile, typing.Tuple[object, int]] = {general: ((0, 0, -1000, 0, 0, 0, 0, 0, gen_army), 0)}
+    startVals: typing.Dict[Tile, typing.Tuple[object, int]] = {general: ((0, 0, -1000, 0, 0, 0, 0, 0, gen_army, force_wasted_moves), 0)}
     if not no_log:
         logbook.info(f'finding segment for genArmy {gen_army}, force_wasted_moves {force_wasted_moves}, alreadyVisited {len(visited_set)}')
     path = breadth_first_dynamic_max(
@@ -1244,9 +1258,13 @@ def _optimize_25_launch_segment(
         priorityFunc=prio_func,
         skipFunc=skip_func,
         noLog=True,
+        logResultValues=False,
+        # noLog=False,
+        # logResultValues=True,
         maxTurns=turns_left,
         useGlobalVisitedSet=use_global_visited_set,  # has to be false so we try multiple combinations of deviations from the re-traversal in one go.
-        includePath=True)
+        includePath=True,
+        maxTime=1000)
 
     # if not no_log:
     #     logbook.info(f'  found {path}')

@@ -20,12 +20,17 @@ from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, TileSet
 from base.client.map import MapBase, Tile
 from Models.Move import Move
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 GATHER_SWITCH_POINT = 150
 
 class BotGatherOps:
     @staticmethod
-    def get_number_of_captures_in_gather_tree(bot, gatherNodes: typing.List[GatherTreeNode], asPlayer: int = -2) -> int:
+    def get_number_of_captures_in_gather_tree(bot: EklipZBot, gatherNodes: typing.List[GatherTreeNode], asPlayer: int = -2) -> int:
         if asPlayer == -2:
             asPlayer = bot._map.player_index
 
@@ -43,7 +48,7 @@ class BotGatherOps:
         return sumCaps.value
 
     @staticmethod
-    def convert_gather_to_move_list_path(bot, gatherNodes, turnsUsed, value, moveOrderPriorityMinFunc) -> MoveListPath:
+    def convert_gather_to_move_list_path(bot: EklipZBot, gatherNodes, turnsUsed, value, moveOrderPriorityMinFunc) -> MoveListPath:
         gcp = Gather.GatherCapturePlan.build_from_root_nodes(bot._map, gatherNodes, negativeTiles=set(), searchingPlayer=bot._map.player_index, onlyCalculateFriendlyArmy=False, priorityMatrix=None, viewInfo=bot.viewInfo)
         moveListThing = []
         move = gcp.pop_first_move()
@@ -56,7 +61,7 @@ class BotGatherOps:
 
     @staticmethod
     def try_find_gather_move(
-            bot,
+            bot: EklipZBot,
             threat: ThreatObj | None,
             defenseCriticalTileSet: typing.Set[Tile],
             leafMoves: typing.List[Move],
@@ -112,7 +117,7 @@ class BotGatherOps:
 
     @staticmethod
     def get_main_gather_move(
-            bot,
+            bot: EklipZBot,
             defenseCriticalTileSet: typing.Set[Tile],
             leafMoves: typing.List[Move] | None,
             enemyGather: bool = False,
@@ -361,7 +366,7 @@ class BotGatherOps:
 
     @staticmethod
     def get_gather_to_target_tile(
-            bot,
+            bot: EklipZBot,
             target: Tile,
             maxTime: float,
             gatherTurns: int,
@@ -386,7 +391,7 @@ class BotGatherOps:
 
     @staticmethod
     def timing_gather(
-            bot,
+            bot: EklipZBot,
             startTiles: typing.List[Tile],
             negativeTiles: typing.Set[Tile] | None = None,
             skipTiles: typing.Set[Tile] | None = None,
@@ -541,7 +546,7 @@ class BotGatherOps:
 
     @staticmethod
     def get_defensive_gather_to_target_tiles(
-            bot,
+            bot: EklipZBot,
             targets,
             maxTime,
             gatherTurns,
@@ -678,7 +683,7 @@ class BotGatherOps:
         return matrix
 
     @staticmethod
-    def build_mst(bot, startTiles, maxTime=0.1, maxDepth=150, negativeTiles: typing.Set[Tile] = None, avoidTiles=None, priorityFunc=None):
+    def build_mst(bot: EklipZBot, startTiles, maxTime=0.1, maxDepth=150, negativeTiles: typing.Set[Tile] = None, avoidTiles=None, priorityFunc=None):
         LOG_TIME = False
         searchingPlayer = bot._map.player_index
         frontier = SearchUtils.HeapQueue()
@@ -742,7 +747,7 @@ class BotGatherOps:
         return result
 
     @staticmethod
-    def build_mst_rebuild(bot, startTiles, fromMap, searchingPlayer):
+    def build_mst_rebuild(bot: EklipZBot, startTiles, fromMap, searchingPlayer):
         results = []
         for tile in startTiles:
             gather = BotGatherOps.get_gather_mst(bot, tile, None, fromMap, 0, searchingPlayer)
@@ -755,7 +760,7 @@ class BotGatherOps:
         return results
 
     @staticmethod
-    def get_gather_mst(bot, tile, fromTile, fromMap, turn, searchingPlayer):
+    def get_gather_mst(bot: EklipZBot, tile, fromTile, fromMap, turn, searchingPlayer):
         gatherTotal = tile.army
         turnTotal = 1
         if tile.player != searchingPlayer:
@@ -780,7 +785,7 @@ class BotGatherOps:
         return thisNode
 
     @staticmethod
-    def get_tree_move_non_city_leaf_count(bot, gathers):
+    def get_tree_move_non_city_leaf_count(bot: EklipZBot, gathers):
         count = 0
         for gather in gathers:
             foundCity, countNonCityLeaves = BotGatherOps._get_tree_move_non_city_leaf_count_recurse(bot, gather)
@@ -788,7 +793,7 @@ class BotGatherOps:
         return count
 
     @staticmethod
-    def _get_tree_move_non_city_leaf_count_recurse(bot, gather):
+    def _get_tree_move_non_city_leaf_count_recurse(bot: EklipZBot, gather):
         count = 0
         thisNodeFoundCity = False
         for child in gather.children:
@@ -833,7 +838,7 @@ class BotGatherOps:
 
     @staticmethod
     def get_tree_move_default(
-            bot,
+            bot: EklipZBot,
             gathers: typing.List[GatherTreeNode],
             valueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] | None = None,
             pop: bool = False
@@ -859,7 +864,7 @@ class BotGatherOps:
 
     @staticmethod
     def get_gather_to_target_tiles(
-            bot,
+            bot: EklipZBot,
             targets,
             maxTime,
             gatherTurns,
@@ -1051,7 +1056,7 @@ class BotGatherOps:
 
     @staticmethod
     def get_gather_to_target_tiles_greedy(
-            bot,
+            bot: EklipZBot,
             targets,
             maxTime,
             gatherTurns,
@@ -1107,7 +1112,7 @@ class BotGatherOps:
 
     @staticmethod
     def get_timing_gather_negatives_unioned(
-            bot,
+            bot: EklipZBot,
             gatherNegatives: typing.Set[Tile],
             additional_offset: int = 0,
             forceAllowCities: bool = False,

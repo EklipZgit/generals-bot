@@ -20,12 +20,17 @@ from Strategy.WinConditionAnalyzer import WinCondition
 from ViewInfo import PathColorer
 from base.client.tile import Tile
 import BotModules as BM
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 
 class BotExplorationOps:
     @staticmethod
     def get_optimal_exploration(
-            bot,
+            bot: EklipZBot,
             turns,
             negativeTiles: typing.Set = None,
             valueFunc=None,
@@ -172,7 +177,7 @@ class BotExplorationOps:
         return None
 
     @staticmethod
-    def find_flank_defense_move(bot, defenseCriticalTileSet: typing.Set[Tile], highPriority: bool = False) -> Move | None:
+    def find_flank_defense_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile], highPriority: bool = False) -> Move | None:
         # this is not called often enough for this to matter and the circular reference here is hell
         from BotModules.BotDefense import BotDefense
         pathToCheck = bot.sketchiest_potential_inbound_flank_path
@@ -279,7 +284,7 @@ class BotExplorationOps:
         return None
 
     @staticmethod
-    def explore_target_player_undiscovered(bot, negativeTiles: typing.Set[Tile] | None, onlyHuntGeneral: bool | None = None, maxTime: float | None = None) -> Path | None:
+    def explore_target_player_undiscovered(bot: EklipZBot, negativeTiles: typing.Set[Tile] | None, onlyHuntGeneral: bool | None = None, maxTime: float | None = None) -> Path | None:
         if negativeTiles:
             negativeTiles = negativeTiles.copy()
         if bot._map.turn < 50 or bot.targetPlayer == -1:
@@ -363,7 +368,7 @@ class BotExplorationOps:
         return None
 
     @staticmethod
-    def try_find_exploration_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    def try_find_exploration_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         genPlayer = bot._map.players[bot.general.player]
 
         largeTileThresh = 15 * genPlayer.standingArmy / genPlayer.tileCount
@@ -446,7 +451,7 @@ class BotExplorationOps:
         return None
 
     @staticmethod
-    def try_get_enemy_territory_exploration_continuation_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    def try_get_enemy_territory_exploration_continuation_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if bot.targetPlayer == -1:
             return None
 
@@ -481,7 +486,7 @@ class BotExplorationOps:
         return None
 
     @staticmethod
-    def _get_vision_expanding_available_move(bot, coreNegs: typing.Set[Tile], pathToCheckForVisionOf: Path | None = None) -> Move | None:
+    def _get_vision_expanding_available_move(bot: EklipZBot, coreNegs: typing.Set[Tile], pathToCheckForVisionOf: Path | None = None) -> Move | None:
         bestWeighted = 3
         bestMove = None
 

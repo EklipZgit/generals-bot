@@ -255,13 +255,14 @@ bot_target_player=1
         analysis = BoardAnalyzer(map, general)
         analysis.rebuild_intergeneral_analysis(enemy_general, possibleSpawns=None)
         builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.desired_tile_island_size = 5
         builder.recalculate_tile_islands(enemy_general)
 
         expander = ArmyFlowExpanderV2(map)
         expander.target_team = map.team_ids_by_player_index[enemy_general.player]
         expander.enemy_general = enemy_general
         expander.island_builder = builder
-        expander._ensure_flow_graph_exists(builder)
+        expander._ensure_flow_graph_exists(builder, turns=50)
 
         target_crossable = expander._detect_target_crossable_friendly_islands(
             builder, expander.flow_graph, expander.team, expander.target_team
@@ -271,7 +272,7 @@ bot_target_player=1
         )
 
         lookup_tables = expander._process_flow_into_flow_army_turns(
-            border_pairs, expander.flow_graph, target_crossable
+            border_pairs, expander.flow_graph, target_crossable, 50
         )
 
         return expander, builder, lookup_tables

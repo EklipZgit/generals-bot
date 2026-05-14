@@ -34,7 +34,7 @@ class FlowExpansionTargetCrossableTests(TestBase):
         enemy_general = map.generals[1 - map.player_index]
         expander.target_team = map.team_ids_by_player_index[enemy_general.player]
         expander.enemyGeneral = enemy_general
-        expander._ensure_flow_graph_exists(builder)
+        expander._ensure_flow_graph_exists(builder, turns=50)
         return expander
 
     # ------------------------------------------------------------------
@@ -170,7 +170,7 @@ a1   M    b1   b1
         FINAL layout (5 rows, 6 cols) — outpost fully surrounded on all 4 sides by b1:
           b1   b1   b1   b1   b1   b1
           aG1  a1   a1   a1   b1   bG1
-          a1   a1   a1   b1   a1   b1   ← outpost at (col4,row2)
+          a1   a1   a1   b1   a2   b1   ← outpost at (col4,row2)
           a1   a1   a1   a1   b1   b1
           b1   b1   b1   b1   b1   b1
 
@@ -185,7 +185,7 @@ a1   M    b1   b1
 |    |    |    |    |    |
 b1   b1   b1   b1   b1   b1
 aG1  a1   a1   a1   b1   bG1
-a1   a1   a1   b1   a1   b1
+a1   a1   a1   b1   a2   b1
 a1   a1   a1   a1   b1   b1
 b1   b1   b1   b1   b1   b1
 |    |    |    |    |    |
@@ -232,14 +232,19 @@ b1   b1   b1   b1   b1   b1
         from border-pair seeding (i.e., must not appear as the friendly_island_id in any
         returned FlowBorderPairKey).
 
-        Same layout as the encircled-outpost test above.
+        Layout (5 rows, 6 cols):
+          b1   b1   b1   b1   b1   b1
+          aG5  a1   a1   a1   b1   bG1
+          a1   a1   a1   b1   a2   b1   ← outpost at (col4,row2)
+          a1   a1   a1   a1   b1   b1
+          b1   b1   b1   b1   b1   b1
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |    |    |
 b1   b1   b1   b1   b1   b1
-aG1  a1   a1   a1   b1   bG1
-a1   a1   a1   b1   a1   b1
+aG5  a1   a1   a1   b1   bG1
+a1   a1   a1   b1   a2   b1
 a1   a1   a1   a1   b1   b1
 b1   b1   b1   b1   b1   b1
 |    |    |    |    |    |
@@ -322,29 +327,28 @@ aG20 a1        b1   bG1
         as target-crossable.
 
         Layout (6 rows, 7 cols):
-          b1   b1   b1   b1   b1   b1   b1
-          aG1  a1   a1   b1   a1   b1   bG1  ← outpost1 at (col4,row1)
-          a1   a1   a1   b1   b1   b1   b1   ← b1 below outpost1
-          a1   a1   a1   b1   b1   a1   b1   ← outpost2 at (col5,row3)
-          a1   a1   a1   b1   b1   b1   b1   ← b1 below outpost2
-          b1   b1   b1   b1   b1   b1   b1
+          a1   a1   a1   a1   b1   a1   b1
+          aG20 a1   a1   b1   a3   b1   bG1  ← outpost1 at (col4,row1)
+          a1   a1   a1   b1   M    b1   b1
+          a1   a1   a1   b1   b1   a3   M    ← outpost2 at (col5,row3)
+          a1   a1   a30  b1   b1   b1   b1
+          a1   a1   b1   b1   M    M    M
 
-        Main: cols 0-2, rows 1-4 = 12 tiles (all border, 1-tile leaves).
-        Outpost1 at (4,1): b1 above, b1 below (4,2), b1 left (3,1), bG1 right (5,1) → enemy_border=4.
-        Outpost2 at (5,3): b1 above (5,2), b1 below (5,4), b1 left (4,3), b1 right (6,3) → enemy_border=4.
-        Total = 12+1+1 = 14.  Threshold = 14//5 = 2.
+        Main: mostly cols 0-2, with extra friendly source army at (2,4).
+        Outpost1 at (4,1): b1 above, mountain below (4,2), b1 left (3,1), b1 right (5,1).
+        Outpost2 at (5,3): b1 above (5,2), b1 below (5,4), b1 left (4,3), mountain right (6,3).
         Each outpost full_island = itself (1 tile) < 2 → condition 3 passes.
         Flow routes each outpost toward bG1 at (6,1) → condition 4 passes.
         """
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapData = """
 |    |    |    |    |    |    |
-b1   b1   b1   b1   b1   b1   b1
-aG1  a1   a1   b1   a1   b1   bG1
-a1   a1   a1   b1   b1   b1   b1
-a1   a1   a1   b1   b1   a1   b1
-a1   a1   a1   b1   b1   b1   b1
-b1   b1   b1   b1   b1   b1   b1
+a1   a1   a1   a1   b1   a1   b1
+aG20 a1   a1   b1   a3   b1   bG1
+a1   a1   a1   b1   M    b1   b1
+a1   a1   a1   b1   b1   a3   M
+a1   a1   a30  b1   b1   b1   b1
+a1   a1   b1   b1   M    M    M
 |    |    |    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
@@ -498,27 +502,27 @@ b1   b1   b1   b1   bG1  b1
         be detected as target-crossable (assuming all other conditions are met).
 
         Layout (5 rows, 6 cols):
-          b1   b1   b1   b1   b1   b1
-          aG1  a1   a1   b1   a1   bG1   ← outpost at (col4,row1), b1 on all 4 sides
-          a1   a1   a1   b1   b1   b1
-          a1   a1   a1   b1   b1   b1
-          b1   b1   b1   b1   b1   b1
+          a1   a1   a1   M    b1   b1
+          aG20 a1   a1   b1   a2   bG1   ← outpost at (col4,row1)
+          a1   a1   a1   M    b1   b1
+          a1   a1   a1   M    b1   b1
+          a1   a1   a1   a1   b1   b1
 
-        Main: cols 0-2, rows 1-3 = 9 tiles (all border leaves).  Outpost at (4,1): 1 tile.
+        Main: left-side friendly region plus one lower bridge tile at (3,4).  Outpost at (4,1): 1 tile.
         Outpost neighbours: b1(4,0) above, b1(4,2) below, b1(3,1) left, bG1(5,1) right.
         full_island of outpost = itself (1 tile, no friendly neighbours).
-        Total = 9+1 = 10.  Threshold = 10//5 = 2.  Outpost parent = 1 < 2 → IS crossable.
+        Total friendly tiles keeps the 1/5 threshold above 1.  Outpost parent = 1 < threshold → IS crossable.
         enemy_border = 4, friendly_border = 0 → condition 2 passes.
         Flow routes outpost toward bG1 → condition 4 passes.
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |    |    |
-b1   b1   b1   b1   b1   b1
-aG1  a1   a1   b1   a1   bG1
-a1   a1   a1   b1   b1   b1
-a1   a1   a1   b1   b1   b1
-b1   b1   b1   b1   b1   b1
+a1   a1   a1   M    b1   b1
+aG20 a1   a1   b1   a2   bG1
+a1   a1   a1   M    b1   b1
+a1   a1   a1   M    b1   b1
+a1   a1   a1   a1   b1   b1
 |    |    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
@@ -557,20 +561,20 @@ b1   b1   b1   b1   b1   b1
         target-crossable when: the parent island size is below the 1/5 threshold,
         enemy_border > friendly_border, and flow routes through the outpost.
 
-        Layout (7 rows, 7 cols):
-          b1   b1   b1   b1   b1   b1   b1
-          aG1  a1   a1   a1   b1   b1   bG1  ← bG1 at (6,1)
-          a1   a1   a1   a1   b1   a1   b1   ← outpost tile 1 at (5,2)
-          a1   a1   a1   a1   b1   a1   b1   ← outpost tile 2 at (5,3), receives enemy flow via (6,3)
-          a1   a1   a1   a1   b1   b1   b1
-          b1   b1   b1   b1   b1   b1   b1
+        Layout (6 rows, 7 cols):
+          b1   b1   b1   b1   M    b1   b1
+          aG16 a1   a1   a1   M    b1   bG1  ← bG1 at (6,1)
+          a1   a1   a1   a1   b1   a2   b1   ← outpost tile 1 at (5,2)
+          a1   a1   a1   a1   b1   a2   b1   ← outpost tile 2 at (5,3), receives enemy flow via (6,3)
+          a1   a1   a1   a1   M    b1   b1
+          b1   b1   b1   b1   M    b1   b1
 
         bG1 at (6,1) drives enemy flow via (6,3) into the outpost at (5,3), making (5,3)
         the sole crossing point for enemy flow into friendly territory.
 
-        Main: cols 0-3, rows 1-4 = 16 tiles.  Outpost: (5,2) + (5,3) = 2 tiles.
-        full_island of outpost covers 2 tiles (isolated from main by col-4 b1 barrier).
-        Total = 16+2 = 18.  Threshold = 18//5 = 3.  Outpost parent = 2 < 3 → IS crossable.
+        Main: cols 0-3, rows 1-4 plus the friendly edge tiles.  Outpost: (5,2) + (5,3) = 2 tiles.
+        full_island of outpost covers 2 tiles (isolated from main by col-4 mountain/b1 barrier).
+        Total friendly tiles keeps the 1/5 threshold above 2.  Outpost parent = 2 < threshold → IS crossable.
 
         Condition 2 (enemy_border > friendly_border) per leaf island:
           - (5,2) top: up=b1, left=b1, right=b1 → enemy=3 vs friendly=1 (down=(5,3)) → passes
@@ -585,12 +589,12 @@ b1   b1   b1   b1   b1   b1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |    |    |    |
-b1   b1   b1   b1   b1   b1   b1
-aG1  a1   a1   a1   b1   b1   bG1
-a1   a1   a1   a1   b1   a1   b1
-a1   a1   a1   a1   b1   a1   b1
-a1   a1   a1   a1   b1   b1   b1
-b1   b1   b1   b1   b1   b1   b1
+b1   b1   b1   b1   M    b1   b1
+aG16 a1   a1   a1   M    b1   bG1
+a1   a1   a1   a1   b1   a2   b1
+a1   a1   a1   a1   b1   a2   b1
+a1   a1   a1   a1   M    b1   b1
+b1   b1   b1   b1   M    b1   b1
 |    |    |    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)

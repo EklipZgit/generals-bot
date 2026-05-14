@@ -1,9 +1,19 @@
 import SearchUtils
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 
 class BotDefenseQueries:
     @staticmethod
-    def determine_fog_defense_amount_available_for_tiles(bot, targetTiles, enPlayer, fogDefenseTurns: int = 0, fogReachTurns: int = 8) -> int:
+    def determine_fog_defense_amount_available_for_tiles(
+            bot: EklipZBot,
+            targetTiles,
+            enPlayer, 
+            fogDefenseTurns: int = 0,
+            fogReachTurns: int = 8) -> int:
         """Does NOT include the army that is on the targetTiles."""
         targetArmy = bot.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=None, inTurns=fogDefenseTurns)
 

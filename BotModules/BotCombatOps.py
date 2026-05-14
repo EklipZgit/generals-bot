@@ -31,6 +31,11 @@ from ViewInfo import PathColorer, TargetStyle
 from Models.Move import Move
 from base.client.map import Tile
 from DangerAnalyzer import ThreatType, ThreatObj
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 def scale(inValue, inBottom, inTop, outBottom, outTop):
     if inBottom > inTop:
@@ -47,7 +52,7 @@ def scale(inValue, inBottom, inTop, outBottom, outTop):
 
 class BotCombatOps:
     @staticmethod
-    def check_for_king_kills_and_races(bot, threat: ThreatObj | None, force: bool = False) -> typing.Tuple[Move | None, Path | None, float]:
+    def check_for_king_kills_and_races(bot: EklipZBot, threat: ThreatObj | None, force: bool = False) -> typing.Tuple[Move | None, Path | None, float]:
         kingKillPath = None
         kingKillChance = 0.0
         alwaysCheckKingKillWithinRange = 5
@@ -424,7 +429,7 @@ class BotCombatOps:
 
     @staticmethod
     def get_army_scrim_move(
-            bot,
+            bot: EklipZBot,
             friendlyArmyTile: Tile,
             enemyArmyTile: Tile,
             friendlyHasKillThreat: bool | None = None,
@@ -449,7 +454,7 @@ class BotCombatOps:
         return None
 
     @staticmethod
-    def get_kill_race_chance(bot, generalHuntPath: Path, enGenProbabilityCutoff: float = 0.4, turnsToDeath: int | None = None, cutoffKillArmy: int = 0, againstPlayer: int = None) -> float:
+    def get_kill_race_chance(bot: EklipZBot, generalHuntPath: Path, enGenProbabilityCutoff: float = 0.4, turnsToDeath: int | None = None, cutoffKillArmy: int = 0, againstPlayer: int = None) -> float:
         if generalHuntPath is None:
             return 0.0
 
@@ -514,7 +519,7 @@ class BotCombatOps:
 
     @staticmethod
     def get_army_scrim_paths(
-            bot,
+            bot: EklipZBot,
             friendlyArmyTile: Tile,
             enemyArmyTile: Tile,
             enemyCannotMoveAway: bool = True,
@@ -549,86 +554,91 @@ class BotCombatOps:
         return friendlyPath, enemyPath, result
 
     @staticmethod
-    def get_all_in_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
-        if BotStateQueries.is_all_in(bot, ):
-            hitGeneralInTurns = bot.all_in_army_advantage_cycle - bot.all_in_army_advantage_counter % bot.all_in_army_advantage_cycle
-            if bot.is_all_in_army_advantage and bot.targetPlayerObj.tileCount < 90:
-                hitGeneralInTurns = hitGeneralInTurns % 25 + 5
-            flankAllInMove = BotCombatOps.try_find_flank_all_in(bot, hitGeneralInTurns)
+    def get_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+        if not BotStateQueries.is_all_in(bot):
+            return None
 
-            if flankAllInMove:
-                bot.all_in_army_advantage_counter += 1
-                return flankAllInMove
+        hitGeneralInTurns = bot.all_in_army_advantage_cycle - bot.all_in_army_advantage_counter % bot.all_in_army_advantage_cycle
+        if bot.is_all_in_army_advantage and bot.targetPlayerObj.tileCount < 90:
+            hitGeneralInTurns = hitGeneralInTurns % 25 + 5
+        flankAllInMove = BotCombatOps.try_find_flank_all_in(bot, hitGeneralInTurns)
 
-            targets = [bot.targetPlayerExpectedGeneralLocation]
+        if flankAllInMove:
+            bot.all_in_army_advantage_counter += 1
+            return flankAllInMove
 
-            andTargs = ''
+        targets = [bot.targetPlayerExpectedGeneralLocation]
 
-            if not bot.targetPlayerExpectedGeneralLocation.isGeneral:
-                andTargs = f' (and undisc)'
-                emergenceTiles = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=5, cutoffEmergenceRatio=0.6)[0:3]
-                targets = emergenceTiles[0:5]
-                for t in targets:
-                    bot.viewInfo.add_targeted_tile(t, TargetStyle.WHITE)
+        andTargs = ''
 
-            if (bot.is_all_in_army_advantage or bot.all_in_city_behind) and not BotStateQueries.is_still_ffa_and_non_dominant(bot):
-                andTargs = ' (and cities)'
-                if bot.all_in_city_behind or bot._map.remainingPlayers == 2:
-                    targets.extend(bot.targetPlayerObj.cities)
+        if not bot.targetPlayerExpectedGeneralLocation.isGeneral:
+            andTargs = f' (and undisc)'
+            emergenceTiles = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=5, cutoffEmergenceRatio=0.6)[0:3]
+            targets = emergenceTiles[0:5]
+            for t in targets:
+                bot.viewInfo.add_targeted_tile(t, TargetStyle.WHITE)
 
-            msg = f'allin g AT tg gen{andTargs}, in {hitGeneralInTurns}t, {str([str(t) for t in targets])}'
+        if (bot.is_all_in_army_advantage or bot.all_in_city_behind) and not BotStateQueries.is_still_ffa_and_non_dominant(bot):
+            andTargs = ' (and cities)'
+            if bot.all_in_city_behind or bot._map.remainingPlayers == 2:
+                targets.extend(bot.targetPlayerObj.cities)
 
-            with bot.perf_timer.begin_move_event(f'pcst {msg}. self.all_in_army_advantage_cycle {bot.all_in_army_advantage_cycle}, self.all_in_army_advantage_counter {bot.all_in_army_advantage_counter}'):
-                gathNeg = defenseCriticalTileSet.copy()
-                citiesToHalf = set()
-                if bot.is_all_in_army_advantage:
-                    for contestedCity in bot.cityAnalyzer.owned_contested_cities:
-                        if contestedCity.army > bot.targetPlayerObj.standingArmy:
-                            citiesToHalf.add(contestedCity)
-                        else:
-                            gathNeg.add(contestedCity)
+        msg = f'allin g AT tg gen{andTargs}, in {hitGeneralInTurns}t, {str([str(t) for t in targets])}'
 
-                gathCapPlan = Gather.gather_approximate_turns_to_tiles(
-                    bot._map,
-                    rootTiles=targets,
-                    approximateTargetTurns=hitGeneralInTurns,
-                    asPlayer=bot.general.player,
-                    gatherMatrix=None,
-                    captureMatrix=None,
-                    negativeTiles=gathNeg,
-                    skipTiles=None,
-                    prioritizeCaptureHighArmyTiles=False,
-                    useTrueValueGathered=True,
-                    includeGatherPriorityAsEconValues=True,
-                    includeCapturePriorityAsEconValues=True,
-                    tilesToHalf=citiesToHalf,
-                    timeLimit=min(0.075, BotTimings.get_remaining_move_time(bot, )),
-                    logDebug=False,
-                    viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
-                if gathCapPlan is None:
-                    return None
+        with bot.perf_timer.begin_move_event(f'pcst {msg}. self.all_in_army_advantage_cycle {bot.all_in_army_advantage_cycle}, self.all_in_army_advantage_counter {bot.all_in_army_advantage_counter}'):
+            gathNeg = defenseCriticalTileSet.copy()
+            citiesToHalf = set()
+            if bot.is_all_in_army_advantage:
+                for contestedCity in bot.cityAnalyzer.owned_contested_cities:
+                    if contestedCity.army > bot.targetPlayerObj.standingArmy:
+                        citiesToHalf.add(contestedCity)
+                    else:
+                        gathNeg.add(contestedCity)
 
-                move = gathCapPlan.get_first_move()
-                bot.curPath = gathCapPlan
-                bot.info(f'PCST ALL IN appx {hitGeneralInTurns}t: {gathCapPlan}')
+            if bot.is_winning_gather_cyclic or bot.is_all_in_army_advantage:
+                gathNeg.update(bot.defensive_spanning_tree)
+                gathNeg.update(l.tile for l in bot.best_defense_leaves)
 
-            if move is not None:
-                bot.info(msg)
-                if hitGeneralInTurns > 15 and not bot.is_winning_gather_cyclic and not bot.is_all_in_army_advantage:
-                    BotComms.send_teammate_communication(bot, f'All in here, hit in {hitGeneralInTurns} moves', detectionKey='allInAtGenTargets', cooldown=10)
+            gathCapPlan = Gather.gather_approximate_turns_to_tiles(
+                bot._map,
+                rootTiles=targets,
+                approximateTargetTurns=hitGeneralInTurns,
+                asPlayer=bot.general.player,
+                gatherMatrix=None,
+                captureMatrix=None,
+                negativeTiles=gathNeg,
+                skipTiles=None,
+                prioritizeCaptureHighArmyTiles=False,
+                useTrueValueGathered=True,
+                includeGatherPriorityAsEconValues=True,
+                includeCapturePriorityAsEconValues=True,
+                tilesToHalf=citiesToHalf,
+                timeLimit=min(0.075, BotTimings.get_remaining_move_time(bot, )),
+                logDebug=False,
+                viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
+            if gathCapPlan is None:
+                return None
 
-                for target in targets:
-                    BotComms.send_teammate_tile_ping(bot, target, cooldown=25, cooldownKey=f'allIn{str(target)}')
+            move = gathCapPlan.get_first_move()
+            bot.curPath = gathCapPlan
+            bot.info(f'PCST ALL IN appx {hitGeneralInTurns}t: {gathCapPlan}')
 
-                bot.all_in_army_advantage_counter += 1
-                bot.gatherNodes = gathCapPlan.root_nodes
-                return move
+        if move is not None:
+            bot.info(msg)
+            if hitGeneralInTurns > 15 and not bot.is_winning_gather_cyclic and not bot.is_all_in_army_advantage:
+                BotComms.send_teammate_communication(bot, f'All in here, hit in {hitGeneralInTurns} moves', detectionKey='allInAtGenTargets', cooldown=10)
 
+            for target in targets:
+                BotComms.send_teammate_tile_ping(bot, target, cooldown=25, cooldownKey=f'allIn{str(target)}')
+
+            bot.all_in_army_advantage_counter += 1
+            bot.gatherNodes = gathCapPlan.root_nodes
+            return move
         return None
 
     @staticmethod
     def get_army_scrim_result(
-            bot,
+            bot: EklipZBot,
             friendlyArmyTile: Tile,
             enemyArmyTile: Tile,
             enemyCannotMoveAway: bool = False,
@@ -689,7 +699,7 @@ class BotCombatOps:
 
     @staticmethod
     def get_armies_scrim_result(
-            bot,
+            bot: EklipZBot,
             friendlyArmies: typing.List[Army],
             enemyArmies: typing.List[Army],
             enemyCannotMoveAway: bool = False,
@@ -803,7 +813,7 @@ class BotCombatOps:
         return result
 
     @staticmethod
-    def extend_interspersed_path_moves(bot, paths: typing.List[Path], move: Move | None):
+    def extend_interspersed_path_moves(bot: EklipZBot, paths: typing.List[Path], move: Move | None):
         if move is not None:
             if move.dest is None:
                 raise AssertionError()
@@ -821,7 +831,7 @@ class BotCombatOps:
             curPath.add_next(move.dest, move.move_half)
 
     @staticmethod
-    def extract_engine_result_paths_and_render_sim_moves(bot, result: ArmySimResult) -> typing.Tuple[Path | None, Path | None]:
+    def extract_engine_result_paths_and_render_sim_moves(bot: EklipZBot, result: ArmySimResult) -> typing.Tuple[Path | None, Path | None]:
         friendlyPaths: typing.List[Path] = []
         enemyPaths: typing.List[Path] = []
 
@@ -866,7 +876,7 @@ class BotCombatOps:
 
     @staticmethod
     def try_find_counter_army_scrim_path_killpath(
-            bot,
+            bot: EklipZBot,
             threatPath: Path,
             allowGeneral: bool,
             forceEnemyTowardsGeneral: bool = False
@@ -876,7 +886,7 @@ class BotCombatOps:
 
     @staticmethod
     def try_find_counter_army_scrim_path_kill(
-            bot,
+            bot: EklipZBot,
             threatPath: Path,
             allowGeneral: bool,
             forceEnemyTowardsGeneral: bool = False
@@ -902,7 +912,7 @@ class BotCombatOps:
 
     @staticmethod
     def try_find_counter_army_scrim_path(
-            bot,
+            bot: EklipZBot,
             threatPath: Path,
             allowGeneral: bool,
             forceEnemyTowardsGeneral: bool = False
@@ -987,7 +997,7 @@ class BotCombatOps:
 
     @staticmethod
     def find_large_tiles_near(
-            bot,
+            bot: EklipZBot,
             fromTiles: typing.List[Tile],
             distance: int,
             forPlayer=-2,
@@ -1121,20 +1131,20 @@ class BotCombatOps:
         return None
 
     @staticmethod
-    def should_kill(bot, tile):
+    def should_kill(bot: EklipZBot, tile):
         if tile.isCity and abs(tile.delta.armyDelta) < 3:
             return False
         return True
 
     @staticmethod
-    def just_moved(bot, tile):
+    def just_moved(bot: EklipZBot, tile):
         if abs(tile.delta.armyDelta) > 2:
             return True
         else:
             return False
 
     @staticmethod
-    def should_kill_path_move_half(bot, threatKill, additionalArmy=0):
+    def should_kill_path_move_half(bot: EklipZBot, threatKill, additionalArmy=0):
         start = threatKill.start.tile
         next = threatKill.start.next.tile
         threatKill.calculate_value(bot.general.player, teams=bot._map.team_ids_by_player_index)
@@ -1186,7 +1196,7 @@ class BotCombatOps:
         return keyTiles
 
     @staticmethod
-    def worth_path_kill(bot, pathKill: Path, threatPath: Path, analysis=None, cutoffDistance=5):
+    def worth_path_kill(bot: EklipZBot, pathKill: Path, threatPath: Path, analysis=None, cutoffDistance=5):
         if pathKill.start is None or pathKill.tail is None:
             return False
 
@@ -1253,7 +1263,7 @@ class BotCombatOps:
         return True
 
     @staticmethod
-    def kill_army(bot, army: Army, allowGeneral=False, allowWorthPathKillCheck=True):
+    def kill_army(bot: EklipZBot, army: Army, allowGeneral=False, allowWorthPathKillCheck=True):
         if len(army.expectedPaths) == 0:
             army.expectedPaths = ArmyTracker.get_army_expected_path(bot._map, army, bot.general, bot.armyTracker.player_targets)
 
@@ -1289,11 +1299,11 @@ class BotCombatOps:
         return None
 
     @staticmethod
-    def kill_enemy_path(bot, threatPath: Path, allowGeneral=False) -> Path | None:
+    def kill_enemy_path(bot: EklipZBot, threatPath: Path, allowGeneral=False) -> Path | None:
         return BotCombatOps.kill_enemy_paths(bot, [threatPath], allowGeneral)
 
     @staticmethod
-    def kill_enemy_paths(bot, threatPaths: typing.List[Path], allowGeneral=False) -> Path | None:
+    def kill_enemy_paths(bot: EklipZBot, threatPaths: typing.List[Path], allowGeneral=False) -> Path | None:
         threats = []
 
         allThreatsLow = True
@@ -1382,11 +1392,11 @@ class BotCombatOps:
             return path
 
     @staticmethod
-    def kill_threat(bot, threat: ThreatObj, allowGeneral=False):
+    def kill_threat(bot: EklipZBot, threat: ThreatObj, allowGeneral=False):
         return BotCombatOps.kill_enemy_path(bot, threat.path.get_subsegment(threat.path.length // 2), allowGeneral)
 
     @staticmethod
-    def sum_enemy_army_near_tile(bot, startTile: Tile, distance: int = 2) -> int:
+    def sum_enemy_army_near_tile(bot: EklipZBot, startTile: Tile, distance: int = 2) -> int:
         enemyNear = SearchUtils.Counter(0)
 
         def counterFunc(tile: Tile) -> bool:
@@ -1401,7 +1411,7 @@ class BotCombatOps:
         return value
 
     @staticmethod
-    def sum_player_army_near_tile(bot, tile: Tile, distance: int = 2, player: int | None = None) -> int:
+    def sum_player_army_near_tile(bot: EklipZBot, tile: Tile, distance: int = 2, player: int | None = None) -> int:
         armyNear = BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot, [tile], distance, player)
         logbook.info(f"player_army_near for tile {tile.x},{tile.y} player {player} returned {armyNear}")
         if tile.player == player:
@@ -1409,7 +1419,7 @@ class BotCombatOps:
         return armyNear
 
     @staticmethod
-    def sum_friendly_army_near_or_on_tiles(bot, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
+    def sum_friendly_army_near_or_on_tiles(bot: EklipZBot, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
         if player is None:
             player = bot._map.player_index
         armyNear = SearchUtils.Counter(0)
@@ -1423,7 +1433,7 @@ class BotCombatOps:
         return value
 
     @staticmethod
-    def find_end_of_turn_sim_result(bot, threat, kingKillPath: Path | None, time_limit: float | None = None) -> ArmySimResult | None:
+    def find_end_of_turn_sim_result(bot: EklipZBot, threat, kingKillPath: Path | None, time_limit: float | None = None) -> ArmySimResult | None:
         frArmies = BotCombatOps.get_largest_tiles_as_armies(bot, player=bot.general.player, limit=bot.behavior_end_of_turn_scrim_army_count)
         enArmies = BotCombatOps.get_largest_tiles_as_armies(bot, player=bot.targetPlayer, limit=bot.behavior_end_of_turn_scrim_army_count)
 
@@ -1466,7 +1476,7 @@ class BotCombatOps:
         return simResult
 
     @staticmethod
-    def find_end_of_turn_scrim_move(bot, threat, kingKillPath: Path | None, time_limit: float | None = None):
+    def find_end_of_turn_scrim_move(bot: EklipZBot, threat, kingKillPath: Path | None, time_limit: float | None = None):
         simResult = BotCombatOps.find_end_of_turn_sim_result(bot, threat, kingKillPath, time_limit)
 
         if simResult is not None:
@@ -1477,7 +1487,7 @@ class BotCombatOps:
         return None
 
     @staticmethod
-    def get_largest_tiles_as_armies(bot, player: int, limit: int) -> typing.List[Army]:
+    def get_largest_tiles_as_armies(bot: EklipZBot, player: int, limit: int) -> typing.List[Army]:
         player = bot._map.players[player]
 
         def sortFunc(t: Tile) -> float:
@@ -1499,7 +1509,7 @@ class BotCombatOps:
         return armies
 
     @staticmethod
-    def count_enemy_territory_near_tile(bot, startTile: Tile, distance: int = 2) -> int:
+    def count_enemy_territory_near_tile(bot: EklipZBot, startTile: Tile, distance: int = 2) -> int:
         enemyNear = SearchUtils.Counter(0)
 
         def counterFunc(tile: Tile) -> bool:
@@ -1513,7 +1523,7 @@ class BotCombatOps:
         return value
 
     @staticmethod
-    def count_enemy_tiles_near_tile(bot, startTile: Tile, distance: int = 2) -> int:
+    def count_enemy_tiles_near_tile(bot: EklipZBot, startTile: Tile, distance: int = 2) -> int:
         enemyNear = SearchUtils.Counter(0)
 
         def counterFunc(tile: Tile) -> bool:
@@ -1527,7 +1537,7 @@ class BotCombatOps:
         return value
 
     @staticmethod
-    def sum_player_standing_army_near_or_on_tiles(bot, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
+    def sum_player_standing_army_near_or_on_tiles(bot: EklipZBot, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
         if player is None:
             player = bot._map.player_index
         armyNear = SearchUtils.Counter(0)
@@ -1541,7 +1551,7 @@ class BotCombatOps:
         return value
 
     @staticmethod
-    def sum_friendly_army_near_tile(bot, tile: Tile, distance: int = 2, player: int | None = None) -> int:
+    def sum_friendly_army_near_tile(bot: EklipZBot, tile: Tile, distance: int = 2, player: int | None = None) -> int:
         armyNear = BotCombatOps.sum_friendly_army_near_or_on_tiles(bot, [tile], distance, player)
         logbook.info(f"friendly_army_near for tile {tile.x},{tile.y} player {player} returned {armyNear}")
         if bot._map.is_tile_on_team_with(tile, player):
@@ -1550,7 +1560,7 @@ class BotCombatOps:
 
     @staticmethod
     def get_approximate_attack_defense_sweet_spot(
-            bot,
+            bot: EklipZBot,
             tile: Tile,
             negativeTiles,
             cycleBase: int = 10,
@@ -1869,7 +1879,7 @@ class BotCombatOps:
         return False
 
     @staticmethod
-    def check_for_army_movement_scrims(bot, econCutoff=2.0) -> Move | None:
+    def check_for_army_movement_scrims(bot: EklipZBot, econCutoff=2.0) -> Move | None:
         curScrim = 0
         cutoff = 3
 
@@ -1952,20 +1962,20 @@ class BotCombatOps:
         return None
 
     @staticmethod
-    def get_scrim_cached(bot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> ArmySimResult | None:
+    def get_scrim_cached(bot: EklipZBot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> ArmySimResult | None:
         key = BotCombatOps.get_scrim_cache_key(bot, friendlyArmies, enemyArmies)
         cachedSimResult: ArmySimResult | None = bot.cached_scrims.get(key, None)
         return cachedSimResult
 
     @staticmethod
-    def get_scrim_cache_key(bot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> str:
+    def get_scrim_cache_key(bot: EklipZBot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> str:
         sortedArmies = list(sorted(friendlyArmies, key=lambda a: a.tile))
         sortedArmies.extend(list(sorted(enemyArmies, key=lambda a: a.tile)))
         key = ''.join([str(a.tile) for a in sortedArmies])
         return key
 
     @staticmethod
-    def check_for_attack_launch_move(bot, outLaunchPlanNegatives: typing.Set[Tile]) -> Move | None:
+    def check_for_attack_launch_move(bot: EklipZBot, outLaunchPlanNegatives: typing.Set[Tile]) -> Move | None:
         if bot.target_player_gather_path is None and not bot.flanking:
             return None
         #
@@ -2048,7 +2058,7 @@ class BotCombatOps:
         return None
 
     @staticmethod
-    def try_find_army_out_of_position_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    def try_find_army_out_of_position_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         thresh = bot.targetPlayerObj.standingArmy ** 0.6
         logbook.info(f'Checking for out of position tiles with army greater than threshold {thresh:.0f}')
         outOfPositionArmies = []
@@ -2088,12 +2098,12 @@ class BotCombatOps:
         return None
 
     @staticmethod
-    def try_find_flank_all_in(bot, hitGeneralAtTurn: int) -> Move | None:
+    def try_find_flank_all_in(bot: EklipZBot, hitGeneralAtTurn: int) -> Move | None:
         launchPoint: Move | None = None
         return None
 
     @staticmethod
-    def try_get_cyclic_all_in_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    def try_get_cyclic_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         winningEc = bot.opponent_tracker.winning_on_economy(byRatio=1.15)
         winningTile = bot.opponent_tracker.winning_on_tiles(byRatio=1.1)
         winningArmy = bot.opponent_tracker.winning_on_army(byRatio=1.45)

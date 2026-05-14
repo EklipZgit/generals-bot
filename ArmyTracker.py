@@ -393,10 +393,10 @@ class ArmyTracker(object):
         # TODO really, only REBUILD when player.index in self.players_with_incorrect_tile_predictions
         # Otherwise, just add or subtract one fog tile to match.
         player = self.map.players[playerIndex]
-        if self.map.is_player_on_team_with(self.map.player_index, player.index) or len(player.tiles) == 0 or (player.tileDelta == 0 and player.index not in self.players_with_incorrect_tile_predictions and not force):
+        if self.map.is_player_on_team_with(self.map.player_index, player.index) or (player.tileDelta == 0 and player.index not in self.players_with_incorrect_tile_predictions and not force and len(self.map.players[playerIndex].tiles) != 0):
             return
 
-        if self.should_recalc_fog_land_by_player[player.index]:
+        if self.should_recalc_fog_land_by_player[player.index] or len(self.map.players[playerIndex].tiles) == 0:
             self._build_fog_prediction_internal(player.index, playersExpectedFogTileCounts, predictedGeneralLocation)
             self.should_recalc_fog_land_by_player[player.index] = False
         else:
@@ -2348,7 +2348,7 @@ class ArmyTracker(object):
         depthLimit = None
         armyInFog = armyPlayerObj.standingArmy - armyPlayerObj.visibleStandingArmy
         if useOpponentKnownFogTileArmy:
-            armyInFog = max(0, armyInFog - self._get_known_non_general_fog_tile_extra_army(player))
+            armyInFog = max(0, min(armyInFog, armyInFog - self._get_known_non_general_fog_tile_extra_army(player) + 1))
         if unaccountedForDelta > 2 * armyInFog - 4:
             depthLimit = self._calculate_maximum_general_distance_for_raw_fog_standing_army(armyPlayerObj, armyInFog)
 
@@ -3604,6 +3604,9 @@ class ArmyTracker(object):
         bannedTiles, connectedTiles, coreConnected, pathToUnelim = self.get_fog_connected_based_on_emergences(player, predictedGeneralLocation)
         self.connectedByPlayer[player] = connectedTiles
         self.coreConnectedByPlayer[player] = coreConnected
+        if len(coreConnected) == 0 and predictedGeneralLocation is not None:
+            coreConnected.add(predictedGeneralLocation)
+            connectedTiles.add(predictedGeneralLocation)
 
         keep = []
         for tile in playerObj.tiles:
@@ -3770,7 +3773,9 @@ class ArmyTracker(object):
         @param outputTilesToBeConverted:
         @return:
         """
-        secondIterConnected = connectedTiles
+        secondIterConnected = connectedTiles.copy()
+        if pathToPotentialEnGeneral is not None:
+            secondIterConnected.update(pathToPotentialEnGeneral.tileList)
         if pathToPotentialEnGeneral is not None:
             # this ban makes it so we don't try to double-fill the connectedDark tiles. These can be pathed through but wont be converted.
             nearGenBan = bannedTiles.copy()
@@ -3890,9 +3895,11 @@ class ArmyTracker(object):
         deferVisionBaseline: typing.Set[Tile] = set()
 
         def deferForeach(t: Tile):
-            deferVisionBaseline.add(t)
-            if t.discovered and t.player != -1 and t.visible and self.map.team_ids_by_player_index[t.player] != self.map.friendly_team:
+            if not t.visible and t in skips:
                 return True
+            if t.player != -1 and t.visible and (not t.discoveredAsNeutral or self.map.team_ids_by_player_index[t.player] != self.map.friendly_team):
+                return True
+            deferVisionBaseline.add(t)
             return False
 
         SearchUtils.breadth_first_foreach_fast_no_neut_cities(self.map, self.map.players[self.map.player_index].tiles, 5, deferForeach)
@@ -4150,7 +4157,7 @@ class ArmyTracker(object):
         turn = self.map.turn
         while True:
             if turn & 1 == 0:
-                if armyLeft <= 0:
+                if armyLeft < 0:
                     break
                 armyLeft -= cityCount
 

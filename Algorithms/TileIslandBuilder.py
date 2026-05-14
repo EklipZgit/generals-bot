@@ -21,6 +21,40 @@ if typing.TYPE_CHECKING:
     from ViewInfo import ViewInfo
 
 
+class OrderedTileIslandSet(object):
+    def __init__(self):
+        self._items: typing.List[TileIsland] = []
+        self._lookup: typing.Set[TileIsland] = set()
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __contains__(self, island: TileIsland) -> bool:
+        return island in self._lookup
+
+    def add(self, island: TileIsland):
+        if island in self._lookup:
+            return
+        self._lookup.add(island)
+        self._items.append(island)
+
+    def sort(self):
+        self._items.sort(key=lambda i: i.tiles_by_army[0].tile_index)
+
+    def discard(self, island: TileIsland):
+        if island not in self._lookup:
+            return
+        self._lookup.remove(island)
+        self._items.remove(island)
+
+    def clear(self):
+        self._lookup.clear()
+        self._items.clear()
+
+
 class TileIsland(object):
     def __init__(self, tiles: typing.Iterable[Tile], team: int, tileCount: int | None = None, armySum: int | None = None, overrideUniqueId: int | None = None):
         if isinstance(tiles, set):
@@ -43,7 +77,7 @@ class TileIsland(object):
             for t in self.tile_set:
                 self.sum_army += t.army
 
-        self.border_islands: typing.Set[TileIsland] = set()
+        self.border_islands: OrderedTileIslandSet = OrderedTileIslandSet()
         """
         Tile islands that border this island. This does not include parent islands - only leaf child islands are counted as borders.
         """
@@ -62,7 +96,7 @@ class TileIsland(object):
         self.sum_army_all_adjacent_friendly: int = self.sum_army
 
         # adds about 1/10th of a millisecond to a tile island build
-        self.tiles_by_army: typing.List[Tile] = [t for t in sorted(tiles, key=lambda tile: tile.army, reverse=True)]
+        self.tiles_by_army: typing.List[Tile] = [t for t in sorted(self.tile_set, key=lambda tile: (-tile.army, tile.tile_index))]
         """Sorted from largest army to smallest army"""
 
         self.cities: typing.List[Tile] = [t for t in self.tiles_by_army if t.isCity]
@@ -145,6 +179,12 @@ class TileIsland(object):
         self.tiles_by_army.append(tile)
         self.sum_army += tile.army
         self.tile_count += 1
+        self.cities = [t for t in self.tiles_by_army if t.isCity]
+
+    def refresh_cached_tile_metadata(self):
+        self.sum_army = sum(t.army for t in self.tile_set)
+        self.tiles_by_army = sorted(self.tile_set, key=lambda t: (-t.army, t.tile_index))
+        self.cities = [t for t in self.tiles_by_army if t.isCity]
 
 
 class IslandNamer(object):
@@ -224,9 +264,18 @@ class TileIslandBuilder(object):
         self.log_debug: bool = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
         self.use_debug_asserts: bool = True
 
+    def _sort_island_collections(self):
+        self.all_tile_islands.sort()
+        for islands in self.tile_islands_by_player:
+            islands.sort(key=lambda i: i.tiles_by_army[0].tile_index)
+        for islands in self.tile_islands_by_team_id:
+            islands.sort(key=lambda i: i.tiles_by_army[0].tile_index)
+        for island in self.all_tile_islands:
+            island.border_islands.sort()
+
     def reset_for_rebuild(self):
         self.tile_island_lookup = MapMatrix(self.map, None)
-        self.all_tile_islands = set()
+        self.all_tile_islands = OrderedTileIslandSet()
         self.tile_islands_by_player = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player
         self.tile_islands_by_team_id = [[] for _ in range(max(self.teams) + 2)]
@@ -298,10 +347,12 @@ class TileIslandBuilder(object):
                 self.tile_islands_by_team_id[newIsland.team].append(newIsland)
 
         logbook.info(f'building island borders ({time.perf_counter() - start:.5f}s in)')
+        self._sort_island_collections()
         for island in self.all_tile_islands:
             # if not island.bordered:
             self._build_island_borders(island)
             self.tile_islands_by_unique_id[island.unique_id] = island
+        self._sort_island_collections()
 
         logbook.info(f'building large island distances and sets ({time.perf_counter() - start:.5f}s in)')
         for team in self.teams:
@@ -397,11 +448,10 @@ class TileIslandBuilder(object):
                                     # sum_army and tile topology are unchanged — nothing to rebuild.
                                     armyMoveHandledTiles.add(tile)
                                     armyMoveHandledTiles.add(pairedTile)
-                                    newArmy = sum(t.army for t in existingIsland.tile_set)
-                                    if self.use_debug_asserts and newArmy != sum(t.army for t in existingIsland.tile_set):
-                                        logbook.warning(f'INTRA sum_army update tile={tile} paired={pairedTile} island={existingIsland} old={existingIsland.sum_army} new={newArmy} tiles={[(str(t), t.army) for t in existingIsland.tile_set]}')
-                                    existingIsland.sum_army = newArmy
-                                    existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
+                                    oldArmy = existingIsland.sum_army
+                                    existingIsland.refresh_cached_tile_metadata()
+                                    if self.use_debug_asserts and oldArmy != existingIsland.sum_army:
+                                        logbook.info(f'INTRA sum_army update tile={tile} paired={pairedTile} island={existingIsland} old={oldArmy} new={existingIsland.sum_army} tiles={[(str(t), t.army) for t in existingIsland.tile_set]}')
                                     existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
                                     continue
                             elif pairedIsland.team == existingIsland.team:
@@ -416,15 +466,13 @@ class TileIslandBuilder(object):
                                     # Tile topology is unchanged; only sum_army needs updating on both islands.
                                     armyMoveHandledTiles.add(tile)
                                     armyMoveHandledTiles.add(pairedTile)
-                                    newExistArmy = sum(t.army for t in existingIsland.tile_set)
-                                    newPairedArmy = sum(t.army for t in pairedIsland.tile_set)
+                                    oldExistArmy = existingIsland.sum_army
+                                    oldPairedArmy = pairedIsland.sum_army
+                                    existingIsland.refresh_cached_tile_metadata()
+                                    pairedIsland.refresh_cached_tile_metadata()
                                     if self.use_debug_asserts:
-                                        logbook.info(f'INTER sum_army update tile={tile} paired={pairedTile} existIsland={existingIsland} old={existingIsland.sum_army} new={newExistArmy} | pairedIsland={pairedIsland} old={pairedIsland.sum_army} new={newPairedArmy}')
-                                    existingIsland.sum_army = newExistArmy
-                                    existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
+                                        logbook.info(f'INTER sum_army update tile={tile} paired={pairedTile} existIsland={existingIsland} old={oldExistArmy} new={existingIsland.sum_army} | pairedIsland={pairedIsland} old={oldPairedArmy} new={pairedIsland.sum_army}')
                                     existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
-                                    pairedIsland.sum_army = newPairedArmy
-                                    pairedIsland.tiles_by_army = sorted(pairedIsland.tile_set, key=lambda t: t.army, reverse=True)
                                     pairedIsland.sum_army_all_adjacent_friendly = max(pairedIsland.sum_army_all_adjacent_friendly, pairedIsland.sum_army)
                                     continue
 
@@ -495,11 +543,10 @@ class TileIslandBuilder(object):
                         impactedLeafIslands.update(self._get_leaf_islands_for_island(existingIsland))
                     else:
                         # Shape is unchanged — patch army stats in-place and record for border refresh.
-                        newArmy = sum(t.army for t in existingIsland.tile_set)
+                        oldArmy = existingIsland.sum_army
+                        existingIsland.refresh_cached_tile_metadata()
                         if self.use_debug_asserts:
-                            logbook.info(f'INPLACE sum_army update tile={tile} island={existingIsland} old={existingIsland.sum_army} new={newArmy}')
-                        existingIsland.sum_army = newArmy
-                        existingIsland.tiles_by_army = sorted(existingIsland.tile_set, key=lambda t: t.army, reverse=True)
+                            logbook.info(f'INPLACE sum_army update tile={tile} island={existingIsland} old={oldArmy} new={existingIsland.sum_army}')
                         existingIsland.sum_army_all_adjacent_friendly = existingIsland.sum_army
                         if existingIsland.full_island is not None:
                             fullIsland = existingIsland.full_island
@@ -732,6 +779,8 @@ class TileIslandBuilder(object):
                 )
                 if confirmed:
                     neighbor.border_islands.add(island)
+
+        self._sort_island_collections()
 
         for team in affectedTeams:
             if team >= 0:
@@ -1241,7 +1290,7 @@ class TileIslandBuilder(object):
         # destroy the old neighbor list that _build_island_borders needs for pre-removal.
         island.tile_count_all_adjacent_friendly = tileCount
         island.sum_army_all_adjacent_friendly = armySum
-        island.tiles_by_army = [t for t in sorted(tileSet, key=lambda tile: tile.army, reverse=True)]
+        island.tiles_by_army = [t for t in sorted(tileSet, key=lambda tile: (-tile.army, tile.tile_index))]
         island.cities = [t for t in island.tiles_by_army if t.isCity]
         island.child_islands = None
         island.full_island = None
@@ -1416,7 +1465,7 @@ class TileIslandBuilder(object):
 
             targetIsland.tile_count = len(targetIsland.tile_set)
             targetIsland.sum_army = sum(t.army for t in targetIsland.tile_set)
-            targetIsland.tiles_by_army = [t for t in sorted(targetIsland.tile_set, key=lambda islandTile: islandTile.army, reverse=True)]
+            targetIsland.tiles_by_army = [t for t in sorted(targetIsland.tile_set, key=lambda islandTile: (-islandTile.army, islandTile.tile_index))]
             targetIsland.cities = [t for t in targetIsland.tiles_by_army if t.isCity]
 
         if len(leafIslands) == 1 and leafIslands[0].tile_count == aggregateTileCount:
@@ -1829,8 +1878,8 @@ class TileIslandBuilder(object):
             if renderIslandColors:
                 _rng = random.Random(hash(island.unique_id))
                 color = (_rng.randint(0, 255), _rng.randint(0, 255), _rng.randint(0, 255))
-                zoneAlph = 80
-                divAlph = 200
+                zoneAlph = 30
+                divAlph = 100
                 if island.team == -1:
                     zoneAlph //= 2
                     divAlph //= 2
@@ -1923,11 +1972,13 @@ class TileIslandBuilder(object):
 
         # Sort all islands' tiles_by_army since they were inserted in arbitrary order
         for island in self.all_tile_islands:
-            island.tiles_by_army = sorted(island.tile_set, key=lambda t: t.army, reverse=True)
+            island.tiles_by_army = sorted(island.tile_set, key=lambda t: (-t.army, t.tile_index))
+        self._sort_island_collections()
 
         # Build all island border lists
         for island in self.all_tile_islands:
             self._build_island_borders(island)
+        self._sort_island_collections()
 
         # Generate full islands
         for island in self.all_tile_islands:

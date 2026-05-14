@@ -2185,6 +2185,11 @@ class ArmyFlowExpander(object):
             ))
             i += 1
 
+        if isinstance(bestOpt, GatherCapturePlan):
+            if viewInfo.redGatherNodes is None:
+                viewInfo.redGatherNodes = []
+            viewInfo.redGatherNodes.extend(bestOpt.root_nodes)
+
         if not dontAddSourceTargetCircles:
             for tile in bestOpt.tileSet:
                 ts = TargetStyle.YELLOW

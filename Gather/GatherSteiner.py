@@ -125,7 +125,9 @@ def _build_pcst_tile_prize_matrix(
         prize = tilePrizeMatrix.raw[tile.tile_index]
         extraCost = tileExtraCostMatrix.raw[tile.tile_index]
 
-        if map.is_tile_on_team_with(tile, searchingPlayer):
+        if negativeTiles is not None and tile in negativeTiles:
+            prize = 0.0
+        elif map.is_tile_on_team_with(tile, searchingPlayer):
             prize = float(tile.army)
             if gatherMatrix:
                 prize += gatherMatrix.raw[tile.tile_index]
@@ -829,11 +831,11 @@ def _pcst_iteration_internal(
     pruning = 'strong'
     if fastMode:
         pruning = 'gw'
-    """ pruning: a string value indicating the pruning method. 
-        Possible values are 'none', 'simple', 'gw', and 'strong' (all literals are case-insensitive). 
-        'none' and 'simple' return intermediate stages of the algorithm and do not have approximation guarantees. They are only intended for development. 
-        The standard GW pruning method is 'gw', which is also the default. 
-        'strong' uses "strong pruning", which was introduced in [JMP00]. It has the same theoretical guarantees as GW pruning but better empirical performance in some cases. 
+    """ pruning: a string value indicating the pruning method.
+        Possible values are 'none', 'simple', 'gw', and 'strong' (all literals are case-insensitive).
+        'none' and 'simple' return intermediate stages of the algorithm and do not have approximation guarantees. They are only intended for development.
+        The standard GW pruning method is 'gw', which is also the default.
+        'strong' uses "strong pruning", which was introduced in [JMP00]. It has the same theoretical guarantees as GW pruning but better empirical performance in some cases.
         For the PCSF problem, the output of strong pruning is at least as good as the output of GW pruning."""
 
     verbosity_level = 0

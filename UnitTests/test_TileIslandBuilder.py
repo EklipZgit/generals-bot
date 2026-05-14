@@ -455,6 +455,35 @@ class TileIslandBuilderUnitTests(TestBase):
             self.assertIsNotNone(builder.tile_island_lookup[adj], f'adjacent tile {adj} should still belong to an island after update')
             self.assertIs(island, builder.tile_island_lookup[adj], f'adjacent tile {adj} should keep the same island object after update')
 
+    def test_update_tile_islands__inplace_update_refreshes_stale_city_metadata(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.reset_tile_deltas_to_current_state(map)
+
+        city = map.GetTile(7, 4)
+        self.assertTrue(city.isCity)
+        cityIsland = builder.tile_island_lookup[city]
+        self.assertIn(city, cityIsland.cities)
+
+        city.isCity = False
+        self.mark_tile_army_incremented(city, 1)
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+
+        self.assertIs(cityIsland, builder.tile_island_lookup[city])
+        self.assertNotIn(city, cityIsland.cities)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        builder.debug_verify_all_islands(context='test_update_tile_islands__inplace_update_refreshes_stale_city_metadata', mode=IslandBuildMode.GroupByArmy)
+
     def test_update_tile_islands__unaffected_tiles_keep_same_island_objects(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 

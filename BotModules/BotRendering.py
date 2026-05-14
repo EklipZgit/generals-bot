@@ -230,10 +230,10 @@ class BotRendering:
                     f'arrowsAdded={arrowsAfter - arrowsBefore} arrowsTotal={arrowsAfter}'
                 )
         if not bot.info_render_tile_islands:
-            expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True, renderIslandColors=False)
+            expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True, renderIslandColors=True)
 
     @staticmethod
-    def mark_tile(bot, tile, alpha=100):
+    def mark_tile(bot: EklipZBot, tile, alpha=100):
         bot.viewInfo.evaluatedGrid[tile.x][tile.y] = alpha
 
     @staticmethod
@@ -327,7 +327,7 @@ class BotRendering:
             viewInfo.bottomLeftGridText[tile] = f'n{f"{scoreVal:.2f}".strip("0")}'
 
     @staticmethod
-    def render_intercept_plan(bot, plan, colorIndex: int = 0):
+    def render_intercept_plan(bot: EklipZBot, plan, colorIndex: int = 0):
         targetStyle = TargetStyle(((colorIndex + 1) % 9) + 1)
         for tile, interceptInfo in plan.common_intercept_chokes.items():
             bot.viewInfo.add_targeted_tile(tile, targetStyle, radiusReduction=11 - colorIndex)

@@ -119,7 +119,7 @@ aG1  a3   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -129,7 +129,7 @@ aG1  a3   b1   bG1
 
         # Test lookup table generation (Phase 2)
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertEqual(1, len(lookup_tables), 'Should generate one lookup table for the single border pair')
@@ -176,7 +176,7 @@ aG1  a3   a1   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -189,7 +189,7 @@ aG1  a3   a1   b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -250,7 +250,7 @@ aG1  a4        b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -263,7 +263,7 @@ aG1  a4        b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -325,7 +325,7 @@ aG1  a4   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -338,7 +338,7 @@ aG1  a4   b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -388,7 +388,7 @@ aG1  a4   a1   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -401,7 +401,7 @@ aG1  a4   a1   b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -452,7 +452,7 @@ aG1  a5        b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -465,7 +465,7 @@ aG1  a5        b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -521,7 +521,7 @@ aG2  a2   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -534,7 +534,7 @@ aG2  a2   b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -590,7 +590,7 @@ aG2  a2   a1   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -603,7 +603,7 @@ aG2  a2   a1   b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -663,7 +663,7 @@ aG2  a3        b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -676,7 +676,7 @@ aG2  a3        b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -737,7 +737,7 @@ aG3  a3   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -750,7 +750,7 @@ aG3  a3   b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -800,7 +800,7 @@ aG3  a5   b1   bG3
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -813,7 +813,7 @@ aG3  a5   b1   bG3
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -863,7 +863,7 @@ aG3  a3   a1   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -876,7 +876,7 @@ aG3  a3   a1   b1   bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -927,7 +927,7 @@ aG2  a5   b1        bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -940,7 +940,7 @@ aG2  a5   b1        bG1
 
         # Test lookup table generation
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -999,7 +999,7 @@ aG1  a3   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1021,12 +1021,12 @@ aG1  a3   b1   bG1
 
         # Build stream data for the first border pair
         border_pair = border_pairs[0]
-        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
         friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 
         # Generate capture lookup table
         capture_lookup = flowExpanderV2._generate_capture_lookup_table(
-            border_pair, target_contribs, stream_data
+            border_pair, target_contribs, stream_data, 50
         )
 
         # Verify basic structure
@@ -1083,7 +1083,7 @@ aG1  a4        b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1093,12 +1093,12 @@ aG1  a4        b1   bG1
 
         # Build stream data for the first border pair
         border_pair = border_pairs[0]
-        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
         friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 
         # Generate capture lookup table
         capture_lookup = flowExpanderV2._generate_capture_lookup_table(
-            border_pair, target_contribs, stream_data
+            border_pair, target_contribs, stream_data, 50
         )
 
         # Find neutral capture entries
@@ -1191,7 +1191,7 @@ aG1  a2   a1   b2   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1211,7 +1211,7 @@ aG1  a2   a1   b2   bG1
         if target_crossable:
             # Find a border pair that might involve target-crossable islands
             for border_pair in border_pairs:
-                stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+                stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
                 if not stream_data:
                     continue
 
@@ -1221,7 +1221,7 @@ aG1  a2   a1   b2   bG1
                 crossing_contribs = [c for c in target_contribs if c.is_crossing]
                 if crossing_contribs:
                     capture_lookup = flowExpanderV2._generate_capture_lookup_table(
-                        border_pair, target_contribs, stream_data
+                        border_pair, target_contribs, stream_data, 50
                     )
 
                     # Verify crossing nodes have turn cost but no army cost or econ value
@@ -1266,7 +1266,7 @@ aG1  a5   b1   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1276,12 +1276,12 @@ aG1  a5   b1   b1   bG1
 
         # Build stream data for the first border pair
         border_pair = border_pairs[0]
-        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
         friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 
         # Generate capture lookup table
         capture_lookup = flowExpanderV2._generate_capture_lookup_table(
-            border_pair, target_contribs, stream_data
+            border_pair, target_contribs, stream_data, 50
         )
 
         # Should have entries for capturing 1, 2, or both enemy islands
@@ -1359,7 +1359,7 @@ aG1  a3   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1369,12 +1369,12 @@ aG1  a3   b1   bG1
 
         # Build stream data for the first border pair
         border_pair = border_pairs[0]
-        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
         friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 
         # Generate gather lookup table
         gather_lookup = flowExpanderV2._generate_gather_lookup_table(
-            border_pair, friendly_contribs, stream_data
+            border_pair, friendly_contribs, stream_data, 50
         )
 
         # Verify basic structure
@@ -1422,7 +1422,7 @@ aG1  a2   a2   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1432,12 +1432,12 @@ aG1  a2   a2   b1   bG1
 
         # Build stream data for the first border pair
         border_pair = border_pairs[0]
-        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
         friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 
         # Generate gather lookup table
         gather_lookup = flowExpanderV2._generate_gather_lookup_table(
-            border_pair, friendly_contribs, stream_data
+            border_pair, friendly_contribs, stream_data, 50
         )
 
         # Should have entries for gathering from 1, 2, or both friendly islands
@@ -1490,7 +1490,7 @@ aG1  a2   a5   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1500,12 +1500,12 @@ aG1  a2   a5   b1   bG1
 
         # Build stream data for the first border pair
         border_pair = border_pairs[0]
-        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
         friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 
         # Generate gather lookup table
         gather_lookup = flowExpanderV2._generate_gather_lookup_table(
-            border_pair, friendly_contribs, stream_data
+            border_pair, friendly_contribs, stream_data, 50
         )
 
         # Verify that the higher army island is preferred first (due to better army/tile ratio)
@@ -1548,7 +1548,7 @@ aG1  a2   a1   a2   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1558,12 +1558,12 @@ aG1  a2   a1   a2   b1   bG1
 
         # Build stream data for the first border pair
         border_pair = border_pairs[0]
-        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
         friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 
         # Generate gather lookup table
         gather_lookup = flowExpanderV2._generate_gather_lookup_table(
-            border_pair, friendly_contribs, stream_data
+            border_pair, friendly_contribs, stream_data, 50
         )
 
         # Verify turn accounting: each island contributes its tile count to turn cost
@@ -1625,7 +1625,7 @@ a3   b2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1633,7 +1633,7 @@ a3   b2
             flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
         )
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
         flowExpanderV2._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
 
@@ -1697,7 +1697,7 @@ a4   b2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1705,7 +1705,7 @@ a4   b2
             flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
         )
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
         flowExpanderV2._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
 
@@ -1760,7 +1760,7 @@ a7   b2
         flowExpanderV2 = ArmyFlowExpanderV2(map)
         flowExpanderV2.target_team = enemyGeneral.player
 
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1768,7 +1768,7 @@ a7   b2
             flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
         )
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
         flowExpanderV2._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
 
@@ -1844,7 +1844,7 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         flowExpanderV2.log_debug = True
         flowExpanderV2.target_team = enemyGeneral.player
 
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -1852,7 +1852,7 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
             flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
         )
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
         flowExpanderV2._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
 
@@ -2230,7 +2230,7 @@ aG1                      bG1
         flowExpanderV2.target_team = map.team_ids_by_player_index[enemyGeneral.player]
         flowExpanderV2.enemyGeneral = enemyGeneral
 
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -2241,7 +2241,7 @@ aG1                      bG1
         self.assertGreater(len(border_pairs), 0, 'Should have at least one border pair')
 
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')
@@ -2308,7 +2308,7 @@ aG1  a1   b1   bG1
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -2319,12 +2319,12 @@ aG1  a1   b1   bG1
         if border_pairs:
             # Build stream data for the first border pair
             border_pair = border_pairs[0]
-            stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable)
+            stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
             friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
 
             # Generate gather lookup table
             gather_lookup = flowExpanderV2._generate_gather_lookup_table(
-                border_pair, friendly_contribs, stream_data
+                border_pair, friendly_contribs, stream_data, 50
             )
 
             # Should handle empty friendly stream gracefully
@@ -2393,7 +2393,7 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -2405,7 +2405,7 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
 
         # Generate lookup tables
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
 
         self.assertGreater(len(lookup_tables), 0, 'Should generate lookup tables')

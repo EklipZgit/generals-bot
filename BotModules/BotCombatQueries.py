@@ -4,12 +4,17 @@ import SearchUtils
 import logbook
 from Army import Army
 from base.client.map import Tile
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 
 class BotCombatQueries:
     @staticmethod
     def find_large_tiles_near(
-            bot,
+            bot: EklipZBot,
             fromTiles: typing.List[Tile],
             distance: int,
             forPlayer=-2,
@@ -41,7 +46,7 @@ class BotCombatQueries:
         return largeTilesNearTargets[0:limit]
 
     @staticmethod
-    def get_largest_tiles_as_armies(bot, player: int, limit: int) -> typing.List[Army]:
+    def get_largest_tiles_as_armies(bot: EklipZBot, player: int, limit: int) -> typing.List[Army]:
         player = bot._map.players[player]
 
         def sortFunc(t: Tile) -> float:
@@ -58,7 +63,7 @@ class BotCombatQueries:
         return armies
 
     @staticmethod
-    def sum_friendly_army_near_or_on_tiles(bot, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
+    def sum_friendly_army_near_or_on_tiles(bot: EklipZBot, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
         if player is None:
             player = bot._map.player_index
         armyNear = SearchUtils.Counter(0)
@@ -72,7 +77,7 @@ class BotCombatQueries:
         return value
 
     @staticmethod
-    def count_enemy_territory_near_tile(bot, startTile: Tile, distance: int = 2) -> int:
+    def count_enemy_territory_near_tile(bot: EklipZBot, startTile: Tile, distance: int = 2) -> int:
         enemyNear = SearchUtils.Counter(0)
 
         def counterFunc(tile: Tile) -> bool:

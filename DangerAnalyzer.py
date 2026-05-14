@@ -269,7 +269,7 @@ class DangerAnalyzer(object):
             added = tailLookup.get(threatStart)
 
             for path in army.expectedPaths:
-                if path.length <= 0:
+                if path is None or path.length <= 0:
                     continue
                 if path.start.tile == threatStart:
                     if path.tail.tile not in added:

@@ -92,7 +92,7 @@ class DirectOrToolsGraphBuilder(object):
         supply_text = '' if supply is None else f' ort_supply={supply}'
         border_text = '|'.join(
             f'{b.unique_id}:team{b.team}:{b.tile_count}t:{b.sum_army}a:{self._format_island_tiles(b)}'
-            for b in sorted(island.border_islands, key=lambda i: i.unique_id)
+            for b in island.border_islands
         )
         return (
             f'id={island.unique_id} team={island.team} tiles={island.tile_count} army={island.sum_army}'
@@ -111,6 +111,7 @@ class DirectOrToolsGraphBuilder(object):
         use_backpressure_from_enemy_general: bool,
         use_neutral_flow: bool,
         army_override_matrix: 'MapMatrixInterface[int] | None',
+        negativeTiles: 'TileSet | None',
         perf_timer: 'PerformanceTimer',
     ) -> OrToolsGraphData:
         """
@@ -123,8 +124,15 @@ class DirectOrToolsGraphBuilder(object):
 
         def _get_island_army_sum(island: 'TileIsland') -> int:
             if army_override_matrix is None:
-                return island.sum_army
-            return sum(army_override_matrix.raw[tile.tile_index] for tile in island.tile_set)
+                army_sum = island.sum_army
+            else:
+                army_sum = sum(army_override_matrix.raw[tile.tile_index] for tile in island.tile_set)
+            if island.team == team and negativeTiles is not None:
+                if army_override_matrix is None:
+                    army_sum -= sum(tile.army for tile in island.tile_set if tile in negativeTiles)
+                else:
+                    army_sum -= sum(army_override_matrix.raw[tile.tile_index] for tile in island.tile_set if tile in negativeTiles)
+            return army_sum
 
         # ----------------------------------------------------------------
         # Phase 1: per-island demands (mirrors _determine_initial_demands...)
@@ -155,17 +163,11 @@ class DirectOrToolsGraphBuilder(object):
 
         all_node_ids: typing.Set[int] = set()
 
-        with perf_timer.begin_move_event('OrTools build phase1 demands'):
+        with perf_timer.begin_move_event('OrTools build phase1 demands and in/out nodes per island'):
             flow_diag_islands: typing.Set[int] = set()
-            flow_diag_tile_positions = {(8, 6), (9, 6), (10, 6)}
-            for x, y in flow_diag_tile_positions:
-                tile = map_obj.GetTile(x, y)
-                tile_island = islands.tile_island_lookup.raw[tile.tile_index]
-                if tile_island is not None:
-                    flow_diag_islands.add(tile_island.unique_id)
             for island in islands.all_tile_islands:
                 island_army_sum = _get_island_army_sum(island)
-                cost = island.tile_count - 1
+                cost = island.tile_count # - 1
                 demand = island.tile_count - island_army_sum
                 has_nx_demand_attr = False
                 if island.team == team:
@@ -173,7 +175,7 @@ class DirectOrToolsGraphBuilder(object):
                     cumulative_demand += demand
                     friendly_army_supply += island_army_sum - island.tile_count
                     if island.tiles_by_army[0].army == 1:
-                        cost *= 2
+                        cost += 1
                 elif island.team == target_team:
                     has_nx_demand_attr = True
                     demand = island_army_sum + island.tile_count
@@ -220,6 +222,7 @@ class DirectOrToolsGraphBuilder(object):
                 # Split edge: input → output (weight=cost, capacity=100000)
                 arc_starts.append(island.unique_id)
                 arc_ends.append(-island.unique_id)
+                # Note that this is the flow THROUGH an island, all islands can flow any amount of army through them (except perhaps tunnels...?)
                 arc_caps.append(100000)
                 arc_costs.append(cost)
 
@@ -238,7 +241,18 @@ class DirectOrToolsGraphBuilder(object):
                     arc_starts.append(src)
                     arc_ends.append(dst)
                     arc_caps.append(100000)
-                    arc_costs.append(1)
+                    cost = 2
+                    if island.team == team:
+                        cost += 2
+                    elif island.team == -1:
+                        cost += 1
+                    arc_costs.append(cost)
+                    # if island.team == team:
+                    #     arc_costs.append(1000 - island.sum_army + island.tile_count)
+                    # elif island.team == target_team:
+                    #     arc_costs.append(900 + island.sum_army + island.tile_count)
+                    # else:
+                    #     arc_costs.append(2000)
                     all_node_ids.add(src)
                     all_node_ids.add(dst)
                     if self.log_debug and (island.unique_id in flow_diag_islands or movable_island.unique_id in flow_diag_islands):
@@ -288,7 +302,7 @@ class DirectOrToolsGraphBuilder(object):
             # -targetGeneralIsland.unique_id → fakeNode
             arc_starts.append(-target_general_island.unique_id)
             arc_ends.append(fake_node)
-            arc_caps.append(1000000)
+            arc_caps.append(1000)
             arc_costs.append(backpressure_weight)
             all_node_ids.add(-target_general_island.unique_id)
 
@@ -296,7 +310,7 @@ class DirectOrToolsGraphBuilder(object):
             arc_starts.append(-fr_general_island.unique_id)
             arc_ends.append(fake_node)
             arc_caps.append(1000000)
-            arc_costs.append(1000)
+            arc_costs.append(10000)
             all_node_ids.add(-fr_general_island.unique_id)
 
             # fakeNode → targetGeneralIsland.unique_id
@@ -615,6 +629,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         self.friendly_general: 'Tile' = friendly_general
         self.invalid_flow_renderer = invalid_flow_renderer
         self.army_override_matrix: 'MapMatrixInterface[int] | None' = None
+        self.negative_tiles: 'TileSet | None' = None
 
         self._intergeneral_analysis: 'ArmyAnalyzer' = intergeneral_analysis
         self._nx_finder: NetworkXFlowDirectionFinder | None = None
@@ -704,6 +719,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
             self.use_backpressure_from_enemy_general,
             use_neutral_flow,
             self.army_override_matrix,
+            self.negative_tiles,
             perf_timer=self.perf_timer,
         )
 
@@ -737,6 +753,9 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         includeNeutralDemand: bool = False,
         method=None,
     ) -> 'IslandMaxFlowGraph':
+        if negativeTiles is not self.negative_tiles:
+            self.negative_tiles = negativeTiles
+            self.invalidate_cache()
         with self.perf_timer.begin_move_event('OrTools ensure_graph_data_available'):
             self.ensure_graph_data_available(islands, allow_neutral_flow=includeNeutralDemand)
 

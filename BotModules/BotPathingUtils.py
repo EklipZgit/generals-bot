@@ -12,10 +12,15 @@ from Gather import GatherCapturePlan
 from ViewInfo import PathColorer
 from Models.Move import Move
 from base.client.map import Tile
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotPathingUtils:
     @staticmethod
-    def get_undiscovered_count_on_path(bot, path: Path) -> int:
+    def get_undiscovered_count_on_path(bot: EklipZBot, path: Path) -> int:
         numFog = 0
         for t in path.tileList:
             if not t.discovered:
@@ -23,11 +28,11 @@ class BotPathingUtils:
         return numFog
 
     @staticmethod
-    def get_first_path_move(bot, path: TilePlanInterface):
+    def get_first_path_move(bot: EklipZBot, path: TilePlanInterface):
         return path.get_first_move()
 
     @staticmethod
-    def is_move_safe_valid(bot, move, allowNonKill=True):
+    def is_move_safe_valid(bot: EklipZBot, move, allowNonKill=True):
         if move is None:
             return False
         if move.source == bot.general:
@@ -39,7 +44,7 @@ class BotPathingUtils:
         return True
 
     @staticmethod
-    def continue_cur_path(bot, threat: ThreatObj | None, defenseCriticalTileSet: typing.Set[Tile]) -> typing.Tuple[bool, Move | None]:
+    def continue_cur_path(bot: EklipZBot, threat: ThreatObj | None, defenseCriticalTileSet: typing.Set[Tile]) -> typing.Tuple[bool, Move | None]:
         '''
         returns shouldUseMove, move. if move is None and shouldUseMove is true, that means the curPath actually wants you to play None as the move.
         :param bot:
@@ -169,7 +174,7 @@ class BotPathingUtils:
         return (False, None)
 
     @staticmethod
-    def get_enemy_count_on_path(bot, path: Path) -> int:
+    def get_enemy_count_on_path(bot: EklipZBot, path: Path) -> int:
         numEn = 0
         for t in path.tileList:
             if bot._map.is_tile_enemy(t):
@@ -177,7 +182,7 @@ class BotPathingUtils:
         return numEn
 
     @staticmethod
-    def distance_from_general(bot, sourceTile):
+    def distance_from_general(bot: EklipZBot, sourceTile):
         if sourceTile == bot.general:
             return 0
         val = 0
@@ -187,7 +192,7 @@ class BotPathingUtils:
         return val
 
     @staticmethod
-    def distance_from_teammate(bot, sourceTile):
+    def distance_from_teammate(bot: EklipZBot, sourceTile):
         if sourceTile == bot.teammate_general:
             return 0
         val = 0
@@ -197,7 +202,7 @@ class BotPathingUtils:
         return val
 
     @staticmethod
-    def is_path_moving_mostly_away(bot, path: Path, bMap: MapMatrixInterface[int]):
+    def is_path_moving_mostly_away(bot: EklipZBot, path: Path, bMap: MapMatrixInterface[int]):
         distSum = 0
         for tile in path.tileList:
             distSum += bMap[tile]
@@ -216,7 +221,7 @@ class BotPathingUtils:
         return False
 
     @staticmethod
-    def get_path_subsegment_starting_from_last_move(bot, launchPath: Path) -> Path:
+    def get_path_subsegment_starting_from_last_move(bot: EklipZBot, launchPath: Path) -> Path:
         lastMoved = -1
         if bot.armyTracker.lastMove is not None:
             i = 1
@@ -336,7 +341,7 @@ class BotPathingUtils:
 
     @staticmethod
     def get_value_per_turn_subsegment(
-            bot,
+            bot: EklipZBot,
             path: Path,
             minFactor=0.7,
             minLengthFactor=0.1,
@@ -419,7 +424,7 @@ class BotPathingUtils:
 
     @staticmethod
     def get_path_to_target(
-            bot,
+            bot: EklipZBot,
             target,
             maxTime=0.1,
             maxDepth=400,
@@ -445,7 +450,7 @@ class BotPathingUtils:
             maxObstacleCost=maxObstacleCost)
 
     @staticmethod
-    def is_move_towards_enemy(bot, move) -> bool:
+    def is_move_towards_enemy(bot: EklipZBot, move) -> bool:
         if move is None:
             return False
 
@@ -458,7 +463,7 @@ class BotPathingUtils:
         return False
 
     @staticmethod
-    def is_tile_in_range_from(bot, source: Tile, target: Tile, maxDist: int, minDist: int = 0) -> bool:
+    def is_tile_in_range_from(bot: EklipZBot, source: Tile, target: Tile, maxDist: int, minDist: int = 0) -> bool:
         dist = 1000
         if target == bot.general:
             dist = bot.distance_from_general(source)
@@ -480,7 +485,7 @@ class BotPathingUtils:
         return minDist <= dist <= maxDist
 
     @staticmethod
-    def get_euclid_shortest_from_tile_towards_target(bot, sourceTile: Tile, towardsTile: Tile) -> Move:
+    def get_euclid_shortest_from_tile_towards_target(bot: EklipZBot, sourceTile: Tile, towardsTile: Tile) -> Move:
         shortest = 100
         shortestTile = None
         for adj in sourceTile.movable:
@@ -495,7 +500,7 @@ class BotPathingUtils:
 
     @staticmethod
     def get_path_to_targets(
-            bot,
+            bot: EklipZBot,
             targets,
             maxTime=0.1,
             maxDepth=400,
@@ -578,7 +583,7 @@ class BotPathingUtils:
         return path
 
     @staticmethod
-    def get_path_subsegment_to_closest_enemy_team_territory(bot, path: Path) -> Path | None:
+    def get_path_subsegment_to_closest_enemy_team_territory(bot: EklipZBot, path: Path) -> Path | None:
         idx = 0
         team = bot.targetPlayerObj.team
         minDist = bot.territories.territoryTeamDistances[team][path.start.tile]
@@ -600,7 +605,7 @@ class BotPathingUtils:
         return subsegment
 
     @staticmethod
-    def distance_from_opp(bot, sourceTile):
+    def distance_from_opp(bot: EklipZBot, sourceTile):
         if sourceTile == bot.targetPlayerExpectedGeneralLocation:
             return 0
         val = 0
@@ -609,7 +614,7 @@ class BotPathingUtils:
         return val
 
     @staticmethod
-    def distance_from_target_path(bot, sourceTile):
+    def distance_from_target_path(bot: EklipZBot, sourceTile):
         if sourceTile in bot.shortest_path_to_target_player.tileSet:
             return 0
 
@@ -619,7 +624,7 @@ class BotPathingUtils:
         return val
 
     @staticmethod
-    def get_distance_from_board_center(bot, tile, center_ratio=0.25) -> float:
+    def get_distance_from_board_center(bot: EklipZBot, tile, center_ratio=0.25) -> float:
         distFromCenterX = abs((bot._map.cols / 2) - tile.x)
         distFromCenterY = abs((bot._map.rows / 2) - tile.y)
 

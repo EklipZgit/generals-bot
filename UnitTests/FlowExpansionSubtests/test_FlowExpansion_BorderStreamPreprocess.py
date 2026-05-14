@@ -62,7 +62,7 @@ aG1  a3   b1   bG1
         flowExpanderV2.enemyGeneral = enemyGeneral
 
         # Test the preprocessing components
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         self.assertIsNotNone(flowExpanderV2.flow_graph, 'Flow graph should be built')
 
         # Test target-crossable detection
@@ -574,7 +574,7 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
         flowExpanderV2.target_team = enemyGeneral.player
 
         # Set up the flow graph
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -587,7 +587,7 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
         # Validate connectivity for each border pair's downstream stream
         for border_pair in border_pairs:
             stream_data = flowExpanderV2._build_border_pair_stream_data(
-                border_pair, flowExpanderV2.flow_graph, target_crossable
+                border_pair, flowExpanderV2.flow_graph, target_crossable, 50
             )
 
             if not stream_data:

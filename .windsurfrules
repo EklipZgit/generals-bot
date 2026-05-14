@@ -10,6 +10,7 @@
 8. We don't EVER do imports inside of functions. Always do imports at the top of the file and reorganize code if necessary to work around circular imports.
 9. Tests are run with unittest, not pytest.
 10. Do not EVER unstage or stash staged git changes. Don't ever stage git changes. The user will do all git staging and unstaging, you are allowed read-only git commands only.
+11. For Python structured data passed across functions, never use ad-hoc nested dicts when fields are known; use dataclasses with type annotations and slots instead, and only convert to/from dict at serialization or logging boundaries.
 
 --- GetLogsForScopeByTurn.ps1 ---
 1. GetLogsForScopeByTurn.ps1 is a PowerShell script at the repo root that extracts per-turn log slices for a named scope from bot test output.
@@ -28,3 +29,28 @@
 6. Full_island parents (island.child_islands is not None) must never be added to refreshIslands in update_tile_islands — they are aggregate containers and _build_island_borders must never be called on them during incremental updates.
 7. _update_island_state must NOT clear border_islands early — _build_island_borders uses the old border_islands for its pre-removal pass. Clearing early destroys the neighbor list needed for stale back-ref cleanup.
 
+--- Formatting ---
+def test_grouped_knapsack__logged_repro(self):
+    repro = GroupedKnapsackPreGroupReproInput(turn_budget=9,
+                                              items=[GroupedKnapsackPreGroupReproItem(border_pair=(639, 592),
+                                                                                     external_group_id=None,
+                                                                                     is_external=False)
+                                                     GroupedKnapsackPreGroupReproItem(border_pair=(639, 592),
+                                                                                     external_group_id=None,
+                                                                                     is_external=False)])
+^ bad
+
+def test_grouped_knapsack__logged_repro(self):
+    repro = GroupedKnapsackPreGroupReproInput(
+        turn_budget=9,
+        items=[
+            GroupedKnapsackPreGroupReproItem(
+                border_pair=(639, 592),
+                external_group_id=None,
+                is_external=False),
+            GroupedKnapsackPreGroupReproItem(
+                border_pair=(639, 592),
+                external_group_id=None,
+                is_external=False)
+        ])
+^ good. We always indent 4, never try to vertical align mid-line shit. Wrap first argument if wrapping, etc.

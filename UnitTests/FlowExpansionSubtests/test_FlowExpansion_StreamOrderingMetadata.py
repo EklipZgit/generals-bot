@@ -149,7 +149,7 @@ class FlowExpansionStreamOrderingMetadataTests(TestBase):
         expander = ArmyFlowExpanderV2(map)
         expander.target_team = map.team_ids_by_player_index[enemyGeneral.player]
         expander.enemy_general = enemyGeneral
-        expander._ensure_flow_graph_exists(builder)
+        expander._ensure_flow_graph_exists(builder, turns=50)
         return expander, builder
 
     def _get_border_pair_stream_contributions(
@@ -170,7 +170,7 @@ class FlowExpansionStreamOrderingMetadataTests(TestBase):
 
         results = []
         for border_pair in border_pairs:
-            stream_data = expander._build_border_pair_stream_data(border_pair, expander.flow_graph, target_crossable)
+            stream_data = expander._build_border_pair_stream_data(border_pair, expander.flow_graph, target_crossable, 50)
             if not stream_data:
                 continue
             friendly_contribs, target_contribs = expander._preprocess_flow_stream_tilecounts(stream_data, border_pair)
@@ -440,7 +440,7 @@ aG1  a3   a2   b1   bG1
         self.assertGreater(len(border_pairs), 0, 'Expected at least one border pair')
 
         border_pair = border_pairs[0]
-        stream_data = expander._build_border_pair_stream_data(border_pair, expander.flow_graph, target_crossable)
+        stream_data = expander._build_border_pair_stream_data(border_pair, expander.flow_graph, target_crossable, 50)
         self.assertIsNotNone(stream_data)
 
         friendly_stream = stream_data.friendly_stream

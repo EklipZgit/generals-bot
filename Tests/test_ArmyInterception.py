@@ -2589,7 +2589,29 @@ setting bestInterceptTable[dist 1]:
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
         self.assertOwned(3, 9)
 
-    
+    def test_should_intercept_when_better_than_taking_neutrals_wtf__longer(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_when_better_than_taking_neutrals_wtf___ouF0W0tnh---1--92.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 92, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '3,7->3,11')
+
+        #proof:
+        # simHost.queue_player_moves_str(general.player, '3,13->3,8')
+        # simHost.queue_player_moves_str(general.player, '6,4->7,4->7,5  3,13->3,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        self.assertOwned(3, 9)
+        self.assertTileDifferentialGreaterThan(4, simHost, 'just launching gen is already this good. Delaying gen by 2 moves is better by 1 even.')
+        #self.assertTileDifferentialGreaterThan(5, simHost, 'Delaying gen by 2 neutral cap moves is better by 1, but that requires acking that delaying an intercept improves captures which is dangerous as it leads to letting enemies turn around and keep capping.')
+
     def test_should_not_play_weird_intercept_moves_over_just_capturing_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_play_weird_intercept_moves_over_just_capturing_threat___ouF0W0tnh---1--322.txtmap'
@@ -2606,3 +2628,41 @@ setting bestInterceptTable[dist 1]:
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
         self.assertOwned(5, 12)
+    
+    def test_should_recognize_blocking_a_capture_is_better_than_taking_a_neutral(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_blocking_a_capture_is_better_than_taking_a_neutral___KJJW_lqPL---0--298.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 298, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=298)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,14->11,14->11,13')
+        simHost.queue_player_moves_str(general.player, '13,18->12,18')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(11, 13)
+    
+    def test_should_not_believe_that_intercept_saves_general_when_does_not(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_believe_that_intercept_saves_general_when_does_not___JhWFWKK4k---1--393.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 393, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=393)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,9->16,9->16,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+

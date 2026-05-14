@@ -126,7 +126,7 @@ aG1  a3   b1   bG1
         expander.island_builder = builder
         expander.log_debug = False
 
-        expander._ensure_flow_graph_exists(builder)
+        expander._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = expander._detect_target_crossable_friendly_islands(
             builder, expander.flow_graph, expander.team, expander.target_team
         )
@@ -134,7 +134,7 @@ aG1  a3   b1   bG1
             expander.flow_graph, builder, expander.team, expander.target_team, target_crossable
         )
         lookup_tables = expander._process_flow_into_flow_army_turns(
-            border_pairs, expander.flow_graph, target_crossable
+            border_pairs, expander.flow_graph, target_crossable, 50
         )
         expander._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
 

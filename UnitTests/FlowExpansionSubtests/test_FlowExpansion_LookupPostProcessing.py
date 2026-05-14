@@ -140,7 +140,7 @@ class FlowExpansionLookupPostProcessingTests(TestBase):
         expander = ArmyFlowExpanderV2(map)
         expander.target_team = map.team_ids_by_player_index[enemyGeneral.player]
         expander.enemy_general = enemyGeneral
-        expander._ensure_flow_graph_exists(builder)
+        expander._ensure_flow_graph_exists(builder, turns=50)
 
         target_crossable = expander._detect_target_crossable_friendly_islands(
             builder, expander.flow_graph, expander.team, expander.target_team
@@ -150,7 +150,7 @@ class FlowExpansionLookupPostProcessingTests(TestBase):
         )
 
         lookup_tables = expander._process_flow_into_flow_army_turns(
-            border_pairs, expander.flow_graph, target_crossable
+            border_pairs, expander.flow_graph, target_crossable, 50
         )
 
         return expander, builder, lookup_tables
@@ -1110,7 +1110,7 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
         expander = ArmyFlowExpanderV2(map)
         expander.target_team = map.team_ids_by_player_index[enemyGeneral.player]
         expander.enemyGeneral = enemyGeneral
-        expander._ensure_flow_graph_exists(builder)
+        expander._ensure_flow_graph_exists(builder, turns=50)
 
         target_crossable = expander._detect_target_crossable_friendly_islands(
             builder, expander.flow_graph, expander.team, expander.target_team
@@ -1119,7 +1119,7 @@ a12  a4   a2   a3   aG2  a16  b2   b2   b2   b2   b3   b3   b3   bG1
             expander.flow_graph, builder, expander.team, expander.target_team, target_crossable
         )
         lookup_tables = expander._process_flow_into_flow_army_turns(
-            border_pairs, expander.flow_graph, target_crossable
+            border_pairs, expander.flow_graph, target_crossable, 50
         )
         expander._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
 

@@ -19,6 +19,11 @@ from Path import Path
 from ViewInfo import PathColorer, TargetStyle
 from base.client.map import Tile, MapBase
 from Models.Move import Move
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotTargeting:
     @staticmethod
@@ -107,7 +112,7 @@ class BotTargeting:
         return fromTile
 
     @staticmethod
-    def are_more_teams_alive_than(bot, numTeams: int) -> bool:
+    def are_more_teams_alive_than(bot: EklipZBot, numTeams: int) -> bool:
         aliveTeams = set()
         afkPlayers = BotTargeting.get_afk_players(bot)
         teams = MapBase.get_teams_array(bot._map)
@@ -122,7 +127,7 @@ class BotTargeting:
         return False
 
     @staticmethod
-    def getDistToEnemy(bot, tile):
+    def getDistToEnemy(bot: EklipZBot, tile):
         dist = 1000
         for i in range(len(bot._map.generals)):
             gen = bot._map.generals[i]
@@ -155,7 +160,7 @@ class BotTargeting:
 
     @staticmethod
     def get_target_player_possible_general_location_tiles_sorted(
-            bot,
+            bot: EklipZBot,
             elimNearbyRange: int = 2,
             player: int = -2,
             cutoffEmergenceRatio: float = 0.333,
@@ -235,7 +240,7 @@ class BotTargeting:
         return finalTiles
 
     @staticmethod
-    def _get_furthest_apart_3_enemy_general_locations(bot, player) -> typing.Tuple[typing.List[Tile], MapMatrixInterface[int]]:
+    def _get_furthest_apart_3_enemy_general_locations(bot: EklipZBot, player) -> typing.Tuple[typing.List[Tile], MapMatrixInterface[int]]:
         valids = bot.armyTracker.valid_general_positions_by_player[player].raw
 
         furthests = []
@@ -304,7 +309,7 @@ class BotTargeting:
         return bisects
 
     @staticmethod
-    def increment_attack_counts(bot, tile: Tile):
+    def increment_attack_counts(bot: EklipZBot, tile: Tile):
         contestData = bot.contest_data.get(tile, None)
         if contestData is None:
             contestData = ContestData(tile)
@@ -317,7 +322,7 @@ class BotTargeting:
 
     @staticmethod
     def get_contested_targets(
-            bot,
+            bot: EklipZBot,
             shortTermContestCutoff: int = 25,
             longTermContestCutoff: int = 60,
             numToInclude=3,
@@ -339,7 +344,7 @@ class BotTargeting:
         return mostRecentTargets
 
     @staticmethod
-    def get_median_tile_value(bot, percentagePoint=50, player: int = -1):
+    def get_median_tile_value(bot: EklipZBot, percentagePoint=50, player: int = -1):
         if player == -1:
             player = bot.general.player
 
@@ -354,7 +359,7 @@ class BotTargeting:
             return 0
 
     @staticmethod
-    def find_enemy_city_path(bot, negativeTiles: TileSet, force: bool = False) -> typing.Tuple[int, Path | None]:
+    def find_enemy_city_path(bot: EklipZBot, negativeTiles: TileSet, force: bool = False) -> typing.Tuple[int, Path | None]:
         scores = [c for c in BM.BotCityOps.BotCityOps.get_enemy_cities_by_priority(bot)]
         foundScores = [c for c in scores if not c.isTempFogPrediction or c.discovered]
         if len(foundScores) > 0:
@@ -417,7 +422,7 @@ class BotTargeting:
         return bestTurns, BotPathingUtils.get_path_to_target(bot, tgTile)
 
     @staticmethod
-    def get_path_to_target_player(bot, isAllIn=False, cutLength: int | None = None) -> Path | None:
+    def get_path_to_target_player(bot: EklipZBot, isAllIn=False, cutLength: int | None = None) -> Path | None:
         maxTile = bot.targetPlayerExpectedGeneralLocation
         if maxTile is None:
             return None
@@ -483,7 +488,7 @@ class BotTargeting:
             if path is not None and cutLength is not None and path.length > cutLength:
                 path = path.get_subsegment(cutLength, end=True)
 
-        if bot.targetPlayer == -1 and bot._map.remainingPlayers > 2 and not bot._map.is_2v2:
+        if path is not None and bot.targetPlayer == -1 and bot._map.remainingPlayers > 2 and not bot._map.is_2v2:
             fakeGenPath = path.get_subsegment(11)
             logbook.info(f"FakeGenPath because FFA: {str(fakeGenPath)}")
             return fakeGenPath
@@ -491,7 +496,7 @@ class BotTargeting:
         return path
 
     @staticmethod
-    def get_max_explorable_undiscovered_tile(bot, minSpawnDist: int) -> Tile:
+    def get_max_explorable_undiscovered_tile(bot: EklipZBot, minSpawnDist: int) -> Tile:
         # 4 and larger gets dicey
         depth = BotTargeting.get_safe_per_tile_bfs_depth(bot)
 
@@ -686,7 +691,7 @@ class BotTargeting:
         return targetPlayer
 
     @staticmethod
-    def find_hacky_path_to_find_target_player_spawn_approx(bot, minSpawnDist: int):
+    def find_hacky_path_to_find_target_player_spawn_approx(bot: EklipZBot, minSpawnDist: int):
         if bot.targetPlayerObj is None or len(bot.targetPlayerObj.tiles) == 0:
             return None
 
@@ -761,7 +766,7 @@ class BotTargeting:
 
     @staticmethod
     def find_expected_1v1_general_location_on_undiscovered_map(
-            bot,
+            bot: EklipZBot,
             undiscoveredCounterDepth: int,
             minSpawnDistance: int
     ) -> MapMatrixInterface[int]:
@@ -824,7 +829,7 @@ class BotTargeting:
         return grid
 
     @staticmethod
-    def get_predicted_target_player_general_location(bot, skipDiscoveredAsNeutralFilter: bool = False) -> Tile:
+    def get_predicted_target_player_general_location(bot: EklipZBot, skipDiscoveredAsNeutralFilter: bool = False) -> Tile:
         minSpawnDist = bot.armyTracker.min_spawn_distance
 
         if bot.targetPlayer == -1 and BotStateQueries.is_still_ffa_and_non_dominant(bot):
@@ -928,7 +933,7 @@ class BotTargeting:
         return gMov
 
     @staticmethod
-    def is_player_spawn_cramped(bot, spawnDist=-1) -> bool:
+    def is_player_spawn_cramped(bot: EklipZBot, spawnDist=-1) -> bool:
         if bot._spawn_cramped is not None:
             return bot._spawn_cramped
 

@@ -1,4 +1,9 @@
 import BotLogging
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotLifecycle:
     @staticmethod

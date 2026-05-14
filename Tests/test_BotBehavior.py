@@ -3171,3 +3171,22 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(general.player, playerMap.At(13, 17))
+    
+    def test_should_block_incoming_armies_path_as_blocked_tile_lmao(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_block_incoming_armies_path_as_blocked_tile_lmao___ctsoU1gJI---0--237.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 237, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=237)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '8,10->8,11->4,11->4,13->3,13')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+
+

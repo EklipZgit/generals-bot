@@ -132,7 +132,7 @@ class FlowExpansionProcessFlowIntoFlowArmyTurnsTests(TestBase):
         expander = ArmyFlowExpanderV2(map)
         expander.target_team = map.team_ids_by_player_index[enemyGeneral.player]
         expander.enemy_general = enemyGeneral
-        expander._ensure_flow_graph_exists(builder)
+        expander._ensure_flow_graph_exists(builder, turns=50)
         return expander, builder
 
     def _run_process_flow(
@@ -148,7 +148,7 @@ class FlowExpansionProcessFlowIntoFlowArmyTurnsTests(TestBase):
             expander.flow_graph, builder, expander.team, expander.target_team, target_crossable
         )
         return expander._process_flow_into_flow_army_turns(
-            border_pairs, expander.flow_graph, target_crossable
+            border_pairs, expander.flow_graph, target_crossable, 50
         )
 
     # ------------------------------------------------------------------
@@ -492,7 +492,7 @@ b1   b1   b1   b1   b1   b1
             expander.flow_graph, builder, expander.team, expander.target_team, target_crossable
         )
         lookup_tables = expander._process_flow_into_flow_army_turns(
-            border_pairs, expander.flow_graph, target_crossable
+            border_pairs, expander.flow_graph, target_crossable, 50
         )
 
         if debugMode:
@@ -844,7 +844,7 @@ aG1  a3   b1   bG1
             builder, expander.flow_graph, expander.team, expander.target_team
         )
 
-        result = expander._process_flow_into_flow_army_turns([], expander.flow_graph, target_crossable)
+        result = expander._process_flow_into_flow_army_turns([], expander.flow_graph, target_crossable, 50)
 
         self.assertEqual([], result, 'Empty border_pairs list must produce empty result')
 

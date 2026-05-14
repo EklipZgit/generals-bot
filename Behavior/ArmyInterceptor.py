@@ -1601,6 +1601,9 @@ class ArmyInterceptor(object):
             # determine intercept remainder. This means we stopped the army AT the intercept, effectively means this is a capture, no enemy army remaining.
             if self.log_debug:
                 logbook.info(f'broke at tile being the one the army was at when our intercept path ended...? {enemyTailNode.tile}')
+            if enemyArmyLeftAtInterceptPointBeforeRemainingCapture >= 0 and self.map.is_tile_friendly(enemyTailNode.tile) and not mainEconDamageComplete:
+                # Necessary for test_should_recognize_blocking_enemy_capture_properly__12_13__11_13 test
+                econValueBlocked += TARGET_CAP_VALUE
             # TODO figure out if we need to take one more step / delay and chase and factor that in to the values and turns.
 
             #
@@ -1679,6 +1682,12 @@ class ArmyInterceptor(object):
             if i == 0:
                 if tilesAtDist and len(tilesAtDist) == 1:
                     if node.next is not None and node.next.tile == tilesAtDist[0] and node.next.next is None:
+                        worstCaseInterceptTurn = min(i + 1, worstCaseInterceptTurn)
+                        bestCaseInterceptTurn = min(i + 1, bestCaseInterceptTurn)
+                        directIntercept = True
+                    elif enPathNode.next is not None and node.next is not None and node.next.tile == enPathNode.next.tile and node.next.next is None:
+                        # Necessary for test_should_recognize_blocking_enemy_capture_properly__12_13__11_13 test
+                        enInterceptPointPathNode = enPathNode.next
                         worstCaseInterceptTurn = min(i + 1, worstCaseInterceptTurn)
                         bestCaseInterceptTurn = min(i + 1, bestCaseInterceptTurn)
                         directIntercept = True

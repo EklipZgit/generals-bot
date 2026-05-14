@@ -40,6 +40,7 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
         self.use_backpressure_from_enemy_general = use_backpressure_from_enemy_general
         self.friendly_general: 'Tile' = friendly_general
         self.invalid_flow_renderer = invalid_flow_renderer
+        self.negative_tiles: 'TileSet | None' = None
 
         self.team: int = map.friendly_team
         self.target_team: int = [t for t in map.get_teams_array(map) if t != self.team][0]
@@ -293,9 +294,13 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             inAttrs = {}
             demand = island.tile_count - island.sum_army
             if island.unique_id in ourSet:
+                island_army_sum = island.sum_army
+                if self.negative_tiles is not None:
+                    island_army_sum -= sum(tile.army for tile in island.tile_set if tile in self.negative_tiles)
+                demand = island.tile_count - island_army_sum
                 inAttrs['demand'] = demand
                 cumulativeDemand += demand
-                friendlyArmySupply += island.sum_army - island.tile_count
+                friendlyArmySupply += island_army_sum - island.tile_count
             elif island.unique_id in targetSet:
                 demand = island.sum_army + island.tile_count
                 inAttrs['demand'] = demand
@@ -387,6 +392,9 @@ class NetworkXFlowDirectionFinder(FlowDirectionFinderABC):
             includeNeutralDemand: bool = False,
             method: 'FlowGraphMethod' = None
     ) -> 'IslandMaxFlowGraph':
+        if negativeTiles is not self.negative_tiles:
+            self.negative_tiles = negativeTiles
+            self.invalidate_cache()
         if method is None:
             method = FlowGraphMethod.NetworkSimplex
 

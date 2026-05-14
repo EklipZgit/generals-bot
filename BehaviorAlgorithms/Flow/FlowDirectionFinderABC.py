@@ -97,7 +97,9 @@ class FlowDirectionFinderABC(ABC):
         startTiles = []
         usPlayers = map.get_team_stats_by_team_id(team).livingPlayers
         for p in usPlayers:
-            startTiles.extend(map.players[p].tiles)
+            startTiles.extend(t for t in map.players[p].tiles if t.army > 1 or t in intergeneral_analysis.shortestPathWay.tiles)
+
+        neutFlowDepthDistance = 2
 
         def _foreach(t: 'Tile', dist: int) -> bool:
             island = islands.tile_island_lookup.raw[t.tile_index]
@@ -105,12 +107,30 @@ class FlowDirectionFinderABC(ABC):
                 return True
             if island.team == team:
                 return False
-            if island.team == -1:
-                if island.unique_id not in capacityLookup:
-                    capacityLookup[island.unique_id] = 5 - dist
+            if island.team == -1 and t not in intergeneral_analysis.shortestPathWay.tiles:
+                existingCap = capacityLookup.get(island.unique_id, 0)
+                cap = neutFlowDepthDistance - dist + 1
+                if cap > existingCap:
+                    capacityLookup[island.unique_id] = cap
+                    capacityLookup[island.unique_id] = 100000
             return False
 
-        SearchUtils.breadth_first_foreach_dist(map, startTiles, maxDepth=3, foreachFunc=_foreach)
+        SearchUtils.breadth_first_foreach_dist_fast_no_neut_cities(map, startTiles, maxDepth=neutFlowDepthDistance, foreachFunc=_foreach)
+
+        neutGenDepth = 8
+        def _foreach2(t: 'Tile', dist: int) -> bool:
+            island = islands.tile_island_lookup.raw[t.tile_index]
+            if island is None:
+                return True
+            if island.team == -1:
+                existingCap = capacityLookup.get(island.unique_id, 0)
+                cap = neutGenDepth - dist + 1
+                if cap > existingCap:
+                    capacityLookup[island.unique_id] = cap
+                    capacityLookup[island.unique_id] = 100000
+            return False
+
+        SearchUtils.breadth_first_foreach_dist_fast_no_neut_cities(map, [map.players[map.player_index].general], maxDepth=neutGenDepth, foreachFunc=_foreach2)
 
         result: typing.Dict[int, TileIslandFlowRole] = {}
         for island in islands.all_tile_islands:
@@ -143,6 +163,8 @@ class FlowDirectionFinderABC(ABC):
             #         ):
             #             sink_no_neut = False
 
+            cap = capacityLookup.get(island.unique_id, 10000)
+
             result[island.unique_id] = TileIslandFlowRole(
                 island=island,
                 is_neutral_sink_with_neut=sink_with_neut,
@@ -150,6 +172,7 @@ class FlowDirectionFinderABC(ABC):
                 borders_friendly=borders_fr,
                 borders_enemy=borders_en,
                 are_all_borders_neutral=are_all_borders_neut,
+                capacity=cap,
             )
         return result
 

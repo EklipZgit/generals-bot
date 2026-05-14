@@ -25,6 +25,7 @@ from BotModules.BotTargeting import BotTargeting
 from DangerAnalyzer import ThreatType
 from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, ITERATIVE_EXPANSION_EN_CAP_VAL
+from Gather import GatherCapturePlan
 from Interfaces import TilePlanInterface
 from MapMatrix import MapMatrix, MapMatrixInterface
 from Path import Path, MoveListPath
@@ -35,9 +36,12 @@ from ViewInfo import TargetStyle, PathColorer
 from Models.Move import Move
 from base.client.map import Tile
 
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
+
 class BotExpansionOps:
     @staticmethod
-    def get_optimal_city_or_general_plan_move(bot, timeLimit: float = 4.0) -> Move | None:
+    def get_optimal_city_or_general_plan_move(bot: EklipZBot, timeLimit: float = 4.0) -> Move | None:
         calcedThisTurn = False
         if bot._map.turn < 50 and bot._map.is_2v2:
             BotComms.send_2v2_tip_to_ally(bot, )
@@ -234,7 +238,7 @@ class BotExpansionOps:
         return None
 
     @staticmethod
-    def try_find_main_timing_expansion_move_if_applicable(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    def try_find_main_timing_expansion_move_if_applicable(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if bot.is_all_in_losing:
             return None
 
@@ -278,7 +282,7 @@ class BotExpansionOps:
         return None
 
     @staticmethod
-    def try_find_expansion_move(bot, defenseCriticalTileSet: typing.Set[Tile], timeLimit: float, forceBypassLaunch: bool = False, overrideTurns: int = -1) -> Move | None:
+    def try_find_expansion_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile], timeLimit: float, forceBypassLaunch: bool = False, overrideTurns: int = -1) -> Move | None:
         skipForAllIn = bot.is_all_in_losing or bot.all_in_city_behind
 
         if not forceBypassLaunch and not bot.timings.in_expand_split(bot._map.turn) and overrideTurns < 0:
@@ -424,7 +428,7 @@ class BotExpansionOps:
 
     @staticmethod
     def build_expansion_plan(
-            bot,
+            bot: EklipZBot,
             timeLimit: float,
             expansionNegatives: typing.Set[Tile],
             pathColor: typing.Tuple[int, int, int],
@@ -442,6 +446,8 @@ class BotExpansionOps:
                     numDanger += 1
         if numDanger > 1:
             expansionNegatives.add(bot.general)
+
+        expansionNegatives.update(bot.blocking_tile_info.keys())
 
         remainingCycleTurns = bot.timings.cycleTurns - bot.timings.get_turn_in_cycle(bot._map.turn)
         if overrideTurns > -1:
@@ -476,7 +482,7 @@ class BotExpansionOps:
                     addlOptions.append(option)
                     interceptOptionsSet.add(option)
 
-                    logbook.info(f'intOpt {str(option)}')
+                    bot.info(f'intOpt {option.econValue / option.length:.2f} ({option.econValue:.1f}e/{option.length}t) {str(option)}')
 
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
@@ -558,8 +564,24 @@ class BotExpansionOps:
                             additional_options=additionalOptionsToInclude,
                             army_override_matrix=armyOverrideMatrix,
                         )
+                        cumulative = 0.0
+                        cumulativeTurns = 0
+                        largestGath = 0
+                        enCapped = 0
+                        neutCapped = 0
                         for opt in optCollection.flow_plans:
-                            bot.info(f'FE: {opt}  {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: bot.board_analysis.intergeneral_analysis.aMap.raw[t2.tile_index]))}')
+                            cumulative += opt.econValue
+                            cumulativeTurns += opt.length
+                            if isinstance(opt, GatherCapturePlan):
+                                largestGath = max(opt.gathered_army, largestGath)
+                            enCapped += sum(1 if t.player == bot.targetPlayer else 0 for t in opt.tileList)
+                            neutCapped += sum(1 if t.player == -1 else 0 for t in opt.tileList)
+
+                        bot.info(f'FE turns: {cumulativeTurns}/{remainingCycleTurns}, econ {cumulative:.3f}, enCaps: {enCapped}, neutCaps: {neutCapped}, optCount: {len(optCollection.flow_plans)}, largestGath: {largestGath}')
+
+                        for opt in optCollection.flow_plans:
+                            bot.info(f'FE: {opt.econValue / opt.length:.2f} ({opt.econValue:.1f}e/{opt.length}t) {opt}  {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: bot.board_analysis.intergeneral_analysis.aMap.raw[t2.tile_index]))}')
+
                         addlOptions = list(optCollection.flow_plans)
                         bot.last_flow_expander = flowExpander
                         bot.last_flow_opt_collection = optCollection
@@ -759,7 +781,7 @@ class BotExpansionOps:
 
     @staticmethod
     def build_enemy_expansion_plan(
-            bot,
+            bot: EklipZBot,
             timeLimit: float,
             pathColor: typing.Tuple[int, int, int]
     ) -> ExpansionPotential:
@@ -852,7 +874,7 @@ class BotExpansionOps:
 
     @staticmethod
     def attempt_first_25_collision_reroute(
-            bot,
+            bot: EklipZBot,
             curPath: Path,
             move: Move,
             distMap: MapMatrixInterface[int]
@@ -914,7 +936,7 @@ class BotExpansionOps:
             return None
 
     @staticmethod
-    def find_leaf_move(bot, allLeaves):
+    def find_leaf_move(bot: EklipZBot, allLeaves):
         leafMoves = BotExpansionOps.prioritize_expansion_leaves(bot, allLeaves)
         if bot.target_player_gather_path is not None:
             leafMoves = list(SearchUtils.where(leafMoves, lambda move: move.source not in bot.target_player_gather_path.tileSet))
@@ -941,7 +963,7 @@ class BotExpansionOps:
 
     @staticmethod
     def prioritize_expansion_leaves(
-            bot,
+            bot: EklipZBot,
             allLeaves=None,
             allowNonKill=False,
             distPriorityMap: MapMatrixInterface[int] | None = None,
@@ -1062,7 +1084,7 @@ class BotExpansionOps:
 
     @staticmethod
     def get_optimal_exploration(
-            bot,
+            bot: EklipZBot,
             turns,
             negativeTiles: typing.Set[Tile] = None,
             valueFunc=None,
@@ -1135,7 +1157,7 @@ class BotExpansionOps:
         return bestRevealedPath
 
     @staticmethod
-    def check_launch_against_expansion_plan(bot, existingPlan: ExpansionPotential, expansionNegatives: typing.Set[Tile]) -> ExpansionPotential:
+    def check_launch_against_expansion_plan(bot: EklipZBot, existingPlan: ExpansionPotential, expansionNegatives: typing.Set[Tile]) -> ExpansionPotential:
         return existingPlan
         if bot.target_player_gather_path is None:
             return existingPlan
@@ -1244,7 +1266,7 @@ class BotExpansionOps:
         return existingPlan
 
     @staticmethod
-    def calculate_path_capture_econ_values(bot, launchPath, turnsLeftInCycle, negativeTiles: typing.Set[Tile] | None = None) -> typing.Tuple[int, int, int, int, int, int, int]:
+    def calculate_path_capture_econ_values(bot: EklipZBot, launchPath, turnsLeftInCycle, negativeTiles: typing.Set[Tile] | None = None) -> typing.Tuple[int, int, int, int, int, int, int]:
         econMatrix = BotExpansionOps.get_expansion_weight_matrix(bot)
 
         army = 0
@@ -1576,7 +1598,7 @@ class BotExpansionOps:
         return bot.expansion_use_iterative_negative_tiles
 
     @staticmethod
-    def _add_expansion_threat_negs(bot, negs: typing.Set[Tile]):
+    def _add_expansion_threat_negs(bot: EklipZBot, negs: typing.Set[Tile]):
         logbook.info(f'starting expansion threat negs: {[t for t in negs]}')
         if bot.threat is None:
             return
@@ -1691,7 +1713,7 @@ class BotExpansionOps:
         return distMap, skipTiles
 
     @staticmethod
-    def get_expansion_weight_matrix(bot, copy: bool = False, mult: int = 1) -> MapMatrixInterface[float]:
+    def get_expansion_weight_matrix(bot: EklipZBot, copy: bool = False, mult: int = 1) -> MapMatrixInterface[float]:
         if bot._expansion_value_matrix is None:
             logbook.info(f'rebuilding expansion weight matrix for turn {bot._map.turn}')
             if BotStateQueries.is_still_ffa_and_non_dominant(bot):
@@ -1739,11 +1761,11 @@ class BotExpansionOps:
         return None
 
     @staticmethod
-    def try_gather_tendrils_towards_enemy(bot, turns: int | None = None) -> Move | None:
+    def try_gather_tendrils_towards_enemy(bot: EklipZBot, turns: int | None = None) -> Move | None:
         return None
 
     @staticmethod
-    def _get_expansion_plan_exploration_move(bot, armyCutoff: int, negativeTiles: typing.Set[Tile]) -> Move | None:
+    def _get_expansion_plan_exploration_move(bot: EklipZBot, armyCutoff: int, negativeTiles: typing.Set[Tile]) -> Move | None:
         move = None
         maxPath: TilePlanInterface | None = None
         if bot.expansion_plan is None:
@@ -1778,7 +1800,7 @@ class BotExpansionOps:
         return move
 
     @staticmethod
-    def _get_expansion_plan_quick_capture_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    def _get_expansion_plan_quick_capture_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if not bot.behavior_allow_pre_gather_greedy_leaves:
             return None
 

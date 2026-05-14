@@ -11,10 +11,15 @@ from BotModules.BotComms import BotComms
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotTargeting import BotTargeting
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotTimings:
     @staticmethod
-    def is_player_aggressive(bot, player: int, turnPeriod: int = 50) -> bool:
+    def is_player_aggressive(bot: EklipZBot, player: int, turnPeriod: int = 50) -> bool:
         if player in bot._map.teammates:
             return False
 
@@ -30,7 +35,7 @@ class BotTimings:
         return False
 
     @staticmethod
-    def set_all_in_cycle_to_hit_with_current_timings(bot, cycle: int, bufferTurnsEndOfCycle: int = 5):
+    def set_all_in_cycle_to_hit_with_current_timings(bot: EklipZBot, cycle: int, bufferTurnsEndOfCycle: int = 5):
         turnsLeftInCurrentCycle = bot.timings.cycleTurns - bot.timings.get_turn_in_cycle(bot._map.turn)
         bot.all_in_army_advantage_counter = cycle - turnsLeftInCurrentCycle + bufferTurnsEndOfCycle
         bot.all_in_army_advantage_cycle = cycle
@@ -396,13 +401,13 @@ class BotTimings:
 
         disallowEnemyGather = False
 
-        tileDiff = bot.opponent_tracker.get_tile_differential()
-        if tileDiff < 4:
-            back = max(-10, tileDiff // 2) - 2
-            if not bypass:
-                bot.viewInfo.add_info_line(f'gathSplit/launch back {back} turns due to tileDiff {tileDiff}')
-            gatherSplit += back
-            launchTiming += back
+        # tileDiff = bot.opponent_tracker.get_tile_differential()
+        # if tileDiff < 4:
+        #     back = max(-10, tileDiff // 2) - 2
+        #     if not bypass:
+        #         bot.viewInfo.add_info_line(f'gathSplit/launch back {back} turns due to tileDiff {tileDiff}')
+        #     gatherSplit += back
+        #     launchTiming += back
 
         if bot.flanking:
             bot.viewInfo.add_info_line(f'gathSplit flanking += {bot.behavior_flank_launch_timing_offset}')
@@ -434,6 +439,11 @@ class BotTimings:
             cycle += 50
             launchTiming += 50
             gatherSplit += 50
+
+        if launchTiming > 28:
+            launchTiming = 28
+        if gatherSplit > 22:
+            gatherSplit = 22
 
         if launchTiming < gatherSplit:
             if not bypass:

@@ -673,7 +673,7 @@ class EklipZBot(object):
         with self.perf_timer.begin_move_event('ArmyTracker fog land builder'):
             fogTileCounts = self.opponent_tracker.get_all_player_fog_tile_count_dict()
             for player in self._map.players:
-                self.armyTracker.update_fog_prediction(player.index, fogTileCounts[player.index], None)
+                self.armyTracker.update_fog_prediction(player.index, fogTileCounts[player.index], self.targetPlayerExpectedGeneralLocation)
 
         self._evaluatedUndiscoveredCache = []
         with self.perf_timer.begin_move_event('get_predicted_target_player_general_location'):
@@ -740,7 +740,7 @@ class EklipZBot(object):
 
         if not BotStateQueries.is_all_in(self) and (not self.is_lag_massive_map or self._map.turn < 3 or (self._map.turn + 5) % 5 == 0):
             with self.perf_timer.begin_move_event('WinConditionAnalyzer Analyze'):
-                self.win_condition_analyzer.analyze(self.targetPlayer, self.targetPlayerExpectedGeneralLocation)
+                self.win_condition_analyzer.analyze(self.targetPlayer, self.targetPlayerExpectedGeneralLocation, self.perf_timer)
 
             # Calculate fog risk using opponent tracker
             if self.targetPlayer != -1:
@@ -1160,6 +1160,10 @@ class EklipZBot(object):
         with self.perf_timer.begin_move_event('Flank defense / Vision expansion HIGH PRI'):
             flankDefMove = BotExplorationOps.find_flank_defense_move(self, defenseCriticalTileSet, highPriority=True)
             if flankDefMove:
+                if self.timings.in_gather_split(self._map.turn):
+                    self.timings.splitTurns += 1
+                    if self.timings.splitTurns > self.timings.launchTiming:
+                        self.timings.launchTiming = self.timings.splitTurns
                 return flankDefMove
 
         fog_risk, fog_army_comp, city_comp, expected_city_spanning_offset = self.opponent_tracker.get_immediate_fog_risk(self.targetPlayer, len(self.friendly_city_spanning_tree))
@@ -1396,6 +1400,10 @@ class EklipZBot(object):
         with self.perf_timer.begin_move_event('Flank defense / Vision expansion low pri'):
             flankDefMove = BotExplorationOps.find_flank_defense_move(self, defenseCriticalTileSet, highPriority=False)
             if flankDefMove:
+                if self.timings.in_gather_split(self._map.turn):
+                    self.timings.splitTurns += 1
+                    if self.timings.splitTurns > self.timings.launchTiming:
+                        self.timings.launchTiming = self.timings.splitTurns
                 return flankDefMove
 
         if self.defend_economy:
@@ -1478,7 +1486,7 @@ class EklipZBot(object):
                 for opt in self.expansion_plan.all_paths:
                     move = opt.get_first_move()
                     if move is not None and move.source.player == self._map.player_index and move.source.army > 1:
-                        self.curPath = opt
+                        # self.curPath = opt
                         return move
 
         elif BotPathingUtils.is_move_safe_valid(self, move):

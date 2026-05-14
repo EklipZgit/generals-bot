@@ -3,6 +3,11 @@ import typing
 import BotModules as BM
 import SearchUtils
 from base.client.map import Tile
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotStateQueries:
     @staticmethod
@@ -10,7 +15,7 @@ class BotStateQueries:
         return bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind
 
     @staticmethod
-    def is_tile_enemy(bot, tile: Tile) -> bool:
+    def is_tile_enemy(bot: EklipZBot, tile: Tile) -> bool:
         """Check if a tile belongs to an enemy player."""
         return tile is not None and tile.player != -1 and tile.player != bot.general.player and bot._map.is_tile_enemy(tile)
 
@@ -47,7 +52,7 @@ class BotStateQueries:
         return bot.board_analysis.intergeneral_analysis
 
     @staticmethod
-    def get_player_army_amount_on_path(bot, path, player, startIdx=0, endIdx=1000):
+    def get_player_army_amount_on_path(bot: EklipZBot, path, player, startIdx=0, endIdx=1000):
         value = 0
         idx = 0
         pathNode = path.start
@@ -59,7 +64,7 @@ class BotStateQueries:
         return value
 
     @staticmethod
-    def get_target_army_inc_adjacent_enemy(bot, tile):
+    def get_target_army_inc_adjacent_enemy(bot: EklipZBot, tile):
         sumAdj = 0
         for adj in tile.adjacents:
             if BotStateQueries.is_tile_enemy(bot, adj):
@@ -68,29 +73,29 @@ class BotStateQueries:
         return armyToSearch
 
     @staticmethod
-    def parse_tile_str(bot, tileStr: str):
+    def parse_tile_str(bot: EklipZBot, tileStr: str):
         xStr, yStr = tileStr.split(',')
         return bot._map.GetTile(int(xStr), int(yStr))
 
     @staticmethod
-    def parse_bool(bot, boolStr: str) -> bool:
+    def parse_bool(bot: EklipZBot, boolStr: str) -> bool:
         return boolStr.lower().strip() == "true"
 
     @staticmethod
-    def str_tiles(bot, tiles) -> str:
+    def str_tiles(bot: EklipZBot, tiles) -> str:
         return '|'.join([str(t) for t in tiles])
 
     @staticmethod
-    def get_army_at(bot, tile: Tile, no_expected_path: bool = False):
+    def get_army_at(bot: EklipZBot, tile: Tile, no_expected_path: bool = False):
         return bot.armyTracker.get_or_create_army_at(tile, skip_expected_path=no_expected_path)
 
     @staticmethod
-    def get_army_at_x_y(bot, x: int, y: int):
+    def get_army_at_x_y(bot: EklipZBot, x: int, y: int):
         tile = bot._map.GetTile(x, y)
         return BotStateQueries.get_army_at(bot, tile)
 
     @staticmethod
-    def get_n_closest_team_tiles_near(bot, nearTiles: typing.List[Tile], player: int, distance: int, limit: int, includeNeutral: bool = False) -> typing.List[Tile]:
+    def get_n_closest_team_tiles_near(bot: EklipZBot, nearTiles: typing.List[Tile], player: int, distance: int, limit: int, includeNeutral: bool = False) -> typing.List[Tile]:
         tiles = set(nearTiles)
 
         def nearbyTileAdder(tile: Tile) -> bool:

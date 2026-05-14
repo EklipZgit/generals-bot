@@ -6,10 +6,15 @@ from base.client.map import Tile
 from Models import GatherTreeNode
 from Path import Path
 from ViewInfo import TargetStyle
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotComms:
     @staticmethod
-    def send_teammate_communication(bot, message: str, pingTile: Tile | None = None, cooldown: int = 10, detectOnMessageAlone: bool = False, detectionKey: str | None = None):
+    def send_teammate_communication(bot: EklipZBot, message: str, pingTile: Tile | None = None, cooldown: int = 10, detectOnMessageAlone: bool = False, detectionKey: str | None = None):
         commKey = message
 
         if detectOnMessageAlone:
@@ -36,16 +41,16 @@ class BotComms:
                 BotComms.send_teammate_tile_ping(bot, pingTile)
 
     @staticmethod
-    def send_all_chat_communication(bot, message: str):
+    def send_all_chat_communication(bot: EklipZBot, message: str):
         bot._outbound_all_chat.put(message)
 
     @staticmethod
-    def send_teammate_path_ping(bot, path: Path, cooldown: int = 0, cooldownKey: str | None = None):
+    def send_teammate_path_ping(bot: EklipZBot, path: Path, cooldown: int = 0, cooldownKey: str | None = None):
         for tile in path.tileList:
             BotComms.send_teammate_tile_ping(bot, tile, cooldown, cooldownKey)
 
     @staticmethod
-    def send_teammate_tile_ping(bot, pingTile: Tile, cooldown: int = 0, cooldownKey: str | None = None):
+    def send_teammate_tile_ping(bot: EklipZBot, pingTile: Tile, cooldown: int = 0, cooldownKey: str | None = None):
         if not bot._map.is_2v2:
             return
 
@@ -88,7 +93,7 @@ class BotComms:
         return outbound
 
     @staticmethod
-    def notify_chat_message(bot, chatUpdate: ChatUpdate):
+    def notify_chat_message(bot: EklipZBot, chatUpdate: ChatUpdate):
         bot._chat_messages_received.put(chatUpdate)
 
         st = str(reversed('lare' + 'gneg'))
@@ -99,11 +104,11 @@ class BotComms:
             _spawn(bot.do_thing)
 
     @staticmethod
-    def notify_tile_ping(bot, pingedTile: Tile):
+    def notify_tile_ping(bot: EklipZBot, pingedTile: Tile):
         bot._tiles_pinged_by_teammate.put(pingedTile)
 
     @staticmethod
-    def handle_chat_message(bot, chatUpdate: ChatUpdate):
+    def handle_chat_message(bot: EklipZBot, chatUpdate: ChatUpdate):
         if chatUpdate.from_user == bot._map.usernames[bot._map.player_index]:
             return
 
@@ -123,16 +128,16 @@ class BotComms:
         return True
 
     @staticmethod
-    def handle_bot_chat(bot, chatUpdate: ChatUpdate):
+    def handle_bot_chat(bot: EklipZBot, chatUpdate: ChatUpdate):
         if chatUpdate.message.startswith("!"):
             bot.teammate_communicator.handle_coordination_update(chatUpdate)
 
     @staticmethod
-    def handle_human_chat(bot, chatUpdate: ChatUpdate):
+    def handle_human_chat(bot: EklipZBot, chatUpdate: ChatUpdate):
         pass
 
     @staticmethod
-    def communicate_threat_to_ally(bot, threat, valueGathered: int, defensePlan: typing.List[GatherTreeNode]):
+    def communicate_threat_to_ally(bot: EklipZBot, threat, valueGathered: int, defensePlan: typing.List[GatherTreeNode]):
         if threat.path.tail.tile.isCity:
             return
         valueGathered = int(round(valueGathered))
@@ -158,7 +163,7 @@ class BotComms:
         BotComms.send_teammate_communication(bot, comm, cooldown=50, detectionKey='2v2GameStartTips')
 
     @staticmethod
-    def cooldown_allows(bot, detectionKey: str, cooldown: int, doNotUpdate: bool = False) -> bool:
+    def cooldown_allows(bot: EklipZBot, detectionKey: str, cooldown: int, doNotUpdate: bool = False) -> bool:
         lastSentTurn = bot._communications_sent_cooldown_cache.get(detectionKey, -50)
         if lastSentTurn < bot._map.turn - cooldown:
             if not doNotUpdate:

@@ -2039,6 +2039,7 @@ bot_target_player=1
         #proof
         # simHost.queue_player_moves_str(general.player, '13,4->12,4->12,8->11,8->11,9')
         bot = self.get_debug_render_bot(simHost, general.player)
+        bot.tileIslandBuilder.recalculate_tile_islands(bot.targetPlayerExpectedGeneralLocation)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()

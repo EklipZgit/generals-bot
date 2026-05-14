@@ -52,7 +52,7 @@ aG1  a3   b1   bG1
         flowExpanderV2.enemyGeneral = enemyGeneral
 
         # Set up the flow graph and preprocessing
-        flowExpanderV2._ensure_flow_graph_exists(builder)
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
         target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
             builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
         )
@@ -60,7 +60,7 @@ aG1  a3   b1   bG1
             flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
         )
         lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
-            border_pairs, flowExpanderV2.flow_graph, target_crossable
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, 50
         )
         flowExpanderV2._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
 

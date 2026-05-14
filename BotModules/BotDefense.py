@@ -31,10 +31,13 @@ from ViewInfo import TargetStyle, PathColorer
 from Models.Move import Move
 from base.client.map import Tile, MapBase
 
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
+
 
 class BotDefense:
     @staticmethod
-    def determine_fog_defense_amount_available_for_tiles(bot, targetTiles, enPlayer, fogDefenseTurns: int = 0, fogReachTurns: int = 8) -> int:
+    def determine_fog_defense_amount_available_for_tiles(bot: EklipZBot, targetTiles, enPlayer, fogDefenseTurns: int = 0, fogReachTurns: int = 8) -> int:
         """Does NOT include the army that is on the targetTiles."""
         targetArmy = bot.opponent_tracker.get_approximate_fog_army_risk(enPlayer, cityLimit=None, inTurns=fogDefenseTurns)
 
@@ -68,7 +71,7 @@ class BotDefense:
 
     @staticmethod
     def get_defense_moves(
-            bot,
+            bot: EklipZBot,
             defenseCriticalTileSet: typing.Set[Tile],
             raceEnemyKingKillPath: Path | None,
             raceChance: float
@@ -446,7 +449,7 @@ class BotDefense:
         return None, None
 
     @staticmethod
-    def build_intercept_plans(bot, negTiles: typing.Set[Tile] | None = None) -> typing.Dict[Tile, typing.Any]:
+    def build_intercept_plans(bot: EklipZBot, negTiles: typing.Set[Tile] | None = None) -> typing.Dict[Tile, typing.Any]:
         interceptions: typing.Dict[Tile, typing.Any] = {}
 
         bot.blocking_tile_info: typing.Dict[Tile, ThreatBlockInfo] = {}
@@ -586,7 +589,7 @@ class BotDefense:
 
     @staticmethod
     def get_gather_to_threat_paths(
-            bot,
+            bot: EklipZBot,
             threats: typing.List[ThreatObj],
             force_turns_up_threat_path=0,
             gatherMax: bool = True,
@@ -636,7 +639,7 @@ class BotDefense:
 
     @staticmethod
     def get_gather_to_threat_path(
-            bot,
+            bot: EklipZBot,
             threat: ThreatObj,
             force_turns_up_threat_path=0,
             gatherMax: bool = True,
@@ -662,7 +665,7 @@ class BotDefense:
 
     @staticmethod
     def try_threat_gather(
-            bot,
+            bot: EklipZBot,
             threats: typing.List[ThreatObj],
             distDict,
             gatherDepth,
@@ -765,7 +768,7 @@ class BotDefense:
 
     @staticmethod
     def get_gather_to_threat_path_greedy(
-            bot,
+            bot: EklipZBot,
             threat: ThreatObj,
             force_turns_up_threat_path=0,
             gatherMax: bool = True,
@@ -814,7 +817,7 @@ class BotDefense:
         return move, value, turnsUsed, gatherNodes
 
     @staticmethod
-    def is_move_safe_against_threats(bot, move: Move):
+    def is_move_safe_against_threats(bot: EklipZBot, move: Move):
         threat = bot.threat
         if not threat:
             threat = bot.dangerAnalyzer.fastestPotentialThreat
@@ -840,7 +843,7 @@ class BotDefense:
         return True
 
     @staticmethod
-    def _is_invalid_defense_intercept_for_threat(bot, interceptPath: TilePlanInterface | Path | None, threat: ThreatObj) -> bool:
+    def _is_invalid_defense_intercept_for_threat(bot: EklipZBot, interceptPath: TilePlanInterface | Path | None, threat: ThreatObj) -> bool:
         if interceptPath is None:
             return False
 
@@ -854,7 +857,7 @@ class BotDefense:
         return pathStart.tile in threat.path.tileSet
 
     @staticmethod
-    def get_defense_path_option_from_options_if_available(bot, threatInterceptionPlan, threat: ThreatObj) -> typing.Tuple[InterceptionOptionInfo | None, TilePlanInterface | None]:
+    def get_defense_path_option_from_options_if_available(bot: EklipZBot, threatInterceptionPlan, threat: ThreatObj) -> typing.Tuple[InterceptionOptionInfo | None, TilePlanInterface | None]:
         # if not self.expansion_plan.includes_intercept:  # or self.expansion_plan.intercept_waiting
         #     return None, None
 
@@ -924,7 +927,7 @@ class BotDefense:
         return interceptPath, interceptingOption
 
     @staticmethod
-    def check_kill_threat_only_defense_interception(bot, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, InterceptionOptionInfo | None, bool]:
+    def check_kill_threat_only_defense_interception(bot: EklipZBot, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, InterceptionOptionInfo | None, bool]:
         if not threat.path.tail.tile.isGeneral:
             return None, None, None, False
 
@@ -996,7 +999,7 @@ class BotDefense:
         return bestMove, bestInterceptPath, bestInterceptingOption, bestIsDelayed
 
     @staticmethod
-    def should_bypass_army_danger_due_to_last_move_turn(bot, tile: Tile) -> bool:
+    def should_bypass_army_danger_due_to_last_move_turn(bot: EklipZBot, tile: Tile) -> bool:
         army = bot.get_army_at(tile)
         shouldBypass = army.last_seen_turn < bot._map.turn - 6 and not army.tile.visible
         shouldBypass = shouldBypass or (army.tile.isCity and army.last_moved_turn < bot._map.turn - 3)
@@ -1176,7 +1179,7 @@ class BotDefense:
 
     @staticmethod
     def find_flank_opportunity(
-            bot,
+            bot: EklipZBot,
             targetPlayer: int,
             flankingPlayer: int,
             flankPlayerLaunchPoints: typing.List[Tile],
@@ -1254,7 +1257,7 @@ class BotDefense:
 
     @staticmethod
     def get_defense_tree_move_prio_func_old(
-            bot,
+            bot: EklipZBot,
             threat: ThreatObj,
             anyLeafIsSameDistAsThreat: bool = False,
             printDebug: bool = False
@@ -1315,7 +1318,7 @@ class BotDefense:
 
     @staticmethod
     def get_defense_tree_move_prio_func(
-            bot,
+            bot: EklipZBot,
             threat: ThreatObj,
             anyLeafIsSameDistAsThreat: bool = False,
             printDebug: bool = False
@@ -1375,7 +1378,7 @@ class BotDefense:
         return move_closest_negative_value_func
 
     @staticmethod
-    def get_potential_threat_movement_negatives(bot, targetTile: Tile | None = None) -> typing.Set[Tile]:
+    def get_potential_threat_movement_negatives(bot: EklipZBot, targetTile: Tile | None = None) -> typing.Set[Tile]:
         """
         Based on an available potential threat path, determine if any tiles are not allowed to move because they would increase risk.
 
@@ -1413,7 +1416,7 @@ class BotDefense:
         return potNegs
 
     @staticmethod
-    def check_defense_intercept_move(bot, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, InterceptionOptionInfo | None, bool]:
+    def check_defense_intercept_move(bot: EklipZBot, threat: ThreatObj) -> typing.Tuple[Move | None, Path | None, InterceptionOptionInfo | None, bool]:
         threatInterceptionPlan = bot.intercept_plans.get(threat.path.start.tile, None)
         isDelayed = False
         threatTile = threat.path.start.tile
@@ -1443,6 +1446,7 @@ class BotDefense:
             notEnoughDamageBlocked = False
             armyLeftOver = threat.threatValue - interceptingOption.friendly_army_reaching_intercept > 0
             if threat.path.tail.tile.isGeneral:
+                armyLeftOver = interceptingOption.intercepting_army_remaining < 0
                 if tookTooLong or notEnoughDamageBlocked or armyLeftOver:
                     bot.viewInfo.add_info_line(
                         f'DEF int BYP: rem ar {interceptingOption.intercepting_army_remaining}, long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
@@ -1469,10 +1473,24 @@ class BotDefense:
         else:
             bot.info(f'DEF int incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
             bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
+
+        if mv is None:
+            return None, None, None, False
+
+        mvNext = mv.dest
+        threatNext = threat.path.start.next.tile
+        isMissing = bot.board_analysis.intergeneral_analysis.aMap.raw[mvNext.tile_index] > bot.board_analysis.intergeneral_analysis.aMap.raw[threatNext.tile_index]
+        if isMissing:
+            isMissing = mvNext not in threatNext.movable
+        if threat.threatType == ThreatType.Kill and isMissing:
+            bot.viewInfo.add_info_line(
+                f'DEF int BYP: {mv} would miss threatNext {threatNext}')
+            return None, None, None, False
+
         return mv, interceptPath, interceptingOption, isDelayed
 
     @staticmethod
-    def check_defense_hybrid_intercept_moves(bot, threat: ThreatObj, defensePlan: typing.List[GatherTreeNode], missingDefense: int, defenseNegatives: typing.Set[Tile]) -> typing.Tuple[Move | None, Path | None, bool, typing.List[GatherTreeNode]]:
+    def check_defense_hybrid_intercept_moves(bot: EklipZBot, threat: ThreatObj, defensePlan: typing.List[GatherTreeNode], missingDefense: int, defenseNegatives: typing.Set[Tile]) -> typing.Tuple[Move | None, Path | None, bool, typing.List[GatherTreeNode]]:
         """
         Returns [replacementMove, replacementPath, isDelayed, updatedDefenseNodes]
 
@@ -1552,7 +1570,7 @@ class BotDefense:
         return None, None, False, bestRemainingDefense
 
     @staticmethod
-    def get_enemy_probable_attack_path(bot, enemyPlayer: int) -> Path | None:
+    def get_enemy_probable_attack_path(bot: EklipZBot, enemyPlayer: int) -> Path | None:
         def valFunc(curTile: Tile, prioObj):
             (dist, negArmySum, sumX, sumY, goalIncrement) = prioObj
             if curTile not in bot.board_analysis.flankable_fog_area_matrix:
@@ -1629,7 +1647,7 @@ class BotDefense:
 
     @staticmethod
     def _get_defensive_spanning_tree(
-            bot,
+            bot: EklipZBot,
             negativeTiles: TileSet,
             gatherPrioMatrix: MapMatrixInterface[float] | None = None,
             use_cities_in_play_only: bool = True,
@@ -1702,7 +1720,7 @@ class BotDefense:
         return spanningTreeTiles
 
     @staticmethod
-    def general_move_safe(bot, target, move_half=False):
+    def general_move_safe(bot: EklipZBot, target, move_half=False):
         dangerTiles = BotDefense.get_general_move_blocking_tiles(bot, target, move_half)
         return len(dangerTiles) == 0
 
@@ -1740,7 +1758,7 @@ class BotDefense:
             bot.viewInfo.add_info_line(f'NOT fog risk, fog_risk_amount {bot.fog_risk_amount} in {pushRiskTurns} (gath {enGathAmt}) vs {pathWorth} - {cycleTurnsLeft} vs len {bot.target_player_gather_path.length}')
 
     @staticmethod
-    def get_general_move_blocking_tiles(bot, target: Tile, move_half=False):
+    def get_general_move_blocking_tiles(bot: EklipZBot, target: Tile, move_half=False):
         blockingTiles = []
 
         dangerPaths = BotDefense.get_danger_paths(bot, move_half)
@@ -1778,7 +1796,7 @@ class BotDefense:
         return blockingTiles
 
     @staticmethod
-    def get_danger_tiles(bot, move_half=False) -> typing.Set[Tile]:
+    def get_danger_tiles(bot: EklipZBot, move_half=False) -> typing.Set[Tile]:
         dangerPaths = BotDefense.get_danger_paths(bot, move_half)
 
         dangerTiles = set()
@@ -1789,7 +1807,7 @@ class BotDefense:
         return dangerTiles
 
     @staticmethod
-    def get_danger_paths(bot, move_half=False) -> typing.List[Path]:
+    def get_danger_paths(bot: EklipZBot, move_half=False) -> typing.List[Path]:
         thresh = 3
         if move_half:
             thresh = bot.general.army - bot.general.army // 2 + 2
@@ -1909,7 +1927,7 @@ class BotDefense:
         return bot._map.remainingPlayers == 2 and not bot.opponent_tracker.winning_on_economy(byRatio=bot.behavior_losing_on_economy_skip_defense_threshold)
 
     @staticmethod
-    def should_defend_economy(bot, defenseTiles: typing.Set[Tile]):
+    def should_defend_economy(bot: EklipZBot, defenseTiles: typing.Set[Tile]):
         if bot._map.remainingPlayers > 2:
             return False
         if bot.targetPlayer == -1:
@@ -2009,7 +2027,7 @@ class BotDefense:
         return bot.defend_economy
 
     @staticmethod
-    def check_should_defend_economy_based_on_cycle_behavior(bot, defenseCriticalTileSet: typing.Set[Tile]) -> bool:
+    def check_should_defend_economy_based_on_cycle_behavior(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> bool:
         bot.likely_kill_push = False
 
         if BotTargeting.is_ffa_situation(bot):
@@ -2104,7 +2122,7 @@ class BotDefense:
         return False
 
     @staticmethod
-    def get_threat_killer_move(bot, threat, searchTurns, negativeTiles):
+    def get_threat_killer_move(bot: EklipZBot, threat, searchTurns, negativeTiles):
         killTiles = [threat.path.start.tile]
         if threat.path.start.next:
             killTiles.insert(0, threat.path.start.next.tile)
@@ -2191,7 +2209,7 @@ class BotDefense:
             bot.viewInfo.add_stats_line(f'skipping defense because losing on econ')
 
     @staticmethod
-    def _get_flank_defense_leafmove(bot, flankPath: Path, coreNegs: typing.Set[Tile]) -> Move | None:
+    def _get_flank_defense_leafmove(bot: EklipZBot, flankPath: Path, coreNegs: typing.Set[Tile]) -> Move | None:
         bestWeighted = 3
         bestMove = None
         for leafMove in bot.captureLeafMoves:
@@ -2217,7 +2235,7 @@ class BotDefense:
         return bestMove
 
     @staticmethod
-    def _get_flank_vision_defense_move_internal(bot, flankThreatPath: Path, negativeTiles: typing.Set[Tile], atDist: int) -> Move | None:
+    def _get_flank_vision_defense_move_internal(bot: EklipZBot, flankThreatPath: Path, negativeTiles: typing.Set[Tile], atDist: int) -> Move | None:
         included = set()
         for tile in flankThreatPath.tileList[:(flankThreatPath.length * 5) // 6]:
             if tile in bot.board_analysis.flank_danger_play_area_matrix and not tile.visible and not tile.isSwamp:
@@ -2355,7 +2373,7 @@ class BotDefense:
         return False
 
     @staticmethod
-    def get_best_defense(bot, defendingTile: Tile, turns: int, negativeTileList: typing.List[Tile]) -> Path | None:
+    def get_best_defense(bot: EklipZBot, defendingTile: Tile, turns: int, negativeTileList: typing.List[Tile]) -> Path | None:
         searchingPlayer = defendingTile.player
         logbook.info(f"Trying to get_best_defense. Turns {turns}. Searching player {searchingPlayer}")
         negativeTiles = set()
@@ -2428,7 +2446,38 @@ class BotDefense:
         return None
 
     @staticmethod
-    def set_defensive_blocks_against(bot, threat):
+    def set_defensive_blocks_against(bot: EklipZBot, threat: ThreatObj):
+        for defensiveTile in threat.path.tileList:
+            if defensiveTile.player != bot.player.index:
+                continue
+
+            block = bot.blocking_tile_info.get(defensiveTile, None)
+            amountNecessary = max(0, threat.threatValue - defensiveTile.army)
+            if not block:
+                block = ThreatBlockInfo(
+                    defensiveTile,
+                    amount_needed_to_block=min(defensiveTile.army, amountNecessary),
+                )
+                bot.blocking_tile_info[defensiveTile] = block
+
+            block.amount_needed_to_block = min(defensiveTile.army, max(block.amount_needed_to_block, amountNecessary))
+            defDist = threat.armyAnalysis.interceptDistances.raw[defensiveTile.tile_index]
+            if defDist is None:
+                if threat.armyAnalysis.pathWayLookupMatrix.raw[defensiveTile.tile_index] is not None:
+                    defDist = threat.armyAnalysis.pathWayLookupMatrix.raw[defensiveTile.tile_index].distance
+                else:
+                    defDist = 100
+            for t in defensiveTile.movable:
+                tDist = threat.armyAnalysis.interceptDistances.raw[t.tile_index]
+                if tDist is None:
+                    if threat.armyAnalysis.pathWayLookupMatrix.raw[t.tile_index] is not None:
+                        tDist = threat.armyAnalysis.pathWayLookupMatrix.raw[t.tile_index].distance
+                    else:
+                        tDist = 100
+                if defDist < tDist:
+                    block.add_blocked_destination(t)
+            bot.info(f'blocking {defensiveTile} from moving to {"|".join([str(t) for t in block.blocked_destinations])}')
+
         for gatherTreeNode in bot.best_defense_leaves:
             defensiveTile = gatherTreeNode.tile
             if defensiveTile.army <= 2 and gatherTreeNode.toTile.army > defensiveTile.army:

@@ -1,9 +1,13 @@
 import logbook
+import typing
 
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotCityCaptureControl:
     @staticmethod
-    def block_neutral_captures(bot, reason: str = ''):
+    def block_neutral_captures(bot: EklipZBot, reason: str = ''):
         if bot.curPath and bot.curPath.tail is not None and bot.curPath.tail.tile.isCity and bot.curPath.tail.tile.isNeutral:
             targetNeutCity = bot.curPath.tail.tile
             if bot.is_blocking_neutral_city_captures:

@@ -7,6 +7,7 @@ from ArmyAnalyzer import ArmyAnalyzer
 from BoardAnalyzer import BoardAnalyzer
 from DangerAnalyzer import ThreatObj, ThreatType
 from Gather import GatherSteiner
+from Gather import GatherDebug
 import Gather
 from Algorithms import TileIslandBuilder, MapSpanningUtils
 from Interfaces.MapMatrixInterface import EmptyTileSet
@@ -35,6 +36,25 @@ class GatherSteinerUnitTests(TestBase):
         bot.gather_use_pcst = True
 
         return bot
+
+    def test_build_pcst_tile_prize_matrix__negative_friendly_tile_has_zero_prize(self):
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        negativeTile = general
+        gatherMatrix = MapMatrix(map, 0.0)
+        gatherMatrix.raw[negativeTile.tile_index] = 100.0
+
+        tilePrizeMatrix, _, _, _, _, _ = GatherSteiner._build_pcst_tile_prize_matrix(
+            map=map,
+            searchingPlayer=general.player,
+            rootTiles=[enemyGeneral],
+            negativeTiles={negativeTile},
+            prioritizeCaptureHighArmyTiles=False,
+            skipTiles=None,
+            gatherMatrix=gatherMatrix)
+
+        self.assertEqual(0.0, tilePrizeMatrix.raw[negativeTile.tile_index])
 
     def test_should_build_steiner_prize_collection(self):
         """

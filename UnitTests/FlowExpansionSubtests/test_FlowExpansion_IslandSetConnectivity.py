@@ -40,7 +40,7 @@ class FlowExpansionIslandSetConnectivityTests(TestBase):
         """Helper: build ArmyFlowExpanderV2 with flow graph and detection results."""
         from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
         expander = ArmyFlowExpanderV2(map)
-        expander._ensure_flow_graph_exists(builder)
+        expander._ensure_flow_graph_exists(builder, turns=50)
         return expander
 
     def _get_tile_connected_components(self, tiles: typing.Set[Tile]) -> typing.List[typing.Set[Tile]]:

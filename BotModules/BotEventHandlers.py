@@ -3,10 +3,15 @@ import logbook
 import SearchUtils
 from Army import Army
 from base.client.map import Tile
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotEventHandlers:
     @staticmethod
-    def handle_city_found(bot, tile):
+    def handle_city_found(bot: EklipZBot, tile):
         logbook.info(f"EH: City found handler! City {str(tile)}")
         bot.armyTracker.add_need_to_track_city(tile)
         bot.territories.needToUpdateAroundTiles.add(tile)
@@ -15,7 +20,7 @@ class BotEventHandlers:
         return None
 
     @staticmethod
-    def handle_tile_captures(bot, tile: Tile):
+    def handle_tile_captures(bot: EklipZBot, tile: Tile):
         logbook.info(
             f"EH: Tile captured! Tile {repr(tile)}, oldOwner {tile.delta.oldOwner} newOwner {tile.delta.newOwner}")
         bot.territories.needToUpdateAroundTiles.add(tile)
@@ -51,7 +56,7 @@ class BotEventHandlers:
         return None
 
     @staticmethod
-    def handle_player_captures(bot, capturee: int, capturer: int):
+    def handle_player_captures(bot: EklipZBot, capturee: int, capturer: int):
         logbook.info(
             f"EH: Player captured! capturee {bot._map.usernames[capturee]} ({capturee}) capturer {bot._map.usernames[capturer]} ({capturer})")
         for army in list(bot.armyTracker.armies.values()):
@@ -80,12 +85,12 @@ class BotEventHandlers:
                 bot.all_in_losing_counter = 300
 
     @staticmethod
-    def handle_tile_deltas(bot, tile):
+    def handle_tile_deltas(bot: EklipZBot, tile):
         logbook.info(f"EH: Tile delta handler! Tile {repr(tile)} delta {tile.delta.armyDelta}")
         return None
 
     @staticmethod
-    def handle_tile_discovered(bot, tile):
+    def handle_tile_discovered(bot: EklipZBot, tile):
         logbook.info(f"EH: Tile discovered handler! Tile {repr(tile)}")
         bot.territories.needToUpdateAroundTiles.add(tile)
         if tile.isCity and tile.player != -1:
@@ -103,7 +108,7 @@ class BotEventHandlers:
         return None
 
     @staticmethod
-    def handle_tile_vision_change(bot, tile: Tile):
+    def handle_tile_vision_change(bot: EklipZBot, tile: Tile):
         logbook.info(f"EH: Tile vision change handler! Tile {repr(tile)}")
 
         bot.territories.needToUpdateAroundTiles.add(tile)
@@ -161,7 +166,7 @@ class BotEventHandlers:
         return None
 
     @staticmethod
-    def handle_army_moved(bot, army: Army):
+    def handle_army_moved(bot: EklipZBot, army: Army):
         tile = army.tile
         logbook.info(f"EH: Army Moved handler! Tile {repr(tile)}")
         bot.armies_moved_this_turn.append(tile)
@@ -177,7 +182,7 @@ class BotEventHandlers:
         return None
 
     @staticmethod
-    def clear_fog_armies_around(bot, enemyGeneral: Tile):
+    def clear_fog_armies_around(bot: EklipZBot, enemyGeneral: Tile):
 
         def fog_army_clear_func(tile: Tile):
             if not tile.visible and tile in bot.armyTracker.armies:

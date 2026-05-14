@@ -22,6 +22,7 @@ class TileIslandFlowRole:
         'borders_friendly',
         'borders_enemy',
         'are_all_borders_neutral',
+        'capacity',
     )
 
     def __init__(
@@ -32,6 +33,7 @@ class TileIslandFlowRole:
         borders_friendly: bool,
         borders_enemy: bool,
         are_all_borders_neutral: bool,
+        capacity: int = 100000
     ):
         self.island: 'TileIsland' = island
         self.is_neutral_sink_with_neut: bool = is_neutral_sink_with_neut
@@ -41,6 +43,7 @@ class TileIslandFlowRole:
         self.borders_friendly: bool = borders_friendly
         self.borders_enemy: bool = borders_enemy
         self.are_all_borders_neutral: bool = are_all_borders_neutral
+        self.capacity: int = capacity
 
     def is_neutral_sink(self, use_neutral_flow: bool) -> bool:
         """Convenience accessor — prefer the explicit fields for performance."""

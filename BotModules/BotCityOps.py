@@ -26,11 +26,16 @@ from StrategyModels import ExpansionPotential
 from ViewInfo import TargetStyle, PathColorer
 from Models.Move import Move
 from base.client.map import Player, Tile, MapBase
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotCityOps:
     @staticmethod
     def capture_cities(
-            bot,
+            bot: EklipZBot,
             negativeTiles: typing.Set[Tile],
             forceNeutralCapture: bool = False,
     ) -> typing.Tuple[Path | None, Move | None]:
@@ -414,7 +419,7 @@ class BotCityOps:
         return None, False
 
     @staticmethod
-    def did_player_just_take_fog_city(bot, player: int) -> bool:
+    def did_player_just_take_fog_city(bot: EklipZBot, player: int) -> bool:
         playerObj = bot._map.players[player]
         if playerObj.unexplainedTileDelta == 0:
             return False
@@ -427,7 +432,7 @@ class BotCityOps:
         return False
 
     @staticmethod
-    def get_enemy_cities_by_priority(bot, cutoffDistanceRatio=100.0) -> typing.List:
+    def get_enemy_cities_by_priority(bot: EklipZBot, cutoffDistanceRatio=100.0) -> typing.List:
         prioTiles = []
         if bot.dangerAnalyzer.fastestThreat is not None:
             if bot.dangerAnalyzer.fastestThreat.path.start.tile.isCity:
@@ -451,7 +456,7 @@ class BotCityOps:
         return prioTiles
 
     @staticmethod
-    def get_quick_kill_on_enemy_cities(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Path | None:
+    def get_quick_kill_on_enemy_cities(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Path | None:
         # Force recompile
         foundCap = None
         enemyCitiesOrderedByPriority = BotCityOps.get_enemy_cities_by_priority(bot)
@@ -706,7 +711,7 @@ class BotCityOps:
 
     @staticmethod
     def plan_city_capture(
-            bot,
+            bot: EklipZBot,
             targetCity: Tile,
             cityGatherPath: Path | None,
             allowGather: bool,
@@ -950,7 +955,7 @@ class BotCityOps:
         return None, None
 
     @staticmethod
-    def block_neutral_captures(bot, reason: str = ''):
+    def block_neutral_captures(bot: EklipZBot, reason: str = ''):
         BotCityCaptureControl.block_neutral_captures(bot, reason)
 
     @staticmethod
@@ -1069,7 +1074,7 @@ class BotCityOps:
 
     @staticmethod
     def should_allow_neutral_city_capture(
-            bot,
+            bot: EklipZBot,
             genPlayer: Player,
             forceNeutralCapture: bool,
             targetCity: Tile | None = None
@@ -1097,7 +1102,7 @@ class BotCityOps:
                 generalContribution = defTurns // 2
 
                 cityContribution = (defTurns - len(bot.city_capture_plan_tiles)) // 2
-                cityDefVal = generalContribution + cityContribution
+                cityDefVal = generalContribution + cityContribution - 2
                 if not bot.was_allowing_neutral_cities_last_turn:
                     cityDefVal -= 10
                 searchNegs = set()
@@ -1132,17 +1137,17 @@ class BotCityOps:
                 requiredDefenseArmy = risk + cityCost - cityDefVal
                 turns, defValue = bot.win_condition_analyzer.get_dynamic_turns_visible_defense_against([defTile], defTurns, asPlayer=bot.general.player, minArmy=requiredDefenseArmy, negativeTiles=searchNegs)
 
-            armyBonusDefense = 2 * max(0, defTurns - cycleLeft)
+            armyBonusDefense = 1 * max(0, defTurns - cycleLeft)
             hackToEnsureCity = 30 if bot.was_allowing_neutral_cities_last_turn and bot.targetPlayerObj.tileCount > 60 else 0
             defAfterCity = defValue + cityDefVal + armyBonusDefense
             if bot.opponent_tracker.even_or_up_on_cities(bot.targetPlayer):
                 if risk > defAfterCity + hackToEnsureCity and risk > 5:
                     bot.is_blocking_neutral_city_captures = True
-                    bot.viewInfo.add_stats_line(f'bypassing neut cities, danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) and risk > 5')
+                    bot.viewInfo.add_stats_line(f'bypassing neut cities, danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) and risk > 5, armyBonusDef {armyBonusDefense} (defTurns {defTurns}, cycleLeft {cycleLeft})')
                     return False
 
                 if bot.is_blocking_neutral_city_captures:
-                    bot.viewInfo.add_stats_line(f'bypassing neut cities due to is_blocking_neutral_city_captures {bot.is_blocking_neutral_city_captures}')
+                    bot.viewInfo.add_stats_line(f'bypassing neut cities due to is_blocking_neut_city_capt {bot.is_blocking_neutral_city_captures}')
                     return False
 
             if bot.defend_economy and (bot.targetPlayer == -1 or bot.opponent_tracker.even_or_up_on_cities(bot.targetPlayer)):
@@ -1150,9 +1155,9 @@ class BotCityOps:
                 return False
 
             if risk <= defAfterCity:
-                bot.viewInfo.add_stats_line(f'ALLOW neut cities, danger {risk} in {threatTurns} <= {defAfterCity} ({defValue} + cityDefVal {cityDefVal})')
+                bot.viewInfo.add_stats_line(f'ALLOW neut cities, danger {risk} in {threatTurns} <= {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) (defTurns {defTurns}, cycleLeft {cycleLeft})')
             else:
-                bot.viewInfo.add_stats_line(f'ALLOW neut cities DESPITE danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal})')
+                bot.viewInfo.add_stats_line(f'ALLOW neut cities DESPITE danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) (defTurns {defTurns}, cycleLeft {cycleLeft})')
 
         proactivelyTakeCity = BotCityOps.should_proactively_take_cities(bot, ) or forceNeutralCapture
         safeFromThreat = (
@@ -1205,7 +1210,7 @@ class BotCityOps:
         return False
 
     @staticmethod
-    def get_city_contestation_all_in_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> typing.Tuple[Move | None, int, int, typing.List[GatherTreeNode]]:
+    def get_city_contestation_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> typing.Tuple[Move | None, int, int, typing.List[GatherTreeNode]]:
         targets = list(bot.win_condition_analyzer.contestable_cities)
 
         negatives = defenseCriticalTileSet.copy()
@@ -1258,7 +1263,7 @@ class BotCityOps:
         return None, 0, 0, []
 
     @staticmethod
-    def get_city_preemptive_defense_move(bot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    def get_city_preemptive_defense_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if BotStateQueries.is_still_ffa_and_non_dominant(bot):
             return None
 

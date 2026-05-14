@@ -1,10 +1,15 @@
 import logbook
 
 from base.client.map import Tile
+import typing
+
+
+if typing.TYPE_CHECKING:
+    from bot_ek0x45 import EklipZBot
 
 class BotRepetition:
     @staticmethod
-    def detect_repetition_at_all(bot, turns=4, numReps=2) -> bool:
+    def detect_repetition_at_all(bot: EklipZBot, turns=4, numReps=2) -> bool:
         curTurn = bot._map.turn
         reps = 0
         prevMove = None
@@ -30,7 +35,7 @@ class BotRepetition:
         return False
 
     @staticmethod
-    def detect_repetition(bot, move, turns=4, numReps=2):
+    def detect_repetition(bot: EklipZBot, move, turns=4, numReps=2):
         if move is None:
             return False
         curTurn = bot._map.turn
@@ -49,7 +54,7 @@ class BotRepetition:
         return False
 
     @staticmethod
-    def detect_repetition_tile(bot, tile: Tile, turns=6, numReps=2):
+    def detect_repetition_tile(bot: EklipZBot, tile: Tile, turns=6, numReps=2):
         if tile is None:
             return False
         curTurn = bot._map.turn
@@ -66,13 +71,13 @@ class BotRepetition:
         return False
 
     @staticmethod
-    def move_half_on_repetition(bot, move, repetitionTurns, repCount=3):
+    def move_half_on_repetition(bot: EklipZBot, move, repetitionTurns, repCount=3):
         if BotRepetition.detect_repetition(bot, move, repetitionTurns, repCount):
             move.move_half = True
         return move
 
     @staticmethod
-    def dropped_move(bot, fromTile=None, toTile=None, movedHalf=None):
+    def dropped_move(bot: EklipZBot, fromTile=None, toTile=None, movedHalf=None):
         log = True
         lastMove = None
         if (bot._map.turn - 1) in bot.history.move_history:

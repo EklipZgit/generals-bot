@@ -2677,6 +2677,11 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
     #     rating = (path.value ** 0.5) / 5
     for t in path.tileList[1:]:
         if t.visible:
+            if t.player in friendlyPlayers:
+                if t.isGeneral or t.isCity:
+                    rating -= 1.0
+                if t.army == 1:
+                    rating -= 0.3
             continue
 
         if t.player == -1:
@@ -2773,7 +2778,10 @@ def find_optimal_expansion_path_to_move_first(
         thisVt = thisVal / thisTurns
         thisUncertainty = pathUncertaintyRatings[p]
 
-        if thisVt > maxVt or (thisVt == maxVt and thisUncertainty > maxUncertainty):
+
+        # if thisVt > maxVt or (thisVt == maxVt and thisUncertainty > maxUncertainty):   # TODO value per turn
+        # if thisUncertainty > maxUncertainty or (thisUncertainty == maxUncertainty and thisVt > maxVt):    # TODO uncertainty first
+        if thisUncertainty + thisVt > maxUncertainty + maxVt:    # TODO uncertainty mixed with v/t
             if p not in waitingPaths:
                 logbook.info(f'    path vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} > vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
                 path = p

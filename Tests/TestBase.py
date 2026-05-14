@@ -1778,11 +1778,29 @@ class TestBase(unittest.TestCase):
             cutoffTime=cutoffTime,
         )
 
+        self.assertNoDuplicateTileUse(optCollection.flow_plans)
+
         logbook.info(f'full islands + expand completed in {time.perf_counter() - start:.5f}s in total.')
 
         if debugMode and shouldRender:
             self.render_flow_expansion_debug(expander, optCollection, renderAll, turnsLimit=turns)
         return expander, optCollection
+
+    def assertNoDuplicateTileUse(self, opts: typing.List[GatherCapturePlan]):
+        visited = set()
+        dupes = []
+        for plan in opts:
+            dupesThisSet = []
+            for t in plan.tileSet:
+                if t in visited:
+                    dupesThisSet.append(t)
+
+            visited.update(plan.tileSet)
+            if dupesThisSet:
+                dupes.append(f'plan {plan} duplicated {'|'.join([str(t) for t in dupesThisSet])}')
+
+        if len(dupes) > 0:
+            self.fail(f'found {len(dupes)} plans with duplicated tiles in plan options:\r\n  {"\r\n  ".join(dupes)}')
 
     def render_flow_expansion_debug(self, expander: ArmyFlowExpanderV2, optCollection: FlowExpansionPlanOptionCollection, renderAll: bool, turnsLimit: int = 100):
         map = expander.map
@@ -1821,13 +1839,26 @@ class TestBase(unittest.TestCase):
             #         visited.add(plan)
             #         bestOpts.append(plan)
 
+        targetPlayer = next(iter(map.players), lambda p: p.team == expander.target_team).index
+        cumulative = 0.0
+        cumulativeTurns = 0
+        largestGath = 0
+        enCapped = 0
+        neutCapped = 0
+        for opt in optCollection.flow_plans:
+            cumulative += opt.econValue
+            cumulativeTurns += opt.length
+            largestGath = max(opt.gathered_army, largestGath)
+            enCapped += sum(1 if t.player == targetPlayer else 0 for t in opt.tileList)
+            neutCapped += sum(1 if t.player == -1 else 0 for t in opt.tileList)
+
         for bestOpt in bestOpts:
             vi.add_info_line(str(bestOpt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in bestOpt.tileList))
-            if enemyGeneral is not None:
-                ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, enemyGeneral.player, vi)
-        vi.add_info_line('-------- v all options --------')
+            ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, targetPlayer, vi)
 
-        for opt in optCollection.flow_plans:
+        vi.add_info_line(f'-- turns: {cumulativeTurns}/{turnsLimit}, econ {cumulative:.3f}, enCaps: {enCapped}, neutCaps: {neutCapped}, optCount: {len(optCollection.flow_plans)}, largestGath: {largestGath} --')
+
+        for opt in sorted(optCollection.flow_plans, key=lambda opt: (opt.econValue / opt.length, opt.length), reverse=True):
             vi.add_info_line(str(opt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in opt.tileList))
             if enemyGeneral is not None:
                 ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, opt, general.player, enemyGeneral.player, vi)
@@ -2084,6 +2115,7 @@ class TestBase(unittest.TestCase):
         addlPath = None
         if additionalPath is not None:
             addlPath = Path.from_string(map, additionalPath)
+            addlPath.start.tile.lastMovedTurn = map.turn - 1
 
         if enTile is None:
             enTile = max(map.get_all_tiles(), key=lambda t: t.army if t.player == enemyGeneral.player else 0)
@@ -2126,6 +2158,7 @@ class TestBase(unittest.TestCase):
 
         actualPaths = []
         for path in paths:
+            path.start.tile.lastMovedTurn = map.turn - 1
             if path.tail.tile not in targets and justCityAndGeneralThreats:
                 continue
             actualPaths.append(path)
@@ -2163,12 +2196,16 @@ class TestBase(unittest.TestCase):
             enemyGeneral,
             useDebugLogging)
 
-        threatTile = threats[0].path.start.tile
+        threatTile: Tile = threats[0].path.start.tile
+        threatTile.lastMovedTurn = map.turn
 
         blockingTiles = interceptor.get_intercept_blocking_tiles_for_split_hinting(threatTile, {threatTile: threats})
 
         if len(blockingTiles) > 0:
             logbook.info(f'for threat {str(threatTile)}, blocking tiles were {"  ".join([str(v) for v in blockingTiles.values()])}')
+
+        if len(threats) == 0:
+            raise AssertionError('No threat found')
 
         plan = interceptor.get_interception_plan(threats, turnsLeftInCycle=turnsLeftInCycle, otherThreatsBlockingTiles=blockingTiles)
 

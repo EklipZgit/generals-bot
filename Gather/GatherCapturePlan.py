@@ -5,6 +5,7 @@ from collections import deque
 
 import logbook
 
+from ArmyAnalyzer import ArmyAnalyzer
 from Interfaces.TilePlanInterface import PathMove
 from Models import GatherTreeNode, Move
 from Gather import GatherDebug, GatherPrune
@@ -281,19 +282,20 @@ class GatherCapturePlan(TilePlanInterface):
 
     @staticmethod
     def build_from_root_nodes(
-            map: MapBase,
-            # logEntries: typing.List[str],
-            rootNodes: typing.List[GatherTreeNode],
-            negativeTiles: typing.Set[Tile] | None,
-            searchingPlayer: int,
-            onlyCalculateFriendlyArmy=False,
-            priorityMatrix: MapMatrixInterface[float] | None = None,
-            includeGatherPriorityAsEconValues: bool = False,
-            includeCapturePriorityAsEconValues: bool = True,
-            captures: typing.Set[Tile] | None = None,
-            viewInfo=None,
-            cloneNodes: bool = False,
-            tilesToHalf: TileSet | None = None,
+        map: MapBase,
+        # logEntries: typing.List[str],
+        rootNodes: typing.List[GatherTreeNode],
+        negativeTiles: typing.Set[Tile] | None,
+        searchingPlayer: int,
+        onlyCalculateFriendlyArmy=False,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
+        includeGatherPriorityAsEconValues: bool = False,
+        includeCapturePriorityAsEconValues: bool = True,
+        captures: typing.Set[Tile] | None = None,
+        viewInfo=None,
+        cloneNodes: bool = False,
+        tilesToHalf: TileSet | None = None,
+        intergeneral_analysis: ArmyAnalyzer | None = None,
     ) -> GatherCapturePlan:
         """
         Returns the plan. The root nodes must be connected to all their children, but do not need the correct army / econ values (will be recalculated).
@@ -362,6 +364,7 @@ class GatherCapturePlan(TilePlanInterface):
                 onlyCalculateFriendlyArmy,
                 priorityMatrix,
                 includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+                intergeneral_analysis=intergeneral_analysis,
             )
 
         # find the leaves and build the trunk values.
@@ -520,14 +523,15 @@ class GatherCapturePlan(TilePlanInterface):
 
     @staticmethod
     def _include_capture_estimation_in_calculation(
-            plan: GatherCapturePlan,
-            captures: typing.Set[Tile],
-            searchingPlayer: int,
-            frPlayers: typing.List[int],
-            negativeTiles: typing.Set[Tile] | None = None,
-            onlyCalculateFriendlyArmy=False,
-            priorityMatrix: MapMatrixInterface[float] | None = None,
-            includeCapturePriorityAsEconValues: bool = True
+        plan: GatherCapturePlan,
+        captures: typing.Set[Tile],
+        searchingPlayer: int,
+        frPlayers: typing.List[int],
+        negativeTiles: typing.Set[Tile] | None = None,
+        onlyCalculateFriendlyArmy=False,
+        priorityMatrix: MapMatrixInterface[float] | None = None,
+        includeCapturePriorityAsEconValues: bool = True,
+        intergeneral_analysis: ArmyAnalyzer | None = None,
     ):
         """
         Adds captures to the value of the plan.

@@ -76,7 +76,7 @@ class CityScoreData(object):
     def get_weighted_neutral_value(self, log: bool = True) -> float:
         totalScore = self.city_defensability_score * self.city_relevance_score * self.city_expandability_score * self.city_general_defense_score
         totalScore = totalScore
-        if log:
+        if log and DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(f"cityScore neut {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, ex{self.city_expandability_score:.4f}, def{self.city_defensability_score:.4f}, gdef{self.city_general_defense_score:.4f}, tot{totalScore:.3f}")
         return totalScore
 
@@ -84,7 +84,7 @@ class CityScoreData(object):
         totalScore = self.city_defensability_score * self.city_relevance_score
         if not self.tile.discovered:
             totalScore = totalScore / 2
-        if log:
+        if log and DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(f"cityScore enemy {self.tile.x},{self.tile.y}: re{self.city_relevance_score:.4f}, def{self.city_defensability_score:.4f}, tot{totalScore:.3f}")
         return totalScore
 
@@ -106,6 +106,7 @@ class CityAnalyzer(object):
         self.cities_in_play: typing.Set[Tile] = set()
         """Contains cities that are not further from the enemy general than our general is from the enemy general.
         These are cities that are relevant for defensive spanning trees and central defense point calculations."""
+        self.last_scan_turn: int = -1
 
         self.large_neutral_negatives: typing.Set[Tile] = set()
         """Contains large negative neutral tiles (value / distance to your land > 4; equivalent to 2 econ per turn for capturing them and returning.)"""
@@ -122,10 +123,13 @@ class CityAnalyzer(object):
         return state
 
     def __setstate__(self, state):
+        if "last_scan_turn" not in state:
+            state["last_scan_turn"] = -1
         self.__dict__.update(state)
         self.map = None
 
     def re_scan(self, board_analysis: BoardAnalyzer):
+        self.last_scan_turn = self.map.turn
         self.city_scores: typing.Dict[Tile, CityScoreData] = {}
         self.player_city_scores: typing.Dict[Tile, CityScoreData] = {}
         self.enemy_city_scores: typing.Dict[Tile, CityScoreData] = {}

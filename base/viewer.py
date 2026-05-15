@@ -426,8 +426,9 @@ class GeneralsViewer(object):
                 try:
                     self._drawGrid()
                 except Exception as ex:
-                    logbook.error(f'VIEWER ERROR {traceback.format_exc()}')
-                    print(traceback.format_exc())
+                    errorMessage = f'VIEWER ERROR {traceback.format_exc()}'
+                    logbook.error(errorMessage)
+                    self._event_queue.put(('ERROR', errorMessage))
 
                 self.last_render_time = start
 
@@ -1243,9 +1244,8 @@ class GeneralsViewer(object):
                 self.draw_square(tile, 1, r, g, b, 255, self.square_inner_3)
 
     def draw_division_borders(self):
-        for (divisionMatrix, (r, g, b), alpha) in self._viewInfo._divisions:
-            divisionLine = DirectionalShape(self.get_line(r, g, b, width=2), rotateInitial=90)
-
+        for (divisionMatrix, (r, g, b), alpha, width) in self._viewInfo._divisions:
+            divisionLine = DirectionalShape(self.get_line(r, g, b, width=width), rotateInitial=90)
             def draw_border_func(tile):
                 for move in tile.movable:
                     if move.isNotPathable:
@@ -1534,16 +1534,39 @@ class GeneralsViewer(object):
         # Sort Scores by score then by the turn they left the game if they are dead.
 
         statsSorted = []
+        skippedTeams = []
         for team in self._map.unique_teams:
             # logbook.info(f'starting stats for team: {team}')
             if team >= len(self._viewInfo.team_cycle_stats):
-                logbook.info(f'skipped {team} ??')
+                skippedTeams.append(team)
                 continue
             stats = self._map.get_team_stats_by_team_id(team)
             # logbook.info(f'stats for team {team}: {repr(stats)}')
             cycleData = self._viewInfo.team_cycle_stats[team]
             # logbook.info(f'cycleData for team {team}: {repr(cycleData)}')
             statsSorted.append((stats, cycleData))
+
+        if skippedTeams:
+            errorMessage = (
+                f'VIEWER SCORE ROW missing opponent tracker cycle stats on turn {self._map.turn}: '
+                f'skippedTeams {skippedTeams}, unique_teams {self._map.unique_teams}, '
+                f'team_cycle_stats length {len(self._viewInfo.team_cycle_stats)}, '
+                f'team_last_cycle_stats length {len(self._viewInfo.team_last_cycle_stats)}, '
+                f'player_fog_risks length {len(self._viewInfo.player_fog_risks)}, '
+                f'players {len(self._map.players)}')
+            logbook.error(errorMessage)
+            self._event_queue.put(('ERROR', errorMessage))
+            for team in skippedTeams:
+                stats = self._map.get_team_stats_by_team_id(team)
+                statsSorted.append((stats, None))
+
+        if len(statsSorted) == 0:
+            statsSorted = []
+            for player in self._map.players:
+                if player.dead:
+                    continue
+                stats = self._map.get_team_stats_by_team_id(player.team)
+                statsSorted.append((stats, None))
 
         statsSorted = list(sorted(statsSorted, key=lambda s: (s[0].score, self._map.players[s[1].players[0]].leftGameTurn if s[1] is not None else False), reverse=True))
 
@@ -1552,12 +1575,13 @@ class GeneralsViewer(object):
         for teamScore, teamCycleData in statsSorted:
             if teamCycleData is None:
                 logbook.info(f'Team {teamScore.teamId} had None teamCycleData in viewer...')
-                continue
-            teamPlayers = []
+                teamPlayers = [player for player in self._map.players if player.team == teamScore.teamId]
+            else:
+                teamPlayers = []
 
-            for p in teamCycleData.players:
-                teamPlayer = self._map.players[p]
-                teamPlayers.append(teamPlayer)
+                for p in teamCycleData.players:
+                    teamPlayer = self._map.players[p]
+                    teamPlayers.append(teamPlayer)
 
             team_pos_left = pos_left
 
@@ -1630,11 +1654,22 @@ class GeneralsViewer(object):
                 if teamPlayer is None:
                     continue
 
-                if playerIndexInTeam == 0:
+                if playerIndexInTeam == 0 and teamCycleData is not None:
                     approxArmy = teamCycleData.approximate_fog_city_army + teamCycleData.approximate_fog_army_available_total
                     gathMoves = teamCycleData.moves_spent_gathering_fog_tiles + teamCycleData.moves_spent_gathering_visible_tiles
                     capMoves = teamCycleData.moves_spent_capturing_fog_tiles + teamCycleData.moves_spent_capturing_visible_tiles
-                    risk = self._viewInfo.player_fog_risks[teamPlayer.index]
+                    try:
+                        risk = self._viewInfo.player_fog_risks[teamPlayer.index]
+                    except:
+                        logbook.error(
+                            f'VIEWER ERROR rendering opponent tracker risk for turn {self._map.turn}, '
+                            f'team {teamCycleData.team}, player {teamPlayer.index}, '
+                            f'player_fog_risks length {len(self._viewInfo.player_fog_risks)}, '
+                            f'team_cycle_stats length {len(self._viewInfo.team_cycle_stats)}, '
+                            f'team_last_cycle_stats length {len(self._viewInfo.team_last_cycle_stats)}, '
+                            f'unique_teams {self._map.unique_teams}, players {len(self._map.players)}')
+                        logbook.error(traceback.format_exc())
+                        raise
 
                     # only draw team score data once
                     playerCycleSubtext = f"{str(risk).ljust(3)}  g:{teamCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamCycleData.tiles_gained:2d}  Δc:{teamCycleData.cities_gained:d}   a:{teamCycleData.approximate_fog_army_available_total:3d}/c:{teamCycleData.approximate_fog_city_army:2d} (tru:{teamCycleData.approximate_fog_army_available_total_true:3d}), cum {approxArmy}"
@@ -1644,7 +1679,18 @@ class GeneralsViewer(object):
                     self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                       (team_pos_left + 3, pos_top + 2 + 4.8 * self._medFont.get_height()))
 
-                    teamLastCycleData = self._viewInfo.team_last_cycle_stats[teamCycleData.team]
+                    try:
+                        teamLastCycleData = self._viewInfo.team_last_cycle_stats[teamCycleData.team]
+                    except:
+                        logbook.error(
+                            f'VIEWER ERROR rendering opponent tracker last cycle stats for turn {self._map.turn}, '
+                            f'team {teamCycleData.team}, player {teamPlayer.index}, '
+                            f'player_fog_risks length {len(self._viewInfo.player_fog_risks)}, '
+                            f'team_cycle_stats length {len(self._viewInfo.team_cycle_stats)}, '
+                            f'team_last_cycle_stats length {len(self._viewInfo.team_last_cycle_stats)}, '
+                            f'unique_teams {self._map.unique_teams}, players {len(self._map.players)}')
+                        logbook.error(traceback.format_exc())
+                        raise
 
                     if teamLastCycleData is not None:
                         approxArmy = teamLastCycleData.approximate_fog_city_army + teamLastCycleData.approximate_fog_army_available_total

@@ -12,6 +12,7 @@ from ArmyTracker import ArmyTracker
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotComms import BotComms
+from BotModules.BotCentralDefense import BotCentralDefense
 
 from Models import ContestData
 from MapMatrix import TileSet, MapMatrix, MapMatrixInterface
@@ -431,7 +432,7 @@ class BotTargeting:
             BotComms.send_teammate_communication(bot, f"I will be targeting {bot._map.usernames[bot.targetPlayer]} over here.", maxTile, cooldown=50, detectOnMessageAlone=True)
 
         with bot.perf_timer.begin_move_event('rebuilding intergeneral_analysis'):
-            bot.board_analysis.rebuild_intergeneral_analysis(bot.targetPlayerExpectedGeneralLocation, bot.armyTracker.valid_general_positions_by_player)
+            BotCentralDefense.rebuild_intergeneral_analysis_for_central_defense(bot)
 
         if bot.teammate_path is not None:
             manhattanDist = abs(bot.teammate_general.x - bot.general.x) + abs(bot.teammate_general.y - bot.general.y)

@@ -76,6 +76,8 @@ class ArmyTracker(object):
         self.unrecaptured_emergence_events: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
         """The set of emergence events from which an army emerged and the target player still owns the tile. ONLY counts when we didn't find an obvious emergence path for the player."""
 
+        self.discovered_enemy_land_connector_tiles: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
+
         self.uneliminated_emergence_event_city_perfect_info: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
         """Whether a given emergence event had perfect city info or not."""
 
@@ -160,6 +162,9 @@ class ArmyTracker(object):
         self.notify_unresolved_army_emerged = []
         self.notify_army_moved = []
         self.opponent_tracker = None
+
+        if 'discovered_enemy_land_connector_tiles' not in self.__dict__:
+            self.discovered_enemy_land_connector_tiles = [set() for player in self.map.players]
 
     # distMap used to determine how to move armies under fog
     def scan_movement_and_emergences(
@@ -247,7 +252,7 @@ class ArmyTracker(object):
 
         for army in self.armies.values():
             if army.tile.visible:
-                logbook.info(f'updating {army}  last seen turn to {self.map.turn}')
+                # logbook.info(f'updating {army}  last seen turn to {self.map.turn}')
                 army.last_seen_turn = self.map.turn
 
         for player in self.map.players:
@@ -2813,6 +2818,9 @@ class ArmyTracker(object):
             if tile.delta.gainedSight and tile.delta.oldOwner == tile.player:
                 # We just walked up and now see this tile; the enemy already held it before.
                 # This is NOT a fog-emergence event and tells us nothing new about their general location.
+                if SearchUtils.any_where(tile.movable, lambda t: not t.visible):
+                    self.discovered_enemy_land_connector_tiles[tile.player].add(tile)
+                    reFogLandPlayers.add(tile.player)
                 continue
 
             skip = False
@@ -3708,6 +3716,27 @@ class ArmyTracker(object):
         # with self.perf_timer.begin_move_event(f'ArmyTracker build_network_x_steiner_tree p{player} (num banned {len(bannedTileList)}, required {len(requiredTiles)})'):
         #     connectedTiles = GatherSteiner.build_network_x_steiner_tree(self.map, requiredTiles, bannedTiles=bannedTiles)
         self.player_connected_tiles[player] = connectedSet
+        for tile in list(self.discovered_enemy_land_connector_tiles[player]):
+            if tile.player != player or not SearchUtils.any_where(tile.movable, lambda t: not t.visible):
+                self.discovered_enemy_land_connector_tiles[player].discard(tile)
+                continue
+            if tile in connectedSet or len(connectedSet) == 0:
+                continue
+
+            pathToConnectedLand = SearchUtils.breadth_first_find_queue(
+                self.map,
+                [tile],
+                lambda t, _1, _2: t in connectedSet,
+                noNeutralCities=True,
+                skipTiles=bannedTiles,
+                noLog=True)
+            if pathToConnectedLand is None:
+                continue
+
+            for pathTile in pathToConnectedLand.tileList:
+                if pathTile not in connectedSet:
+                    connectedSet.add(pathTile)
+
         # TODO this was just bad, why did I add it?
         # if self.map.players[player].cityCount == 1:
         #     with self.perf_timer.begin_move_event(f'Fog land build add_emergence_around_minimum_connected_tree p{player}'):

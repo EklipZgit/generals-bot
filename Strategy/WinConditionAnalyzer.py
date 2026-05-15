@@ -480,12 +480,12 @@ class WinConditionAnalyzer(object):
         fogRiskValue = value + fogVal
 
         if fogRiskValue > bestValue:
-            if not noLog:
+            if not noLog and DebugHelper.is_debug_or_unit_test_mode():
                 logbook.info(f'>> RAW gather attack {fogRiskValue} in {inTurns}, > best {bestValue}')
             bestValue = fogRiskValue
             bestPlan = gatherNodes
             bestFogRisk = fogVal
-        elif not noLog:
+        elif not noLog and DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(f'<  RAW gather attack {fogRiskValue} in {inTurns}, < best {bestValue}')
 
         prunedGatherTurns, prunedValue, prunedGatherNodes = Gather.prune_mst_to_max_army_per_turn_with_values(
@@ -502,12 +502,12 @@ class WinConditionAnalyzer(object):
         prunedFogRiskValue = prunedValue + fogVal
 
         if prunedFogRiskValue > bestValue:
-            if not noLog:
+            if not noLog and DebugHelper.is_debug_or_unit_test_mode():
                 logbook.info(f'>> PRUNE + FOG gather attack {prunedFogRiskValue} in {inTurns}, > best {bestValue}')
             bestValue = prunedFogRiskValue
             bestPlan = prunedGatherNodes
             bestFogRisk = fogVal
-        elif not noLog:
+        elif not noLog and DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(f'<  PRUNE + FOG gather attack {prunedFogRiskValue} in {inTurns}, < best {bestValue}')
 
         attackPathRiskVal = 0
@@ -519,17 +519,17 @@ class WinConditionAnalyzer(object):
             attackPathRiskVal += addlRisk
 
             if attackPathRiskVal > bestValue:
-                if not noLog:
+                if not noLog and DebugHelper.is_debug_or_unit_test_mode():
                     logbook.info(f'>> PATH + FOG {attackPathRiskVal} in {inTurns}, > best {bestValue}')
                 bestValue = attackPathRiskVal
                 bestPlan = fakeGathNodes
                 bestFogRisk = addlRisk
-            elif not noLog:
+            elif not noLog and DebugHelper.is_debug_or_unit_test_mode():
                 logbook.info(f'<  PATH + FOG {attackPathRiskVal} in {inTurns}, < best {bestValue}')
-        elif not noLog:
+        elif not noLog and DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(f'<  NO MAX PATH FOUND')
 
-        if not noLog:
+        if not noLog and DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(f'concluded get_approximate_attack_against, value {fogRiskValue} or {prunedFogRiskValue} or {attackPathRiskVal}')
 
         plan = Gather.GatherCapturePlan.build_from_root_nodes(
@@ -935,7 +935,8 @@ class WinConditionAnalyzer(object):
 
         result = self.opponent_tracker.get_approximate_fog_army_risk(asPlayer, inTurns=turnsLeft) - fogValue.value
         distPenalty = max(0, 8 - turnsLeft)
-        logbook.info(f'get_additional_fog_gather_risk fogValue {fogValue.value}, numFogTiles {numFogTiles.value}, inTurns {turnsLeft} ({turnsUsed} used for attack of {inTurns}), result {result}')
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info(f'get_additional_fog_gather_risk fogValue {fogValue.value}, numFogTiles {numFogTiles.value}, inTurns {turnsLeft} ({turnsUsed} used for attack of {inTurns}), result {result}')
         if numFogTiles.value > inTurns // 7 + 1:
             return max(0, result - distPenalty)
 
@@ -1019,7 +1020,8 @@ class WinConditionAnalyzer(object):
         for tile in tiles:
             startTiles[tile] = ((0, 0), 0)
 
-        logbook.info(f'Looking for max path to fog from {str(tiles)}')
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info(f'Looking for max path to fog from {str(tiles)}')
         path = SearchUtils.breadth_first_dynamic_max(
             self.map,
             startTiles,

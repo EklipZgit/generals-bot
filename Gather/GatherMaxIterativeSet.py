@@ -181,7 +181,8 @@ def _get_single_line_iterative_starter_max_set(
         useTrueValueGathered,
         valueFunc,
         pathValueFunc):
-    logEntries.append(f"DUE TO SMALL SEARCH START TILE COUNT {len(startTilesDict)}, FALLING BACK TO FINDING AN INITIAL MAX-VALUE-PER-TURN PATH FOR {remainingTurns} (fullTurns {fullTurns})")
+    if DebugHelper.is_debug_or_unit_test_mode():
+        logEntries.append(f"DUE TO SMALL SEARCH START TILE COUNT {len(startTilesDict)}, FALLING BACK TO FINDING AN INITIAL MAX-VALUE-PER-TURN PATH FOR {remainingTurns} (fullTurns {fullTurns})")
     #
     # validTupleIndexes = []
     #
@@ -239,7 +240,8 @@ def _get_single_line_iterative_starter_max_set(
         logEntries.append(f'didnt find a max path searching to startTiles {"  ".join([str(tile) for tile in startTilesDict])}?')
         return 0, []
     else:
-        logEntries.append(f'Initial vt path {valuePerTurnPath}')
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logEntries.append(f'Initial vt path {valuePerTurnPath}')
 
     if GatherDebug.USE_DEBUG_ASSERTS:
         vis = set()
@@ -886,7 +888,8 @@ def _knapsack_max_set_gather_iterative_prune(
             turnsSoFar = totalTurns
 
     finally:
-        logbook.info('\n'.join(logEntries))
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info('\n'.join(logEntries))
 
     return bestVal, bestSet
 

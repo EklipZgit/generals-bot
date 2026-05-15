@@ -1351,24 +1351,25 @@ class ArmyFlowExpanderV2:
                 return 0.0
             return contribution.sort_score / max(depth + 1, 1)
 
-        bfs_queue: list[tuple[float, int, int, int, IslandFlowNode]] = []
+        bfs_queue: list[tuple[float, int, int, int, int, IslandFlowNode]] = []
         bfs_sequence = 1
         initial_depth = friendly_node.island.tile_count - 1
         heapq.heappush(
             bfs_queue,
-            (-_get_gather_queue_priority(friendly_node, initial_depth), initial_depth, friendly_node.island.unique_id, bfs_sequence, friendly_node)
+            (-_get_gather_queue_priority(friendly_node, initial_depth), initial_depth, friendly_node.island.unique_id, bfs_sequence, 0, friendly_node)
         )
         bfs_visited: set[int] = set()
         while bfs_queue:
-            _, depth, _, _, node_bfs = heapq.heappop(bfs_queue)
+            _, depth, _, _, num_friendly_1s_traversed, node_bfs = heapq.heappop(bfs_queue)
             iid = node_bfs.island.unique_id
             if DebugHelper.is_debug_or_unit_test_mode():
                 logbook.warning(
                     f"FE_DIAG_ORDER_GATHER_BFS_POP "
                     f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
                     f"candidate={self._diag_island_summary(node_bfs.island)} depth={depth} "
+                    f"specialPenalty={num_friendly_1s_traversed} "
                     f"priority={_get_gather_queue_priority(node_bfs, depth):.4f} "
-                    f"queued={[n.island.unique_id for _, _, _, _, n in bfs_queue]} visited={sorted(bfs_visited)}"
+                    f"queued={[n.island.unique_id for _, _, _, _, _, n in bfs_queue]} visited={sorted(bfs_visited)}"
                 )
             if iid in bfs_visited:
                 continue
@@ -1435,6 +1436,8 @@ class ArmyFlowExpanderV2:
                 # is implicit in the army movement mechanics, not subtracted here.
 
                 tile_contribution = self._get_friendly_tile_gather_contribution(tile)
+                if tile.isGeneral or tile.isCity:
+                    tile_contribution = max(0, tile_contribution - num_friendly_1s_traversed)
 
                 current_gathered_army += tile_contribution
 
@@ -1472,17 +1475,23 @@ class ArmyFlowExpanderV2:
                 src = edge.source_flow_node
                 if src.island.team == self.team and src.island.unique_id not in bfs_visited:
                     next_depth = depth + src.island.tile_count
+                    next_num_friendly_1s_traversed = num_friendly_1s_traversed + sum(
+                        1
+                        for tile in node_bfs.island.tile_set
+                        if self._get_tile_army(tile) <= 1
+                    )
                     bfs_sequence += 1
                     heapq.heappush(
                         bfs_queue,
-                        (-_get_gather_queue_priority(src, next_depth), next_depth, src.island.unique_id, bfs_sequence, src)
+                        (-_get_gather_queue_priority(src, next_depth), next_depth, src.island.unique_id, bfs_sequence, next_num_friendly_1s_traversed, src)
                     )
                     if DebugHelper.is_debug_or_unit_test_mode():
                         logbook.warning(
                             f"FE_DIAG_ORDER_GATHER_BFS_ENQUEUE "
                             f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
                             f"from={node_bfs.island.unique_id} src={self._diag_island_summary(src.island)} "
-                            f"depth={next_depth} priority={_get_gather_queue_priority(src, next_depth):.4f}"
+                            f"depth={next_depth} specialPenalty={next_num_friendly_1s_traversed} "
+                            f"priority={_get_gather_queue_priority(src, next_depth):.4f}"
                         )
 
         return lookup

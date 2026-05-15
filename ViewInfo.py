@@ -52,7 +52,7 @@ class PathColorer(object):
 class ViewInfo(object):
     def __init__(self, countHist, map: MapBase):
         # list of true/false matrixes and the color to color the border
-        self._divisions: typing.List[typing.Tuple[typing.Container, typing.Tuple[int, int, int], int]] = []
+        self._divisions: typing.List[typing.Tuple[typing.Container, typing.Tuple[int, int, int], int, int]] = []
         self._zones: typing.List[typing.Tuple[typing.Container, typing.Tuple[int, int, int], int]] = []
         self.map: MapBase = map
         # Draws the red target circles
@@ -213,8 +213,8 @@ class ViewInfo(object):
         logbook.info(statsLines)
         self.statsLines.extend(statsLines.splitlines())
 
-    def add_map_division(self, divisionMatrix: typing.Container[Tile] | MapMatrixSet, color: typing.Tuple[int, int, int], alpha: int = 128):
-        self._divisions.append((divisionMatrix, color, alpha))
+    def add_map_division(self, divisionMatrix: typing.Container[Tile] | MapMatrixSet, color: typing.Tuple[int, int, int], alpha: int = 128, thickness: int = 2):
+        self._divisions.append((divisionMatrix, color, alpha, thickness))
 
     def add_map_zone(self, zoneMatrix: typing.Container[Tile] | MapMatrixSet, color: typing.Tuple[int, int, int], alpha: int = 15):
         """Note this doesn't do pure alpha...?"""

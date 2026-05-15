@@ -388,6 +388,7 @@ class TileIslandBuilder(object):
     def update_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
         logbook.info(f'update_tile_islands starting (turn={self.map.turn})')
         start = time.perf_counter()
+        shouldLogDebugUpdate = self.log_debug or self.use_debug_asserts or DebugHelper.is_debug_or_unit_test_mode()
 
         self._team_stats_by_team_id = self.map.get_team_stats_lookup_by_team_id()
         self._team_stats_by_player = [self._team_stats_by_team_id[p.team] for p in self.map.players]
@@ -425,6 +426,10 @@ class TileIslandBuilder(object):
                     else:
                         continue
                 else:
+                    if tile in self.map.pathable_tiles and not tile.isObstacle:
+                        changedTiles.append(tile)
+                        noIslandChangedTiles.add(tile)
+                        affectedTeams.add(self.teams[tile.player])
                     continue
 
             existingIsland = self.tile_island_lookup.raw[tile.tile_index]
@@ -470,7 +475,7 @@ class TileIslandBuilder(object):
                                     oldPairedArmy = pairedIsland.sum_army
                                     existingIsland.refresh_cached_tile_metadata()
                                     pairedIsland.refresh_cached_tile_metadata()
-                                    if self.use_debug_asserts:
+                                    if shouldLogDebugUpdate:
                                         logbook.info(f'INTER sum_army update tile={tile} paired={pairedTile} existIsland={existingIsland} old={oldExistArmy} new={existingIsland.sum_army} | pairedIsland={pairedIsland} old={oldPairedArmy} new={pairedIsland.sum_army}')
                                     existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
                                     pairedIsland.sum_army_all_adjacent_friendly = max(pairedIsland.sum_army_all_adjacent_friendly, pairedIsland.sum_army)
@@ -545,7 +550,7 @@ class TileIslandBuilder(object):
                         # Shape is unchanged — patch army stats in-place and record for border refresh.
                         oldArmy = existingIsland.sum_army
                         existingIsland.refresh_cached_tile_metadata()
-                        if self.use_debug_asserts:
+                        if shouldLogDebugUpdate:
                             logbook.info(f'INPLACE sum_army update tile={tile} island={existingIsland} old={oldArmy} new={existingIsland.sum_army}')
                         existingIsland.sum_army_all_adjacent_friendly = existingIsland.sum_army
                         if existingIsland.full_island is not None:
@@ -562,14 +567,15 @@ class TileIslandBuilder(object):
                 # impactedTiles even though there is no prior leaf island to tear down.
                 noIslandChangedTiles.add(tile)
 
-        logbook.info(
-            f'update_tile_islands changedTiles ({len(changedTiles)}): '
-            + ' | '.join(
-                f'{t} pl={t.player}(was {t.delta.oldOwner}) army={t.army}(was {t.delta.oldArmy}) '
-                f'isObst={t.isObstacle} isCostlyNeut={t.isCostlyNeutral} disc={t.discovered} idx={t.tile_index}'
-                for t in changedTiles
+        if shouldLogDebugUpdate:
+            logbook.info(
+                f'update_tile_islands changedTiles ({len(changedTiles)}): '
+                + ' | '.join(
+                    f'{t} pl={t.player}(was {t.delta.oldOwner}) army={t.army}(was {t.delta.oldArmy}) '
+                    f'isObst={t.isObstacle} isCostlyNeut={t.isCostlyNeutral} disc={t.discovered} idx={t.tile_index}'
+                    for t in changedTiles
+                )
             )
-        )
 
         forceBorderSoloViolations = self._collect_force_border_solo_violating_leaf_islands()
         if forceBorderSoloViolations:
@@ -599,8 +605,6 @@ class TileIslandBuilder(object):
         if len(changedTiles) == 0 and len(impactedLeafIslands) == 0 and len(noIslandChangedTiles) == 0:
             if self.use_debug_asserts:
                 self.debug_verify_all_islands(context='update_tile_islands:no_changes', mode=mode)
-            complete = time.perf_counter() - start
-            logbook.info(f'islands updated in {complete:.5f}s')
             return
 
         for tile in changedTiles:
@@ -647,9 +651,10 @@ class TileIslandBuilder(object):
 
         if len(impactedTiles) == 0:
             if self.use_debug_asserts:
+                dbgStart = time.perf_counter()
                 self.debug_verify_all_islands(context='update_tile_islands:no_impacted_tiles', mode=mode)
-            complete = time.perf_counter() - start
-            logbook.info(f'islands updated in {complete:.5f}s')
+                dbgComplete = time.perf_counter() - dbgStart
+                logbook.info(f'debug_verify_all_islands completed in {dbgComplete:.5f}s')
             return
 
         priorLeafIslandByTile: typing.Dict[Tile, TileIsland] = {}
@@ -657,16 +662,17 @@ class TileIslandBuilder(object):
             for tile in island.tile_set:
                 priorLeafIslandByTile[tile] = island
 
-        logbook.info(
-            f'update_tile_islands impactedLeafIslands ({len(impactedLeafIslands)}): '
-            + ' | '.join(str(isl) for isl in impactedLeafIslands)
-        )
-        logbook.info(
-            f'update_tile_islands impactedTiles ({len(impactedTiles)}): '
-            + ' | '.join(str(t) for t in sorted(impactedTiles, key=lambda t: t.tile_index))
-        )
+        if shouldLogDebugUpdate:
+            logbook.info(
+                f'update_tile_islands impactedLeafIslands ({len(impactedLeafIslands)}): '
+                + ' | '.join(str(isl) for isl in impactedLeafIslands)
+            )
+            logbook.info(
+                f'update_tile_islands impactedTiles ({len(impactedTiles)}): '
+                + ' | '.join(str(t) for t in sorted(impactedTiles, key=lambda t: t.tile_index))
+            )
 
-        islandsBeforeUpdate: typing.Set[TileIsland] = set(self.all_tile_islands) if (self.log_debug or self.use_debug_asserts) else None
+        islandsBeforeUpdate: typing.Set[TileIsland] = set(self.all_tile_islands) if shouldLogDebugUpdate else None
 
         # Snapshot full_island parents before clearing child pointers so they remain
         # available as reuse candidates in _rebuild_leaf_islands_from_component.
@@ -786,23 +792,25 @@ class TileIslandBuilder(object):
             if team >= 0:
                 self._build_large_island_distances_for_team(team)
 
-        nullIslandNonObstTiles = [
-            t for t in self.map.tiles_by_index
-            if not t.isObstacle and self.tile_island_lookup.raw[t.tile_index] is None
-        ]
-        if nullIslandNonObstTiles:
-            logbook.info(
-                f'update_tile_islands POST-UPDATE: {len(nullIslandNonObstTiles)} non-obstacle tile(s) with None island: '
-                + ' | '.join(
-                    f'{t} pl={t.player} army={t.army} isCity={t.isCity} isGen={t.isGeneral} '
-                    f'isCostlyNeut={t.isCostlyNeutral} disc={t.discovered} idx={t.tile_index}'
-                    for t in nullIslandNonObstTiles
+        if shouldLogDebugUpdate:
+            nullIslandNonObstTiles = [
+                t for t in self.map.tiles_by_index
+                if not t.isObstacle and self.tile_island_lookup.raw[t.tile_index] is None
+            ]
+            if nullIslandNonObstTiles:
+                logbook.info(
+                    f'update_tile_islands POST-UPDATE: {len(nullIslandNonObstTiles)} non-obstacle tile(s) with None island: '
+                    + ' | '.join(
+                        f'{t} pl={t.player} army={t.army} isCity={t.isCity} isGen={t.isGeneral} '
+                        f'isCostlyNeut={t.isCostlyNeutral} disc={t.discovered} idx={t.tile_index}'
+                        for t in nullIslandNonObstTiles
+                    )
                 )
-            )
-        else:
-            logbook.info('update_tile_islands POST-UPDATE: all non-obstacle tiles have islands (no None)')
+            else:
+                logbook.info('update_tile_islands POST-UPDATE: all non-obstacle tiles have islands (no None)')
 
-        if self.log_debug or self.use_debug_asserts:
+        if shouldLogDebugUpdate:
+            dbgStart = time.perf_counter()
             droppedIslands = [isl for isl in islandsBeforeUpdate if isl not in self.all_tile_islands]
             newIslands = [isl for isl in self.all_tile_islands if isl not in islandsBeforeUpdate]
             borderAdjustedIslands = [isl for isl in refreshIslands if isl in islandsBeforeUpdate and isl not in impactedLeafIslands]
@@ -816,14 +824,13 @@ class TileIslandBuilder(object):
                 + ' | '.join(str(isl) for isl in borderAdjustedIslands)
             )
             self.debug_verify_all_islands(context='update_tile_islands', deletingIslandSet=impactedLeafIslands, mode=mode)
+            dbgEnd2 = time.perf_counter()
+            logbook.info(f'update_tile_islands debug_verify_all_islands: {dbgEnd2 - dbgStart:.4f}s')
 
         # Update cached values for next turn's delta detection
         for tile in self.map.tiles_by_index:
             self._prev_turn_army.raw[tile.tile_index] = tile.army
             self._prev_turn_player.raw[tile.tile_index] = tile.player
-
-        complete = time.perf_counter() - start
-        logbook.info(f'islands updated in {complete:.5f}s')
 
     def _get_leaf_islands_for_island(self, island: TileIsland) -> typing.List[TileIsland]:
         # Just return the single island that changed - the island splitting/merging

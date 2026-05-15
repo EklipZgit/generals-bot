@@ -1,3 +1,4 @@
+import contextlib
 import typing
 
 import BotModules as BM
@@ -1097,7 +1098,8 @@ class BotCityOps:
                 minFogDist = bot.distance_from_general(enFogged.tail.tile) + 1
             if threatTurns < minFogDist:
                 threatTurns = minFogDist
-            with bot.perf_timer.begin_move_event(f'approximate attack / def ({threatTurns}t)'):
+            attackDefTimer = bot.perf_timer.begin_move_event(f'approximate attack / def ({threatTurns}t)') if DebugHelper.is_debug_or_unit_test_mode() else contextlib.nullcontext()
+            with attackDefTimer:
                 defTurns = threatTurns
                 generalContribution = defTurns // 2
 
@@ -1117,7 +1119,8 @@ class BotCityOps:
                         for t in playerTilesNearCity:
                             cityDefVal += t.army - 1
                         searchNegs.update(playerTilesNearCity)
-                        bot.viewInfo.add_stats_line(f'new city capture plan tiles? cityDefVal {cityDefVal}')
+                        if DebugHelper.is_debug_or_unit_test_mode():
+                            bot.viewInfo.add_stats_line(f'new city capture plan tiles? cityDefVal {cityDefVal}')
                     else:
                         bot.viewInfo.add_stats_line(f'bypassing neut cities, 0 neut cities available :( cityDefVal {cityDefVal}')
                         return False

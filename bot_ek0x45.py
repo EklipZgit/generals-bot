@@ -41,6 +41,8 @@ from MctsLudii import MctsDUCT
 from Path import Path, MoveListPath
 from PerformanceTimer import PerformanceTimer
 from BoardAnalyzer import BoardAnalyzer
+from BotModules.BotCityCaptureControl import BotCityCaptureControl
+from BotModules.BotCentralDefense import BotCentralDefense
 from BotModules.BotCityOps import BotCityOps
 from BotModules.BotCombatOps import BotCombatOps
 from BotModules.BotComms import BotComms
@@ -242,6 +244,7 @@ class EklipZBot(object):
         self.shortest_path_to_target_player: Path | None = None
         self.defensive_spanning_tree: typing.Set[Tile] = set()
         """Main defensive spanning tree using cities_in_play (cities not further from enemy than our gen is)."""
+        self.last_central_defense_signature: tuple[int | None, tuple[tuple[int, int], ...]] | None = None
 
         self.friendly_city_spanning_tree: typing.Set[Tile] = set()
         """Secondary spanning tree connecting ALL friendly cities (for broader defensive coverage)."""
@@ -326,7 +329,7 @@ class EklipZBot(object):
         self.gather_include_distance_from_enemy_TERRITORY_as_negatives: int = 2  # 4 is bad, confirmed 217-279 in 500 game match after other previous
 
         # 2 and 3 both perform well, probably need to make the selection method more complicated as there are probably times it should use 2 and times it should use 3.
-        self.gather_include_distance_from_enemy_TILES_as_negatives: int = 3  # 3 is definitely too much, confirmed in lots of games. ACTUALLY SEEMS TO BE CONTESTED NOW 3 WON 500 GAME MATCH, won another 500 game match, using 3...
+        self.gather_include_distance_from_enemy_TILES_as_negatives: int = 2  # 3 is definitely too much, confirmed in lots of games. ACTUALLY SEEMS TO BE CONTESTED NOW 3 WON 500 GAME MATCH, won another 500 game match, using 3...
 
         self.gather_include_distance_from_enemy_general_as_negatives: float = 0.0
         self.gather_include_distance_from_enemy_general_large_map_as_negatives: float = 0.0
@@ -419,7 +422,7 @@ class EklipZBot(object):
         self.info_render_intercept_data: bool = False
         self.info_render_tile_islands: bool = False
         self.info_render_defense_spanning_tree: bool = True
-        self.info_render_friendly_city_spanning_tree: bool = True
+        self.info_render_friendly_city_spanning_tree: bool = False
         self.info_render_flow_expand: bool = True
 
     # STEP2: Stay in EklipZBotV2.py. Tiny object-display helper with no domain logic; keep on the outer bot shell unchanged.
@@ -645,7 +648,6 @@ class EklipZBot(object):
 
         if self.board_analysis.central_defense_point and self.board_analysis.intergeneral_analysis:
             centralPoint = self.board_analysis.central_defense_point
-            self.viewInfo.add_targeted_tile(centralPoint, TargetStyle.TEAL, radiusReduction=2)
             if (self.locked_launch_point is None or self.locked_launch_point == self.general) and self.board_analysis.intergeneral_analysis.bMap[centralPoint] < self.board_analysis.inter_general_distance:
                 # then the central defense point is further forward than our general, lock it as launch point.
                 self.viewInfo.add_info_line(f"locking in central launch point {str(centralPoint)}")
@@ -691,8 +693,7 @@ class EklipZBot(object):
         if not self.is_lag_massive_map or self._map.turn < 3 or (self._map.turn + 3) % 5 == 0:
             with self.perf_timer.begin_move_event('Inter-general analysis'):
                 # also rescans chokes, now.
-                cities_in_play = self.cityAnalyzer.cities_in_play if self.cityAnalyzer is not None else None
-                self.board_analysis.rebuild_intergeneral_analysis(self.targetPlayerExpectedGeneralLocation, self.armyTracker.valid_general_positions_by_player, cities_in_play)
+                BotCentralDefense.rebuild_intergeneral_analysis_for_central_defense(self)
 
         with self.perf_timer.begin_move_event('get_alt_en_gen_positions'):
             if not self.is_lag_massive_map or (self._map.turn + 2) % 5 == 0:
@@ -1106,6 +1107,11 @@ class EklipZBot(object):
                     defenseCriticalTileSet.add(t)
                     self.viewInfo.add_info_line(f'{t} added to defense crit from expPlan.blocking')
 
+        if self.win_condition_analyzer.defend_cities:
+            defenseCriticalTileSet.update(self.win_condition_analyzer.defend_cities)
+        if self.win_condition_analyzer.most_forward_defense_city:
+            defenseCriticalTileSet.add(self.win_condition_analyzer.most_forward_defense_city)
+
         # Note: defensive spanning trees are now calculated early in init_turn() for win condition analysis
         # This later calculation incorporates defenseCriticalTileSet and expansion plan blocking tiles
         if self._map.is_army_bonus_turn or self.defensive_spanning_tree is None:
@@ -1118,6 +1124,12 @@ class EklipZBot(object):
                 self.friendly_city_spanning_tree = BotDefense._get_defensive_spanning_tree(
                     self, defenseCriticalTileSet, BotGatherOps.get_gather_tiebreak_matrix(self), use_cities_in_play_only=False
                 )
+
+                self.viewInfo.add_targeted_tiles_with_legend(self.defensive_spanning_tree, 'DefenseTree', TargetStyle.WHITE, radiusReduction=-1)
+
+        BotCentralDefense.calculate_central_defense_point_if_needed(self)
+        if self.board_analysis.central_defense_point is not None:
+            self.viewInfo.add_targeted_tile(self.board_analysis.central_defense_point, TargetStyle.TEAL, radiusReduction=2)
 
         if kingKillPath is not None and threat.threatType == ThreatType.Kill:
             attackingWithSavePath = defenseSavePath is not None and defenseSavePath.start.tile == kingKillPath.start.tile
@@ -1281,7 +1293,7 @@ class EklipZBot(object):
                 playerTilesAdjEnemyVision = [x for x in filter(lambda threatAdjTile: threatAdjTile.player == self.general.player and threatAdjTile.army > annoyingTile.army // 2 and threatAdjTile.army > 1, annoyingTile.movable)]
                 if len(playerTilesAdjEnemyVision) > 0:
                     largestAdjTile = max(playerTilesAdjEnemyVision, key=lambda myTile: myTile.army)
-                    if largestAdjTile and (not largestAdjTile.isGeneral or largestAdjTile.army + 1 > annoyingTile.army):
+                    if largestAdjTile and (largestAdjTile.army - 1 > annoyingTile.army):
                         nukeMove = Move(largestAdjTile, annoyingTile)
                         self.info(f'Nuking general-adjacent vision tile {str(nukeMove)}, targeting it as targeting army.')
                         self.targetingArmy = self.get_army_at(annoyingTile)
@@ -1758,8 +1770,7 @@ class EklipZBot(object):
             Tile.recalc_all_derived(self._map.tiles_by_index)
 
         if self.targetPlayerExpectedGeneralLocation:
-            cities_in_play = self.cityAnalyzer.cities_in_play if self.cityAnalyzer is not None else None
-            self.board_analysis.rebuild_intergeneral_analysis(self.targetPlayerExpectedGeneralLocation, self.armyTracker.valid_general_positions_by_player, cities_in_play)
+            BotCentralDefense.rebuild_intergeneral_analysis_for_central_defense(self)
 
         # Rebuild islands from serialized data if available (overrides the recalculate_tile_islands done in init)
         if 'island_ids' in resume_data:
@@ -1798,6 +1809,7 @@ class EklipZBot(object):
 
         # force a rebuild
         self.cityAnalyzer.reset_reachability()
+        self.last_central_defense_signature = None
 
         return
 

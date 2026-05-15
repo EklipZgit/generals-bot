@@ -142,6 +142,8 @@ class ViewerHost(object):
                 if eventType == 'CLOSED':
                     closedByUser = eventValue
                     self._closed_by_user = closedByUser
+                if eventType == 'ERROR':
+                    logbook.error(eventValue)
 
                 if self.on_click is not None:
                     if eventType == 'LEFT_CLICK':
@@ -162,6 +164,9 @@ class ViewerHost(object):
         while time.perf_counter() - start < 15.0:
             try:
                 eventType, eventValue = self._viewer_event_queue.get(block=True, timeout=0.5)
+                if eventType == 'ERROR':
+                    logbook.error(eventValue)
+                    continue
                 if eventType != 'INITIALIZED':
                     raise Exception("UNEXPECTED VIEWER EVENT: " + eventType)
                 self._recieved_init_ack = True

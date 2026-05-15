@@ -3305,7 +3305,7 @@ def breadth_first_find_queue(
                     break
                 frontier.appendleft((nextTile, newDist, nextArmy, goalInc))
 
-    if not noLog:
+    if not noLog and DebugHelper.is_debug_or_unit_test_mode():
         logbook.info(
             f"BFS-FIND-QUEUE ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:
@@ -3326,7 +3326,7 @@ def breadth_first_find_queue(
         if curNode is not None:
             pathObject.add_next(curNode)
 
-    if not noLog:
+    if not noLog and DebugHelper.is_debug_or_unit_test_mode():
         logbook.info(
             f"BFS-FIND-QUEUE found path OF LENGTH {pathObject.length} VALUE {pathObject.value}\n{pathObject.toString()}")
     return pathObject
@@ -3405,7 +3405,7 @@ def breadth_first_find_dist_queue(
 
 def breadth_first_foreach(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile],
+        startTiles: typing.Iterable[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile], bool | None],
         skipTiles=None,
@@ -3443,6 +3443,7 @@ def breadth_first_foreach(
             # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
             continue
         frontier.appendleft((tile, 0))
+        globalVisited.add(tile.tile_index)
 
     start = time.perf_counter()
     iter = 0
@@ -3477,7 +3478,7 @@ def breadth_first_foreach(
 
 def breadth_first_foreach_with_state(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile] | typing.Dict[Tile, typing.Any],
+        startTiles: typing.Iterable[Tile] | typing.Dict[Tile, typing.Any],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, typing.Any | None], typing.Any | None],
         skipTiles=None,
@@ -3513,10 +3514,12 @@ def breadth_first_foreach_with_state(
     if isinstance(startTiles, dict):
         for tile, startVal in startTiles.items():
             frontier.appendleft((tile, 0, startVal))
+            globalVisited.add(tile.tile_index)
 
     else:
         for tile in startTiles:
             frontier.appendleft((tile, 0, None))
+            globalVisited.add(tile.tile_index)
 
     start = time.perf_counter()
     iter = 0
@@ -3616,7 +3619,7 @@ def breadth_first_foreach_with_state_and_start_dist(
 
 def breadth_first_foreach_dist(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile],
+        startTiles: typing.Iterable[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], bool | None],
         skipTiles: typing.Set[Tile] = None,
@@ -3652,6 +3655,7 @@ def breadth_first_foreach_dist(
             # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
             continue
         frontier.appendleft((tile, 0))
+        globalVisited.add(tile.tile_index)
 
     if not noLog:
         start = time.perf_counter()
@@ -3681,7 +3685,7 @@ def breadth_first_foreach_dist(
 
 def breadth_first_foreach_dist_fast_incl_neut_cities(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile],
+        startTiles: typing.Iterable[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], bool | None]):
     """
@@ -3705,6 +3709,7 @@ def breadth_first_foreach_dist_fast_incl_neut_cities(
 
     for tile in startTiles:
         frontier.appendleft((tile, 0))
+        globalVisited.add(tile.tile_index)
 
     while frontier:
         (current, dist) = frontier.pop()
@@ -3747,6 +3752,7 @@ def breadth_first_foreach_dist_fast_with_start_dist_incl_neut_cities(
 
     for dist, tile in startTiles:
         frontier.appendleft((tile, dist, 0))
+        globalVisited.add(tile.tile_index)
 
     while frontier:
         (current, dist, depth) = frontier.pop()
@@ -3769,7 +3775,7 @@ def breadth_first_foreach_dist_fast_with_start_dist_incl_neut_cities(
 
 def breadth_first_foreach_dist_fast_no_neut_cities(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile],
+        startTiles: typing.Iterable[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], bool | None]):
     """
@@ -3817,7 +3823,7 @@ def breadth_first_foreach_dist_fast_no_neut_cities(
 
 def breadth_first_foreach_dist_fast_no_default_skip(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile],
+        startTiles: typing.Iterable[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], bool | None]):
     """
@@ -3860,7 +3866,7 @@ def breadth_first_foreach_dist_fast_no_default_skip(
 
 def breadth_first_foreach_dist_fast_free_swamp_no_default_skip(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile],
+        startTiles: typing.Iterable[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], bool | None]):
     """
@@ -3906,7 +3912,7 @@ def breadth_first_foreach_dist_fast_free_swamp_no_default_skip(
 
 def breadth_first_foreach_fast_no_neut_cities(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile],
+        startTiles: typing.Iterable[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile], bool | None],
 ):
@@ -3945,17 +3951,17 @@ def breadth_first_foreach_fast_no_neut_cities(
         if newDist > maxDepth:
             continue
         for nextTile in current.movable:  # new spots to try
+            if nextTile.isObstacle:
+                continue
             if nextTile.tile_index in globalVisited:
                 continue
             globalVisited.add(nextTile.tile_index)
-            if nextTile.isObstacle:
-                continue
             frontier.appendleft((nextTile, newDist))
 
 
 def breadth_first_foreach_dist_revisit_callback(
         map: MapBase,
-        startTiles: typing.List[Tile] | typing.Set[Tile],
+        startTiles: typing.Iterable[Tile],
         maxDepth: int,
         foreachFunc: typing.Callable[[Tile, int], None],
         revisitFunc: typing.Callable[[Tile, int], None],
@@ -3993,6 +3999,7 @@ def breadth_first_foreach_dist_revisit_callback(
             # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
             continue
         frontier.appendleft((tile, 0))
+        globalVisited.raw[tile.tile_index] = 0
 
     start = time.perf_counter()
     iter = 0

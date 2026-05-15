@@ -146,6 +146,14 @@ class TestBase(unittest.TestCase):
             numPlayers = max(numPlayers, len(teams))
 
         map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered, num_players=numPlayers, teams=teams)
+        if respect_undiscovered:
+            for tile in map.get_all_tiles():
+                if tile.discovered:
+                    tile.visible = False
+                else:
+                    tile.visible = True
+                    tile.discovered = True
+                    tile.lastSeen = turn
         TextMapLoader.load_map_data_into_map(map, data)
         if turn is not None:
             map.turn = turn
@@ -241,7 +249,7 @@ class TestBase(unittest.TestCase):
         if player_index == -1 and 'player_index' in gameData:
             player_index = int(gameData['player_index'])
 
-        map, general = self.load_map_and_general_from_string(rawMapStr, turn, player_index)
+        map, general = self.load_map_and_general_from_string(rawMapStr, turn, player_index, fill_out_tiles or respect_player_vision)
 
         enemyGen = None
         botTargetPlayer = None
@@ -401,7 +409,7 @@ class TestBase(unittest.TestCase):
                 while map.players[player.index].tileCount > targetTiles:
                     dropCandidates = SearchUtils.where(
                         map.pathable_tiles,
-                        lambda t: t.player == player.index and not t.isGeneral and not t.isCity and (t in entangledTiles or t.isTempFogPrediction or not t.discovered))
+                        lambda t: not t.visible and t.player == player.index and not t.isGeneral and not t.isCity and (t in entangledTiles or t.isTempFogPrediction or not t.discovered))
                     if len(dropCandidates) == 0:
                         break
                     dropCandidates.sort(key=lambda t: (0 if t in entangledTiles else 1, 0 if t.isTempFogPrediction else 1, -t.army))
@@ -412,7 +420,7 @@ class TestBase(unittest.TestCase):
                 if scoreOverflow > 0:
                     trimCandidates = SearchUtils.where(
                         map.pathable_tiles,
-                        lambda t: t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
+                        lambda t: not t.visible and t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
                     trimCandidates.sort(key=lambda t: (0 if t in entangledTiles else 1, 0 if t.isTempFogPrediction else 1, -t.army))
                     for tile in trimCandidates:
                         if scoreOverflow <= 0:
@@ -421,7 +429,7 @@ class TestBase(unittest.TestCase):
                         tile.army -= reduceBy
                         scoreOverflow -= reduceBy
 
-                    if scoreOverflow > 0 and player.general is not None and player.general.army > 1:
+                    if scoreOverflow > 0 and player.general is not None and not player.general.visible and player.general.army > 1:
                         reduceBy = min(player.general.army - 1, scoreOverflow)
                         player.general.army -= reduceBy
                         scoreOverflow -= reduceBy
@@ -1130,19 +1138,22 @@ class TestBase(unittest.TestCase):
             self.fail(f'dist {radius} from {str(sourceTile)} only had {countCaptured.value} captured tiles, required {requireCountCapturedInWindow}.')
 
     def assertMinArmyNear(self, playerMap: MapBase, tile: Tile, player: int, minArmyAmount: int, distance: int = 3, reason: str = ''):
-        counter = SearchUtils.Counter(0)
+        self.assertMinArmyNearTiles(playerMap, [tile], player, minArmyAmount, distance, reason)
 
+
+    def assertMinArmyNearTiles(self, playerMap: MapBase, tiles: typing.Iterable[Tile], player: int, minArmyAmount: int, distance: int = 3, reason: str = ''):
+        counter = SearchUtils.Counter(0)
         def armyCounter(t: Tile):
             if t.player == player:
                 counter.add(t.army - 1)
 
-        SearchUtils.breadth_first_foreach(playerMap, [tile], maxDepth=distance, foreachFunc=armyCounter)
+        SearchUtils.breadth_first_foreach(playerMap, tiles, maxDepth=distance, foreachFunc=armyCounter)
 
         if len(reason) > 0:
             reason = f': {reason}'
 
-        self.assertGreater(counter.value, minArmyAmount - 1, f'Expected {str(tile)} to have at least {minArmyAmount} army within {distance} tiles of it for player {player}, instead found {counter.value}{reason}')
-        logbook.info(f'{str(tile)} had {counter.value} army within {distance} (min was {minArmyAmount}) for player {player}')
+        self.assertGreater(counter.value, minArmyAmount - 1, f'Expected {"|".join(str(tile) for tile in tiles)} to have at least {minArmyAmount} army within {distance} tiles of it for player {player}, instead found {counter.value}{reason}')
+        logbook.info(f'{"|".join(str(tile) for tile in tiles)} had {counter.value} army within {distance} (min was {minArmyAmount}) for player {player}')
 
     def assertTileNearOtherTile(self, playerMap: MapBase, expectedLocation: Tile, actualLocation: Tile, distance: int = 3):
         found = SearchUtils.breadth_first_find_queue(playerMap, [expectedLocation], lambda t, a, d: t == actualLocation, maxDepth=1000, noNeutralCities=True)
@@ -1374,7 +1385,7 @@ class TestBase(unittest.TestCase):
             # Collapse duplicate entangled fog army predictions: keep one army location with value,
             # and reduce duplicate entangled positions to minimum army so they do not over-inflate score.
             for tile in entangledEnemyTilesByPlayer.get(enemyGeneral.player, []):
-                if tile.player != enemyGeneral.player or tile.isGeneral:
+                if tile.visible or tile.player != enemyGeneral.player or tile.isGeneral:
                     continue
                 if tile.army > 1:
                     oldArmy = tile.army
@@ -1383,6 +1394,8 @@ class TestBase(unittest.TestCase):
                         countScoreEnemy.add(1 - oldArmy)
 
         def can_reset_enemy_fog_tile(tile: Tile) -> bool:
+            if tile.visible:
+                return False
             if tile.player != enemyGeneral.player:
                 return False
             if tile.isGeneral or tile.isCity:
@@ -1429,7 +1442,7 @@ class TestBase(unittest.TestCase):
                 entangledSet = set(entangledEnemyTilesByPlayer.get(enemyGeneral.player, []))
                 scoreTrimCandidates = SearchUtils.where(
                     actualEnemyTiles,
-                    lambda t: t.army > 1 and not t.isGeneral and not t.isCity and (t in entangledSet or can_reset_enemy_fog_tile(t)))
+                    lambda t: not t.visible and t.army > 1 and not t.isGeneral and not t.isCity and (t in entangledSet or can_reset_enemy_fog_tile(t)))
                 scoreTrimCandidates.sort(key=lambda t: (0 if t in entangledSet else 1, 0 if t.isTempFogPrediction else 1, -enemyMap[t], -t.army))
                 for tile in scoreTrimCandidates:
                     if scoreOverflow <= 0:
@@ -1444,7 +1457,7 @@ class TestBase(unittest.TestCase):
                 if scoreOverflow > 0:
                     fallbackTrimCandidates = SearchUtils.where(
                         actualEnemyTiles,
-                        lambda t: t.army > 1 and not t.isGeneral and not t.isCity)
+                        lambda t: not t.visible and t.army > 1 and not t.isGeneral and not t.isCity)
                     fallbackTrimCandidates.sort(key=lambda t: (0 if t in entangledSet else 1, -t.army))
                     for tile in fallbackTrimCandidates:
                         if scoreOverflow <= 0:
@@ -1456,7 +1469,7 @@ class TestBase(unittest.TestCase):
                         tile.army -= reduceBy
                         scoreOverflow -= reduceBy
 
-                if scoreOverflow > 0 and enemyGeneral.army > 1:
+                if scoreOverflow > 0 and not enemyGeneral.visible and enemyGeneral.army > 1:
                     reduceBy = min(enemyGeneral.army - 1, scoreOverflow)
                     enemyGeneral.army -= reduceBy
                     scoreOverflow -= reduceBy
@@ -1466,7 +1479,7 @@ class TestBase(unittest.TestCase):
 
             countScoreEnemy.value = sum(t.army for t in map.pathable_tiles if t.player == enemyGeneral.player)
 
-        if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
+        if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore and not enemyGeneral.visible:
             countScoreEnemy.value = countScoreEnemy.value - enemyGeneral.army + 1
             enemyGeneral.army = 1
 
@@ -1475,14 +1488,14 @@ class TestBase(unittest.TestCase):
 
         newAndTemp = set(newTiles)
         for tile in map.players[enemyGeneral.player].tiles:
-            if tile.player == enemyGeneral.player and tile.isTempFogPrediction and tile not in newAndTemp:
+            if tile.player == enemyGeneral.player and (tile.isTempFogPrediction or (not tile.visible and not tile.isGeneral and not tile.isCity)) and tile not in newAndTemp:
                 newAndTemp.add(tile)
                 # countScoreEnemy.value += tile.army
 
         iter = 0
         while enemyGeneralTargetScore is not None and countScoreEnemy.value < enemyGeneralTargetScore and iter < 100:
             for tile in newAndTemp:
-                if tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
+                if not tile.visible and tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
                     countScoreEnemy.add(1)
                     tile.army += 1
             iter += 1

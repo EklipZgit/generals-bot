@@ -3190,3 +3190,87 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
 
+    
+    def test_shouldnt_gather_randomly_at_end_of_round_and_do_dumb_danger_tile_kill_move_when_should_obviously_recapture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFileTrue = 'GameContinuationEntries/shouldnt_gather_randomly_at_end_of_round_and_do_dumb_danger_tile_kill_move_when_should_obviously_recapture___UohocnexH---0--242_true.txtmap'
+        mapFile = 'GameContinuationEntries/shouldnt_gather_randomly_at_end_of_round_and_do_dumb_danger_tile_kill_move_when_should_obviously_recapture___UohocnexH---0--242.txtmap'
+
+        for path, expectedBetter in [
+            ('4,10->4,9->3,9->3,8', 12),  # '14,7->14,8  0,12->1,12  3,7->3,9->4,9->4,10->5,10' achieves 14 tho
+            ('4,10->4,14->5,14', 9),
+        ]:
+            with self.subTest(en_path=path):
+                map, general, enemyGeneral = self.load_map_and_generals(mapFileTrue, 242, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=242)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                simHost.queue_player_leafmoves(enemyGeneral.player)
+                simHost.queue_player_moves_str(general.player, '14,7->14,8')
+                # proof
+                # simHost.queue_player_moves_str(general.player, '3,7->3,9  4,8->4,9  3,9->4,9->4,10->5,10')
+                # better proof but hard to calc
+                # simHost.queue_player_moves_str(general.player, '0,12->1,12  3,7->3,9->4,9->4,10->5,10')
+                # best for the runaway case
+                # simHost.queue_player_moves_str(general.player, '3,7->4,7->4,10->5,10')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertTileDifferentialGreaterThan(expectedBetter, simHost)
+
+    
+    def test_should_actually_fucking_defend_when_recognize_inbound_kill_threat_LOL(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_actually_fucking_defend_when_recognize_inbound_kill_threat_LOL___UohocnexH---0--300.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 300, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=300)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,9->6,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        tiles = [
+            playerMap.At(3,7),
+            playerMap.At(3,8),
+            playerMap.At(3,9),
+            playerMap.At(4,9),
+            playerMap.At(4,10),
+        ]
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertMinArmyNearTiles(playerMap, tiles, general.player, 60, 2, 'Fucking, we know hes gonna try to all in down this path')
+    
+    def test_should_gather_to_hold_central_point_of_defense_nearest_to_contestable_cities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_to_hold_central_point_of_defense_nearest_to_contestable_cities___wSBATsHT8---0--579.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 575, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=575)
+        
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        self.assertNoFriendliesKilled(map, general)
+
+        tiles = [
+            playerMap.At(9,6),
+        ]
+        self.assertMinArmyNearTiles(playerMap, tiles, general.player, 140, 2, 'We need to defend the choke AND contest the cities.')

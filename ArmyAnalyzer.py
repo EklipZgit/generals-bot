@@ -15,6 +15,7 @@ import logbook
 
 from collections import deque
 
+import DebugHelper
 import SearchUtils
 from Army import Army
 from Interfaces import MapMatrixInterface
@@ -124,7 +125,8 @@ class ArmyAnalyzer:
                 skip.discard(tile)
 
             SearchUtils.breadth_first_foreach_fast_no_neut_cities(map, [t for t in map.pathable_tiles if map.is_tile_on_team_with(t, self.tileA.player) or t == self.tileB], maxDepth=bypassRetraverseThreshold, foreachFunc=foreachFunc)
-            logbook.info(f'building distance maps except skipping {len(skip)} tiles')  # : {" | ".join([str(t) for t in skip])}
+            if DebugHelper.is_debug_or_unit_test_mode():
+                logbook.info(f'building distance maps except skipping {len(skip)} tiles')  # : {" | ".join([str(t) for t in skip])}
 
             self.aMap = SearchUtils.build_distance_map_matrix_with_skip(map, [self.tileA], skip)
             self.bMap = SearchUtils.build_distance_map_matrix_with_skip(map, [self.tileB], skip)

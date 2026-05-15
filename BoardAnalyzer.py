@@ -6,6 +6,8 @@
 """
 import time
 import typing
+from collections import deque
+from dataclasses import dataclass
 
 import logbook
 
@@ -15,6 +17,15 @@ from Models import Move
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
 from base.client.map import MapBase, Tile
+
+
+@dataclass(slots=True)
+class DefensiveChokePoint:
+    defended_tile: Tile
+    x: float
+    y: float
+    distance_from_source: int
+    choke_tiles: typing.List[Tile]
 
 
 class BoardAnalyzer:
@@ -33,6 +44,9 @@ class BoardAnalyzer:
         """Tiles that only have a single inward path towards our general."""
 
         self.central_defense_point: Tile = map.players[map.player_index].general
+
+        self.defensive_chokes_by_tile: typing.Dict[Tile, DefensiveChokePoint] = {}
+        self.defensive_furthest_choke_tiles_by_defensive_tile: typing.Dict[Tile, typing.Set[Tile]] = {}
 
         self.friendly_city_distances: typing.Dict[Tile, MapMatrixInterface[int]] = {}
 
@@ -123,29 +137,21 @@ class BoardAnalyzer:
         if self.intergeneral_analysis is not None:
             # only consider the closest 3 cities to enemy...?
             closestCities = list(sorted(cities, key=lambda c: self.intergeneral_analysis.bMap[c]))[0:3]
+        logbook.info(
+            'CENTRAL_DEFENSE_POINT defended tiles considered: '
+            + f'general {str(self.general)} enemyDist={self.intergeneral_analysis.bMap.raw[self.general.tile_index] if self.intergeneral_analysis is not None else None}'
+            + ' cities '
+            + ' | '.join(
+                [
+                    f'{str(city)} enemyDist={self.intergeneral_analysis.bMap.raw[city.tile_index] if self.intergeneral_analysis is not None else None} friendlyDist={self.general_distances.raw[city.tile_index]} player={city.player} army={city.army}'
+                    for city in closestCities
+                ]))
 
         self.friendly_city_distances = {}
         for city in closestCities:
             self.friendly_city_distances[city] = self.map.distance_mapper.get_tile_dist_matrix(city)
-        self.defense_centrality_sums = MapMatrix(self.map, 1000000)
-
-        lowestAvgDist = 10000000
-        lowestAvgTile: Tile | None = None
-
         for tile in self.map.pathable_tiles:
             tileDist = self.friendly_general_distances.raw[tile.tile_index]
-
-            # general is 3x more important than cities
-            distSum = tileDist * 3
-            for city, distances in self.friendly_city_distances.items():
-                distSum += distances.raw[tile.tile_index]
-
-            if distSum < lowestAvgDist or (distSum == lowestAvgDist and self.intergeneral_analysis is not None and self.intergeneral_analysis.bMap.raw[tile.tile_index] < self.intergeneral_analysis.bMap.raw[lowestAvgTile.tile_index]):
-                lowestAvgTile = tile
-                lowestAvgDist = distSum
-
-            self.defense_centrality_sums.raw[tile.tile_index] = distSum
-
             movableInnerCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances.raw[adj.tile_index] - 1)
             movableOuterCount = SearchUtils.count(tile.movable, lambda adj: tileDist == self.friendly_general_distances.raw[adj.tile_index] + 1)
             if movableInnerCount == 1:
@@ -164,8 +170,154 @@ class BoardAnalyzer:
                     logbook.info(
                         f"  outer choke change: tile {str(tile)}, old {oldOuter.raw[tile.tile_index]}, new {self.outerChokes.raw[tile.tile_index]}")
 
-        logbook.info(f'calculated central defense point to be {str(lowestAvgTile)} due to lowestAvgDist {lowestAvgDist}')
-        self.central_defense_point = lowestAvgTile
+    def _get_defensive_choke_point(self, defendedTile: Tile) -> DefensiveChokePoint:
+        if self.intergeneral_analysis is None:
+            chokePoint = DefensiveChokePoint(
+                defended_tile=defendedTile,
+                x=defendedTile.x,
+                y=defendedTile.y,
+                distance_from_source=0,
+                choke_tiles=[defendedTile])
+            self.defensive_chokes_by_tile[defendedTile] = chokePoint
+            self.defensive_furthest_choke_tiles_by_defensive_tile[defendedTile] = {defendedTile}
+            return chokePoint
+
+        enemyDistMap = self.intergeneral_analysis.bMap
+        baseLength = enemyDistMap.raw[defendedTile.tile_index]
+        startTiles = self._get_defensive_choke_start_tiles(defendedTile, baseLength)
+        layers = self._build_defensive_choke_layers(startTiles, baseLength)
+        logbook.info(
+            f'GET_DEF_CHOKE {defendedTile} baseLength={baseLength} startTiles=\r\n  start: '
+            + '\r\n  start: '.join(self._defensive_choke_tile_to_string(tile) for tile in startTiles))
+        # self._log_defensive_choke_layers(defendedTile, layers)
+
+        bestDistance = 0
+        bestLayer = [defendedTile]
+        for distance in range(len(layers) - 1, -1, -1):
+            layerTiles = layers[distance]
+            visible = self._are_tiles_visible(layerTiles)
+            contiguous = self._are_tiles_contiguous(layerTiles)
+            if visible and contiguous:
+                bestDistance = distance
+                bestLayer = layerTiles
+                break
+            # logbook.info(
+            #     f'  GET_DEF_CHOKE {defendedTile} rejected layer defended={str(defendedTile)} distance={distance} visible={visible} contiguous={contiguous} tiles=\r\n    '
+            #     + '\r\n    '.join(self._defensive_choke_tile_to_string(tile) for tile in layerTiles))
+
+        chokePoint = DefensiveChokePoint(
+            defended_tile=defendedTile,
+            x=sum(tile.x for tile in bestLayer) / len(bestLayer),
+            y=sum(tile.y for tile in bestLayer) / len(bestLayer),
+            distance_from_source=bestDistance,
+            choke_tiles=bestLayer)
+        self.defensive_chokes_by_tile[defendedTile] = chokePoint
+        self.defensive_furthest_choke_tiles_by_defensive_tile[defendedTile] = set(bestLayer)
+        logbook.info(
+            f'GET_DEF_CHOKE {defendedTile} selected choke position {self._defensive_choke_point_to_string(chokePoint)} for {str(defendedTile)} baseLength={baseLength} startTiles={len(startTiles)} layerTiles=\r\n{"\r\n".join(str(tile) for tile in bestLayer)}')
+        return chokePoint
+
+    def _get_defensive_choke_start_tiles(self, defendedTile: Tile, baseLength: int) -> typing.List[Tile]:
+        startTiles: typing.List[Tile] = []
+        q = deque([(defendedTile, 0)])
+        visited = {defendedTile.tile_index}
+        enemyDistMap = self.intergeneral_analysis.bMap
+
+        while q:
+            tile, dist = q.popleft()
+            if dist > 2:
+                continue
+
+            enemyDist = enemyDistMap.raw[tile.tile_index]
+            if enemyDist >= baseLength and tile.visible and not tile.isObstacle:
+                startTiles.append(tile)
+
+            if dist == 2:
+                continue
+
+            for nextTile in tile.movable:
+                if nextTile.tile_index in visited:
+                    continue
+                visited.add(nextTile.tile_index)
+                q.append((nextTile, dist + 1))
+
+        if not startTiles:
+            startTiles.append(defendedTile)
+
+        return startTiles
+
+    def _build_defensive_choke_layers(self, startTiles: typing.List[Tile], baseLength: int) -> typing.List[typing.List[Tile]]:
+        q = deque((tile, 0) for tile in startTiles)
+        visited = {tile.tile_index for tile in startTiles}
+        layers: typing.List[typing.List[Tile]] = []
+        enemyDistMap = self.intergeneral_analysis.bMap
+
+        while q:
+            tile, dist = q.popleft()
+            if tile.isObstacle:
+                continue
+
+            enemyDist = enemyDistMap.raw[tile.tile_index]
+            while len(layers) <= dist:
+                layers.append([])
+            layers[dist].append(tile)
+            if not tile.visible:
+                continue
+
+            for nextTile in tile.movable:
+                if nextTile.tile_index in visited:
+                    continue
+                if nextTile.isObstacle:
+                    continue
+                nextEnemyDist = enemyDistMap.raw[nextTile.tile_index]
+                if nextEnemyDist > enemyDist:
+                    continue
+                visited.add(nextTile.tile_index)
+                q.append((nextTile, dist + 1))
+
+        return layers
+
+    def _are_tiles_visible(self, tiles: typing.List[Tile]) -> bool:
+        return all(tile.visible for tile in tiles)
+
+    def _are_tiles_contiguous(self, tiles: typing.List[Tile]) -> bool:
+        if len(tiles) <= 1:
+            return True
+
+        tileIndexes = {tile.tile_index for tile in tiles}
+        visited = {tiles[0].tile_index}
+        q = deque([tiles[0]])
+
+        while q:
+            tile = q.popleft()
+            for nextTile in tile.movable:
+                if nextTile.tile_index not in tileIndexes:
+                    continue
+                if nextTile.tile_index in visited:
+                    continue
+                visited.add(nextTile.tile_index)
+                q.append(nextTile)
+
+        return len(visited) == len(tileIndexes)
+
+    def _get_distance_to_defensive_choke_point(self, tile: Tile, chokePoint: DefensiveChokePoint) -> float:
+        return abs(tile.x - chokePoint.x) + abs(tile.y - chokePoint.y)
+
+    def _defensive_choke_point_to_string(self, chokePoint: DefensiveChokePoint) -> str:
+        return f'{chokePoint.x:.2f},{chokePoint.y:.2f}/d{chokePoint.distance_from_source}'
+
+    def _defensive_choke_tile_to_string(self, tile: Tile) -> str:
+        enemyDist = self.intergeneral_analysis.bMap.raw[tile.tile_index] if self.intergeneral_analysis is not None else None
+        friendlyDist = self.friendly_general_distances.raw[tile.tile_index] if self.friendly_general_distances is not None else None
+        return f'{str(tile)} e{enemyDist} f{friendlyDist} vis={tile.visible} disc={tile.discovered} p{tile.player} a{tile.army}'
+
+    def _log_defensive_choke_layers(self, defendedTile: Tile, layers: typing.List[typing.List[Tile]]):
+        for distance, layerTiles in enumerate(layers):
+            visible = self._are_tiles_visible(layerTiles)
+            contiguous = self._are_tiles_contiguous(layerTiles)
+            logbook.info(
+                f'CENTRAL_DEFENSE_POINT layer defended={str(defendedTile)} distance={distance} count={len(layerTiles)} visible={visible} contiguous={contiguous} tiles=\r\n  '
+                + '\r\n  '.join(self._defensive_choke_tile_to_string(tile) for tile in layerTiles))
 
     def rebuild_intergeneral_analysis(self, opponentGeneral: Tile, possibleSpawns: typing.List[MapMatrixSet] | None = None, cities_in_play: typing.Set[Tile] | None = None):
         self.intergeneral_analysis = ArmyAnalyzer(self.map, self.general, opponentGeneral)
@@ -288,7 +440,6 @@ class BoardAnalyzer:
 
         # order by: totalDistance, then pick tile by closestToOpponent
         cutoffDist = self.intergeneral_analysis.shortestPathWay.distance // 4
-        includedPathways = set()
         for move in leafMoves:
             # sometimes these might be cut off by only being routed through the general
             neutralCity = (move.dest.isCity and move.dest.player == -1)
@@ -296,7 +447,6 @@ class BoardAnalyzer:
                 pathwaySource = self.intergeneral_analysis.pathWayLookupMatrix.raw[move.source.tile_index]
                 pathwayDest = self.intergeneral_analysis.pathWayLookupMatrix.raw[move.dest.tile_index]
                 if pathwaySource.distance <= maxAltLength:
-                    #if pathwaySource not in includedPathways:
                     if pathwaySource.distance > pathwayDest.distance or pathwaySource.distance == pathwayDest.distance:
                         # moving to a shorter path or moving along same distance path
                         # If getting further from our general (and by extension closer to opp since distance is equal)
@@ -306,7 +456,6 @@ class BoardAnalyzer:
                         reasonablyCloseToTheirGeneral = self.intergeneral_analysis.bMap.raw[move.dest.tile_index] < cutoffDist + self.intergeneral_analysis.aMap.raw[self.intergeneral_analysis.tileB.tile_index]
 
                         if gettingFurtherFromOurGen and reasonablyCloseToTheirGeneral:
-                            includedPathways.add(pathwaySource)
                             goodLeaves.append(move)
                     else:
                         logbook.info(f"Pathway for tile {str(move.source)} was already included, skipping")

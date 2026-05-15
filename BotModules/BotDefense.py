@@ -8,6 +8,7 @@ import Gather
 import SearchUtils
 from Algorithms import MapSpanningUtils
 from BotModules.BotCityCaptureControl import BotCityCaptureControl
+from BotModules.BotCentralDefense import BotCentralDefense
 from BotModules.BotCombatQueries import BotCombatQueries
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotComms import BotComms
@@ -1039,8 +1040,10 @@ class BotDefense:
             bot.viewInfo.add_targeted_tile(tile, TargetStyle.RED)
             negTiles = []
             if bot.curPath is not None:
-                negTiles = [tile for tile in bot.curPath.tileSet]
+                negTiles = [t for t in bot.curPath.tileSet]
             armyToSearch = BotStateQueries.get_target_army_inc_adjacent_enemy(bot, tile) - 2
+            if tile.army < 5:
+                armyToSearch = max(armyToSearch, 1)
             killPath = SearchUtils.dest_breadth_first_target(
                 bot._map,
                 [tile],
@@ -1446,7 +1449,7 @@ class BotDefense:
             notEnoughDamageBlocked = False
             armyLeftOver = threat.threatValue - interceptingOption.friendly_army_reaching_intercept > 0
             if threat.path.tail.tile.isGeneral:
-                armyLeftOver = interceptingOption.intercepting_army_remaining < 0
+                armyLeftOver = interceptingOption.intercepting_army_remaining > 0
                 if tookTooLong or notEnoughDamageBlocked or armyLeftOver:
                     bot.viewInfo.add_info_line(
                         f'DEF int BYP: rem ar {interceptingOption.intercepting_army_remaining}, long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
@@ -1668,14 +1671,14 @@ class BotDefense:
         if use_cities_in_play_only:
             # Use cities_in_play from cityAnalyzer if available, which filters out cities
             # that are further from the enemy general than our general is from the enemy general
-            if bot.cityAnalyzer is not None and bot.cityAnalyzer.cities_in_play:
-                for c in bot.cityAnalyzer.cities_in_play:
-                    gDist = bot.distance_from_general(c)
-                    spDist = bot.board_analysis.shortest_path_distances.raw[c.tile_index]
-                    bot.info(f'  DEBUC c{c}  g{gDist}  sp{spDist}  sum{gDist+spDist}  limit{distLimit}  from {bot.sketchiest_potential_inbound_flank_path.tail.tile if bot.sketchiest_potential_inbound_flank_path is not None else "None"}')
-                    if gDist + spDist < distLimit:
-                        includes.append(c)
-                # includes.extend([c for c in bot.cityAnalyzer.cities_in_play if bot.distance_from_general(c) + bot.board_analysis.shortest_path_distances.raw[c.tile_index] < distLimit])
+            # The shared central defense filter decides which friendly cities are worth defending here.
+            citiesInPlay = BotCentralDefense._get_central_defense_cities_in_play(bot)
+            if citiesInPlay:
+                for c in citiesInPlay:
+                    # gDist = bot.distance_from_general(c)
+                    # spDist = bot.board_analysis.shortest_path_distances.raw[c.tile_index]
+                    # bot.info(f'  DEBUC c{c}  g{gDist}  sp{spDist}  sum{gDist+spDist}  limit{distLimit}  include=True  from {bot.sketchiest_potential_inbound_flank_path.tail.tile if bot.sketchiest_potential_inbound_flank_path is not None else "None"}')
+                    includes.append(c)
             else:
                 # Fall back to all cities if cityAnalyzer not available
                 if BotComms.is_2v2_teammate_still_alive(bot):
@@ -1713,9 +1716,7 @@ class BotDefense:
         )
 
         if unconnectableTiles:
-            for t in unconnectableTiles:
-                bot.viewInfo.add_targeted_tile(t, TargetStyle.PURPLE, radiusReduction=-1)
-            bot.viewInfo.add_info_line(f'PURPLE LARGE CIRC = unconnectable defensive spanning tree points.')
+            bot.viewInfo.add_targeted_tiles_with_legend(unconnectableTiles, 'Unconnectable to defense span', TargetStyle.PURPLE, radiusReduction=1)
 
         return spanningTreeTiles
 
@@ -1814,19 +1815,19 @@ class BotDefense:
 
         dangerPaths = []
         if bot.targetPlayer != -1:
-            dangerPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, targetArmy=thresh, maxTime=0.1, maxDepth=2, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
+            dangerPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, targetArmy=thresh, maxTime=0.1, maxDepth=1, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
             if dangerPath is not None:
                 dangerPaths.append(dangerPath)
                 altSet = dangerPath.tileSet.copy()
 
-                altPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, negativeTiles=altSet, targetArmy=thresh, maxTime=0.1, maxDepth=2, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
+                altPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, negativeTiles=altSet, targetArmy=thresh, maxTime=0.1, maxDepth=1, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
                 if altPath is not None:
                     dangerPaths.append(altPath)
                     altSet.discard(altPath.start.tile)
 
                 altSet.discard(dangerPath.start.tile)
 
-                altPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, negativeTiles=altSet, targetArmy=thresh, maxTime=0.1, maxDepth=2, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
+                altPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, negativeTiles=altSet, targetArmy=thresh, maxTime=0.1, maxDepth=1, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
                 if altPath is not None and str(altPath) != str(dangerPath):
                     dangerPaths.append(altPath)
 
@@ -2090,7 +2091,7 @@ class BotDefense:
 
         playerArmy = max(playerArmy, gathPathSum)
 
-        if oppArmy - gathPathSum > 0 and not bot.timings.in_expand_split(bot._map.turn):
+        if oppArmy - gathPathSum > 0 and not bot.timings.in_expand_split(bot._map.turn) and threatPath == bot.enemy_attack_path and not bot.defend_economy and not bot.win_condition_analyzer.is_contesting_cities:
             for tile in threatPath.tileList:
                 if bot._map.is_tile_friendly(tile):
                     defenseCriticalTileSet.add(tile)

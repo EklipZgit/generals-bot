@@ -5,6 +5,7 @@ import typing
 
 import logbook
 
+import DebugHelper
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
 from BoardAnalyzer import BoardAnalyzer
@@ -439,7 +440,7 @@ class ArmyInterceptor(object):
                     return
 
                 delayTurns = intTurnsMat.raw[tile.tile_index]
-                if delayTurns is not None and (delayTurns > 800 or delayTurns > threat.turns + 1):
+                if delayTurns is None or delayTurns > 800 or delayTurns > threat.turns + 1:
                     return
 
                 worstCaseExtraMoves = intDistMat.raw[tile.tile_index]
@@ -1020,9 +1021,11 @@ class ArmyInterceptor(object):
             avgAllThreatsX = allThreatsX / numThreatsAtThisDist
             avgAllThreatsY = allThreatsY / numThreatsAtThisDist
             averageEnemyPositionByTurn[i] = avgAllThreatsX, avgAllThreatsY
-            logbook.info(f'avgPos dist {i} = {avgAllThreatsX:.1f},{avgAllThreatsY:.1f}')
+            if DebugHelper.is_debug_or_unit_test_mode():
+                logbook.info(f'avgPos dist {i} = {avgAllThreatsX:.1f},{avgAllThreatsY:.1f}')
 
-        logbook.info(f'filtering out poor intercept points and setting search depths by intercept tile')
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info(f'filtering out poor intercept points and setting search depths by intercept tile')
         self.filter_interception_best_points(interception, maxDepth, positionsByTurn=averageEnemyPositionByTurn)
 
         # Get the "middlest" tiles at each distance - only consider intercept points at these tiles
@@ -1033,7 +1036,8 @@ class ArmyInterceptor(object):
 
         bestInterceptTable: typing.Dict[int, InterceptionOptionInfo] = {}
 
-        logbook.info(f'getting intercept paths at maxDepth {maxDepth}, threatDistFromCommon {threatDistFromCommon}')
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info(f'getting intercept paths at maxDepth {maxDepth}, threatDistFromCommon {threatDistFromCommon}')
 
         tile: Tile
         interceptInfo: InterceptPointTileInfo

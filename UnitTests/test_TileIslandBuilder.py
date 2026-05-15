@@ -1719,6 +1719,46 @@ M    M    M
         self.assertAllIslandsSumArmyCorrect(builder)
         self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
 
+    def test_update_tile_islands__pathable_none_lookup_tile_without_owner_or_army_delta_gets_island(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        testData = """
+|    |    |    |
+aG1  C1   bG1
+|    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 177)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.reset_tile_deltas_to_current_state(map)
+
+        discoveredCity = map.GetTile(1, 0)
+        island = builder.tile_island_lookup.raw[discoveredCity.tile_index]
+        self.assertIsNotNone(island, f'fixture: discovered city tile {discoveredCity} should have an island before eviction')
+        builder._remove_leaf_island(island)
+        self.assertFalse(discoveredCity.isObstacle, 'fixture: discovered city should be pathable')
+        self.assertIn(discoveredCity, map.pathable_tiles, 'fixture: discovered city should be in pathable_tiles')
+        self.assertIsNone(
+            builder.tile_island_lookup.raw[discoveredCity.tile_index],
+            f'fixture: discovered city tile {discoveredCity} should have no island before update'
+        )
+
+        builder.update_tile_islands(enemyGeneral, mode=IslandBuildMode.GroupByArmy)
+        self.assertUpdateMatchesRecalculate(map, builder, enemyGeneral, IslandBuildMode.GroupByArmy, debugMode)
+        self.assertAllIslandsContiguous(builder, debugMode)
+        self.assertNoTilesWithNullIslands(builder, debugMode)
+        self.assertNoFullIslandCycles(builder)
+        self.assertAllIslandsNamed(builder)
+        self.assertNoZombieIslands(builder)
+        self.assertNoLookupMismatches(builder)
+        self.assertNoBorderIslandsStale(builder)
+        self.assertAllIslandsSumArmyCorrect(builder)
+        self.assertNoBorderIslandsPointToRemovedIslands(builder, debugMode)
+
 
     def test_shouldnt_create_broken_islands_after_captures(self):
         """

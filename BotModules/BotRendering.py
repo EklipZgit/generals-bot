@@ -2,6 +2,7 @@ import typing
 
 import logbook
 
+import DebugHelper
 import Utils
 from MapMatrix import MapMatrixSet
 from Path import Path
@@ -148,7 +149,8 @@ class BotRendering:
             ))
 
         if bot.info_render_defense_spanning_tree and bot.defensive_spanning_tree:
-            bot.viewInfo.add_map_zone(bot.defensive_spanning_tree, Colors.WHITE_PURPLE, alpha=90)
+            bot.viewInfo.add_map_division(bot.defensive_spanning_tree, Colors.WHITE, alpha=200, thickness=4)
+            bot.viewInfo.add_map_zone(bot.defensive_spanning_tree, Colors.P_MAROON, alpha=100)
 
         if bot.win_condition_analyzer.defend_cities:
             bot.viewInfo.add_targeted_tiles_with_legend(bot.win_condition_analyzer.defend_cities, 'DEFEND CITIES', TargetStyle.PURPLE, radiusReduction=3)
@@ -230,7 +232,7 @@ class BotRendering:
                     f'arrowsAdded={arrowsAfter - arrowsBefore} arrowsTotal={arrowsAfter}'
                 )
         if not bot.info_render_tile_islands:
-            expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True, renderIslandColors=True)
+            expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True, renderIslandColors=False)
 
     @staticmethod
     def mark_tile(bot: EklipZBot, tile, alpha=100):
@@ -340,10 +342,12 @@ class BotRendering:
 
             bot.viewInfo.midRightGridText[tile] = f'im{interceptInfo.max_extra_moves_to_capture}'
 
-        bot.viewInfo.add_info_line(f'  intChokes @{plan.target_tile} = {targetStyle}')
+        if DebugHelper.is_debug_or_unit_test_mode():
+            bot.viewInfo.add_info_line(f'  intChokes @{plan.target_tile} = {targetStyle}')
 
-        for dist, opt in plan.intercept_options.items():
-            logbook.info(f'intercept plan opt {plan.target_tile} dist {dist}: {str(opt)}')
+        if DebugHelper.is_debug_or_unit_test_mode():
+            for dist, opt in plan.intercept_options.items():
+                logbook.info(f'intercept plan opt {plan.target_tile} dist {dist}: {str(opt)}')
 
     @staticmethod
     def dump_turn_data_to_string(bot):

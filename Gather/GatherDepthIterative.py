@@ -175,7 +175,8 @@ def _get_single_line_iterative_starter(
         useTrueValueGathered,
         valueFunc,
         pathValueFunc):
-    logEntries.append(f"DUE TO SMALL SEARCH START TILE COUNT {len(startTilesDict)}, FALLING BACK TO FINDING AN INITIAL MAX-VALUE-PER-TURN PATH FOR {remainingTurns} (fullTurns {fullTurns})")
+    if DebugHelper.is_debug_or_unit_test_mode():
+        logEntries.append(f"DUE TO SMALL SEARCH START TILE COUNT {len(startTilesDict)}, FALLING BACK TO FINDING AN INITIAL MAX-VALUE-PER-TURN PATH FOR {remainingTurns} (fullTurns {fullTurns})")
     #
     # validTupleIndexes = []
     #
@@ -235,7 +236,8 @@ def _get_single_line_iterative_starter(
         logEntries.append(f'didnt find a max path searching to startTiles {"  ".join([str(tile) for tile in startTilesDict])}?')
         return 0, []
     else:
-        logEntries.append(f'Initial vt path {valuePerTurnPath}')
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logEntries.append(f'Initial vt path {valuePerTurnPath}')
 
     return valuePerTurnPath.value, [valuePerTurnPath]
 
@@ -1078,7 +1080,8 @@ def _knapsack_levels_gather_iterative_depth_prune(
         #     foreach_tree_node(rootNodes, lambda n: logEntries.append(f'inc: {str(n)}'))
 
     finally:
-        logbook.info('\n'.join(logEntries))
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info('\n'.join(logEntries))
 
     return totalValue, rootNodes
 

@@ -281,6 +281,9 @@ class BotGatherOps:
                     gathString += " +out of play"
                 if bot.defend_economy:
                     gathString += " +ecDef"
+                    if bot.board_analysis.central_defense_point is not None:
+                        gatherTargets = {bot.board_analysis.central_defense_point}
+                        bot.viewInfo.add_targeted_tile(bot.board_analysis.central_defense_point, TargetStyle.TEAL)
 
                 genPlayer = bot._map.players[bot.general.player]
                 for tile in genPlayer.tiles:
@@ -296,9 +299,11 @@ class BotGatherOps:
             if bot.defend_economy:
                 tgTurns = -1
                 useTrueValueGathered = True
-                gatherTargets = gatherTargets.copy()
+
+                gatherTargets = {bot.board_analysis.central_defense_point}
+                # gatherTargets = gatherTargets.copy()
                 if bot.enemy_attack_path is not None:
-                    gatherTargets = bot.enemy_attack_path.tileSet
+                    # gatherTargets = bot.enemy_attack_path.tileSet
                     if bot.opponent_tracker.winning_on_economy(byRatio=1.1, offset=-25):
                         gatherPriorities = None
                         tgTurns = bot._map.remainingCycleTurns - 5
@@ -309,8 +314,6 @@ class BotGatherOps:
                         gathString = f" +NO_MAT_RISKPATH {tgTurns}t" + gathString
                     else:
                         gathString = " +RISKPATH" + gathString
-                else:
-                    gatherTargets.update([t for t in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles if not t.isObstacle])
 
                 for t in gatherTargets:
                     bot.viewInfo.add_targeted_tile(t, TargetStyle.WHITE, radiusReduction=11)

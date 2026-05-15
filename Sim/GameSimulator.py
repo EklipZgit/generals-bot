@@ -6,6 +6,7 @@ from queue import Queue
 
 import DebugHelper
 from BotHost import BotHostBase
+from BotModules.BotRendering import BotRendering
 from Models import Move
 from Path import Path
 from PerformanceTimer import NS_CONVERTER
@@ -651,6 +652,7 @@ class GameSimulatorHost(object):
             if botHost.has_viewer and run_real_time:
                 botHost.initialize_viewer(botHost.eklipz_bot.no_file_logging, onClick=self.on_click)
                 botHost.run_viewer_loop()
+                BotRendering.prep_view_info_for_render(botHost.eklipz_bot, None)
                 botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
                 # botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
 

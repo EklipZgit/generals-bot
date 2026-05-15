@@ -16,6 +16,7 @@ _EXPORTS = {
     'BotCombatOps': 'BotCombatOps',
     'BotCombatQueries': 'BotCombatQueries',
     'BotCityOps': 'BotCityOps',
+    'BotCentralDefense': 'BotCentralDefense',
     'BotCityCaptureControl': 'BotCityCaptureControl',
     'BotEventHandlers': 'BotEventHandlers',
     'BotLifecycle': 'BotLifecycle',

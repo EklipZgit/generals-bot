@@ -208,6 +208,9 @@ class BotExplorationOps:
 
             flankIsCloserThanThreeFifths = bot.distance_from_general(pathToCheck.tail.tile) < 3 * bot.shortest_path_to_target_player.length // 5
             if winningByEnoughToBeSuperCareful and flankIsCloserThanThreeFifths:
+                if bot.likely_kill_push:
+                    bot.info(f'bypassing superCareful flank gath because we think a kill push is incoming')
+                    return None
                 turns = 3 + (bot.timings.get_turns_left_in_cycle(bot._map.turn) + 1) % 4
                 with bot.perf_timer.begin_move_event(f'superCareful flank gath {turns}t'):
                     startTiles = pathToCheck.convert_to_dist_dict(offset=0 - pathToCheck.length)

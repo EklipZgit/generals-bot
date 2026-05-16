@@ -26,7 +26,7 @@ class BotBehaviorTests(TestBase):
         simHost.sim.players[general.player].map.update_visible_tile(enemyGeneral.x, enemyGeneral.y, enemyGeneral.player, enemyGeneral.army, is_city=False, is_general=True)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=30)
 
         # TODO TEST, bot died because it executed a short gather timing cycle and left all its army on the left of the map expanding
 
@@ -47,7 +47,7 @@ class BotBehaviorTests(TestBase):
                 simHost.sim.players[general.player].map.update_visible_tile(enemyGeneral.x, enemyGeneral.y, enemyGeneral.player, enemyGeneral.army, is_city=False, is_general=True)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=50)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=50)
                 self.assertIsNone(winner)
                 self.assertNoRepetition(simHost, minForRepetition=4)
 
@@ -66,7 +66,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=150)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=150)
 
     def test_going_all_in_on_army_advantage_should_gather_at_the_opp_general(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -87,7 +87,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
         startTurn = simHost.sim.turn
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=80)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=80)
         logbook.info(f'game over after {simHost.sim.turn - startTurn} turns')
         self.assertIsNotNone(winner)
         self.assertEqual(map.player_index, winner)
@@ -108,7 +108,7 @@ class BotBehaviorTests(TestBase):
         # some of these will be illegal if the bot does its thing and properly kills the inbound army
         simHost.queue_player_moves_str(enemyGeneral.player, '12,12 -> 11,12 -> 10,12 -> 9,12 -> 8,12 -> 7,12')
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=5.0, turns=3)
         self.assertIsNone(winner)
         self.assertPlayerTileCount(simHost, enemyGeneral.player, 66)
 
@@ -145,7 +145,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=30)
 
         self.assertIsNone(winner)
         # should have captured tiles.
@@ -167,7 +167,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
     def test_when_all_in_with_large_tile_should_keep_attacking_effectively(self):
@@ -185,7 +185,7 @@ class BotBehaviorTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=30)
         self.assertEqual(map.player_index, winner)
 
     def test_should_intercept_and_kill_threats_before_exploring_or_expanding(self):
@@ -203,7 +203,7 @@ class BotBehaviorTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_intercept_and_kill_threats_before_exploring_or_expanding")
@@ -223,7 +223,7 @@ class BotBehaviorTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
     def test_should_not_panic_gather_and_complete_the_general_search_kill(self):
@@ -250,7 +250,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=150)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=150)
         self.assertEqual(winner, genPlayer)
 
     def test_should_begin_killing_enemy_territory_nearby_general(self):
@@ -294,7 +294,7 @@ class BotBehaviorTests(TestBase):
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=50)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.3, turns=50)
                 self.assertIsNone(winner)
                 # there will be 1 army bonus so the avg army will be at least 2.
                 self.assertGatheredNear(simHost, general.player, x=15, y=12, radius=4, requiredAvgTileValue=3.3)
@@ -322,7 +322,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=6)
         self.assertIsNone(winner)
 
     def test_should_recapture_city_instantly(self):
@@ -341,7 +341,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
         city = self.get_player_tile(16, 4, simHost.sim, map.player_index)
         self.assertEqual(map.player_index, city.player)
@@ -365,7 +365,7 @@ class BotBehaviorTests(TestBase):
         bot.armyTracker.emergenceLocationMap[enemyGeneral.player][rawMap.GetTile(16, 20)] = 200
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=50)
         self.assertIsNone(winner)
 
     def test_should_not_incorrectly_dive_enemy_king_in_repetition_with_not_enough_army(self):
@@ -384,7 +384,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=1)
 
@@ -402,7 +402,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost)
 
@@ -422,7 +422,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_plan_through_neutral_city_quick_kill_flank")
@@ -456,7 +456,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=4)
         self.assertIsNone(winner)
 
         tile = self.get_player_tile(2, 12, simHost.sim, general.player)
@@ -478,7 +478,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
     def test_should_immediately_stop_capturing_city_path_when_enemy_kill_threat_on_board(self):
@@ -502,7 +502,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
     def test_should_kill_enemy_with_long_path_because_enemy_doesnt_know_gen_location(self):
@@ -526,7 +526,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
         self.assertEqual(general.player, shouldKillEnemyGen.player)
 
@@ -544,7 +544,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertEqual(map.player_index, winner)
 
     def test_should_defend_attack_and_then_gather_faraway_army_to_defend_king_instead_of_explore(self):
@@ -564,7 +564,7 @@ class BotBehaviorTests(TestBase):
         simHost.sim.set_tile_vision(general.player, 21, 16, undiscovered=True, hidden=True)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.525, turns=120)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=1.525, turns=120)
         self.assertNotEqual(enemyGeneral.player, winner)
         expectGathered = [
             self.get_player_tile(2, 18, simHost.sim, general.player),
@@ -597,7 +597,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
         self.assertIsNone(winner)
 
 
@@ -618,7 +618,7 @@ class BotBehaviorTests(TestBase):
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
                 self.assertIsNone(winner)
 
     def test_shouldnt_loop_killing_gen_adjacent_vision_army(self):
@@ -637,7 +637,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=20)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, repetitionPlayer=general.player, minForRepetition=2)
 
@@ -655,7 +655,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, repetitionPlayer=general.player)
 
@@ -674,7 +674,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=21)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=21)
         self.assertIsNone(winner)
 
     def test_should_not_loop_trying_to_take_city(self):
@@ -691,7 +691,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost)
 
@@ -726,7 +726,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.7, turns=75)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.7, turns=75)
         self.assertIsNone(winner)
 
         sumArmyNear = BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot,bot.shortest_path_to_target_player.tileList, distance=3)
@@ -763,7 +763,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=75)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=75)
         self.assertIsNone(winner)
 
         sumArmyNear = BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot,bot.shortest_path_to_target_player.tileList, distance=3)
@@ -783,7 +783,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_leave_large_tile_in_middle_of_territory__should_continue_attack__dies_to_completely_inefficient_flank_all_the_way_around_right_side_due_to_sitting_on_71_in_middle")
@@ -805,7 +805,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_treat_edge_flanks_as_danger_potential_and_tendril_outwards")
@@ -828,7 +828,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertEqual(map.player_index, winner)
 
     def test_should_not_dodge_off_general_and_die(self):
@@ -846,7 +846,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
     def test_should_gather_from_out_of_play_tiles(self):
@@ -863,7 +863,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_gather_from_out_of_play_tiles")
@@ -883,7 +883,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
         shouldNotBeEnemy = self.get_player_tile(12, 11, simHost.sim, general.player)
         self.assertEqual(general.player, shouldNotBeEnemy.player)
@@ -902,7 +902,7 @@ class BotBehaviorTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=-2, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=100)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=100)
         self.assertIsNone(winner)
         player_map = simHost.get_player_map(general.player)
         self.assertGreater(player_map.players[general.player].cityCount, 12)
@@ -922,7 +922,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=100)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=100)
         self.assertIsNone(winner)
 
         playerArmyNearAmt = BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot,[general], distance=6, player=general.player)
@@ -947,7 +947,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.5, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=2.5, turns=20)
         self.assertIsNone(winner)
 
     def test_should_all_in_enemy_general_since_no_meaningful_defense(self):
@@ -973,7 +973,7 @@ class BotBehaviorTests(TestBase):
 
                 self.begin_capturing_logging()
                 genPlayer = general.player
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=14)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=14)
                 self.assertEqual(genPlayer, winner)
 
     def test_should_contest_cities_when_all_in_gathering_at_opp(self):
@@ -998,7 +998,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
         self.assertIsNone(winner)
         city = self.get_player_tile(7, 10, simHost.sim, general.player)
         self.assertGreater(city.army, 30, 'should not abandon contested city when contesting it guarantees an army+economy win condition.')
@@ -1021,7 +1021,7 @@ class BotBehaviorTests(TestBase):
         genMap = simHost.get_player_map(general.player)
         genPlayer = genMap.players[general.player]
         targPlayer = genMap.players[enemyGeneral.player]
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=150)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=150)
         self.assertIsNone(winner)
 
         cityDiff = genPlayer.cityCount - targPlayer.cityCount
@@ -1054,7 +1054,7 @@ class BotBehaviorTests(TestBase):
         genPlayer = genMap.players[general.player]
         targPlayer = genMap.players[enemyGeneral.player]
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=150)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=150)
         if winner is not None:
             self.assertEqual(genPlayer.index, winner)
 
@@ -1077,7 +1077,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=46)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=46)
         self.assertIsNone(winner)
         genMap = simHost.get_player_map(general.player)
         self.assertGreater(genMap.players[general.player].tileCount, 50)  # actually can probably capture more than 50...?
@@ -1096,7 +1096,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_all_in_general_when_contested_cities_out_of_position_and_knows_no_army_on_general")
@@ -1118,7 +1118,7 @@ class BotBehaviorTests(TestBase):
         simHost.queue_player_moves_str(general.player, '6,9->5,9')
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=5.0, turns=15)
         self.assertIsNone(winner)
 
     def test_should_not_fail_defense(self):
@@ -1140,7 +1140,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=25)
         self.assertIsNone(winner)
 
     def test_should_prioritize_attack_paths_through_indirect_fog(self):
@@ -1161,7 +1161,7 @@ class BotBehaviorTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=30)
         self.assertIsNone(winner)
         self.assertIn(bot._map.GetTile(17, 11), bot.target_player_gather_path.tileSet)
         self.assertIn(bot._map.GetTile(17, 12), bot.target_player_gather_path.tileSet)
@@ -1185,7 +1185,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=30)
         self.assertIsNone(winner)
 
         tiles = [
@@ -1212,7 +1212,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         # self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.5, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=1.5, turns=15)
         self.assertIsNone(winner)
 
         pMap = simHost.get_player_map(general.player)
@@ -1233,7 +1233,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
         self.assertIsNone(winner)
 
         cityA = self.get_player_tile(10, 17, simHost.sim, general.player)
@@ -1263,7 +1263,7 @@ class BotBehaviorTests(TestBase):
                 # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=21)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=21)
                 self.assertIsNone(winner)
 
                 self.assertNoRepetition(simHost, minForRepetition=2)
@@ -1313,7 +1313,7 @@ class BotBehaviorTests(TestBase):
                 # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=runForTurns)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=runForTurns)
                 self.assertIsNone(winner)
 
                 city = self.get_player_tile(enCity.x, enCity.y, simHost.sim, general.player)
@@ -1347,7 +1347,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         pMap = simHost.get_player_map(general.player)
@@ -1368,7 +1368,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_swap_timings_off_of_long_econ_defense")
@@ -1387,7 +1387,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=14)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=14)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 60)
@@ -1412,7 +1412,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=12)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=12)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 76)
@@ -1435,7 +1435,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=9)
         self.assertIsNone(winner)
 
         city = self.get_player_tile(4, 1, simHost.sim, general.player)
@@ -1459,7 +1459,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.assertGatheredNear(simHost, general.player, 4, 8, 4, requiredAvgTileValue=1.5)
@@ -1482,7 +1482,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=36)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=36)
         self.assertIsNone(winner)
 
         self.assertGatheredNear(simHost, general.player, 3, 9, 4, requiredAvgTileValue=1.5)
@@ -1509,7 +1509,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=32)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=32)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountLess(simHost, general.player, 60, "should have spent the whole time gathering defensively")
@@ -1530,7 +1530,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_go_all_in_along_existing_path_with_army_on_it")
@@ -1551,7 +1551,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNotNone(winner)
 
     def test_should_attack_with_army_not_hold_on_general(self):
@@ -1569,7 +1569,7 @@ class BotBehaviorTests(TestBase):
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=19)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=19)
         self.begin_capturing_logging()
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost)
@@ -1591,7 +1591,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=20)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost, minForRepetition=3)
@@ -1613,7 +1613,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost)
 
@@ -1635,7 +1635,7 @@ class BotBehaviorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_actively_attack_52_army_but_lock_the_68_for_dealing_with_it_instead")
@@ -1675,7 +1675,7 @@ no, it's the fact that pushing the 15 up means that later on, when you're moving
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_expand_up_into_main_attack_paths_with_tiles_along_them_main_attack_paths")
@@ -1696,7 +1696,7 @@ no, it's the fact that pushing the 15 up means that later on, when you're moving
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_launch_attack_before_spreading_leaf_moves")
@@ -1736,7 +1736,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_prep_attack_through_longest_enemy_tile_path_so_long_as_safe_on_shortest__move_gen_prediction_to_top")
@@ -1757,7 +1757,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_loop")
@@ -1784,7 +1784,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost, minForRepetition=2)
@@ -1806,7 +1806,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertEqual(map.player_index, winner)
 
     def test_should_not_run_past_enemy_threat_with_small_army_when_cant_defend(self):
@@ -1843,7 +1843,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
     def test_should_quickly_recapture_wall_break_city(self):
@@ -1864,7 +1864,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         wallBreakCity = self.get_player_tile(12, 11, simHost.sim, general.player)
@@ -1888,7 +1888,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=75)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=75)
         self.assertIsNone(winner)
 
         wallBreakCity = self.get_player_tile(12, 11, simHost.sim, general.player)
@@ -1913,7 +1913,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=50)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_determine_cannot_safely_hold_out_of_position_top_left_cities_when_middle_wall_break_available_and_hold_wall")
@@ -1934,7 +1934,7 @@ whoever has less extra troops will always get ahead
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_go_upward_to_keep_capturing_tiles_without_allowing_blue_intercept")
@@ -1960,7 +1960,7 @@ whoever has less extra troops will always get ahead
         bot.curPath.add_next(playerMap.GetTile(16, 8))
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=22)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=22)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCount(simHost.sim, general.player, 81, 'should wait for the incoming army and make leafmoves and stuff.')
@@ -1979,7 +1979,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=55)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=55)
         self.assertIsNone(winner)
 
     def test_should_not_find_no_moves_scrim_when_ought_to_be_gathering(self):
@@ -1996,7 +1996,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_find_no_moves_scrim_when_ought_to_be_gathering")
@@ -2015,7 +2015,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost, 2)
@@ -2034,7 +2034,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         tile = playerMap.GetTile(16, 13)
@@ -2054,7 +2054,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
         self.assertEqual(general.player, enemyGeneral.player)
@@ -2076,7 +2076,7 @@ whoever has less extra troops will always get ahead
         enPlayer = playerMap.players[enemyGeneral.player]
         self.assertEqual(3, enPlayer.cityCount)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         self.assertFalse(bot.is_all_in_losing)
@@ -2105,7 +2105,7 @@ whoever has less extra troops will always get ahead
                     playerMap = simHost.get_player_map(general.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
                     self.assertIsNone(winner)
 
                     self.assertPlayerTileCountLess(simHost, enemyGeneral.player, 124)
@@ -2131,7 +2131,7 @@ whoever has less extra troops will always get ahead
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
                 self.assertIsNone(winner)
 
                 self.assertPlayerTileCountLess(simHost, enemyGeneral.player, expectedCaps)
@@ -2150,7 +2150,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_all_in_en_gen_when_opp_doesnt_know_our_gen_and_cannot_hold_city")
@@ -2169,7 +2169,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=75)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=75)
         self.assertIsNone(winner)
 
         gatheredNear = BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot,[playerMap.players[general.player].general], distance=10, player=general.player)
@@ -2189,7 +2189,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         enArmy = playerMap.GetTile(12, 13)
@@ -2211,7 +2211,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_take_forever_on_danger_tiles")
@@ -2232,7 +2232,7 @@ whoever has less extra troops will always get ahead
         ogTileDiff = self.get_tile_differential(simHost)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=17)
         self.assertIsNone(winner)
 
         self.assertGreater(self.get_tile_differential(simHost), ogTileDiff + 11*2 + 6 - 1)
@@ -2253,7 +2253,7 @@ whoever has less extra troops will always get ahead
         ogTileDiff = self.get_tile_differential(simHost)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=29)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=29)
         self.assertIsNone(winner)
 
         self.assertGreater(self.get_tile_differential(simHost), ogTileDiff - 2 + 11*2 + 6 - 1)
@@ -2277,7 +2277,7 @@ whoever has less extra troops will always get ahead
                     playerMap = simHost.get_player_map(general.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
                     self.assertIsNone(winner)
 
     def test_should_complete_kill_of_en_army(self):
@@ -2296,7 +2296,7 @@ whoever has less extra troops will always get ahead
         army = bot.get_army_at_x_y(9, 16)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertIsNone(winner)
 
         shouldBe1 = playerMap.GetTile(11, 16)
@@ -2319,7 +2319,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_kill_enemy_danger_tiles_before_city_cap")
@@ -2341,7 +2341,7 @@ whoever has less extra troops will always get ahead
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
                 self.assertIsNone(winner)
 
     def test_should_find_one_move_kill_on_enemy_general(self):
@@ -2358,7 +2358,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertEqual(general.player, winner)
 
     def test_should_intercept_incoming_army_and_handle_weird_path_splits(self):
@@ -2376,7 +2376,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
         self.assertIsNone(winner)
 
         self.assertGreater(self.get_tile_differential(simHost), 0, "should be winning this encounter")
@@ -2396,7 +2396,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=30)
         self.assertIsNone(winner)
 
         for tile in [
@@ -2421,7 +2421,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertEqual(general.player, playerMap.GetTile(6, 0).player)
@@ -2444,7 +2444,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertLess(bot.timings.splitTurns, 39)
@@ -2463,7 +2463,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_error_on_weird_0_length_threat")
@@ -2482,7 +2482,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertIsNone(winner)
 
         city = playerMap.GetTile(12, 3)
@@ -2505,7 +2505,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
         self.assertIsNone(winner)
 
         self.assertEqual(0, bot.all_in_losing_counter)
@@ -2524,7 +2524,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=35)
         self.assertEqual(general.player, winner)
 
     def test_should_not_blow_up_on_interception_expansion_path(self):
@@ -2541,7 +2541,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
     def test_should_not_blow_up_on_other_intercept_plan_stuff(self):
@@ -2558,7 +2558,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
     def test_should_defend_inevitably_incoming_kill_threat_with_3s_from_right(self):
@@ -2575,7 +2575,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=16)
         self.assertIsNone(winner)
 
         numGathed = 0
@@ -2607,7 +2607,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost, repetitionPlayer=general.player)
@@ -2631,7 +2631,7 @@ whoever has less extra troops will always get ahead
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
                 if not inTime:
                     self.assertIsNone(winner)
                 else:
@@ -2657,7 +2657,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         c1 = playerMap.GetTile(12, 13)
@@ -2680,7 +2680,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
         self.assertMinArmyNear(playerMap, playerMap.GetTile(6, 14), general.player, 30)
@@ -2708,7 +2708,7 @@ whoever has less extra troops will always get ahead
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
                 self.assertIsNone(winner)
 
     def test_should_not_attack_wastefully_early_on_long_spawns(self):
@@ -2741,7 +2741,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertFalse(bot.army_out_of_play)
@@ -2760,7 +2760,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(-2, simHost, 'shouldnt sit there while losing and do nothing lmao')
 
@@ -2782,7 +2782,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=21)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=21)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertMinArmyNear(playerMap, general, general.player, 30, distance=3)
@@ -2801,7 +2801,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(0, bot.all_in_losing_counter)
@@ -2821,8 +2821,8 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
+        # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
         timings: Timings | None = bot.timings
         self.assertIsNotNone(timings)
 
@@ -2842,7 +2842,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
 
     def test_should_have_a_normal_ish_launch_and_gather_split_timing(self):
@@ -2861,7 +2861,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(bot.timings.launchTiming, 33)
@@ -2881,7 +2881,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_OVERgather_defensively_near_end_of_round__must_weight_tile_differential_appropriately")
@@ -2901,7 +2901,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(3, playerMap.GetTile(9, 9).army)
@@ -2925,7 +2925,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=27)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=27)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(9, simHost)
@@ -2948,7 +2948,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for shouldnt_do_janky_riskpath_gather_backwards_to_general")
@@ -2967,7 +2967,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_play_defensive_once_ahead_on_tiles_and_opponent_has_terrifying_army_threat")
@@ -2986,7 +2986,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
 
     def test_should_be_able_to_go_kill_army_behind_in_corner(self):
@@ -3003,7 +3003,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(general.player, playerMap.GetTile(18, 0))
@@ -3022,7 +3022,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
 
     def test_should_pull_backwards_3s_after_taking_city(self):
@@ -3046,17 +3046,17 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=31)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=31)
         self.assertNoFriendliesKilled(map, general)
         self.assertOwnedXY(playerMap, 2, 6)
-    
+
     def test_force_far_gathers_shouldnt_trigger_a_massive_gather_resulting_in_loss(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/force_far_gathers_shouldnt_trigger_a_massive_gather_resulting_in_loss___wVkZWg5RH---1--662.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 662, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=662)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -3065,18 +3065,18 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(bot.curPath.length, 20)
-    
+
     def test_should_not_block_interception_via_launch_for_silly_reasons(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_block_interception_via_launch_for_silly_reasons___8F0l9Ns10---0--776.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 776, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=776)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,3->8,8->3,8->3,10->1,10->1,11')
@@ -3084,18 +3084,18 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
         self.assertLess(general.army, 3)
 
-    
+
     def test_should_finish_all_in_attacks(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_finish_all_in_attacks___QoMfyZD0B---1--824.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 824, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=824)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -3103,18 +3103,18 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_finish_all_in_attacks")
-    
+
     def test_should_launch_attack_not_repeat_send_general_then_leave_army_behind(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_launch_attack_not_repeat_send_general_then_leave_army_behind___f75jrrOSq---1--170.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 170, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=170)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -3122,11 +3122,11 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertGreater(playerMap.GetTile(16, 12).army, 45)
-    
+
     def test_should_recognize_170_fog_risk_and_prep_defense_in_winning_position(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_170_fog_risk_and_prep_defense_in_winning_position___riwBGNTXu---0--365.txtmap'
@@ -3134,7 +3134,7 @@ whoever has less extra troops will always get ahead
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=365)
         rawMap.GetTile(16,13).army = 2
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None  None  None  None  None  None  16,13->14,13  14,12->14,13->11,13->11,12->6,12->6,10->4,10->4,9')
@@ -3145,21 +3145,21 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertNoFriendliesKilled(map, general)
 
         # we end up with 132 inbound enemy army on the city in 11 turns.
         self.assertOwned(general.player, playerMap.GetTile(6, 10))
         self.assertOwned(general.player, playerMap.GetTile(7, 12))
 
-    
+
     def test_should_not_swap_to_king_kill_path_when_need_to_recapture_city_wtf(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_swap_to_king_kill_path_when_need_to_recapture_city_wtf___FmaSzcEXX---1--502.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 502, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=502)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -3167,18 +3167,18 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(general.player, playerMap.At(13, 17))
-    
+
     def test_should_block_incoming_armies_path_as_blocked_tile_lmao(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_block_incoming_armies_path_as_blocked_tile_lmao___ctsoU1gJI---0--237.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 237, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=237)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,10->8,11->4,11->4,13->3,13')
@@ -3186,11 +3186,11 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
 
 
-    
+
     def test_shouldnt_gather_randomly_at_end_of_round_and_do_dumb_danger_tile_kill_move_when_should_obviously_recapture(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFileTrue = 'GameContinuationEntries/shouldnt_gather_randomly_at_end_of_round_and_do_dumb_danger_tile_kill_move_when_should_obviously_recapture___UohocnexH---0--242_true.txtmap'
@@ -3220,19 +3220,19 @@ whoever has less extra troops will always get ahead
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertTileDifferentialGreaterThan(expectedBetter, simHost)
 
-    
+
     def test_should_actually_fucking_defend_when_recognize_inbound_kill_threat_LOL(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_actually_fucking_defend_when_recognize_inbound_kill_threat_LOL___UohocnexH---0--300.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 300, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=300)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '7,9->6,9')
@@ -3248,18 +3248,18 @@ whoever has less extra troops will always get ahead
         ]
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertMinArmyNearTiles(playerMap, tiles, general.player, 60, 2, 'Fucking, we know hes gonna try to all in down this path')
-    
+
     def test_should_gather_to_hold_central_point_of_defense_nearest_to_contestable_cities(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_gather_to_hold_central_point_of_defense_nearest_to_contestable_cities___wSBATsHT8---0--579.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 575, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=575)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -3267,7 +3267,7 @@ whoever has less extra troops will always get ahead
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
         self.assertNoFriendliesKilled(map, general)
 
         tiles = [

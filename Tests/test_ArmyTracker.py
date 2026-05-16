@@ -128,7 +128,7 @@ class ArmyTrackerTests(TestBase):
             simHost.queue_player_moves_str(enemyGeneral.player, f'None')
         if debugMode:
             self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=1)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=1)
 
     def test_small_gather_adj_to_fog_should_not_double_gather_from_fog(self):
         # SEE TEST WITH THE SAME NAME IN test_Map.py which proves that this bug is not the map engines fault, and is instead armytracker emergence as the cause.
@@ -148,7 +148,7 @@ class ArmyTrackerTests(TestBase):
 
         if debugMode:
             simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, aroundTile=map.GetTile(10, 14)))
-            simHost.run_sim(run_real_time=debugMode, turn_time=5, turns=2)
+            simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=5, turns=2)
             return
 
         bot = simHost.get_bot()
@@ -204,7 +204,7 @@ class ArmyTrackerTests(TestBase):
                     self.begin_capturing_logging()
 
                     simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=6)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=6)
                     self.assertIsNone(winner)
                     continue
 
@@ -349,7 +349,7 @@ class ArmyTrackerTests(TestBase):
                 self.begin_capturing_logging()
 
                 simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=3)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=5.0, turns=3)
                 self.assertIsNone(winner)
 
     def test_should_not_duplicate_fog_island_armies(self):
@@ -500,7 +500,7 @@ class ArmyTrackerTests(TestBase):
         self.begin_capturing_logging()
         if debugMode:
             simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
             self.assertIsNone(winner)
 
         m = simHost.get_player_map(general.player)
@@ -580,7 +580,7 @@ class ArmyTrackerTests(TestBase):
         self.begin_capturing_logging()
 
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
     def template(self):
@@ -598,7 +598,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
     def test_should_not_duplicate_gather_army_exit_from_fog(self):
@@ -618,7 +618,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
     def test_should_not_resolve_fog_path_for_normal_move(self):
@@ -638,7 +638,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
     def test_should_not_perform_army_increment_or_city_increment_on_initial_test_map_load(self):
@@ -682,7 +682,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=5.0, turns=2)
         self.assertNoFogMismatches(simHost, general.player)
 
     def test_should_not_duplicate_army_collision_backwards_into_fog(self):
@@ -702,7 +702,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=5.0, turns=2)
         # self.assertNoFogMismatches(simHost, general.player)
 
     def test_should_not_warp_army_through_fog(self):
@@ -722,7 +722,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
     def test_should_intercept_army_that_enters_fog__army_tracker_not_predicting_fog_moves(self):
@@ -751,7 +751,7 @@ class ArmyTrackerTests(TestBase):
         self.begin_capturing_logging()
         simHost.sim.ignore_illegal_moves = True
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=20)
         self.assertIsNone(winner)
 
     def test_should_not_duplicate_stationary_army_into_fog_when_attacking_it(self):
@@ -775,7 +775,7 @@ class ArmyTrackerTests(TestBase):
 
                 self.begin_capturing_logging()
                 simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
                 self.assertIsNone(winner)
 
     def test_should_detect_cities_based_on_incontroversial_moves_from_fog(self):
@@ -802,7 +802,7 @@ class ArmyTrackerTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=1)
         self.assertIsNone(winner)
 
         botTile = self.get_player_tile(4, 9, simHost.sim, general.player)
@@ -848,7 +848,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         # simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=4)
         self.assertIsNone(winner)
         notCity = self.get_player_tile(9, 1, simHost.sim, general.player)
         self.assertFalse(notCity.isCity)
@@ -879,7 +879,7 @@ class ArmyTrackerTests(TestBase):
 
                 simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=1 if not hasVisionOfEnSource else 3)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=1 if not hasVisionOfEnSource else 3)
                 self.assertIsNone(winner)
 
     def test_should_not_duplicate_prio_loss_move_capture_backwards_into_fog(self):
@@ -899,7 +899,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
     def test_should_recognize_army_collision_from_new_fog(self):
@@ -919,7 +919,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
     def test_should_determine_opp_took_city_in_fog_and_register_scary_alternate_attack_threat(self):
@@ -968,7 +968,7 @@ class ArmyTrackerTests(TestBase):
                 if debugMode:
                     self.begin_capturing_logging()
                 simHost.run_between_turns(lambda: self.assertLess(len(pMap.players[enemyGeneral.player].cities), 2, "at no point should we leave the duplicate fog city around in the fog."))
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=30)
                 self.assertIsNone(winner)
 
                 self.assertEqual(general.player, fakeCity.player, "should have rapidly captured the wall-city.")
@@ -1015,7 +1015,7 @@ class ArmyTrackerTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
     def test_should_force_entangled_armies_different_directions_and_never_merge_them(self):
@@ -1039,7 +1039,7 @@ class ArmyTrackerTests(TestBase):
         self.begin_capturing_logging()
         genMap = simHost.get_player_map(general.player)
         simHost.run_between_turns(lambda: self.assertLess(genMap.GetTile(10, 10).army, 75))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=20)
         self.assertIsNone(winner)
 
         countOrigName = 0
@@ -1099,7 +1099,7 @@ class ArmyTrackerTests(TestBase):
 
                 self.begin_capturing_logging()
                 simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
                 self.assertIsNone(winner)
 
     def test_does_not_do_funky_thinks_with_dest_tiles_with_vision_loss_source_that_were_not_captured_due_to_source_prio_cap(self):
@@ -1186,7 +1186,7 @@ a1   b1   b1   bG1
                     ogArmy = bot.get_army_at_x_y(7, 6)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=1)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=1)
                     self.assertIsNone(winner)
 
                     botWrongTile1 = bot._map.GetTile(7, 6)
@@ -1251,7 +1251,7 @@ a1   b1   b1   bG1
                     simHost.queue_player_moves_str(general.player, 'None')
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=1)
                 self.assertIsNone(winner)
 
                 fuckedTile = self.get_player_tile(10, 13, simHost.sim, general.player)
@@ -1278,7 +1278,7 @@ a1   b1   b1   bG1
                     simHost.queue_player_moves_str(general.player, 'None')
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=1)
                 self.assertIsNone(winner)
 
                 wtfCity = self.get_player_tile(11, 12, simHost.sim, general.player)
@@ -1298,7 +1298,7 @@ a1   b1   b1   bG1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=True))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=5)
         self.assertIsNone(winner)
 
         bot = self.get_debug_render_bot(simHost, general.player)
@@ -1346,7 +1346,7 @@ a1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
         self.assertIsNone(winner)
 
         attackedCity = self.get_player_tile(10, 14, simHost.sim, general.player)
@@ -1376,7 +1376,7 @@ a1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for should_not_duplicate_fog_emergence_neutral_army
@@ -1397,7 +1397,7 @@ a1   b1   b1   bG1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=True))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
     def test_should_not_capture_fog_island_neutral_then_invent_infinite_army(self):
@@ -1416,7 +1416,7 @@ a1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for should_not_capture_fog_island_neutral_then_invent_infinite_army
@@ -1439,7 +1439,7 @@ a1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
         badTile = playerMap.GetTile(12, 11)
@@ -1464,7 +1464,7 @@ a1   b1   b1   bG1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, aroundTile=map.GetTile(9, 1)))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     def test_should_not_create_phantom_visible_army(self):
@@ -1487,7 +1487,7 @@ a1   b1   b1   bG1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=True))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=5)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     def test_should_not_magician_army_into_nothing_when_it_clearly_moved_up_into_fog(self):
@@ -1509,7 +1509,7 @@ a1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     def test_should_drop_bad_fog_predictions_after_discovering_army_came_from_different_direction(self):
@@ -1565,7 +1565,7 @@ a1   b1   b1   bG1
             self.assertEqual(enemyGeneral.player, playerTile.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         for tile in badTiles:
@@ -1592,7 +1592,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertTrue(bot._map.euclidDist(20, 14, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y) < 5)
@@ -1613,7 +1613,7 @@ a1   b1   b1   bG1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
 
         self.assertIsNone(winner)
 
@@ -1639,7 +1639,7 @@ a1   b1   b1   bG1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost, general.player, excludeFogMoves=False, aroundTile=playerMap.GetTile(9, 16)))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertFalse(army.scrapped)
@@ -1662,7 +1662,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_conclude_enemy_has_fog_city(self):
@@ -1688,7 +1688,7 @@ a1   b1   b1   bG1
         fogCity = playerMap.GetTile(8, 9)
         self.assertEqual(-1, fogCity.player)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertEqual(enemyGeneral.player, fogCity.player)
@@ -1711,7 +1711,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         badTile = playerMap.GetTile(8, 6)
@@ -1735,7 +1735,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         tile1 = playerMap.GetTile(1, 17)
@@ -1765,7 +1765,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         toTile = playerMap.GetTile(2, 19)
@@ -1795,7 +1795,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         genTile = playerMap.GetTile(8, 2)
@@ -1816,7 +1816,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertLess(bot._map.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 3)
@@ -1835,7 +1835,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=22)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=22)
         self.assertIsNone(winner)
 
         tile = playerMap.GetTile(1, 8)
@@ -1863,7 +1863,7 @@ a1   b1   b1   bG1
         army = bot.get_army_at_x_y(7, 4)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
         self.assertNoFogMismatches(simHost, general.player, aroundTile=map.GetTile(8, 5))
 
@@ -1907,7 +1907,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=14)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=14)
         self.assertIsNone(winner)
 
         playerCity = playerMap.GetTile(3, 8)
@@ -1931,7 +1931,7 @@ a1   b1   b1   bG1
 
         self.assertEqual(190, bot.opponent_tracker.current_team_cycle_stats[1].approximate_fog_army_available_total)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
         self.assertLess(bot.opponent_tracker.current_team_cycle_stats[1].approximate_fog_army_available_total, 144)
         city = playerMap.GetTile(0, 11)
@@ -2015,7 +2015,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
     def test_should_not_duplicate_collided_armies_into_fog(self):
@@ -2034,7 +2034,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertNoFogMismatches(simHost, general.player, aroundTile=playerMap.GetTile(9, 10))
@@ -2053,7 +2053,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertEqual(enemyGeneral.player, playerMap.GetTile(11, 9).player)
@@ -2073,7 +2073,7 @@ a1   b1   b1   bG1
 
         self.assertEqual(1, bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][6])
         self.begin_capturing_logging(logbook.DEBUG)
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertIsNone(winner)
 
         self.assertEqual(1, bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][6], "should not have increased emergence, what the hell man")
@@ -2110,7 +2110,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_detect_obvious_wallbreak_city_near_general(self):
@@ -2128,7 +2128,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
         city = playerMap.GetTile(19, 16)
@@ -2150,7 +2150,7 @@ a1   b1   b1   bG1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertNoFogMismatches(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
     def test_should_vanish_entangled_armies_after_city_cap(self):
@@ -2176,7 +2176,7 @@ a1   b1   b1   bG1
         self.mark_armies_as_entangled(bot, realLocation, entangledLocations)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         for tile in entangledLocations:
@@ -2196,7 +2196,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertIsNone(bot.dangerAnalyzer.fastestThreat)
@@ -2220,7 +2220,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertLess(bot.armyTracker.emergenceLocationMap[enemyGeneral.player][playerMap.GetTile(2, 12)], 1)
@@ -2259,7 +2259,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
         realTile = playerMap.GetTile(16, 2)
@@ -2287,7 +2287,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         armies = bot.armyTracker.get_unique_armies_by_player(enemyGeneral.player)
@@ -2313,7 +2313,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
 
         army = bot.armyTracker.armies.get(playerMap.GetTile(11, 8))
@@ -2352,7 +2352,7 @@ a1   b1   b1   bG1
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
                 self.assertNoFriendliesKilled(map, general)
 
                 armies = bot.armyTracker.get_unique_armies_by_player(enemyGeneral.player)
@@ -2386,7 +2386,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(1, len(playerMap.players[enemyGeneral.player].cities))
@@ -2407,7 +2407,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general)
 
         army = bot.get_army_at_x_y(1, 8)
@@ -2431,7 +2431,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=14)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=14)
         self.assertNoFriendliesKilled(map, general)
 
     def test_army_emerging_as_enemy_teammate_should_not_dupe_original_army(self):
@@ -2449,7 +2449,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         army = bot.get_army_at_x_y(12, 9)
@@ -2470,7 +2470,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         frFrom = playerMap.GetTile(16, 10)
         frTo = playerMap.GetTile(17, 10)
         enTo = playerMap.GetTile(17, 9)
@@ -2494,7 +2494,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(playerMap.GetTile(17, 10).army, 11)
@@ -2517,7 +2517,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertNoArmyOn(map.GetTile(12, 7), bot)
@@ -2537,7 +2537,7 @@ a1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general)
         self.assertNoArmyOn(playerMap.At(3, 5), bot)
         self.assertNoArmyOn(playerMap.At(4, 5), bot)

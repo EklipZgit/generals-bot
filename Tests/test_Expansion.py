@@ -48,7 +48,7 @@ class ExpansionTests(TestBase):
         simHost.sim.set_tile_vision(general.player, 13, 1, hidden=True, undiscovered=True)
         simHost.sim.set_tile_vision(general.player, 13, 2, hidden=True, undiscovered=True)
         simHost.sim.set_tile_vision(general.player, 13, 3, hidden=True, undiscovered=True)
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=6)
         self.assertIsNone(winner)
         #should have taken 5 enemy tiles and one neutral
         self.assertEqual(45, simHost.sim.players[general.player].map.players[general.player].tileCount)
@@ -98,7 +98,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=remainingTurns)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=remainingTurns)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 50, '?')
@@ -123,7 +123,7 @@ bot_target_player=1
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.3, turns=11)
         self.assertIsNone(winner)
 
         self.assertEqual(36, simHost.get_player_map(general.player).players[general.player].tileCount)
@@ -149,7 +149,7 @@ bot_target_player=1
 
         self.begin_capturing_logging()
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.3, turns=11)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 35)
@@ -192,7 +192,7 @@ bot_target_player=1
         # alternatively
         # 3 in 4 by pushing out the 6,12 2+3, thats 70@10t
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=14)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=14)
         self.assertIsNone(winner)
         pMap = simHost.get_player_map(general.player)
         genPlayer = pMap.players[general.player]
@@ -217,7 +217,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 46)
@@ -241,7 +241,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=11)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 39)
@@ -267,7 +267,7 @@ bot_target_player=1
         ogDiff = self.get_tile_differential(simHost, general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=20)
         self.assertIsNone(winner)
 
         finalDiff = self.get_tile_differential(simHost, general.player)
@@ -290,7 +290,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=4)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 44)
@@ -315,7 +315,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=20)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 33)
@@ -342,7 +342,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=28)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.3, turns=28)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountLess(simHost, enemyGeneral.player, 44)
@@ -365,7 +365,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for should_not_expand_into_neutral_city_wtf
@@ -387,7 +387,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=13)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=13)
         self.assertNoFriendliesKilled(map, general, allyGen)
         self.assertNoRepetition(simHost)
 
@@ -407,7 +407,7 @@ bot_target_player=1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_run_down_into_non_enemy_territory_with_kill_threat_army")
@@ -426,7 +426,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCount(simHost, general.player, 53, "should capture 2 blue tiles and 2 neutrals")
@@ -446,7 +446,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=24)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=24)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountLess(simHost, enemyGeneral.player, 21)
@@ -480,7 +480,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_use_large_army_taking_en_tiles_first(self):
@@ -502,7 +502,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertIsNone(winner)
 
         shouldBeGen = playerMap.GetTile(7, 14)
@@ -523,7 +523,7 @@ bot_target_player=1
 
         initTileDiff = self.get_tile_differential(simHost)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=19)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=19)
         self.assertIsNone(winner)
 
         self.assertGreater(self.get_tile_differential(simHost) - initTileDiff, 16)
@@ -549,7 +549,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
         self.assertIsNone(winner)
 
         self.assertGreater(playerMap.GetTile(general.x, general.y).army, 32, 'should not have launched from general yet.')
@@ -569,7 +569,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=26)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=26)
         self.assertIsNone(winner)
 
         self.assertGreater(playerMap.players[general.player].tileCount, 43, "should have launched off general for more tiles than expansion plan")
@@ -590,7 +590,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertIsNone(winner)
         self.assertPlayerTileCountGreater(simHost, general.player, 58)
 
@@ -610,7 +610,7 @@ bot_target_player=1
         bot.tileIslandBuilder.use_debug_asserts = True
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
         self.assertIsNone(winner)
 
     def test_should_perform_early_gather_to_tendrils__open(self):
@@ -627,7 +627,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
         self.assertIsNone(winner)
 
         self.assertGreater(playerMap.players[general.player].tileCount, 56)
@@ -646,7 +646,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
     def test_should_not_launch_super_early_v1(self):
@@ -663,7 +663,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
 
     def test_should_not_launch_super_early_v2(self):
@@ -680,7 +680,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
         self.assertIsNone(winner)
 
     def test_should_not_take_ages_predicting_expansion(self):
@@ -697,7 +697,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         # self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertEqual(0, simHost.dropped_move_counts_by_player[general.player])
@@ -718,7 +718,7 @@ bot_target_player=1
 
         tileDiff = self.get_tile_differential(simHost, general.player, enemyGeneral.player)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=17)
         self.assertIsNone(winner)
 
         finalTileDiff = self.get_tile_differential(simHost, general.player, enemyGeneral.player)
@@ -740,7 +740,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=26)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=26)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 56)
@@ -764,7 +764,7 @@ bot_target_player=1
 
         tileDiff = self.get_tile_differential(simHost)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=21)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=21)
         self.assertIsNone(winner)
 
         finalTileDiff = self.get_tile_differential(simHost)
@@ -788,7 +788,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=17)
         self.assertIsNone(winner)
 
         diff = self.get_tile_differential(simHost)
@@ -810,7 +810,7 @@ bot_target_player=1
 
         initDiff = self.get_tile_differential(simHost)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         finalDiff = self.get_tile_differential(simHost)
@@ -836,7 +836,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=18)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=18)
         self.assertIsNone(winner)
 
         tileDiff = self.get_tile_differential(simHost)
@@ -856,7 +856,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(-5, simHost)
@@ -875,7 +875,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(10, simHost)
@@ -899,7 +899,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(4, simHost)
@@ -919,7 +919,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=21)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=21)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(-8, simHost)
@@ -938,7 +938,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_on_discover_should_not_let_first50_plan_not_capture_tiles(self):
@@ -957,7 +957,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(16, simHost)
@@ -976,7 +976,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertIsNone(winner)
 
         self.assertEqual(50, playerMap.players[general.player].tileCount, "should have capped 2 tiles at end.")
@@ -995,7 +995,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertIsNone(winner)
 
         self.assertGreater(playerMap.GetTile(3, 11).army, 40)
@@ -1022,7 +1022,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertIsNone(winner)
         self.assertTileDifferentialGreaterThan(-9, simHost)
 
@@ -1041,7 +1041,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=24)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=24)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(18, simHost)
@@ -1062,7 +1062,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
         self.assertIsNone(winner)
 
         self.assertLess(general.army, 10, 'should have launched with general army too')
@@ -1082,7 +1082,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
         # would blow up if bug were reproing
 
@@ -1108,7 +1108,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(7, simHost)
@@ -1129,7 +1129,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
         self.assertTileDifferentialGreaterThan(0, simHost)
 
@@ -1151,7 +1151,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(4, simHost)
@@ -1173,7 +1173,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
         self.assertIsNone(winner)
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(5, 5), 'should expand away from general, not into it')
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(5, 6), 'should expand away from general, not into it')
@@ -1194,7 +1194,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost)
@@ -1213,7 +1213,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost)
@@ -1241,7 +1241,7 @@ bot_target_player=1
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
                 self.assertIsNone(winner)
 
                 with self.subTest('main test'):
@@ -1270,7 +1270,7 @@ bot_target_player=1
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
                 self.assertIsNone(winner)
 
                 self.assertTileDifferentialGreaterThan(1, simHost, 'can at worst achieve 1 tile diff by just taking neutrals rest of round')
@@ -1289,7 +1289,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(9, simHost)
@@ -1313,7 +1313,7 @@ bot_target_player=1
         # simHost.queue_player_moves_str(general.player, '2,19->2,18->4,18->4,17->8,17->8,16->11,16->11,15->13,15->13,18')  # force us not to find opponent, to make test consistent
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=41)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=41)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(43, simHost, 'should spend the whole damn time capping tiles and pull from corner.')
@@ -1363,7 +1363,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(general.player, playerMap.GetTile(9, 10), "should capture this central tile with a 2, no reason not to.")
@@ -1392,7 +1392,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for look_at_recapture_line_and_launch_earlier_with_plan_to_cap_right_side_end_of_round")
@@ -1411,7 +1411,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(-6, simHost, 'should take 3 enemy tiles, wtf')
@@ -1432,7 +1432,7 @@ bot_target_player=1
 
         diff = self.get_tile_differential(simHost)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(diff + 7, simHost, 'should have capped tiles with all 4 moves')
@@ -1452,7 +1452,7 @@ bot_target_player=1
         simHost.queue_player_leafmoves(enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 51, "can easily capture 52 tiles out of a good launch here.")
@@ -1472,7 +1472,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(4, simHost, 'should take enemy tiles with all army')
 
@@ -1490,7 +1490,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=27)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=27)
         self.assertNoFriendliesKilled(map, general)
         self.assertOwned(general.player, playerMap.GetTile(7, 3), 'should not have done wonky stuff')
         self.assertOwned(general.player, playerMap.GetTile(9, 2), 'should not have done wonky stuff')
@@ -1511,7 +1511,7 @@ bot_target_player=1
         bot.get_army_at_x_y(4, 4).last_moved_turn = map.turn - 5
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(general.player, playerMap.GetTile(6, 14), 'should capture enemy tile, not neutral, wtf')
@@ -1534,7 +1534,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(1, simHost, 'should cap the tiles because general can do stuff rest of round...')
 
@@ -1552,7 +1552,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(12, simHost, 'can literally capture one tile per move the entire rest of the round except 1')
 
@@ -1570,7 +1570,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(14, simHost, 'because shouldnt ignore good moves')
 
@@ -1602,7 +1602,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=22)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=22)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(12, simHost)
@@ -1621,7 +1621,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
         self.assertPlayerTileCountGreater(simHost, general.player, 119, 'shouldnt fail to find a move and that move ought to be expansion or capture near end of round')
 
@@ -1639,7 +1639,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_stop_chain-capping_enemy_tiles_when_can_still_expand_from_genafter_dumping_fully_into_enemy_land")
@@ -1659,7 +1659,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(2, simHost, 'should cap 2 tiles and then use general for more land')
@@ -1681,7 +1681,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(3, simHost, 'should cap 2 tiles and then use general for more land')
@@ -1704,7 +1704,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(12, simHost, 'should at minimum do a proper city-expand plan')   # proof 2 minimum
@@ -1733,7 +1733,7 @@ bot_target_player=1
         ])
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertEqual(playerMap.GetTile(2, 9).army, 2) # incremented the turn we left the general. Shouldn't have moved that 2 to follow.
         self.assertEqual(playerMap.GetTile(1, 9).army, 6)
 
@@ -1760,7 +1760,7 @@ bot_target_player=1
         ])
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertEqual(playerMap.GetTile(1, 9).army, 1)
         self.assertEqual(playerMap.GetTile(2, 9).army, 8)
 
@@ -1778,7 +1778,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
     def test_shouldnt_create_broken_islands_after_captures(self):
@@ -1810,7 +1810,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
     def test_shouldnt_create_broken_islands_after_captures__TMP(self):
@@ -1843,7 +1843,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general)
 
     def test_shouldnt_explode_flow_expand_on_direct_build_of_bad_position(self):
@@ -1864,7 +1864,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
     def test_flow_graph_neutral_demand_feasibility_repro(self):
@@ -1957,14 +1957,14 @@ bot_target_player=1
                     nx.flow.min_cost_flow(G)
                 except nx.NetworkXUnfeasible as ex:
                     self.fail(f'use_neutral_flow={use_neutral_flow}: NetworkXUnfeasible: {ex}')
-    
+
     def test_should_continue_capturing_enemy_tiles_for_remainder_of_round(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_continue_capturing_enemy_tiles_for_remainder_of_round___Vbdk6Ojkl---1--133.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=133)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1972,18 +1972,18 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=17)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(14, simHost, 'if capped enemy tiles whole round, would still have to make like 3 neutral moves bc not enough army, so go from -16 to +15')
-    
+
     def test_should_prefer_expanding_into_enemy_territory(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_prefer_expanding_into_enemy_territory___UCtSMmRDT---1--66.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 66, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=66)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_leafmoves(enemyGeneral.player, 15)
@@ -1991,17 +1991,17 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
 
-    
+
     def test_should_use_f25_piggyback_to_effectively_capture_nearby_enemy_land_not_just_neutral(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_use_f25_piggyback_to_effectively_capture_nearby_enemy_land_not_just_neutral___f7V_QKag3---0--87.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 87, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=87)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -2012,7 +2012,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=13)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=13)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(3, simHost, 'should find a good plan')
@@ -2043,7 +2043,7 @@ bot_target_player=1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=13)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=13)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(5, simHost, 'immediately capping enemy followed by neutrals nets 6')

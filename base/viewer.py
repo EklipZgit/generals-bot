@@ -150,6 +150,7 @@ class GeneralsViewer(object):
         self.square_inner_5: Rect = None
         self._red_x: Surface = None
         self._min_sleep_time: float = min_sleep_time
+        self._already_logged_team_stats_error: bool = False
 
         self.player_colors: typing.List[int] = PLAYER_COLORS
 
@@ -1547,15 +1548,17 @@ class GeneralsViewer(object):
             statsSorted.append((stats, cycleData))
 
         if skippedTeams:
-            errorMessage = (
-                f'VIEWER SCORE ROW missing opponent tracker cycle stats on turn {self._map.turn}: '
-                f'skippedTeams {skippedTeams}, unique_teams {self._map.unique_teams}, '
-                f'team_cycle_stats length {len(self._viewInfo.team_cycle_stats)}, '
-                f'team_last_cycle_stats length {len(self._viewInfo.team_last_cycle_stats)}, '
-                f'player_fog_risks length {len(self._viewInfo.player_fog_risks)}, '
-                f'players {len(self._map.players)}')
-            logbook.error(errorMessage)
-            self._event_queue.put(('ERROR', errorMessage))
+            if not self._already_logged_team_stats_error:
+                self._already_logged_team_stats_error = True
+                errorMessage = (
+                    f'VIEWER SCORE ROW missing opponent tracker cycle stats on turn {self._map.turn}: '
+                    f'skippedTeams {skippedTeams}, unique_teams {self._map.unique_teams}, '
+                    f'team_cycle_stats length {len(self._viewInfo.team_cycle_stats)}, '
+                    f'team_last_cycle_stats length {len(self._viewInfo.team_last_cycle_stats)}, '
+                    f'player_fog_risks length {len(self._viewInfo.player_fog_risks)}, '
+                    f'players {len(self._map.players)}')
+                logbook.error(errorMessage)
+                self._event_queue.put(('ERROR', errorMessage))
             for team in skippedTeams:
                 stats = self._map.get_team_stats_by_team_id(team)
                 statsSorted.append((stats, None))

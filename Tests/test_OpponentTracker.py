@@ -23,7 +23,7 @@ class OpponentTrackerTests(TestBase):
 
         self.assertEqual(190, bot.opponent_tracker.current_team_cycle_stats[1].approximate_fog_army_available_total)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
         self.assertLess(bot.opponent_tracker.current_team_cycle_stats[1].approximate_fog_army_available_total, 144)
 
@@ -81,7 +81,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         self.assertEqual(6, bot.get_opponent_cycle_stats().approximate_fog_army_available_total)
@@ -102,7 +102,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertEqual(18, bot.get_opponent_cycle_stats().approximate_fog_army_available_total)
@@ -122,7 +122,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertLess(bot.get_opponent_cycle_stats().approximate_fog_army_available_total, 5)
@@ -143,7 +143,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertEqual(0, bot.get_opponent_cycle_stats().approximate_fog_army_available_total)
@@ -165,7 +165,7 @@ class OpponentTrackerTests(TestBase):
 
         ogTileDiff = self.get_tile_differential(simHost)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
         self.assertIsNone(winner)
 
         endTileDiff = self.get_tile_differential(simHost)
@@ -186,7 +186,7 @@ class OpponentTrackerTests(TestBase):
 
         ogDiff = self.get_tile_differential(simHost)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=22)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=22)
         self.assertIsNone(winner)
 
         self.assertLess(self.get_tile_differential(simHost), ogDiff + 5)
@@ -207,7 +207,7 @@ class OpponentTrackerTests(TestBase):
         bot.target_player_gather_path = None
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=22)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=22)
         self.assertIsNone(winner)
 
         self.assertLess(playerMap.players[general.player].tileCount, 53)
@@ -226,7 +226,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_not_over_reduce_fog_army_on_move_half_chase(self):
@@ -244,7 +244,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         enStats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
@@ -278,7 +278,7 @@ class OpponentTrackerTests(TestBase):
         self.assertGreater(matrix[playerMap.GetTile(4, 6)], 0.1)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=39)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=39)
         self.assertIsNone(winner)
 
         self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles(bot.target_player_gather_path.tileList, distance=3), 130)
@@ -297,7 +297,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=33)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=33)
         self.assertIsNone(winner)
 
     def test_should_not_reduce_enemy_army_while_capturing_visible_tiles(self):
@@ -316,7 +316,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         enStats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
@@ -343,7 +343,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.assertEqual(0, bot.sum_player_standing_army_near_or_on_tiles([playerMap.GetTile(2, 11)], distance=6, player=general.player), "should have used all the tiles in the top left")
@@ -362,7 +362,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=35)
         self.assertIsNone(winner)
 
         self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([general], distance=2), 60)
@@ -383,7 +383,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=35)
         self.assertIsNone(winner)
 
         self.assertLess(bot.sum_player_standing_army_near_or_on_tiles([general], distance=2), 45)
@@ -406,7 +406,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         stats = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player)
@@ -432,7 +432,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=0)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=0)
         self.assertIsNone(winner)
 
         lookup = bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player)
@@ -456,7 +456,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=36)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=36)
         self.assertIsNone(winner)
 
     def test_should_infer_inbound_kill_attempt_and_defend_aggressively_after_taking_unmatched_city(self):
@@ -476,7 +476,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=45)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=45)
         self.assertIsNone(winner)
 
     def test_should_prevent_city_capture_when_expecting_inbound_kill_threat(self):
@@ -494,7 +494,7 @@ class OpponentTrackerTests(TestBase):
         bot.locked_launch_point = playerMap.GetTile(9, 14)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=16)
         self.assertIsNone(winner)
 
         city = playerMap.GetTile(6, 13)
@@ -514,7 +514,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=30)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=30)
         self.assertIsNone(winner)
 
         self.assertMinArmyNear(playerMap, general, general.player, minArmyAmount=70, distance=4)
@@ -533,7 +533,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(48, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
@@ -555,7 +555,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(48, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
@@ -576,7 +576,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(83, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
@@ -596,7 +596,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(1, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
@@ -638,7 +638,7 @@ class OpponentTrackerTests(TestBase):
         self.assertEqual(0, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(0, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
@@ -658,7 +658,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=18)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=18)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertMinArmyNear(playerMap, playerMap.GetTile(10, 15), general.player, minArmyAmount=90, distance=4)
@@ -677,7 +677,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=23)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=23)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertMinArmyNear(playerMap, playerMap.GetTile(10, 15), general.player, minArmyAmount=90, distance=4)
@@ -697,7 +697,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
 
         with self.subTest(careLess=False):
@@ -721,7 +721,7 @@ class OpponentTrackerTests(TestBase):
         startingFog = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total
         startingFogTrue = bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total_true
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(startingFog, bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total)
@@ -742,7 +742,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_fully_recognize_finding_all_of_the_fog_army_in_the_fog")
@@ -771,7 +771,7 @@ class OpponentTrackerTests(TestBase):
                 self.assertEqual(35, startingCountDict[1])
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general)
 
                 endingCountDict = bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player)
@@ -802,7 +802,7 @@ class OpponentTrackerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(bot.opponent_tracker.get_current_cycle_stats_by_player(enemyGeneral.player).approximate_fog_army_available_total, 102)
@@ -827,7 +827,7 @@ class OpponentTrackerTests(TestBase):
         self.assertEqual(7, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         # should expect gathered a 2
@@ -857,7 +857,7 @@ class OpponentTrackerTests(TestBase):
         self.assertEqual(7, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         # should expect captured fog neut with a 2

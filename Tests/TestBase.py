@@ -51,10 +51,11 @@ from BotModules.BotTimings import BotTimings
 
 
 __unittest = True
-
+_overrideBypass = os.environ.get('bypass_ui', 'False') == 'True'
 
 class TestBase(unittest.TestCase):
     GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_RENDERING = False or _overrideBypass
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -146,14 +147,6 @@ class TestBase(unittest.TestCase):
             numPlayers = max(numPlayers, len(teams))
 
         map = self.get_test_map(board, turn=turn, dont_set_seen_visible_discovered=respect_undiscovered, num_players=numPlayers, teams=teams)
-        if respect_undiscovered:
-            for tile in map.get_all_tiles():
-                if tile.discovered:
-                    tile.visible = False
-                else:
-                    tile.visible = True
-                    tile.discovered = True
-                    tile.lastSeen = turn
         TextMapLoader.load_map_data_into_map(map, data)
         if turn is not None:
             map.turn = turn
@@ -249,7 +242,14 @@ class TestBase(unittest.TestCase):
         if player_index == -1 and 'player_index' in gameData:
             player_index = int(gameData['player_index'])
 
-        map, general = self.load_map_and_general_from_string(rawMapStr, turn, player_index, fill_out_tiles or respect_player_vision)
+        rawVisibilityBoard = TextMapLoader.load_map_from_string(rawMapStr)
+        map, general = self.load_map_and_general_from_string(rawMapStr, turn, player_index, respect_player_vision)
+        protectedFileVisibleTiles = set()
+        if fill_out_tiles:
+            for row in rawVisibilityBoard:
+                for rawTile in row:
+                    if not rawTile.discovered:
+                        protectedFileVisibleTiles.add(map.GetTile(rawTile.x, rawTile.y))
 
         enemyGen = None
         botTargetPlayer = None
@@ -340,7 +340,28 @@ class TestBase(unittest.TestCase):
                 if f'{playerChar}Tiles' in gameData:
                     playerTiles = int(gameData[f'{playerChar}Tiles'])
 
-                self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, gen, enemyTiles, enemyScore, enemyCities, respect_player_vision, armies)
+                self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, gen, enemyTiles, enemyScore, enemyCities, respect_player_vision, armies, protectedFileVisibleTiles)
+
+        if fill_out_tiles:
+            for player in map.players:
+                if player.dead or player.index == general.player or player.index in map.teammates:
+                    continue
+                enemyChar, _ = chars[player.index]
+                if f'{enemyChar}Score' not in gameData:
+                    continue
+                targetScore = int(gameData[f'{enemyChar}Score'])
+                actualScore = sum(tile.army for tile in map.pathable_tiles if tile.player == player.index)
+                if actualScore <= targetScore:
+                    continue
+                finalDropCandidates = SearchUtils.where(
+                    map.pathable_tiles,
+                    lambda t: t not in protectedFileVisibleTiles and t.player == player.index and t.army == 1 and not t.isGeneral and not t.isCity)
+                finalDropCandidates.sort(key=lambda t: 0 - abs(t.x - general.x) - abs(t.y - general.y))
+                for tile in finalDropCandidates:
+                    if actualScore <= targetScore:
+                        break
+                    map.reset_wrong_undiscovered_fog_guess(tile)
+                    actualScore -= 1
 
         for player in map.players:
             player.score = 0
@@ -409,7 +430,7 @@ class TestBase(unittest.TestCase):
                 while map.players[player.index].tileCount > targetTiles:
                     dropCandidates = SearchUtils.where(
                         map.pathable_tiles,
-                        lambda t: not t.visible and t.player == player.index and not t.isGeneral and not t.isCity and (t in entangledTiles or t.isTempFogPrediction or not t.discovered))
+                        lambda t: t not in protectedFileVisibleTiles and t.player == player.index and not t.isGeneral and not t.isCity and (t in entangledTiles or t.isTempFogPrediction or not t.discovered))
                     if len(dropCandidates) == 0:
                         break
                     dropCandidates.sort(key=lambda t: (0 if t in entangledTiles else 1, 0 if t.isTempFogPrediction else 1, -t.army))
@@ -420,7 +441,7 @@ class TestBase(unittest.TestCase):
                 if scoreOverflow > 0:
                     trimCandidates = SearchUtils.where(
                         map.pathable_tiles,
-                        lambda t: not t.visible and t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
+                        lambda t: t not in protectedFileVisibleTiles and t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
                     trimCandidates.sort(key=lambda t: (0 if t in entangledTiles else 1, 0 if t.isTempFogPrediction else 1, -t.army))
                     for tile in trimCandidates:
                         if scoreOverflow <= 0:
@@ -429,12 +450,12 @@ class TestBase(unittest.TestCase):
                         tile.army -= reduceBy
                         scoreOverflow -= reduceBy
 
-                    if scoreOverflow > 0 and player.general is not None and not player.general.visible and player.general.army > 1:
+                    if scoreOverflow > 0 and player.general is not None and player.general not in protectedFileVisibleTiles and player.general.army > 1:
                         reduceBy = min(player.general.army - 1, scoreOverflow)
                         player.general.army -= reduceBy
                         scoreOverflow -= reduceBy
 
-                    if scoreOverflow > 0:
+                    if scoreOverflow > 0 and len(protectedFileVisibleTiles) == 0:
                         raise AssertionError(f'Unable to trim enemy player {player.index} score overflow {scoreOverflow} to match target score {targetScore}')
 
                     recalc_player_stats()
@@ -589,6 +610,8 @@ class TestBase(unittest.TestCase):
         return Army(generalArmy), Army(enemyArmy)
 
     def render_paths(self, map: MapBase, paths: typing.List[Path | None], infoStr: str, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
         viewInfo = self.get_renderable_view_info(map)
 
         r = 255
@@ -616,6 +639,9 @@ class TestBase(unittest.TestCase):
         self.render_view_info(map, viewInfo, infoStr)
 
     def render_tile_islands(self, map: MapBase, builder: TileIslandBuilder, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         viewInfo = self.get_renderable_view_info(map)
 
         builder.add_tile_islands_to_view_info(viewInfo, printIslandInfoLines=True, renderIslandNames=True)
@@ -626,6 +652,9 @@ class TestBase(unittest.TestCase):
         self.render_view_info(map, viewInfo)
 
     def render_moves(self, map: MapBase, infoStr: str, moves1: typing.List[Move | None], moves2: typing.List[Move | None] = None, addlViewInfoLogLines: typing.List[str] | None = None, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         viewInfo = self.get_renderable_view_info(map)
         verifiedColors = False
         for move in moves1:
@@ -699,6 +728,9 @@ class TestBase(unittest.TestCase):
         self.render_view_info(map, viewInfo, infoStr)
 
     def render_army_analyzer(self, map: MapBase, analyzer: ArmyAnalyzer, alsoRenderPaths: typing.List[Path] | None = None, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         viewInfo = ViewInfo(0, map)
         board = BoardAnalyzer(map, analyzer.tileA, None)
         board.rebuild_intergeneral_analysis(analyzer.tileB, possibleSpawns=None)
@@ -783,6 +815,9 @@ class TestBase(unittest.TestCase):
         self.render_view_info(map, viewInfo, f'ArmyAnalysis between {analyzer.tileA} and {analyzer.tileB}')
 
     def render_sim_analysis(self, map: MapBase, simResult: ArmySimResult, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         aMoves = [aMove for aMove, bMove in simResult.expected_best_moves]
         bMoves = [bMove for aMove, bMove in simResult.expected_best_moves]
 
@@ -932,6 +967,9 @@ class TestBase(unittest.TestCase):
         return ViewerProcessHost.get_renderable_view_info(map)
 
     def render_view_info(self, map: MapBase, viewInfo: ViewInfo, infoString: str | None = None):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         if infoString:
             logbook.info(infoString)
         # titleString = infoString
@@ -950,6 +988,9 @@ class TestBase(unittest.TestCase):
         time.sleep(0.2)
 
     def render_map(self, map: MapBase, infoString: str | None = None, includeTileDiffs: bool = False):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         titleString = infoString
         if titleString is None:
             titleString = self._testMethodName
@@ -1243,6 +1284,9 @@ class TestBase(unittest.TestCase):
         return largest
 
     def render_sim_map_from_all_perspectives(self, sim):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         simMapViewInfo = ViewInfo(3, sim.sim_map)
         self.render_view_info(sim.sim_map, simMapViewInfo, 'Sim Map Raw')
         for player in sim.players:
@@ -1260,12 +1304,16 @@ class TestBase(unittest.TestCase):
             enemyGeneralTargetScore: int = None,
             enemyCityCount: int = 1,
             respectPlayerVision: bool = False,
-            armies: typing.Dict[Tile, Army] | None = None
+            armies: typing.Dict[Tile, Army] | None = None,
+            protectedFileVisibleTiles: typing.Set[Tile] | None = None
     ):
         """
         Leave enemy params empty to match the general values evenly (and create an enemy general opposite general)
         -1 means leave the map alone, keep whatever tiles and army amounts are already on the map
         """
+
+        if protectedFileVisibleTiles is None:
+            protectedFileVisibleTiles = set()
 
         bannedEnemyTiles: typing.Set[Tile] = set()
         skipArmyTiles = set()
@@ -1362,7 +1410,8 @@ class TestBase(unittest.TestCase):
                         countTilesGeneral.add(1)
                         newTiles.add(tile)
                 elif enemyGeneralTileCount:
-                    if countTilesEnemy.value < enemyGeneralTileCount and tile not in bannedEnemyTiles:
+                    canAddEnemyTileWithoutScoreOverflow = enemyGeneralTargetScore is None or enemyGeneralTargetScore < 0 or countScoreEnemy.value < enemyGeneralTargetScore
+                    if countTilesEnemy.value < enemyGeneralTileCount and tile not in bannedEnemyTiles and canAddEnemyTileWithoutScoreOverflow:
                         tile.player = enemyGeneral.player
                         tile.army = 1
                         countTilesEnemy.add(1)
@@ -1385,7 +1434,7 @@ class TestBase(unittest.TestCase):
             # Collapse duplicate entangled fog army predictions: keep one army location with value,
             # and reduce duplicate entangled positions to minimum army so they do not over-inflate score.
             for tile in entangledEnemyTilesByPlayer.get(enemyGeneral.player, []):
-                if tile.visible or tile.player != enemyGeneral.player or tile.isGeneral:
+                if tile in protectedFileVisibleTiles or tile.player != enemyGeneral.player or tile.isGeneral:
                     continue
                 if tile.army > 1:
                     oldArmy = tile.army
@@ -1394,7 +1443,7 @@ class TestBase(unittest.TestCase):
                         countScoreEnemy.add(1 - oldArmy)
 
         def can_reset_enemy_fog_tile(tile: Tile) -> bool:
-            if tile.visible:
+            if tile in protectedFileVisibleTiles:
                 return False
             if tile.player != enemyGeneral.player:
                 return False
@@ -1442,7 +1491,7 @@ class TestBase(unittest.TestCase):
                 entangledSet = set(entangledEnemyTilesByPlayer.get(enemyGeneral.player, []))
                 scoreTrimCandidates = SearchUtils.where(
                     actualEnemyTiles,
-                    lambda t: not t.visible and t.army > 1 and not t.isGeneral and not t.isCity and (t in entangledSet or can_reset_enemy_fog_tile(t)))
+                    lambda t: t not in protectedFileVisibleTiles and t.army > 1 and not t.isGeneral and not t.isCity and (t in entangledSet or can_reset_enemy_fog_tile(t)))
                 scoreTrimCandidates.sort(key=lambda t: (0 if t in entangledSet else 1, 0 if t.isTempFogPrediction else 1, -enemyMap[t], -t.army))
                 for tile in scoreTrimCandidates:
                     if scoreOverflow <= 0:
@@ -1457,7 +1506,7 @@ class TestBase(unittest.TestCase):
                 if scoreOverflow > 0:
                     fallbackTrimCandidates = SearchUtils.where(
                         actualEnemyTiles,
-                        lambda t: not t.visible and t.army > 1 and not t.isGeneral and not t.isCity)
+                        lambda t: t not in protectedFileVisibleTiles and t.army > 1 and not t.isGeneral and not t.isCity)
                     fallbackTrimCandidates.sort(key=lambda t: (0 if t in entangledSet else 1, -t.army))
                     for tile in fallbackTrimCandidates:
                         if scoreOverflow <= 0:
@@ -1469,36 +1518,35 @@ class TestBase(unittest.TestCase):
                         tile.army -= reduceBy
                         scoreOverflow -= reduceBy
 
-                if scoreOverflow > 0 and not enemyGeneral.visible and enemyGeneral.army > 1:
+                if scoreOverflow > 0 and enemyGeneral not in protectedFileVisibleTiles and enemyGeneral.army > 1:
                     reduceBy = min(enemyGeneral.army - 1, scoreOverflow)
                     enemyGeneral.army -= reduceBy
                     scoreOverflow -= reduceBy
 
-                if scoreOverflow > 0:
+                if scoreOverflow > 0 and len(protectedFileVisibleTiles) == 0:
                     raise AssertionError(f"Enemy General {enemyGeneral.player} still has score overflow {scoreOverflow} while reconciling fog armies to target score {enemyGeneralTargetScore}")
 
             countScoreEnemy.value = sum(t.army for t in map.pathable_tiles if t.player == enemyGeneral.player)
 
-        if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore and not enemyGeneral.visible:
+        if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore and enemyGeneral not in protectedFileVisibleTiles:
             countScoreEnemy.value = countScoreEnemy.value - enemyGeneral.army + 1
             enemyGeneral.army = 1
 
-        if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore:
+        if enemyGeneralTargetScore is not None and countScoreEnemy.value > enemyGeneralTargetScore and len(protectedFileVisibleTiles) == 0:
             raise AssertionError(f"Enemy General {enemyGeneral.player} countScoreEnemy.value {countScoreEnemy.value} > enemyGeneralTargetScore {enemyGeneralTargetScore}. Have to implement reducing the army on non-visible tiles from the snapshot here")
 
         newAndTemp = set(newTiles)
         for tile in map.players[enemyGeneral.player].tiles:
-            if tile.player == enemyGeneral.player and (tile.isTempFogPrediction or (not tile.visible and not tile.isGeneral and not tile.isCity)) and tile not in newAndTemp:
+            if tile.player == enemyGeneral.player and (tile.isTempFogPrediction or (tile not in protectedFileVisibleTiles and not tile.isCity)) and tile not in newAndTemp:
                 newAndTemp.add(tile)
                 # countScoreEnemy.value += tile.army
 
-        iter = 0
-        while enemyGeneralTargetScore is not None and countScoreEnemy.value < enemyGeneralTargetScore and iter < 100:
-            for tile in newAndTemp:
-                if not tile.visible and tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
+        newAndTempOrdered = sorted(newAndTemp, key=lambda t: (t == enemyGeneral, genDistMap[t]), reverse=True)
+        if enemyGeneralTargetScore is not None:
+            for tile in newAndTempOrdered:
+                while tile not in protectedFileVisibleTiles and tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
                     countScoreEnemy.add(1)
                     tile.army += 1
-            iter += 1
 
         while generalTargetScore is not None and countScoreGeneral.value < generalTargetScore:
             for tile in map.get_all_tiles():
@@ -1523,9 +1571,21 @@ class TestBase(unittest.TestCase):
             actualEnemyScore = sum(t.army for t in actualEnemyTiles)
             scoreOverflow = actualEnemyScore - enemyGeneralTargetScore
             if scoreOverflow > 0:
+                finalDropCandidates = SearchUtils.where(
+                    newTiles,
+                    lambda t: t not in protectedFileVisibleTiles and t.player == enemyGeneral.player and not t.isGeneral and not t.isCity)
+                finalDropCandidates.sort(key=lambda t: (t.army, -genDistMap[t]))
+                for tile in finalDropCandidates:
+                    if scoreOverflow <= 0:
+                        break
+                    oldArmy = tile.army
+                    map.reset_wrong_undiscovered_fog_guess(tile)
+                    countTilesEnemy.add(-1)
+                    scoreOverflow -= oldArmy
+
                 finalTrimCandidates = SearchUtils.where(
                     actualEnemyTiles,
-                    lambda t: t.army > 1 and not t.isGeneral and not t.isCity)
+                    lambda t: t not in protectedFileVisibleTiles and t.army > 1 and not t.isGeneral and not t.isCity)
                 finalTrimCandidates.sort(key=lambda t: (0 if t.isTempFogPrediction else 1, -t.army))
                 for tile in finalTrimCandidates:
                     if scoreOverflow <= 0:
@@ -1534,12 +1594,12 @@ class TestBase(unittest.TestCase):
                     tile.army -= reduceBy
                     scoreOverflow -= reduceBy
 
-                if scoreOverflow > 0 and enemyGeneral.army > 1:
+                if scoreOverflow > 0 and enemyGeneral not in protectedFileVisibleTiles and enemyGeneral.army > 1:
                     reduceBy = min(enemyGeneral.army - 1, scoreOverflow)
                     enemyGeneral.army -= reduceBy
                     scoreOverflow -= reduceBy
 
-                if scoreOverflow > 0:
+                if scoreOverflow > 0 and len(protectedFileVisibleTiles) == 0:
                     raise AssertionError(f"Enemy General {enemyGeneral.player} final score overflow {scoreOverflow} after full tile reconciliation to target score {enemyGeneralTargetScore}")
 
             countScoreEnemy.value = sum(t.army for t in map.pathable_tiles if t.player == enemyGeneral.player)
@@ -1816,6 +1876,9 @@ class TestBase(unittest.TestCase):
             self.fail(f'found {len(dupes)} plans with duplicated tiles in plan options:\r\n  {"\r\n  ".join(dupes)}')
 
     def render_flow_expansion_debug(self, expander: ArmyFlowExpanderV2, optCollection: FlowExpansionPlanOptionCollection, renderAll: bool, turnsLimit: int = 100):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         map = expander.map
         builder: TileIslandBuilder = expander.island_builder
         vi = self.get_renderable_view_info(map)
@@ -1977,7 +2040,7 @@ class TestBase(unittest.TestCase):
 
                     simHost.sim.ignore_illegal_moves = True
                     base.client.map.ENABLE_DEBUG_ASSERTS = False
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=debugModeTurnTime, turns=700)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=debugModeTurnTime, turns=700)
                     lastWinTurns = simHost.sim.turn
                     if lastWinTurns < minGameDurationToCount:
                         self.begin_capturing_logging()
@@ -2224,9 +2287,9 @@ class TestBase(unittest.TestCase):
 
         return plan
 
-    def get_best_intercept_option_path_values(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path]:
+    def get_best_intercept_option_path_values(self, plan: ArmyInterception, maxDepth=200, chooseHighestVtOverMostRecaptures: bool = False) -> typing.Tuple[int, int, Path]:
         """Returns value, effectiveTurns, path"""
-        res = self.get_best_intercept_option_path_values_or_none(plan, maxDepth)
+        res = self.get_best_intercept_option_path_values_or_none(plan, maxDepth, chooseHighestVtOverMostRecaptures)
 
         if res is None:
             self.fail(f'Expected an intercept option to be found, but none was found.')
@@ -2241,7 +2304,7 @@ class TestBase(unittest.TestCase):
         maxOpt = max(plans, key=lambda o: (o.econValue / o.length, o.length))
         return maxOpt
 
-    def get_best_intercept_option_path_values_or_none(self, plan: ArmyInterception, maxDepth=200) -> typing.Tuple[int, int, Path] | None:
+    def get_best_intercept_option_path_values_or_none(self, plan: ArmyInterception, maxDepth=200, chooseHighestVtOverMostRecaptures: bool = False) -> typing.Tuple[int, int, Path] | None:
         """Returns value, effectiveTurns, path"""
         if plan is None:
             return None
@@ -2255,7 +2318,7 @@ class TestBase(unittest.TestCase):
                 continue
             val = option.econValue
             path = option.path
-            vt = val/dist
+            vt = val/dist if chooseHighestVtOverMostRecaptures else val
             if vt > bestVt:
                 logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
                 bestOpt = path
@@ -2268,7 +2331,7 @@ class TestBase(unittest.TestCase):
 
         return bestOptAmt, bestOptDist, bestOpt
 
-    def get_best_intercept_option(self, plan: ArmyInterception, maxDepth=200) -> InterceptionOptionInfo:
+    def get_best_intercept_option(self, plan: ArmyInterception, maxDepth=200, chooseHighestVtOverMostRecaptures: bool = False) -> InterceptionOptionInfo:
         """Returns value, effectiveTurns, path"""
         bestOpt = None
         bestVt = 0
@@ -2277,7 +2340,7 @@ class TestBase(unittest.TestCase):
                 continue
             val = option.econValue
             path = option.path
-            vt = val/dist
+            vt = val/dist if chooseHighestVtOverMostRecaptures else val
             if vt > bestVt:
                 logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
                 bestOpt = option
@@ -2285,9 +2348,9 @@ class TestBase(unittest.TestCase):
 
         return bestOpt
 
-    def assert_no_best_intercept_option(self, plan: ArmyInterception, maxDepth=200):
+    def assert_no_best_intercept_option(self, plan: ArmyInterception, maxDepth=200, chooseHighestVtOverMostRecaptures: bool = False):
         """Returns value, effectiveTurns, path"""
-        res = self.get_best_intercept_option_path_values_or_none(plan, maxDepth)
+        res = self.get_best_intercept_option_path_values_or_none(plan, maxDepth, chooseHighestVtOverMostRecaptures)
 
         if res is not None:
             bestOptAmt, bestOptDist, bestOpt = res
@@ -2300,6 +2363,7 @@ class TestBase(unittest.TestCase):
             yStart: int | None = None,
             xEnd: int | None = None,
             yEnd: int | None = None,
+            chooseHighestVtOverMostRecaptures: bool = False,
             message: str | None = None):
         opt = None
         optAmt = 0
@@ -2318,7 +2382,7 @@ class TestBase(unittest.TestCase):
             if yEnd is not None and path.tail.tile.y != yEnd:
                 continue
 
-            vt = val/dist
+            vt = val/dist if chooseHighestVtOverMostRecaptures else val
             if vt > maxVt:
                 logbook.info(f'FOUND INTERCEPT OPT {val}/{dist} -- {str(path)}')
                 opt = path
@@ -2336,6 +2400,7 @@ class TestBase(unittest.TestCase):
             yStart: int | None = None,
             xEnd: int | None = None,
             yEnd: int | None = None,
+            chooseHighestVtOverMostRecaptures: bool = False
     ) -> typing.Tuple[Path | None, int, int]:
         """
         Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
@@ -2365,7 +2430,7 @@ class TestBase(unittest.TestCase):
             if yEnd is not None and path.tail.tile.y != yEnd:
                 continue
 
-            vt = val/dist
+            vt = val/dist if chooseHighestVtOverMostRecaptures else val
             if vt > maxVt:
                 logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
                 bestOpt = path
@@ -2385,6 +2450,7 @@ class TestBase(unittest.TestCase):
             yStart: int | None = None,
             xEnd: int | None = None,
             yEnd: int | None = None,
+            chooseHighestVtOverMostRecaptures: bool = False
     ) -> InterceptionOptionInfo:
         """
         Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
@@ -2397,7 +2463,7 @@ class TestBase(unittest.TestCase):
         @return:
         """
 
-        bestOpt = self.get_interceptor_option_by_coords_or_none(plan, xStart, yStart, xEnd, yEnd)
+        bestOpt = self.get_interceptor_option_by_coords_or_none(plan, xStart, yStart, xEnd, yEnd, chooseHighestVtOverMostRecaptures)
 
         if bestOpt is None:
             self.fail(f'No intercept option found for xStart {xStart}, yStart {yStart}, xEnd {xEnd}, yEnd {yEnd}')
@@ -2411,6 +2477,7 @@ class TestBase(unittest.TestCase):
             yStart: int | None = None,
             xEnd: int | None = None,
             yEnd: int | None = None,
+            chooseHighestVtOverMostRecaptures: bool = False
     ) -> InterceptionOptionInfo | None:
         """
         Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
@@ -2440,9 +2507,9 @@ class TestBase(unittest.TestCase):
             if yEnd is not None and path.tail.tile.y != yEnd:
                 continue
 
-            vt = val/dist
+            vt = val/dist if chooseHighestVtOverMostRecaptures else val
             if vt > maxVt:
-                logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {str(path)}')
+                logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f}/{dist} -- {option}')
                 bestOpt = option
                 maxVt = vt
 
@@ -2460,6 +2527,9 @@ class TestBase(unittest.TestCase):
             valueMatrix: MapMatrixInterface[float] | None = None,
             armyCostMatrix: MapMatrixInterface[float] | None = None
     ):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         viewInfo = self.get_renderable_view_info(map)
         if player == -1:
             player = map.player_index
@@ -2488,6 +2558,9 @@ class TestBase(unittest.TestCase):
         self.render_view_info(map, viewInfo, info)
 
     def render_intercept_plan(self, map: MapBase, plan: ArmyInterception, colorIndex: int = 0, renderIndividualAnalysis: bool = False, viewInfoMod: typing.Callable[[ViewInfo], None] | None = None):
+        if self.GLOBAL_BYPASS_RENDERING:
+            return
+
         viewInfo = self.get_renderable_view_info(map)
         targetStyle = TargetStyle(colorIndex + 2)
 
@@ -2505,6 +2578,10 @@ class TestBase(unittest.TestCase):
             viewInfo.bottomLeftGridText[tile] = f'it{interceptInfo.max_delay_turns}'
 
             viewInfo.midRightGridText[tile] = f'im{interceptInfo.max_extra_moves_to_capture}'
+
+
+        for tile in plan.middlest_intercept_tiles:
+            viewInfo.add_targeted_tile(tile, TargetStyle.ORANGE)
 
         viewInfo.add_info_line('LEGEND:')
         viewInfo.add_info_line('  cw: = choke width')

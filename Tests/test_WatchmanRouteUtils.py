@@ -27,7 +27,7 @@ class WatchmanRouteUtilsTests(TestBase):
         bot.info_render_leaf_move_values = True
 
         return bot
-    
+
     def test_a_star_watchman_route_problem_should_produce_optimal_result(self):
         # Bot needs to comprehend that moving down wins the race
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -43,7 +43,7 @@ class WatchmanRouteUtilsTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
         #
         # self.begin_capturing_logging()
-        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
 
         startTile = self.get_player_largest_tile(simHost.sim, general.player)
         toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=0.1)
@@ -88,7 +88,7 @@ class WatchmanRouteUtilsTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             # self.begin_capturing_logging()
-            # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+            # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
 
             startTile = self.get_player_largest_tile(simHost.sim, general.player)
             toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=0.1)
@@ -130,7 +130,7 @@ class WatchmanRouteUtilsTests(TestBase):
 
         #
         # self.begin_capturing_logging()
-        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
 
         startTile = self.get_player_largest_tile(simHost.sim, general.player)
         toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=0.1)
@@ -170,7 +170,7 @@ class WatchmanRouteUtilsTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             # self.begin_capturing_logging()
-            # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+            # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
 
             startTile = self.get_player_largest_tile(simHost.sim, general.player)
             toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=0.1)
@@ -208,7 +208,7 @@ class WatchmanRouteUtilsTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         # self.begin_capturing_logging()
-        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
 
         startTile = self.get_player_largest_tile(simHost.sim, general.player)
         toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=0.1)
@@ -244,7 +244,7 @@ class WatchmanRouteUtilsTests(TestBase):
 
         #
         # self.begin_capturing_logging()
-        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
 
         startTile = self.get_player_largest_tile(simHost.sim, general.player)
         toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=0.01)
@@ -294,7 +294,7 @@ class WatchmanRouteUtilsTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             # self.begin_capturing_logging()
-            # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+            # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
 
             startTile = self.get_player_largest_tile(simHost.sim, general.player)
             toReveal = bot.get_target_player_possible_general_location_tiles_sorted(elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=0.1)

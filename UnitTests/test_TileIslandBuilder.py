@@ -2113,7 +2113,7 @@ aG1  C1   bG1
 
         simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None')
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=12)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=12)
 
     def test_sibling_teardown_rebuild_reuses_prior_island_objects(self):
         """
@@ -2688,7 +2688,7 @@ aG1
         simHost.run_between_turns(after_turn)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=16)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=16)
 
     # simHost-based tests: run real bot turns and assert island rebuild scope
     # -----------------------------------------------------------------------
@@ -2793,7 +2793,7 @@ aG1
         # Queue the bot to stay put (pass moves) so only army-increment turns cause changes
         simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None')
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
 
     def test_simhost__bot_captures_enemy_tile_only_rebuilds_local_islands(self):
         """
@@ -2842,7 +2842,7 @@ aG1
         simHost.run_between_turns(after_turn)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
 
     def test_simhost__enemy_army_increment_does_not_rebuild_friendly_islands(self):
         """
@@ -2907,7 +2907,7 @@ aG1
         # Bot stays put — enemy is AFK — so only army-increment turns fire
         simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None')
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=12)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=12)
 
     def test_simhost__multi_turn_update_always_matches_recalculate(self):
         """
@@ -2939,7 +2939,7 @@ aG1
         simHost.run_between_turns(after_turn)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=20)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=20)
 
     def test_simhost__large_map_neutral_islands_not_mass_rebuilt_on_army_increment(self):
         """
@@ -3006,7 +3006,7 @@ aG1
 
         simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None')
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=12)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=12)
 
     def test_simhost__enemy_capture_does_not_rebuild_distant_friendly_islands(self):
         """
@@ -3070,7 +3070,7 @@ aG1
 
         simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None')
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=16)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=16)
 
     def test_update_tile_islands__enemy_captures_neutral_splits_adjacent_friendly_multi_tile_island(self):
         """
@@ -3351,7 +3351,7 @@ a10       b26
         self.assertEqual(369, islandShouldHaveId369.unique_id, 'tile island loader should preserve the island ids')
         playerMap = simHost.get_player_map(general.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
         self.assertEqual(islandShouldNotChange1Id, bot.tileIslandBuilder.tile_island_lookup.raw[map.At(16, 7).tile_index].unique_id, 'none of these islands have any reason to be rebuilt after this move')
         self.assertEqual(islandShouldNotChange2Id, bot.tileIslandBuilder.tile_island_lookup.raw[map.At(16, 17).tile_index].unique_id, 'none of these islands have any reason to be rebuilt after this move')

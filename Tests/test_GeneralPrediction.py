@@ -41,7 +41,7 @@ class GeneralPredictionTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
@@ -72,7 +72,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         outTile = playerMap.GetTile(14, 15)
@@ -112,7 +112,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[gen1.player][playerMap.GetTile(gen1.x, gen1.y)])
@@ -139,7 +139,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
         self.assertIsNone(winner)
 
         shouldBe = [
@@ -178,7 +178,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         shouldBe = [
@@ -215,7 +215,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         shouldBe = [
@@ -247,7 +247,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         shouldBe = [
@@ -287,7 +287,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=16)
         self.assertIsNone(winner)
 
         shouldBe = [
@@ -339,7 +339,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
 
         self.assertGreater(len(playerMap.players[enemyGeneral.player].tiles), 16)
@@ -364,7 +364,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         shouldBe = [
@@ -405,7 +405,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertTrue(bot._map.euclidDist(17, 7, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y) < 5, 'should pick somewhere pretty central to the players tile-mass')
@@ -431,7 +431,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertIsNone(winner)
 
         farTile = playerMap.GetTile(1, 4)
@@ -473,7 +473,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertIsNone(winner)
 
         farTile = playerMap.GetTile(1, 4)
@@ -517,7 +517,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=14)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=14)
         self.assertIsNone(winner)
 
         farTile = playerMap.GetTile(1, 4)
@@ -555,7 +555,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertLess(bot._map.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 4)
@@ -574,7 +574,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(6, 1)], "should not mis-eliminate the general")
@@ -608,7 +608,7 @@ class GeneralPredictionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=46)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=46)
                 self.assertIsNone(winner)
 
                 self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(18, 12)])
@@ -653,7 +653,7 @@ class GeneralPredictionTests(TestBase):
                     playerMap = simHost.get_player_map(general.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=46)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=46)
                     self.assertIsNone(winner)
 
                     self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(18, 12)])
@@ -700,7 +700,7 @@ class GeneralPredictionTests(TestBase):
                     playerMap = simHost.get_player_map(general.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=38)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=38)
                     self.assertIsNone(winner)
 
                     self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(18, 12)])
@@ -745,7 +745,7 @@ class GeneralPredictionTests(TestBase):
                     playerMap = simHost.get_player_map(general.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=38)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=38)
                     self.assertIsNone(winner)
 
                     self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(18, 12)])
@@ -767,7 +767,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         expectedToBeGeneral = playerMap.GetTile(2, 12)
@@ -791,7 +791,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         # should keep the emergence we added in the back area.
@@ -817,7 +817,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.05, turns=68)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.05, turns=68)
         self.assertIsNone(winner)
 
         self.assertTrue(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(4, 3)])
@@ -839,7 +839,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         notGen = playerMap.GetTile(2, 6)
@@ -864,7 +864,7 @@ class GeneralPredictionTests(TestBase):
         bot.armyTracker.player_launch_timings[enemyGeneral.player] = 24
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         almostCertainlyNotGeneralEmVal = bot.armyTracker.get_prediction_value_x_y(enemyGeneral.player, 12, 4)
@@ -889,7 +889,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertEqual(map.player_index, winner)
 
     def test_should_pick_central_general_location(self):
@@ -906,7 +906,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_pick_central_general_location")
@@ -972,7 +972,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
         goodTile = playerMap.GetTile(0, 8)
         goodTileVal = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][goodTile]
@@ -1001,7 +1001,7 @@ class GeneralPredictionTests(TestBase):
         bot.armyTracker.uneliminated_emergence_event_city_perfect_info[enemyGeneral.player].add(playerMap.GetTile(7, 7))
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.GetTile(18, 0)], 'should consider this not possible spawn since left side emergence guarantees no path through mountains')
@@ -1036,7 +1036,7 @@ class GeneralPredictionTests(TestBase):
                     playerMap = simHost.get_player_map(general.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                     self.assertNoFriendliesKilled(map, general)
 
                     emergence = bot.armyTracker.emergenceLocationMap[enemyGeneral.player][map.GetTile(7, 2)]
@@ -1057,7 +1057,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEmergenceLessThanXY(bot, 7, 7, 50)
@@ -1085,7 +1085,7 @@ class GeneralPredictionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertInvalidGeneralPositionXY(bot, 19, 17)
@@ -1130,7 +1130,7 @@ class GeneralPredictionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertInvalidGeneralPositionXY(bot, 19, 17)
@@ -1334,7 +1334,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertValidGeneralPosition(bot, enemyGeneral)
         self.assertNoFriendliesKilled(map, general)
 
@@ -1355,7 +1355,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertFalse(playerMap.GetTile(39,36).isGeneral)
@@ -1377,7 +1377,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertValidGeneralPositionXY(bot, 10, 17)
@@ -1416,14 +1416,14 @@ class GeneralPredictionTests(TestBase):
         simHost.queue_player_moves_str(general.player, '10,8->10,9  1,8->1,9')
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileNearOtherTile(map, map.GetTile(10, 13), bot.targetPlayerExpectedGeneralLocation, 15)
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
 
         self.assertTileNearOtherTile(map, map.GetTile(8, 14), bot.targetPlayerExpectedGeneralLocation, 8)
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
 
         self.assertEmergenceGreaterThanXY(bot, 8, 14, 5)
 
@@ -1441,7 +1441,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         # should find the point between the two emergences / the "center" of the emergence spanning tree graph and use that. Which should clearly be pretty much the exact general location here.
@@ -1464,7 +1464,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         armyInFog = playerMap.players[enemyGeneral.player].standingArmy - playerMap.players[enemyGeneral.player].visibleStandingArmy

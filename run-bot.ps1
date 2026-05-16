@@ -1,4 +1,17 @@
-﻿
+
+
+
+$Script:CheapBotCpuAffinityMask = [IntPtr]0x10000
+$Script:HumanPcoreAffinityMasks = @(
+    [IntPtr]0x1,
+    [IntPtr]0x4,
+    [IntPtr]0x10,
+    [IntPtr]0x40,
+    [IntPtr]0x100,
+    [IntPtr]0x400,
+    [IntPtr]0x1000,
+    [IntPtr]0x4000
+)
 
 
 function Run-BotOnce {
@@ -14,7 +27,8 @@ function Run-BotOnce {
         $userID = $null,
         [switch]$nolog,
         [switch]$noTextLog,
-        [switch]$publicLobby
+        [switch]$publicLobby,
+        [IntPtr]$cpuAffinityMask = [IntPtr]::Zero
     )
 
     $ErrorActionPreference = 'Stop'
@@ -122,6 +136,7 @@ This allows you to have different bots running on different monitors, etc.
     `$privateGame = '$privateGame'
     `$argString = '$argString'
     `$path = '$path'
+    `$cpuAffinityMask = [IntPtr]::new($($cpuAffinityMask.ToInt64()))
     `$arguments = @('$([string]::Join("', '", $arguments))')
     Write-Output "arguments $([string]::Join(', ', $arguments))"
     `$cleanName = '$name'.Replace('[', '').Replace(']', '')
@@ -144,6 +159,9 @@ This allows you to have different bots running on different monitors, etc.
         `$procArguments = @("$path", '-name', '$name', '-g', '$game')
         `$procArguments += `$arguments
         `$Process = Start-Process -FilePath "$pythonVer.exe" -ArgumentList `$procArguments -PassThru -NoNewWindow @startProcSplat
+        if (`$cpuAffinityMask -ne [IntPtr]::Zero) {
+            `$Process.ProcessorAffinity = `$cpuAffinityMask
+        }
         `$Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
         `$Process | Wait-Process 2>&1
     }
@@ -247,7 +265,8 @@ function Run-SoraAI {
         [switch]$public,
         [switch]$nolog,
         [switch]$noTextLog,
-        [int]$sleepMax = 3
+        [int]$sleepMax = 3,
+        [IntPtr]$cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )
     while ($true)
     {
@@ -259,7 +278,7 @@ function Run-SoraAI {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name "Sora AI" -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog -noTextLog:$noTextLog
+            run-botonce -game $g -name "Sora AI" -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -273,7 +292,8 @@ function Run-SoraAlt {
         [switch]$public,
         [switch]$nolog,
         [switch]$noTextLog,
-        [int]$sleepMax = 3
+        [int]$sleepMax = 3,
+        [IntPtr]$cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )
     while ($true)
     {
@@ -302,7 +322,7 @@ function Run-SoraAlt {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog -noTextLog:$noTextLog
+            run-botonce -game $g -name $name -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -311,10 +331,11 @@ function Run-SoraAlt {
 
 function Run-SoraAITeammate {
     Param(
+        [IntPtr]$cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )
     while ($true)
     {
-        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -nolog -public:$public
+        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -nolog -public:$public -cpuAffinityMask $cpuAffinityMask
     }
 }
 
@@ -1311,7 +1332,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Human -left -game 1v1 -sleepMax 1200'
+        $command = 'Run-Human -left -game 1v1 -sleepMax 1200 -cpuAffinityMask $Script:HumanPcoreAffinityMasks[0]'
         try {
             Invoke-Expression $command
         } finally {
@@ -1326,7 +1347,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Human -right -game ffa -sleepMax 120 -nolog'
+        $command = 'Run-Human -right -game ffa -sleepMax 120 -nolog -cpuAffinityMask $Script:HumanPcoreAffinityMasks[1]'
         try {
             # Invoke-Expression $command
         } finally {
@@ -1341,7 +1362,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer'
+        $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask $Script:HumanPcoreAffinityMasks[2]'
         try {
             Invoke-Expression $command
         } finally {
@@ -1353,7 +1374,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui'
+        $command = 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui -cpuAffinityMask $Script:HumanPcoreAffinityMasks[3]'
         try {
             Invoke-Expression $command
         } finally {
@@ -1365,7 +1386,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 90 -left -nolog'
+        $command = 'Run-Teammate -sleepMax 90 -left -nolog -cpuAffinityMask $Script:HumanPcoreAffinityMasks[4]'
         try {
             # Invoke-Expression $command
         } finally {
@@ -1380,7 +1401,7 @@ function Start-WindowsTerminalLiveBots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog'
+        $command = 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask $Script:HumanPcoreAffinityMasks[5]'
         try {
             # Invoke-Expression $command
         } finally {
@@ -1487,7 +1508,7 @@ function Start-WindowsTerminalLiveBots {
     # }
 
     # ALT TESTING
-    # Run-Human -name 'HaltWhoGoesThere' -game custom -private -sleepMax 1 -roomID Human.exeNormal1
+    # Run-Human -name 'HaltWhoGoesThere' -game custom -private -sleepMax 1 -roomID Human.exeNormal1 -cpuAffinityMask $Script:HumanPcoreAffinityMasks[0]
 }
 
 
@@ -1506,7 +1527,7 @@ function Start-WindowsTerminalBotServer2v2Bots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer'
+        $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask $Script:HumanPcoreAffinityMasks[0]'
         try {
             Invoke-Expression $command
         } finally {
@@ -1522,7 +1543,7 @@ function Start-WindowsTerminalBotServer2v2Bots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-HumanTeammate -game team -right -sleepMax 10 -nolog -noui -botServer'
+        $command = 'Run-HumanTeammate -game team -right -sleepMax 10 -nolog -noui -botServer -cpuAffinityMask $Script:HumanPcoreAffinityMasks[1]'
         try {
             Invoke-Expression $command
         } finally {
@@ -1534,7 +1555,7 @@ function Start-WindowsTerminalBotServer2v2Bots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 10 -left -nolog -botServer'
+        $command = 'Run-Teammate -sleepMax 10 -left -nolog -botServer -cpuAffinityMask $Script:HumanPcoreAffinityMasks[2]'
         try {
             Invoke-Expression $command
         } finally {
@@ -1546,7 +1567,7 @@ function Start-WindowsTerminalBotServer2v2Bots {
     wt -w $windowName new-tab pwsh -NoExit -c {
         cd "D:/2019_reformat_Backup/generals-bot/";
         . ./run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 10 -left -nolog -name Teammate2.exe -botServer'
+        $command = 'Run-Teammate -sleepMax 10 -left -nolog -name Teammate2.exe -botServer -cpuAffinityMask $Script:HumanPcoreAffinityMasks[3]'
         try {
             Invoke-Expression $command
         } finally {
@@ -1662,13 +1683,14 @@ function Run-Path {
         [switch]$public,
         [switch]$nolog,
         [switch]$noTextLog,
-        [int]$sleepMax = 3
+        [int]$sleepMax = 3,
+        [IntPtr]$cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )
     while ($true)
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_path_collect.py" -nolog:$nolog -noTextLog:$noTextLog -public:$public
+            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_path_collect.py" -nolog:$nolog -noTextLog:$noTextLog -public:$public -cpuAffinityMask $cpuAffinityMask
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1683,13 +1705,14 @@ function Run-Blob {
         [switch]$public,
         [switch]$nolog,
         [switch]$noTextLog,
-        [int]$sleepMax = 3
+        [int]$sleepMax = 3,
+        [IntPtr]$cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )
     while ($true)
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_blob.py" -nolog:$nolog -noTextLog:$noTextLog -public:$public
+            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_blob.py" -nolog:$nolog -noTextLog:$noTextLog -public:$public -cpuAffinityMask $cpuAffinityMask
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1710,7 +1733,8 @@ function Run-Bot {
         [switch]$nolog,
         [switch]$noTextLog,
         [switch]$publicLobby,
-        $sleepMax = 30
+        $sleepMax = 30,
+        [IntPtr]$cpuAffinityMask = [IntPtr]::Zero
     )
     $games = $game
     while($true)
@@ -1789,7 +1813,8 @@ function Run-Human {
         [switch] $nolog,
         [switch] $noTextLog,
         $name = 'Human.exe',
-        [switch] $botServer
+        [switch] $botServer,
+        [IntPtr]$cpuAffinityMask = $Script:HumanPcoreAffinityMasks[0]
     )
     $splat = @{
         noui = $noui
@@ -1797,6 +1822,7 @@ function Run-Human {
         nolog = $nolog
         noTextLog = $noTextLog
         public = -not $botServer
+        cpuAffinityMask = $cpuAffinityMask
     }
     while ($true)
     {
@@ -1835,7 +1861,8 @@ function Run-HumanTeammate {
         [switch] $noui,
         [switch] $nolog,
         [switch] $noTextLog,
-        [switch] $botServer
+        [switch] $botServer,
+        [IntPtr]$cpuAffinityMask = $Script:HumanPcoreAffinityMasks[1]
     )
 
     $splat = @{
@@ -1845,6 +1872,7 @@ function Run-HumanTeammate {
         nolog = $nolog
         noTextLog = $noTextLog
         public = -not $botServer
+        cpuAffinityMask = $cpuAffinityMask
     }
 
     while ($true)
@@ -1863,7 +1891,8 @@ function Run-Teammate {
         [switch] $nolog,
         [switch] $noTextLog,
         $name = "Teammate.exe",
-        [switch] $botServer
+        [switch] $botServer,
+        [IntPtr]$cpuAffinityMask = $Script:HumanPcoreAffinityMasks[2]
     )
 
     $userId = 'efgBuddy.exe'
@@ -1879,6 +1908,7 @@ function Run-Teammate {
         nolog = $nolog
         noTextLog = $noTextLog
         public = -not $botServer
+        cpuAffinityMask = $cpuAffinityMask
     }
 
     while ($true)

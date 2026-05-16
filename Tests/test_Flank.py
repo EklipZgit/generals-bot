@@ -29,7 +29,7 @@ class FlankTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 101, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=101)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -37,19 +37,19 @@ class FlankTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertIsNone(winner)
 
         self.assertOwned(-1, playerMap.GetTile(5, 14))
         self.assertOwned(-1, playerMap.GetTile(5, 12))
-    
+
     def test_should_launch_with_less_army_on_questionable_flank(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_launch_with_less_army_on_questionable_flank___rNJJy-29s---1--150.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 150, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=150)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '10,2->13,2->13,4->12,4->12,6->10,6->10,9->11,9')
@@ -58,7 +58,7 @@ class FlankTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
     def test_should_never_all_in_with_questionable_flanks_incoming(self):
@@ -75,7 +75,7 @@ class FlankTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         self.assertPlayerTileVisibleAndCorrect(19, 6, simHost.sim, general.player)
@@ -96,7 +96,7 @@ class FlankTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertNoRepetition(simHost)
@@ -107,7 +107,7 @@ class FlankTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 152, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=152)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -126,7 +126,7 @@ class FlankTests(TestBase):
                 simHost.queue_player_move(general.player, move)
 
         simHost.run_between_turns(moveChecker)
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=5)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=5)
 
         self.assertOwned(-1, playerMap.GetTile(17, 11), 'shouldnt have captured 17,11')
 

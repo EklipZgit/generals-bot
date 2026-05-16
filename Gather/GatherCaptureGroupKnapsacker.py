@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 
 import KnapsackUtils
 import logbook
 from Algorithms.FastDisjointSet import FastDisjointSet
+from PerformanceTimer import PerformanceTimer
 
 
 @dataclass(slots=True)
@@ -144,9 +146,6 @@ def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: b
             idx))
 
     disjoint_set = FastDisjointSet()
-    for group_id in sorted(set(input_data.groups)):
-        disjoint_set.add(group_id)
-    tile_owner_root_by_tile_id: dict[int, int] = {}
     group_state_by_root: dict[int, GroupedKnapsackGroupState] = {}
     active_indices: list[int] = []
     groups_by_index: dict[int, int] = {}
@@ -154,12 +153,10 @@ def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: b
 
     for index in sorted_indices:
         tile_set = set(input_data.item_tile_sets[index])
-        own_root = disjoint_set[input_data.groups[index]]
         overlapping_roots: set[int] = set()
         for tile_id in tile_set:
-            owner_root = tile_owner_root_by_tile_id.get(tile_id, None)
-            if owner_root is not None:
-                overlapping_roots.add(disjoint_set[owner_root])
+            if tile_id in disjoint_set:
+                overlapping_roots.add(disjoint_set[tile_id])
 
         if not noLog and input_data.is_external_item.get(index, False):
             overlap_options = [
@@ -171,29 +168,38 @@ def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: b
             ]
             logbook.info(
                 f'Grouped knapsack external inspect: {_describe_grouped_knapsack_option(input_data, index)} '
-                f'own_root={own_root} overlapping_roots={sorted(overlapping_roots)} '
+                f'overlapping_roots={sorted(overlapping_roots)} '
                 f'overlap_options={overlap_options} '
                 f'overlap_descriptions={[ _describe_grouped_knapsack_option(input_data, option_idx) for option_idx in overlap_options ]}')
 
-        conflicting_roots = {root for root in overlapping_roots if root != own_root}
-        if len(conflicting_roots) > 0:
+        if len(overlapping_roots) > 1:
             maybe_options.append(GroupedKnapsackMaybeOption(
                 option_index=index,
-                would_merge_groups=tuple(sorted(conflicting_roots | {own_root}))))
+                would_merge_groups=tuple(sorted(overlapping_roots))))
             if not noLog:
                 conflicted_options = [
                     group_state_by_root[root].option_indices
-                    for root in sorted(conflicting_roots)
+                    for root in sorted(overlapping_roots)
                     if root in group_state_by_root
                 ]
                 logbook.info(
                     f'Grouped knapsack prune: deferring maybe type={_describe_grouped_knapsack_external_flag(input_data, index)} '
                     f'{_describe_grouped_knapsack_option(input_data, index)} '
-                    f'would_merge_roots={sorted(conflicting_roots | {own_root})} conflicted_options={conflicted_options}')
+                    f'would_merge_roots={sorted(overlapping_roots)} conflicted_options={conflicted_options}')
             continue
 
-        if own_root not in group_state_by_root:
-            root = own_root
+        if len(overlapping_roots) == 1:
+            root = next(iter(overlapping_roots))
+        else:
+            root = next(iter(tile_set))
+
+        disjoint_set.add(root)
+        for tile_id in tile_set:
+            disjoint_set.add(tile_id)
+            disjoint_set.merge(root, tile_id)
+
+        root = disjoint_set[root]
+        if root not in group_state_by_root:
             group = GroupedKnapsackGroupState(
                 root_id=root,
                 option_indices=[],
@@ -209,7 +215,6 @@ def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: b
                     f'type={_describe_grouped_knapsack_external_flag(input_data, index)} '
                     f'option={_describe_grouped_knapsack_option(input_data, index)}')
         else:
-            root = own_root
             group = group_state_by_root[root]
             input_group = input_data.groups[index]
             input_group_frontier = group.frontier_by_input_group.get(input_group, [])
@@ -237,9 +242,6 @@ def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: b
             group.frontier_by_input_group[input_group] = []
         _add_to_frontier(input_data, group.frontier_by_input_group[input_group], index)
         active_indices.append(index)
-
-        for tile_id in tile_set:
-            tile_owner_root_by_tile_id[tile_id] = root
 
     compact_group_by_root = {
         root: group_id
@@ -288,7 +290,8 @@ def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: b
 
 def solve_grouped_knapsack_input(
         input_data: GroupedKnapsackInput,
-        noLog: bool = True
+        noLog: bool = True,
+        perfTimer: PerformanceTimer | None = None
 ) -> GroupedKnapsackResult:
     turn_budget = input_data.turn_budget
     weights = input_data.weights
@@ -353,6 +356,166 @@ def solve_grouped_knapsack_input(
                 logbook.info(
                     f'Grouped knapsack maybe substitution: maybe={_describe_grouped_knapsack_option(input_data, maybe_idx)} '
                     f'would_merge_groups={maybe.would_merge_groups} replaced={replaced_indices} '
+                    f'chosen_weight={chosen_weight}, chosen_value={chosen_value}')
+
+    repair_timing_context = perfTimer.begin_move_event('Grouped knapsack post-solve repair scan') if perfTimer is not None else nullcontext()
+    with repair_timing_context:
+        chosen_tile_owner_by_tile_id: dict[int, int] = {}
+        chosen_by_input_group: dict[int, int] = {}
+        for chosen_idx in chosen_set:
+            chosen_by_input_group[input_data.groups[chosen_idx]] = chosen_idx
+            for tile_id in input_data.item_tile_sets[chosen_idx]:
+                chosen_tile_owner_by_tile_id[tile_id] = chosen_idx
+
+        conflict_free_indices: list[int] = []
+        for option_idx in range(len(weights)):
+            if option_idx in chosen_set:
+                continue
+
+            conflicting_chosen_indices = {
+                chosen_tile_owner_by_tile_id[tile_id]
+                for tile_id in input_data.item_tile_sets[option_idx]
+                if tile_id in chosen_tile_owner_by_tile_id
+            }
+            option_input_group = input_data.groups[option_idx]
+            same_group_chosen_idx = chosen_by_input_group.get(option_input_group, None)
+            if len(conflicting_chosen_indices) == 0:
+                conflict_free_indices.append(option_idx)
+                continue
+            if len(conflicting_chosen_indices) > 1:
+                continue
+            replaced_idx = next(iter(conflicting_chosen_indices))
+            if same_group_chosen_idx is not None and same_group_chosen_idx != replaced_idx:
+                continue
+
+            candidate_weight = chosen_weight - weights[replaced_idx] + weights[option_idx]
+            candidate_value = chosen_value - values[replaced_idx] + values[option_idx]
+            if candidate_weight > turn_budget or candidate_value <= chosen_value:
+                continue
+
+            chosen_set.remove(replaced_idx)
+            chosen_set.add(option_idx)
+            chosen_weight = candidate_weight
+            chosen_value = candidate_value
+            if input_data.groups[replaced_idx] in chosen_by_input_group:
+                del chosen_by_input_group[input_data.groups[replaced_idx]]
+            chosen_by_input_group[option_input_group] = option_idx
+            for tile_id in input_data.item_tile_sets[replaced_idx]:
+                if chosen_tile_owner_by_tile_id.get(tile_id, None) == replaced_idx:
+                    del chosen_tile_owner_by_tile_id[tile_id]
+            for tile_id in input_data.item_tile_sets[option_idx]:
+                chosen_tile_owner_by_tile_id[tile_id] = option_idx
+            if not noLog:
+                logbook.info(
+                    f'Grouped knapsack post-solve single-conflict substitution: '
+                    f'option={_describe_grouped_knapsack_option(input_data, option_idx)} '
+                    f'replaced={_describe_grouped_knapsack_option(input_data, replaced_idx)} '
+                    f'chosen_weight={chosen_weight}, chosen_value={chosen_value}')
+
+        considered_chosen_indices = sorted(
+            chosen_set,
+            key=lambda idx: (_get_option_value_per_turn(input_data, idx), values[idx], -weights[idx], idx))[:max(1, min(len(chosen_set), 8))]
+        repair_capacity = sum(weights[idx] for idx in considered_chosen_indices)
+        repair_existing_value = sum(values[idx] for idx in considered_chosen_indices)
+        considered_chosen_set = set(considered_chosen_indices)
+        considered_chosen_tile_set = {
+            tile_id
+            for chosen_idx in considered_chosen_indices
+            for tile_id in input_data.item_tile_sets[chosen_idx]
+        }
+        kept_chosen_indices = chosen_set - considered_chosen_set
+        kept_chosen_tile_set = {
+            tile_id
+            for chosen_idx in kept_chosen_indices
+            for tile_id in input_data.item_tile_sets[chosen_idx]
+        }
+        direct_replacement_indices = [
+            option_idx
+            for option_idx in range(len(weights))
+            if option_idx not in chosen_set
+            and weights[option_idx] <= repair_capacity
+            and not any(tile_id in kept_chosen_tile_set for tile_id in input_data.item_tile_sets[option_idx])
+            and any(tile_id in considered_chosen_tile_set for tile_id in input_data.item_tile_sets[option_idx])
+        ]
+        direct_replacement_indices.sort(
+            key=lambda idx: (-_get_option_value_per_turn(input_data, idx), -values[idx], weights[idx], idx))
+        conflict_free_indices.sort(
+            key=lambda idx: (-_get_option_value_per_turn(input_data, idx), -values[idx], weights[idx], idx))
+        repair_candidate_indices = (
+            considered_chosen_indices +
+            direct_replacement_indices[:max(8, len(considered_chosen_indices) * 4)] +
+            [
+                option_idx
+                for option_idx in conflict_free_indices[:max(8, len(considered_chosen_indices) * 4)]
+                if weights[option_idx] <= repair_capacity
+                and not any(tile_id in kept_chosen_tile_set for tile_id in input_data.item_tile_sets[option_idx])
+            ])
+        repair_candidate_indices = list(dict.fromkeys(repair_candidate_indices))
+
+    if len(repair_candidate_indices) > len(considered_chosen_indices):
+        repair_solve_timing_context = perfTimer.begin_move_event(f'Grouped knapsack post-solve repair solve candidates={len(repair_candidate_indices)}') if perfTimer is not None else nullcontext()
+        with repair_solve_timing_context:
+            repair_input = GroupedKnapsackInput(
+                turn_budget=repair_capacity,
+                groups=[input_data.groups[idx] for idx in repair_candidate_indices],
+                weights=[weights[idx] for idx in repair_candidate_indices],
+                values=[values[idx] for idx in repair_candidate_indices],
+                econ_values=[input_data.econ_values[idx] for idx in repair_candidate_indices],
+                friendly_island_sets=[input_data.friendly_island_sets[idx] for idx in repair_candidate_indices],
+                target_island_sets=[input_data.target_island_sets[idx] for idx in repair_candidate_indices],
+                item_tile_sets=[input_data.item_tile_sets[idx] for idx in repair_candidate_indices],
+                is_external_item={
+                    local_idx: input_data.is_external_item[original_idx]
+                    for local_idx, original_idx in enumerate(repair_candidate_indices)
+                    if input_data.is_external_item.get(original_idx, False)
+                },
+                item_descriptions=[input_data.item_descriptions[idx] for idx in repair_candidate_indices],
+                max_iterations=input_data.max_iterations)
+            repair_grouping = prune_and_get_groups_for_knapsack(repair_input, noLog=noLog)
+            repair_active_idx = sorted(repair_grouping.active_indices, key=lambda i: (repair_grouping.groups_by_index[i], i))
+            repair_groups = [repair_grouping.groups_by_index[i] for i in repair_active_idx]
+            repair_weights = [repair_input.weights[i] for i in repair_active_idx]
+            repair_values = [repair_input.values[i] for i in repair_active_idx]
+            repair_max_value, repair_chosen_local_indices = KnapsackUtils.solve_multiple_choice_knapsack(
+                repair_active_idx, repair_capacity, repair_weights, repair_values, repair_groups, noLog=noLog, longRuntimeThreshold=10.0)
+        repair_chosen_original_indices = {
+            repair_candidate_indices[local_idx]
+            for local_idx in repair_chosen_local_indices
+        }
+        repair_chosen_tile_set: set[int] = set()
+        repair_has_duplicate_tiles = False
+        for repair_idx in repair_chosen_original_indices:
+            for tile_id in input_data.item_tile_sets[repair_idx]:
+                if tile_id in repair_chosen_tile_set:
+                    repair_has_duplicate_tiles = True
+                repair_chosen_tile_set.add(tile_id)
+        repair_chosen_input_groups = [input_data.groups[idx] for idx in repair_chosen_original_indices]
+        repair_has_duplicate_groups = len(repair_chosen_input_groups) != len(set(repair_chosen_input_groups))
+        remaining_chosen_indices = chosen_set - considered_chosen_set
+        remaining_chosen_tile_set = {
+            tile_id
+            for chosen_idx in remaining_chosen_indices
+            for tile_id in input_data.item_tile_sets[chosen_idx]
+        }
+        remaining_chosen_input_groups = {
+            input_data.groups[chosen_idx]
+            for chosen_idx in remaining_chosen_indices
+        }
+        if (
+                not repair_has_duplicate_tiles
+                and not repair_has_duplicate_groups
+                and not bool(repair_chosen_tile_set & remaining_chosen_tile_set)
+                and not bool(set(repair_chosen_input_groups) & remaining_chosen_input_groups)
+                and repair_max_value > repair_existing_value):
+            chosen_set.difference_update(considered_chosen_set)
+            chosen_set.update(repair_chosen_original_indices)
+            chosen_weight = chosen_weight - repair_capacity + sum(weights[idx] for idx in repair_chosen_original_indices)
+            chosen_value = chosen_value - repair_existing_value + repair_max_value
+            if not noLog:
+                logbook.info(
+                    f'Grouped knapsack post-solve repair knapsack substitution: '
+                    f'removed={[ _describe_grouped_knapsack_option(input_data, removed_idx) for removed_idx in considered_chosen_indices ]} '
+                    f'added={[ _describe_grouped_knapsack_option(input_data, added_idx) for added_idx in sorted(repair_chosen_original_indices, reverse=True) ]} '
                     f'chosen_weight={chosen_weight}, chosen_value={chosen_value}')
 
     chosen_orig_idx = sorted(chosen_set, reverse=True)

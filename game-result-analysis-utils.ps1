@@ -6,7 +6,7 @@ function Copy-Turn25StartResultsToUnitTest {
         $DestFolder = "D:/2019_reformat_backup/generals-bot/Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat",
         $LogFolder = "D:/GeneralsLogs/GroupedLogs"
     )
-    
+
     $items = Get-ChildItem -Path $LogFolder -Recurse -Filter '50.txtmap'
     foreach ($item in $items)
     {
@@ -23,7 +23,7 @@ function Copy-Turn25StartResultsToUnitTest {
             Write-Host "skipped - newName $newName, folder $($folder.BaseName)"
             continue
         }
-        
+
         $item | Copy-Item -Destination "$DestFolder/$newName.txtmap"
     }
 }
@@ -39,7 +39,7 @@ function Copy-WinMapsToWonMapsDirectory {
     {
         mkdir $DestFolder -Force
     }
-    
+
     $folders = Get-ChildItem -Path $LogFolder -Directory
     foreach ($folder in $folders)
     {
@@ -66,7 +66,7 @@ function Copy-WinMapsToWonMapsDirectory {
             {
                 break;
             }
-            
+
             foreach ($char in $contentLine.ToCharArray())
             {
                 if ([char]::IsUpper($char))
@@ -155,7 +155,7 @@ function Create-TestContinuingGameFrom {
 
         [Parameter(Position=0)]
         $TestCategory = "BotBehavior",
-        
+
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 
@@ -178,16 +178,16 @@ function Create-TestContinuingGameFrom {
     {
         # no op
     }
-    else 
+    else
     {
         $TestMapFile = "$($TestMapFile).txtmap"
     }
-    
+
     $map = Get-Item $TestMapFile -ErrorAction Ignore
     if ($null -eq $map)
     {
         Write-Warning "Unable to load $TestMapFile"
-        return        
+        return
     }
 
     $turn = $map.BaseName
@@ -245,14 +245,14 @@ function Create-TestContinuingGameFrom {
     }
 
     $testFileContent += @"
-    
+
     def test_$TestName(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/$newName'
         $mapLoader
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=$turn)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         $simHostBuilder
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -260,7 +260,7 @@ function Create-TestContinuingGameFrom {
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         $baseAssert
 
         self.skipTest("TODO add asserts for $TestName")
@@ -278,7 +278,7 @@ function Create-UnitTestContinuingGameFrom {
 
         [Parameter(Position=0)]
         $TestCategory = "BotBehavior",
-        
+
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 

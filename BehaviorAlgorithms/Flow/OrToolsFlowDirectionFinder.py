@@ -175,7 +175,8 @@ class DirectOrToolsGraphBuilder(object):
                     cumulative_demand += demand
                     friendly_army_supply += island_army_sum - island.tile_count
                     if island.tiles_by_army[0].army == 1:
-                        cost += 1
+                        # Don't ask me why but 300 works well while like 3 does not.  See test_should_not_waste_a_bunch_of_moves_moving_from_general, which makes suboptimal moves at += 3 but plays great at += 300
+                        cost += 300
                 elif island.team == target_team:
                     has_nx_demand_attr = True
                     demand = island_army_sum + island.tile_count
@@ -281,7 +282,7 @@ class DirectOrToolsGraphBuilder(object):
             node_supply_map[fake_node] = cumulative_demand
             all_node_ids.add(fake_node)
             fake_node_excess_supply = max(0, cumulative_demand)
-            fake_node_enemy_general_fallback_capacity = fake_node_excess_supply // 4
+            fake_node_enemy_general_fallback_capacity = (fake_node_excess_supply + 1) // 2
             fake_node_friendly_general_fallback_capacity = fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
 
             # Edges to/from neutral sinks

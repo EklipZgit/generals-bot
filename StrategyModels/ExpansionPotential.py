@@ -1,8 +1,10 @@
 import typing
 
-from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from Interfaces import TilePlanInterface
 from base.client.tile import Tile
+
+if typing.TYPE_CHECKING:
+    from Behavior.ArmyInterceptor import InterceptionOptionInfo
 
 
 class ExpansionPotential(object):

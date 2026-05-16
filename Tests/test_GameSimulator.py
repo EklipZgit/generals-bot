@@ -21,7 +21,7 @@ class GameSimulatorTests(TestBase):
 
         simHost = GameSimulatorHost(map, player_with_viewer=general.player)
 
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.0001)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.0001)
 
     def test_loads_map_data_correctly_per_player(self):
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/242.txtmap', 242, player_index=1)
@@ -184,7 +184,7 @@ class GameSimulatorTests(TestBase):
         # simHost = GameSimulatorHost(map)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1)
 
     def test_simulates_a_2v2_game(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -199,12 +199,12 @@ M              M                   M                   M         cG7  M         
                M                                                           M              C41
           C42       M    M                                            M    M                        M
           M    C48  M                                                                dG7  M              M
-     M                                  M                   M                     
+     M                                  M                   M
                M    M                                                 M                   M
                M                                                           M    M         M
                     C41  C45       M                   M              M         C41
      M                                                                          M    M                   M
-               M                   C43  M              C43  M           
+               M                   C43  M              C43  M
 M    aG7                      M                   M                                  M              M    M
                                         M                   M         M                   M         M
                                              M                   M         M                   M
@@ -233,7 +233,7 @@ dTiles=1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player)
 
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.1)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1)
 
     def test_game_simulator__correctly_updates_client_fog_of_war__robust_against_manually_tweaked_maps(self):
         map, general = self.load_map_and_general('Defense/FailedToFindPlannedDefensePathForNoReason_Turn243/243.txtmap', 243, player_index=1)
@@ -257,12 +257,12 @@ M              M                   M              M                             
                M                                       M              M
           C42       M    M                        M    M                        M
           M    C48  M                   bG1                           M              M
-     M                                  M                     
+     M                                  M
           M    M    M                             M                   M
           M    M                                       M    M         M
                     C41  C45       M              M         M
      M                                                      M    M                   M
-               M                   C43  M           
+               M                   C43  M
 M                             M                                  M              M    M
           aG7  !b1  !b1                 M         M                   M         M
                                              M         M                   M

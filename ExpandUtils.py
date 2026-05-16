@@ -31,6 +31,48 @@ def _format_plan_first_move_for_log(plan: TilePlanInterface | None) -> str:
     return f'{move.source}->{move.dest} srcArmy={move.source.army} destPlayer={move.dest.player} destArmy={move.dest.army}'
 
 
+def _format_plan_tile_sequence_for_log(
+        plan: TilePlanInterface | None,
+        friendlyPlayers: typing.List[int],
+        targetPlayers: typing.List[int]
+) -> str:
+    if plan is None:
+        return 'None'
+    return '[' + ', '.join(
+        _format_plan_tile_for_log(tile, friendlyPlayers, targetPlayers)
+        for tile in plan.tileList
+    ) + ']'
+
+
+def _format_plan_tile_set_for_log(
+        plan: TilePlanInterface | None,
+        friendlyPlayers: typing.List[int],
+        targetPlayers: typing.List[int]
+) -> str:
+    if plan is None:
+        return 'None'
+    return '[' + ', '.join(
+        _format_plan_tile_for_log(tile, friendlyPlayers, targetPlayers)
+        for tile in sorted(plan.tileSet, key=lambda t: (t.y, t.x))
+    ) + ']'
+
+
+def _format_plan_tile_for_log(
+        tile: Tile,
+        friendlyPlayers: typing.List[int],
+        targetPlayers: typing.List[int]
+) -> str:
+    if tile.player in friendlyPlayers:
+        kind = 'friendly'
+    elif tile.player in targetPlayers:
+        kind = 'enemy'
+    elif tile.player < 0:
+        kind = 'neutral'
+    else:
+        kind = 'other'
+    return f'({tile.x},{tile.y}):{kind}:p{tile.player}:army{tile.army}:vis{tile.visible}:disc{tile.discovered}'
+
+
 class RoundPlan(object):
     def __init__(
             self,
@@ -452,7 +494,10 @@ def get_round_plan_with_expansion(
                     for opt in maxPaths:
                         logbook.warning(
                             f'EXP_SELECT_CANDIDATE first={_format_plan_first_move_for_log(opt)} '
-                            f'len={opt.length} delay={opt.requiredDelay} value={opt.econValue:.2f} plan={opt}'
+                            f'len={opt.length} delay={opt.requiredDelay} value={opt.econValue:.2f} '
+                            f'pathTiles={_format_plan_tile_sequence_for_log(opt, friendlyPlayers, targetPlayers)} '
+                            f'tileSet={_format_plan_tile_set_for_log(opt, friendlyPlayers, targetPlayers)} '
+                            f'plan={opt}'
                         )
                 # Calculate total value from the options
                 totalValue = sum(int(opt.econValue * 10000) for opt in maxPaths)
@@ -472,6 +517,8 @@ def get_round_plan_with_expansion(
                     if logStuff:
                         logbook.warning(
                             f'EXP_SELECT_CHOSEN first={_format_plan_first_move_for_log(path)} '
+                            f'pathTiles={_format_plan_tile_sequence_for_log(path, friendlyPlayers, targetPlayers)} '
+                            f'tileSet={_format_plan_tile_set_for_log(path, friendlyPlayers, targetPlayers)} '
                             f'plan={path}'
                         )
 
@@ -2659,7 +2706,7 @@ def _get_capture_counts(
     return turnsUsed, enemyCapped, neutralCapped, visited
 
 
-def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: TilePlanInterface, originalNegativeTiles: typing.Set[Tile], econVt: float) -> float:
+def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: TilePlanInterface, deferCityGen: bool = False) -> float:
     # rating = max(0, path.value) ** 0.5
     if isinstance(path, InterceptionOptionInfo) and path.requiredDelay <= 0:
         # intercepts are high priority no matter what, and always more important than other intercepts of smaller tile amounts.
@@ -2675,11 +2722,18 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
     # # if isinstance(path, Path):
     # if path.value >= 0:
     #     rating = (path.value ** 0.5) / 5
+    if path.tileList[0].isCity or path.tileList[0].isGeneral:
+        rating += 0.5
+        if deferCityGen:
+            rating -= 10
+
     for t in path.tileList[1:]:
         if t.visible:
             if t.player in friendlyPlayers:
                 if t.isGeneral or t.isCity:
-                    rating -= 1.0
+                    rating += 0.1
+                    if deferCityGen:
+                        rating -= 1.0
                 if t.army == 1:
                     rating -= 0.3
             continue
@@ -2687,11 +2741,11 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
         if t.player == -1:
             rating += 0.3
             if not t.discovered:
-                rating += 0.2
+                rating += 0.03
         elif t.player not in friendlyPlayers:
-            rating -= 0.2
+            rating += 0.05
             if not t.discovered:
-                rating -= 0.3
+                rating += 0.1
 
         # if t.player not in friendlyPlayers:
         #     rating += 0.5
@@ -2726,6 +2780,14 @@ def find_optimal_expansion_path_to_move_first(
     # if map.players[searchingPlayer].general is not None:
     #     playerCities.append(map.players[searchingPlayer].general)
 
+    sumTurns = 0
+    for path in maxPaths:
+        sumTurns += path.length
+
+    deferringCityGen = False
+    if sumTurns < remainingTurns - 1:
+        deferringCityGen = True
+
     waitingPaths = set()
     pathVals: typing.Dict[TilePlanInterface, float] = {}
     pathTurns: typing.Dict[TilePlanInterface, int] = {}
@@ -2739,7 +2801,7 @@ def find_optimal_expansion_path_to_move_first(
                 thisVal, thisTurns = overrides
 
         thisVt = thisVal / thisTurns
-        thisUncertainty = _get_uncertainty_capture_rating(friendlyPlayers, p, originalNegativeTiles, thisVt)
+        thisUncertainty = _get_uncertainty_capture_rating(friendlyPlayers, p, deferringCityGen)
         thisUncertainty = thisUncertainty / (thisTurns + 1)
 
         pathVals[p] = thisVal

@@ -58,7 +58,7 @@ class FlowExpansionUnitTests(TestBase):
         #     simHost.queue_player_moves_str(general.player, expectedPath)
         #
         #     self.begin_capturing_logging()
-        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+        #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
         self.assertNotEqual(0, len(opts))
 
@@ -84,7 +84,7 @@ class FlowExpansionUnitTests(TestBase):
         #     simHost.queue_player_moves_str(general.player, expectedPath)
         #
         #     self.begin_capturing_logging()
-        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+        #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
         self.assertNotEqual(0, len(opts))
 
@@ -1339,7 +1339,7 @@ player_index=0
                 #     simHost.queue_player_moves_str(general.player, expectedPath)
                 #
                 #     self.begin_capturing_logging()
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+                #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
                 if bestEcon == 0.0:
                     self.assertEqual(0, len(opts))
@@ -1385,7 +1385,7 @@ player_index=0
                 #     simHost.queue_player_moves_str(general.player, expectedPath)
                 #
                 #     self.begin_capturing_logging()
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+                #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
                 self.assertNotEqual(0, len(opts))
 
@@ -1428,7 +1428,7 @@ player_index=0
                 #     simHost.queue_player_moves_str(general.player, expectedPath)
                 #
                 #     self.begin_capturing_logging()
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+                #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
                 self.assertNotEqual(0, len(opts))
 
@@ -1536,7 +1536,7 @@ player_index=0
                 #     simHost.queue_player_moves_str(general.player, expectedPath)
                 #
                 #     self.begin_capturing_logging()
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+                #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
                 # otherwise just the one option
                 self.assertNotEqual(0, len(opts))
@@ -1579,7 +1579,7 @@ player_index=0
                 #     simHost.queue_player_moves_str(general.player, expectedPath)
                 #
                 #     self.begin_capturing_logging()
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+                #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
                 self.assertNotEqual(0, len(opts))
 
@@ -1614,7 +1614,7 @@ player_index=0
                 #     simHost.queue_player_moves_str(general.player, expectedPath)
                 #
                 #     self.begin_capturing_logging()
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+                #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
                 self.assertEqual(1, len(opts), 'should not find invalid options')
                 longestOpt = opts[0]
@@ -1656,7 +1656,7 @@ player_index=0
                 #     simHost.queue_player_moves_str(general.player, expectedPath)
                 #
                 #     self.begin_capturing_logging()
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+                #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
                 self.assertEqual(planCount, len(opts), 'should not find invalid options')
                 if planCount > 0:
@@ -1699,7 +1699,7 @@ player_index=0
                 #     simHost.queue_player_moves_str(general.player, expectedPath)
                 #
                 #     self.begin_capturing_logging()
-                #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+                #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
                 self.assertEqual(planCount, len(opts), 'should not find invalid options')
                 if planCount > 0:
@@ -1725,7 +1725,7 @@ player_index=0
         #     simHost.queue_player_moves_str(general.player, expectedPath)
         #
         #     self.begin_capturing_logging()
-        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+        #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
         # self.assertEqual(planCount, len(opts), 'should not find invalid options')
         # if planCount > 0:
@@ -1786,7 +1786,7 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
 
@@ -1815,7 +1815,7 @@ player_index=0
         #     simHost.queue_player_moves_str(general.player, expectedPath)
         #
         #     self.begin_capturing_logging()
-        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=min(10, turns))
+        #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
         self.assertEqual(0, len(opts), 'should not find any valid options')
     def test_should_not_fail_to_produce_a_GCP(self):
@@ -1832,7 +1832,7 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
     def test_should_not_attempt_to_expand_a_1_to_a_neutral(self):
@@ -1849,7 +1849,7 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
     def test_should_not_produce_disconnected_tile_set_again(self):
@@ -1882,9 +1882,9 @@ player_index=0
         bot = self.get_debug_render_bot(simHost, general.player)
 
         # This should NOT raise an AssertionError about disconnected tiles
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
-    
+
     def test_should_not_fail_to_find_flow_into_enemy_land(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_fail_to_find_flow_into_enemy_land___MNTTgVtiIG---1--87.txtmap'
@@ -1892,7 +1892,7 @@ player_index=0
         enemyGeneral = self.move_enemy_general(map, enemyGeneral, 14, 0)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=87)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '10,8->10,9->14,9')
@@ -1900,21 +1900,21 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
         # Weirdly it IS optimal to take the neutral tile first because it lets you cap one extra tile up near the enemy
         # land rather than having a 2 left in the middle of enemy land and capping an extra neutral near general instead.
         # TODO should be capturing backwards away from the general, though?
         self.assertTileDifferentialGreaterThan(-4, simHost, )
 
-    
+
     def test_should_greedily_spend_general_army_efficiently_towards_enemy_land(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_greedily_spend_general_army_efficiently_towards_enemy_land___r-atHOGjY---1--88.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 88, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=88)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_leafmoves(enemyGeneral.player, 4)
@@ -1930,18 +1930,18 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(6, simHost, 'Capping enemy is better?')
-    
+
     def test_should_flow_expand_into_enemy_land_in_one_way_or_another_what_the_fuck(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_flow_expand_into_enemy_land_in_one_way_or_another_what_the_fuck___NhWcLS2LN---0--82.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 82, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=82)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1950,10 +1950,10 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(8, simHost, 'capping for 5 moves yields 10 though it is reasonable to take a neutral for 1 move to optimize to odd caps for 1\'s')
-    
+
     def test_should_not_do_retarded_shit_instead_of_just_flowing_at_end_of_round(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_do_retarded_shit_instead_of_just_flowing_at_end_of_round___BFSnEeOZE---0--141.txtmap'
@@ -1961,7 +1961,7 @@ player_index=0
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 141, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=141)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         # simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1973,18 +1973,18 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(3, simHost, 'fucking, it is not hard to find this plan')
-    
+
     def test_should_flow_where_enemy_is_likely_to_be__not_backwards(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_flow_where_enemy_is_likely_to_be,_not_backwards___nrgqL_LnC---0--71.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 71, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=71)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1992,18 +1992,18 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
         self.assertOwned(7, 9)
 
-    
+
     def test_should_be_able_to_expand_through_enemy_land_surrounded_by_friendly_1s(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_be_able_to_expand_through_enemy_land_surrounded_by_friendly_1s___KJJW_lqPL---0--122.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 122, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=122)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_leafmoves(enemyGeneral.player)
@@ -2011,17 +2011,17 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=28)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=28)
         self.assertNoFriendliesKilled(map, general)
 
-    
+
     def test_should_not_keep_rallying_general_army_behind_border_tile_when_general_can_expand_elsewhere(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_keep_rallying_general_army_behind_border_tile_when_general_can_expand_elsewhere___fNpOohe_E---1--75.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 75, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=75)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_leafmoves(enemyGeneral.player, 8)
@@ -2031,7 +2031,69 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(24, simHost)
 
+
+    def test_should_not_waste_a_bunch_of_moves_moving_from_general(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_waste_a_bunch_of_moves_moving_from_general___7aAGqaVxf---0--92.txtmap'
+        MapBase.DO_NOT_RANDOMIZE = False
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 92, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '9,6->10,6->10,7  12,14->12,13->13,13')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(7, simHost, 'because duh, this is a trivially easy find')
+
+    def test_should_find_a_way_to_flow_the_11_down_and_left(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_find_a_way_to_flow_the_11_down_and_left___UOzQeTP3I---1--81.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 81, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=81)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_find_a_way_to_flow_the_11_down_and_left")
+
+    def test_should_not_bypass_enemy_land_flow_with_fake_general_flow(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_bypass_enemy_land_flow_with_fake_general_flow___YSU0D94dO---1--88.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 88, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=88)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_bypass_enemy_land_flow_with_fake_general_flow")

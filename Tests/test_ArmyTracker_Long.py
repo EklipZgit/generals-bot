@@ -128,7 +128,7 @@ class ArmyTrackerTests(TestBase):
             simHost.queue_player_moves_str(enemyGeneral.player, f'None')
         if debugMode:
             self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=1)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=1)
 
     def test_generate_all_adjacent_army_scenarios(self):
         # self.skipTest('takes too long right now, and currently passing')

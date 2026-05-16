@@ -54,7 +54,7 @@ class TeamCommunicatorTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCoordinatedDefenseMatches(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=8)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         shouldCapWith60_1 = self.get_player_tile(7, 9, simHost.sim, general.player)
@@ -113,7 +113,7 @@ class TeamCommunicatorTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCoordinatedDefenseMatches(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=8)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         shouldCapWith60_1 = self.get_player_tile(7, 9, simHost.sim, general.player)
@@ -174,7 +174,7 @@ class TeamCommunicatorTests(TestBase):
             msg = f'LEAD p{lead.player.index}: {str(lead.teammate_communicator)}\nFOLLOWER p{follower.player.index}: {str(follower.teammate_communicator)}'
             combinedFailures = "\n".join(failures)
             self.fail(f'\n{msg}\n{combinedFailures}')
-    
+
     def test_should_coordinate_defense(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         for attacksSelf in [False, True, None]:
@@ -201,16 +201,16 @@ class TeamCommunicatorTests(TestBase):
 
                 self.begin_capturing_logging()
                 simHost.run_between_turns(lambda: self.assertCoordinatedDefenseMatches(simHost))
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=12)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=12)
                 self.assertNoFriendliesKilled(map, general, allyGen)
-    
+
     def test_should_coordinate_defense_on_close_spawns(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_coordinate_defense___1sM7IUnt5---3--133.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 133, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=133)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '16,16->15,16->15,17->15,18->15,19->14,19->13,19->12,19->11,19->10,19->9,19->8,19->8,20')
@@ -222,17 +222,17 @@ class TeamCommunicatorTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCoordinatedDefenseMatches(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
-    
+
     def test_should_not_loop_on_2v2_defense(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_loop_on_2v2_defense___2J0rKDuFG---3--131.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 131, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=131)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '15,11->15,12->15,13->16,13->16,14->17,14->17,15->17,16->17,17->17,18->17,19->17,20->18,20')
@@ -242,16 +242,16 @@ class TeamCommunicatorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertNoFriendliesKilled(map, general, allyGen)
-    
+
     def test_should_not_pull_back_army_when_cannot_defend_teammate__all_in_attacker_instead(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_pull_back_army_when_cannot_defend_teammate__all_in_attacker_instead___W9ueAfLB----2--201.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 201, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=201)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,11->8,11->8,12->8,13->8,14->7,14->6,14->5,14->4,14->4,15->4,16')
@@ -261,5 +261,5 @@ class TeamCommunicatorTests(TestBase):
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.3, turns=11)
         self.assertNoFriendliesKilled(map, general, allyGen)

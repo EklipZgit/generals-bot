@@ -128,7 +128,7 @@ aG7
 
 
 dG1
-| 
+|
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=3)
         general = map.GetTile(0, 0)
@@ -153,11 +153,11 @@ dG1
         mapRaw = """
 |   |
 aG7
-a1 
+a1
 
 
 dG1
-| 
+|
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=3)
         general = map.GetTile(0, 0)
@@ -183,11 +183,11 @@ dG1
         mapRaw = """
 |   |
 aG7
-b1 
+b1
 
 
 dG1
-| 
+|
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=3)
         general = map.GetTile(0, 0)
@@ -214,11 +214,11 @@ dG1
         mapRaw = """
 |   |
 aG7
-b1 
+b1
 
 
 dG1
-| 
+|
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=13, player_index=3)
         general = map.GetTile(0, 0)
@@ -248,7 +248,7 @@ C5
 
 
 dG1
-| 
+|
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=3)
         general = map.GetTile(0, 0)
@@ -280,7 +280,7 @@ C5
 
 
 dG1
-| 
+|
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=13, player_index=3)
         general = map.GetTile(0, 0)
@@ -308,7 +308,7 @@ dG1
         mapRaw = """
 |    |    |    |    |
 aG7
-      
+
 aC10
 aC9
 aC5       b5        bG1
@@ -409,7 +409,7 @@ aC5       b5        bG1
         mapRaw = """
 |    |    |    |    |
 aG7
-      
+
 aC10
 C45
 M         b5        bG1
@@ -465,7 +465,7 @@ M         b5        bG1
         mapRaw = """
 |    |    |    |    |
 aG7
-      
+
 M
 aC9
 M         b5        bG1
@@ -508,8 +508,8 @@ M         b5        bG1
         mapRaw = """
 |    |    |    |    |
 aG7
-      
-M 
+
+M
 M
 aC5       b5        bG1
 |    |    |    |    |
@@ -551,12 +551,12 @@ aC5       b5        bG1
 
     def test_tile_delta_against_neutral_city_on_bonus_turn(self):
         mapRaw = """
-|  
+|
 aG7
 C5
 
 
-| 
+|
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=13, player_index=0)
 
@@ -703,13 +703,13 @@ C5
         simHost.queue_player_moves_str(general.player, "14,6->15,6->16,6->17,6")
         simHost.queue_player_moves_str(enemyGeneral.player, "12,13->12,12->12,11->13,11")
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=4)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=4)
 
     def test_run_adj_collision_mutual(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         # DONT CHANGE THIS ONE, IT WAS FAILING AND BYPASSING THE COLLISION ASSERTS...
         self.run_adj_test(debugMode=debugMode, aArmy=20, bArmy=5, aMove=(1, 0), bMove=(-1, -0), turn=96)
-    
+
     def test_small_gather_adj_to_fog_should_not_double_gather_from_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/small_gather_adj_to_fog_should_not_double_gather_from_fog___rgI9fxNa3---a--451.txtmap'
@@ -773,7 +773,7 @@ C5
         simHost.queue_player_moves_str(general.player, "8,12->7,12->8,12->7,12")
         simHost.queue_player_moves_str(enemyGeneral.player, "7,16->7,15")
         self.begin_capturing_logging()
-        simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=2)
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=2)
 
     def test_load_map_should_load_with_actual_scores(self):
         mapFile = 'GameContinuationEntries/should_not_dance_around_armies_standing_still___HeEzmHU03---0--269.txtmap'
@@ -933,7 +933,7 @@ C5
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 297, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=297)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, botInitOnly=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '7,5->8,5')
@@ -941,7 +941,7 @@ C5
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         city = playerMap.GetTile(8, 5)
@@ -972,7 +972,7 @@ C5
 
                         self.begin_capturing_logging()
                         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost, general.player))
-                        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                         self.assertNoFriendliesKilled(map, general)
 
                         self.assertOwned(enemyGeneral.player, playerMap.GetTile(7, 21))
@@ -984,9 +984,9 @@ C5
 aG15
 b1   a1   b1
 b12  a1   b1
-b1   a1   b1 
-b1   b1   b1         
-b1   b1   a1         
+b1   a1   b1
+b1   b1   b1
+b1   b1   a1
 
 
           b5        bG1
@@ -1006,7 +1006,7 @@ player_index=0
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(1, 3))
@@ -1019,9 +1019,9 @@ player_index=0
 aG15
 b1   a1   b1
      b1   b1
-b12  a1   b1 
-b1   b1   b1         
-b1   b1   a1         
+b12  a1   b1
+b1   b1   b1
+b1   b1   a1
 
 
           b5        bG1
@@ -1041,7 +1041,7 @@ player_index=0
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(1, 3))
@@ -1066,18 +1066,18 @@ player_index=0
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertCorrectArmyDeltas(simHost, general.player)
-    
+
     def test_should_not_duplicate_armies_back_into_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_duplicate_armies_back_into_fog___Uay7ww5nZ---0--224.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 224, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=224)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '12,3->11,3')
@@ -1087,7 +1087,7 @@ player_index=0
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost, general.player, nearTile=playerMap.GetTile(12, 3)))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
     def test_should_not_literally_kill_self_in_2v2_by_preventing_ally_from_saving__unit(self):
@@ -1144,14 +1144,14 @@ player_index=0
     # 277 after FUCKING TWO WHOLE GODDAMN DAYS OF TRYING TO FUCKING FJKDSF:LKJFDS:JLKFDSGLJK:HRSW:JMNKLGWR GOD I HATE TILE TRACKING, BRUTE FORCE WOULD HAVE BEEN SO MUCH BETTER
     # 279 after fixing incorrect delta on neutral(fog)->neutral(visible) from fog move
     # 279 still
-    # 279 after all the mechanical updates    
+    # 279 after all the mechanical updates
     def test_should_not_hallucinate_enemy_cities_when_just_taking_own_city(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_hallucinate_enemy_cities_when_just_taking_own_city___Yk-wWOfJ1---1--125.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 125, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=125)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(general.player, '2,2->2,3  3,3->2,3  1,3->2,3')
@@ -1160,5 +1160,5 @@ player_index=0
 
         simHost.run_between_turns(lambda: self.assertEqual(1, playerMap.players[enemyGeneral.player].cityCount))
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertNoFriendliesKilled(map, general)

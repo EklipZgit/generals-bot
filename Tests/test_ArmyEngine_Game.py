@@ -12,7 +12,7 @@ class ArmyEngineGameTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=238)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # simHost.make_player_afk(enemyGeneral.player)
@@ -21,7 +21,7 @@ class ArmyEngineGameTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.3, turns=10)
         self.assertIsNone(winner)
 
     def test_should_scrim_against_incoming_army(self):
@@ -42,9 +42,9 @@ class ArmyEngineGameTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.3, turns=50)
         self.assertIsNone(winner)
-    
+
     def test_army_scrim_defense_should_not_avoid_kill_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/army_scrim_defense_should_not_avoid_kill_threat___rgNPA7Zan---b--388.txtmap'
@@ -54,7 +54,7 @@ class ArmyEngineGameTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=388)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # simHost.make_player_afk(enemyGeneral.player)
@@ -63,7 +63,7 @@ class ArmyEngineGameTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for army_scrim_defense_should_not_avoid_kill_threat
@@ -87,9 +87,9 @@ class ArmyEngineGameTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=1.5, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=1.5, turns=15)
         self.assertIsNone(winner)
-    
+
     def test_should_intercept_correctly(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_correctly___BegNpvZT3---a--246.txtmap'
@@ -99,7 +99,7 @@ class ArmyEngineGameTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=246)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # simHost.make_player_afk(enemyGeneral.player)
@@ -107,11 +107,11 @@ class ArmyEngineGameTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for should_intercept_correctly
-    
+
     def test_should_not_cycle_sideways(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_cycle_sideways___rlgSxdZ62---b--423.txtmap'
@@ -121,7 +121,7 @@ class ArmyEngineGameTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=423)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # simHost.make_player_afk(enemyGeneral.player)
@@ -129,11 +129,11 @@ class ArmyEngineGameTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for should_not_cycle_sideways
-    
+
     def test_should_not_let_general_die_scrim_path(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_let_general_die_scrim_path___HeTqrYFT3---a--740.txtmap'
@@ -143,7 +143,7 @@ class ArmyEngineGameTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=740)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # simHost.make_player_afk(enemyGeneral.player)
@@ -152,9 +152,9 @@ class ArmyEngineGameTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.01, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.01, turns=15)
         self.assertIsNone(winner)
-    
+
     def test_should_not_let_general_die_scrim_path__turn_before(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_let_general_die_scrim_path__turn_before___HeTqrYFT3---a--739.txtmap'
@@ -164,7 +164,7 @@ class ArmyEngineGameTests(TestBase):
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=739)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # simHost.make_player_afk(enemyGeneral.player)
@@ -173,5 +173,5 @@ class ArmyEngineGameTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.01, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.01, turns=15)
         self.assertIsNone(winner)

@@ -386,9 +386,10 @@ class TileIslandBuilder(object):
         logbook.info(f'islands all built in {complete:.5f}s')
 
     def update_tile_islands(self, enemyGeneralExpectedLocation: Tile | None, mode: IslandBuildMode = IslandBuildMode.GroupByArmy):
-        logbook.info(f'update_tile_islands starting (turn={self.map.turn})')
         start = time.perf_counter()
-        shouldLogDebugUpdate = self.log_debug or self.use_debug_asserts or DebugHelper.is_debug_or_unit_test_mode()
+        shouldLogDebugUpdate = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
+        if shouldLogDebugUpdate:
+            logbook.info(f'update_tile_islands starting (turn={self.map.turn})')
 
         self._team_stats_by_team_id = self.map.get_team_stats_lookup_by_team_id()
         self._team_stats_by_player = [self._team_stats_by_team_id[p.team] for p in self.map.players]
@@ -455,7 +456,7 @@ class TileIslandBuilder(object):
                                     armyMoveHandledTiles.add(pairedTile)
                                     oldArmy = existingIsland.sum_army
                                     existingIsland.refresh_cached_tile_metadata()
-                                    if self.use_debug_asserts and oldArmy != existingIsland.sum_army:
+                                    if shouldLogDebugUpdate and oldArmy != existingIsland.sum_army:
                                         logbook.info(f'INTRA sum_army update tile={tile} paired={pairedTile} island={existingIsland} old={oldArmy} new={existingIsland.sum_army} tiles={[(str(t), t.army) for t in existingIsland.tile_set]}')
                                     existingIsland.sum_army_all_adjacent_friendly = max(existingIsland.sum_army_all_adjacent_friendly, existingIsland.sum_army)
                                     continue
@@ -654,7 +655,8 @@ class TileIslandBuilder(object):
                 dbgStart = time.perf_counter()
                 self.debug_verify_all_islands(context='update_tile_islands:no_impacted_tiles', mode=mode)
                 dbgComplete = time.perf_counter() - dbgStart
-                logbook.info(f'debug_verify_all_islands completed in {dbgComplete:.5f}s')
+                if shouldLogDebugUpdate:
+                    logbook.info(f'debug_verify_all_islands completed in {dbgComplete:.5f}s')
             return
 
         priorLeafIslandByTile: typing.Dict[Tile, TileIsland] = {}

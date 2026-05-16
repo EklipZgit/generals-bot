@@ -61,7 +61,7 @@ class ArmyInterceptionTests(TestBase):
             army.last_moved_turn = map.turn - 1
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
             self.assertIsNone(winner)
 
             self.assertEqual(general.player, playerMap.GetTile(7, 14).player)
@@ -108,7 +108,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
         # sometimes we're winning, sometimes we're equal because depending how the threat risk is calculated the best move may be to delay to prevent enemy army crossing back up
         self.assertTileDifferentialGreaterThan(-1, simHost)
@@ -137,7 +137,7 @@ class ArmyInterceptionTests(TestBase):
 
         tileDiff = self.get_tile_differential(simHost)
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=29)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=29)
         self.assertIsNone(winner)
 
         finalTileDiff = self.get_tile_differential(simHost)
@@ -170,7 +170,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=15)
                 self.assertIsNone(winner)
 
                 self.assertTileDifferentialGreaterThan(-1, simHost, 'should not have allowed opp free reign :(')
@@ -205,7 +205,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(1, simHost)
@@ -257,7 +257,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertIsNone(winner)
 
         chokeTile = playerMap.GetTile(2, 7)
@@ -284,7 +284,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=17)
                 self.assertIsNone(winner)
 
                 self.assertGreater(self.get_tile_differential(simHost), 0, "should have intercepted and then caught up on tiles")
@@ -303,7 +303,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost)
@@ -322,7 +322,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertIsNone(winner)
 
         city = playerMap.GetTile(7, 11)
@@ -350,7 +350,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=19)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=19)
                 self.assertIsNone(winner)
 
                 self.assertGreater(self.get_tile_differential(simHost), 10)
@@ -377,7 +377,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertIsNone(winner)
 
         self.assertEqual(playerMap.GetTile(2, 7).player, general.player)
@@ -419,7 +419,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         self.assertEqual(playerMap.GetTile(6, 7).player, general.player)
@@ -483,7 +483,7 @@ class ArmyInterceptionTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertEqual(general.player, city.player, 'should never lose control of the city.'))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
 
     def test_should_kill_point_blank_army_lul(self):
@@ -500,7 +500,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         self.assertEqual(general.player, playerMap.GetTile(7, 7).player)
@@ -551,7 +551,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_return_to_save_general(self):
@@ -569,7 +569,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertIsNone(winner)
 
     def test_should_not_chase_when_gets_self_killed(self):
@@ -586,7 +586,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_one_move_intercept_to_prevent_expansion_threat(self):
@@ -603,7 +603,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         self.assertEqual(general.player, playerMap.GetTile(4, 7).player)
@@ -642,7 +642,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=27)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=27)
         self.assertIsNone(winner)
 
         self.assertGreater(self.get_tile_differential(simHost), 20, "should not have lost a ton of econ by letting enemy walk around")
@@ -662,7 +662,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         tile = playerMap.GetTile(13, 12)
@@ -709,7 +709,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(19, simHost)
@@ -732,7 +732,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
 
     def test_should_not_override_defense_with_intercept_for_wrong_army_lol__longer(self):
@@ -760,7 +760,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
     def test_should_not_use_defensive_intercept_tile_for_expansion(self):
@@ -777,7 +777,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=32)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=32)
         self.assertIsNone(winner)
 
     def test_should_not_take_longer_intercept_than_necessary_defense_moves(self):
@@ -804,7 +804,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
                 self.assertIsNone(winner)
 
     def test_should_not_allow_runaround_kill(self):
@@ -821,7 +821,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
         self.assertIsNone(winner)
 
     def test_should_intercept_with_smaller_army_to_prevent_damage_by_end_of_round(self):
@@ -846,7 +846,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=14)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=14)
                 self.assertIsNone(winner)
 
                 self.assertTileDifferentialGreaterThan(15, simHost)
@@ -865,7 +865,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(-3, simHost)
@@ -884,7 +884,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertTileDifferentialGreaterThan(1, simHost)
 
     def test_should_not_intercept_armies_that_will_not_reach_the_intercept_point_due_to_low_value(self):
@@ -902,7 +902,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
         self.assertTileDifferentialGreaterThan(7, simHost)
 
     def test_should_wait_a_move_to_guarantee_no_bypass(self):
@@ -926,7 +926,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
                 self.assertIsNone(winner)
                 self.assertTileDifferentialGreaterThan(8, simHost)
 
@@ -946,7 +946,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertIsNone(winner)
         self.assertTileDifferentialGreaterThan(8, simHost)
 
@@ -981,7 +981,7 @@ class ArmyInterceptionTests(TestBase):
                         army.expectedPaths.append(path)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=15)
                     self.assertIsNone(winner)
 
                     city1 = playerMap.GetTile(4, 13)
@@ -1006,7 +1006,7 @@ class ArmyInterceptionTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
             self.assertIsNone(winner)
 
             self.assertNoRepetition(simHost)
@@ -1031,7 +1031,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(-3, simHost, 'should split and cap up the line of 1s while defending at home with the split, uncomment general moves above for proof')
@@ -1052,7 +1052,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         tile = playerMap.GetTile(13, 9)
@@ -1079,7 +1079,7 @@ class ArmyInterceptionTests(TestBase):
         # TODO we have already zoned out the incoming army, we don't even need to move our 2,12 tile. We can go capture tiles up top or pull 2's forward, he's 5 captures behind and we can capture a bunch of his if he runs backwards
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=18)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=18)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(13, simHost)
@@ -1098,7 +1098,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_conserve_split_army_to_deal_with_second_army_on_future_intercept_turns")
@@ -1118,7 +1118,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertOwned(general.player, playerMap.GetTile(20, 14))
@@ -1140,7 +1140,7 @@ class ArmyInterceptionTests(TestBase):
 
         self.enable_intercept_bypass_bad_plans()
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(0, simHost)
@@ -1163,7 +1163,7 @@ class ArmyInterceptionTests(TestBase):
         self.enable_intercept_bypass_bad_plans()
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         self.assertOwned(general.player, playerMap.GetTile(9,9))
@@ -1182,7 +1182,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=16)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=16)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost)
@@ -1204,7 +1204,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(6, simHost)
@@ -1223,7 +1223,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertIsNone(winner)
 
         self.assertLess(playerMap.GetTile(15, 5).army, 5)
@@ -1250,7 +1250,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=21)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=21)
                 self.assertIsNone(winner)
                 self.assertTileDifferentialGreaterThan(8, simHost)
 
@@ -1280,7 +1280,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
                 self.assertIsNone(winner)
 
                 self.assertTileDifferentialGreaterThan(minTileDiff, simHost)
@@ -1302,7 +1302,7 @@ class ArmyInterceptionTests(TestBase):
 
         simHost.sim.ignore_illegal_moves = True
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=18)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=18)
         self.assertIsNone(winner)
         self.assertTileDifferentialGreaterThan(2, simHost)
 
@@ -1320,7 +1320,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
         self.assertIsNone(winner)
 
     def test_should_not_threat_killer_move_on_diagonals(self):
@@ -1346,7 +1346,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
                 self.assertIsNone(winner)
                 self.assertTileDifferentialGreaterThan(8, simHost)
 
@@ -1369,7 +1369,7 @@ class ArmyInterceptionTests(TestBase):
         bot.armyTracker.armies[playerMap.GetTile(9, 10)].expectedPaths.insert(0, Path.from_string(playerMap, '9,10->10,10->10,9->11,9->11,8'))
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
         self.assertGreater(playerMap.GetTile(10, 11).army, 80)
 
@@ -1398,7 +1398,7 @@ class ArmyInterceptionTests(TestBase):
                 bot.armyTracker.armies[playerMap.GetTile(9, 10)].expectedPaths.insert(0, Path.from_string(playerMap, '9,10->10,10->10,9->11,9->11,8'))
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
                 self.assertIsNone(winner)
                 self.assertTileDifferentialGreaterThan(8, simHost)
 
@@ -1418,7 +1418,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertIsNone(winner)
         self.assertTileDifferentialGreaterThan(8, simHost)
 
@@ -1442,7 +1442,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
                 self.assertFalse(playerMap.players[playerMap.player_index].dead)
 
     def test_should_not_do_infinite_intercepts_costing_tons_of_time(self):
@@ -1461,7 +1461,7 @@ class ArmyInterceptionTests(TestBase):
         self.begin_capturing_logging()
 
         # if debugMode:
-        #     winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         #     self.assertIsNone(winner)
 
         start = time.perf_counter()
@@ -1503,7 +1503,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_split_or_delay_when_appropriate(self):
@@ -1528,7 +1528,7 @@ class ArmyInterceptionTests(TestBase):
                     playerMap = simHost.get_player_map(general.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
                     self.assertIsNone(winner)
                     firstMove = simHost.sim.moves_history[-2][general.player]
                     self.assertEqual(not split, firstMove is None or firstMove.source.coords != (8,8))
@@ -1554,7 +1554,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.assertTileDifferentialGreaterThan(-2, simHost)
@@ -1573,7 +1573,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=9)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost)
@@ -1593,7 +1593,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertNoRepetition(simHost)
@@ -1615,7 +1615,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_recognize_cannot_intercept_defense_on_final_choke_no_priority(self):
@@ -1634,7 +1634,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
         self.skipTest('no asserts yet since bot doesnt think it can even try a race here (even though it probably should)')
 
@@ -1660,7 +1660,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
                 self.assertIsNone(winner)
                 self.assertNoRepetition(simHost)
 
@@ -1688,7 +1688,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
                 self.assertIsNone(winner)
 
                 self.assertTileDifferentialGreaterThan(15, simHost)
@@ -1709,7 +1709,7 @@ class ArmyInterceptionTests(TestBase):
 
         initCityCount = playerMap.players[playerMap.player_index].cityCount
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=28)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=28)
         self.assertIsNone(winner)
 
         if playerMap.players[playerMap.player_index].cityCount > initCityCount:
@@ -1737,7 +1737,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.assertOwned(general.player, playerMap.GetTile(18, 6))
@@ -1756,7 +1756,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_override_defense_when_gets_self_killed")
@@ -1778,7 +1778,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(-5, simHost, 'immediately moving to intercept yields -4 with recapture')
 
@@ -1799,7 +1799,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
         self.assertTileDifferentialGreaterThan(7, simHost, 'blocking quickly guarantees minimum of 7 econ, as well. Shouldnt let the army get to the damaging-defense point.')
 
@@ -1830,7 +1830,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertTileDifferentialGreaterThan(expectedEcon, simHost)
@@ -1862,7 +1862,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general)
                 self.assertLess(playerMap.At(11, 11).army, 2, 'should have used 11,11 to begin the intercept')
 
@@ -1885,7 +1885,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertTileDifferentialGreaterThan(5, simHost)
@@ -1909,7 +1909,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(general.player, playerMap.GetTile(8, 10), 'should have split and prevented repetition, and recaptured line')
@@ -1931,7 +1931,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(2, simHost, 'should have launched off general immediately to intercept to prevent damage')
@@ -1951,7 +1951,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
 
     def test_should_intercept__not_defend_when_at_right_angles_to_inbound_threat(self):
@@ -1974,7 +1974,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=17)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=17)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertTileDifferentialGreaterThan(0, simHost)
@@ -2001,7 +2001,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertOwned(general.player, playerMap.GetTile(9, 4))
@@ -2029,7 +2029,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertTileDifferentialGreaterThan(18, simHost)
@@ -2048,7 +2048,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEqual(71, playerMap.players[general.player].tileCount, 'should have capped a neutral tile every single move, since interception does nothing.')
@@ -2068,7 +2068,7 @@ class ArmyInterceptionTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
             self.assertNoFriendliesKilled(map, general)
 
             self.assertTileDifferentialGreaterThan(20, simHost)
@@ -2089,7 +2089,7 @@ class ArmyInterceptionTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
             self.assertNoFriendliesKilled(map, general)
 
             self.assertTileDifferentialGreaterThan(10, simHost)
@@ -2110,7 +2110,7 @@ class ArmyInterceptionTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
             self.assertNoFriendliesKilled(map, general)
 
             self.assertTileDifferentialGreaterThan(5, simHost)
@@ -2136,7 +2136,7 @@ class ArmyInterceptionTests(TestBase):
                     playerMap = simHost.get_player_map(general.player)
 
                     self.begin_capturing_logging()
-                    winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                    winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                     self.assertNoFriendliesKilled(map, general)
                     debugMode = False
 
@@ -2200,7 +2200,7 @@ class ArmyInterceptionTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
             self.assertNoFriendliesKilled(map, general)
 
     def test_should_always_defend_general__can_split_from_this_position(self):
@@ -2218,7 +2218,7 @@ class ArmyInterceptionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general)
 
     def test_should_recognize_to_either_split_or_delay(self):
@@ -2246,7 +2246,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
                 self.assertNoFriendliesKilled(map, general)
                 tiles = [
                     playerMap.GetTile(4, 9),
@@ -2279,7 +2279,7 @@ class ArmyInterceptionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertOwnedXY(playerMap, 14, 17)
@@ -2405,7 +2405,7 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
         self.assertNoRepetition(simHost)
 
@@ -2428,7 +2428,7 @@ setting bestInterceptTable[dist 1]:
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertLess(playerMap.players[enemyGeneral.player].score, 55, 'should have killed the army no matter where it went')
@@ -2447,7 +2447,7 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
 
 
@@ -2465,7 +2465,7 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_never_intercept_away_from_threat")
@@ -2486,7 +2486,7 @@ setting bestInterceptTable[dist 1]:
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
                 self.assertNoFriendliesKilled(map, general)
 
     def test_should_not_intercept_inbound_threats_as_defense_intercepts_with_the_tile_being_threatened(self):
@@ -2503,7 +2503,7 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertNoFriendliesKilled(map, general)
         self.assertFalse(playerMap.players[playerMap.player_index].dead)
 
@@ -2522,7 +2522,7 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(playerMap.players[enemyGeneral.player].score, 81, 'should have killed the army no matter where it went')
@@ -2545,7 +2545,7 @@ setting bestInterceptTable[dist 1]:
 
         self.begin_capturing_logging()
         # turns=11 for full
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertLess(general.army, 3)
 
 
@@ -2567,18 +2567,18 @@ setting bestInterceptTable[dist 1]:
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertOwned(general.player, playerMap.At(15, 16))
-    
+
     def test_should_intercept_when_better_than_taking_neutrals_wtf(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_when_better_than_taking_neutrals_wtf___ouF0W0tnh---1--92.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 92, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '3,7->3,11')
@@ -2586,7 +2586,7 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertOwned(3, 9)
 
     def test_should_intercept_when_better_than_taking_neutrals_wtf__longer(self):
@@ -2607,7 +2607,7 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertOwned(3, 9)
         self.assertTileDifferentialGreaterThan(4, simHost, 'just launching gen is already this good. Delaying gen by 2 moves is better by 1 even.')
         #self.assertTileDifferentialGreaterThan(5, simHost, 'Delaying gen by 2 neutral cap moves is better by 1, but that requires acking that delaying an intercept improves captures which is dangerous as it leads to letting enemies turn around and keep capping.')
@@ -2618,7 +2618,7 @@ setting bestInterceptTable[dist 1]:
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 322, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=322)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '6,12->5,12')
@@ -2626,16 +2626,16 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertOwned(5, 12)
-    
+
     def test_should_recognize_blocking_a_capture_is_better_than_taking_a_neutral(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_blocking_a_capture_is_better_than_taking_a_neutral___KJJW_lqPL---0--298.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 298, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=298)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '10,14->11,14->11,13')
@@ -2644,18 +2644,18 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(11, 13)
-    
+
     def test_should_not_believe_that_intercept_saves_general_when_does_not(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_believe_that_intercept_saves_general_when_does_not___JhWFWKK4k---1--393.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 393, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=393)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '15,9->16,9->16,8')
@@ -2663,6 +2663,42 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+
+    def test_should_correctly_value_intercept_from_general(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_correctly_value_intercept_from_general___jzXGxMXQl---1--323.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 323, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=323)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,4->6,5->5,5->5,11->6,11->6,15->5,15z->4,15->4,16->5,16  6,15->10,15')
+        # ^ literally does 38 econ damage in 21 turns, so that's the best we could hope to block. (goes from +8 to -30 tile differential if we do nothing).
+        #   A single path at best can get 30 econ damage in 17 turns though.
+
+        # proof ignore, proves that ^ literally does 38 econ damage, so that's the best we could hope to block.
+        # simHost.queue_player_moves_str(general.player, 'None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None  None')
+
+        # proof shortest. This goes from +8 to -16 tile differential, or 24 damage, blocking 14 (or 6 if evaling against single path).
+        #  Terminates at 5 turns with enemy army remaining = 21, enemy captures 9 more turns
+        # simHost.queue_player_moves_str(general.player, '4,11->4,9->5,9->5,7  None  None  None  None  None  None  None  None  None  None  None  None  None')
+
+        # proof short. This goes from +8 to -2 tile differential, or 10 damage, blocking 28 (or 20 if evaling against single path).
+        #  Terminates at 6 turns with enemy army remaining = 4, enemy makes a single additional capture after.
+        # simHost.queue_player_moves_str(general.player, '2,11->4,11->4,9->5,9->5,8')
+
+        # proof long. This goes from +8 to +20 tile differential, REVERSING 12 damage, blocking all 38 (or 30 if evaling against single path) AND doing 12 damage.
+        #  Intercepts at turn 6 with -19 enemy army remaining, recapture complete at 15 turns.
+        # simHost.queue_player_moves_str(general.player, '2,10->2,11->4,11->4,9->5,9->5,5->6,5->6,4')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=27)
         self.assertNoFriendliesKilled(map, general)
 

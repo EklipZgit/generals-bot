@@ -3036,6 +3036,12 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
                 break
 
         (prioVals, dist, curTurns, current, parent, maxDict) = heapq.heappop(frontier)
+        diagTile = (
+                current.x,
+                current.y
+        ) in {(7, 9), (5, 9)}
+        if diagTile:
+            logbook.info(f'DIAG_DEF_GATHER_BFS pop current={current} parent={parent} dist={dist} curTurns={curTurns} maxDepth={maxDepth} maxTurns={maxTurns} prio={prioVals}')
 
         # remove if visited set
         fromVal = fromTileLookup.raw[current.tile_index]
@@ -3043,15 +3049,21 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         if fromVal is not None:
             oldPrioVals, oldParent = fromVal
             # if prioVals > oldPrioVals:
+            if diagTile:
+                logbook.info(f'DIAG_DEF_GATHER_BFS skip-visited current={current} parent={parent} oldParent={oldParent} oldPrio={oldPrioVals} newPrio={prioVals}')
             continue
 
         if skipTiles and current in skipTiles:
+            if diagTile:
+                logbook.info(f'DIAG_DEF_GATHER_BFS skip-skipTiles current={current} parent={parent}')
             continue
 
         fromTileLookup.raw[current.tile_index] = (prioVals, parent)
         # fromTileLookup[current.tile_index] = (prioVals, parent)
 
         newValue = valueFunc(current, prioVals)
+        if diagTile:
+            logbook.info(f'DIAG_DEF_GATHER_BFS value current={current} parent={parent} newValue={newValue}')
 
         if newValue:
             maxMinusOne = None
@@ -3078,18 +3090,24 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
         if dist > depthEvaluated:
             depthEvaluated = dist
         if dist >= maxDepth or curTurns >= maxTurns:
+            if diagTile:
+                logbook.info(f'DIAG_DEF_GATHER_BFS stop-expand current={current} dist={dist} curTurns={curTurns} maxDepth={maxDepth} maxTurns={maxTurns}')
             continue
         ogDist = dist
         dist += 1
         curTurns += 1
         for next in current.movable:  # new spots to try
             if next == parent:
+                if diagTile:
+                    logbook.info(f'DIAG_DEF_GATHER_BFS skip-parent current={current} next={next}')
                 continue
             # if next.tile_index in visited:
             #     continue
             if (next.isMountain
                     or (noNeutralCities and next.isCostlyNeutral)
                     or (not next.discovered and next.isNotPathable)):
+                if diagTile:
+                    logbook.info(f'DIAG_DEF_GATHER_BFS skip-unpathable current={current} next={next} isMountain={next.isMountain} isCostlyNeutral={next.isCostlyNeutral} discovered={next.discovered} isNotPathable={next.isNotPathable}')
                 continue
             nextPrio = priorityFunc(next, prioVals)
             if nextPrio is not None:
@@ -3105,10 +3123,16 @@ def breadth_first_dynamic_max_per_tile_per_distance_global_visited(
                 if skipFunc:
                     shouldSkip = skipFunc(next, nextPrio)
                     if shouldSkip:
+                        if diagTile:
+                            logbook.info(f'DIAG_DEF_GATHER_BFS skip-skipFunc current={current} next={next} nextPrio={nextPrio}')
                         continue
 
                 # visited.add(next.tile_index)
+                if diagTile:
+                    logbook.info(f'DIAG_DEF_GATHER_BFS push current={current} next={next} dist={dist} curTurns={curTurns} nextPrio={nextPrio}')
                 heapq.heappush(frontier, (nextPrio, dist, curTurns, next, current, maxDict))
+            elif diagTile:
+                logbook.info(f'DIAG_DEF_GATHER_BFS skip-prio-none current={current} next={next}')
     if not noLog:
         logbook.info(f"BFS-DYNAMIC-MAX ITERATIONS {iter}, DURATION: {time.perf_counter() - start:.4f}, DEPTH: {depthEvaluated}")
     if foundDist >= 1000:

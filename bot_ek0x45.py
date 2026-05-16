@@ -1495,11 +1495,22 @@ class EklipZBot(object):
         if move is None:
             self.info("Found-no-moves-gather found no move, random expansion move?")
             if self.expansion_plan and self.expansion_plan.selected_option:
+                deferred = []
+                deferring = False
+                if self.expansion_plan.turns_used < self._map.remainingCycleTurns - 1:
+                    deferring = True
                 for opt in self.expansion_plan.all_paths:
                     move = opt.get_first_move()
                     if move is not None and move.source.player == self._map.player_index and move.source.army > 1:
-                        # self.curPath = opt
-                        return move
+                        if deferring and SearchUtils.any_where(opt.tileList, lambda t: t.player == self._map.player_index and (t.isGeneral or t.isCity)):
+                            self.info(f'Deferred exp opt {opt} due to gen/city movement')
+                            deferred.append(move)
+                        else:
+                            return move
+                if deferred:
+                    self.info(f'Playing deferred opt {deferred[0]} because no non-deferred found')
+                    return deferred[0]
+
 
         elif BotPathingUtils.is_move_safe_valid(self, move):
             self.info(f"Found-no-moves-gather found {value}v/{turns}t gather, using {move}")
@@ -1951,7 +1962,7 @@ class EklipZBot(object):
         self.tileIslandBuilder = TileIslandBuilder(self._map, self.board_analysis.intergeneral_analysis)
         self.tileIslandBuilder.recalculate_tile_islands(enemyGeneralExpectedLocation=self.targetPlayerExpectedGeneralLocation)
         self.launchPoints.append(self.general)
-        self.army_interceptor = ArmyInterceptor(self._map, self.board_analysis)
+        self.army_interceptor = ArmyInterceptor(self._map, self.board_analysis, viewInfo=self.viewInfo)
         self.win_condition_analyzer = WinConditionAnalyzer(self._map, self.opponent_tracker, self.cityAnalyzer, self.territories, self.board_analysis)
         self.capture_line_tracker = CaptureLineTracker(self._map)
         BotTimings.timing_cycle_ended(self)

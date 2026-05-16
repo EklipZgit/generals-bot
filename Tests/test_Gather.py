@@ -39,7 +39,7 @@ class GatherTests(TestBase):
         simHost.reveal_player_general(playerToReveal=enemyGeneral.player, playerToRevealTo=general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.3, turns=100)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.3, turns=100)
         self.assertIsNone(winner)
 
     def test_gather_value_estimates_should_be_correct(self):
@@ -296,7 +296,7 @@ class GatherTests(TestBase):
                 # self.render_view_info(map, viewInfo, 'not steiner???')
 
                 # self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=80)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=80)
                 self.assertEqual(general.player, enemyGeneral.player, "should have captured enemy general")
 
                 # this assert no longer relevant now that all in gathers are max-value-per-turn
@@ -324,7 +324,7 @@ class GatherTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for random_large_gather_test
@@ -348,7 +348,7 @@ class GatherTests(TestBase):
         # alert enemy of the player general
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=25)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=25)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=1)
 
@@ -458,7 +458,7 @@ b1   b1   b1   b1   b1   b1   bG1
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
 
     def test_should_not_get_errors_about_nodes_missing_from_tree(self):
@@ -477,7 +477,7 @@ b1   b1   b1   b1   b1   b1   bG1
 
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
     def test_should_find_gather_in_2v2(self):
@@ -496,7 +496,7 @@ b1   b1   b1   b1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for should_find_gather_in_2v2
@@ -517,7 +517,7 @@ b1   b1   b1   b1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for should_not_have_no_gather_found
@@ -538,7 +538,7 @@ b1   b1   b1   b1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertIsNone(winner)
 
     def test_should_not_divide_by_zero(self):
@@ -557,7 +557,7 @@ b1   b1   b1   b1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=16)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=16)
         self.assertIsNone(winner)
         city = playerMap.GetTile(21, 1)
         self.assertEqual(general.player, city.player)
@@ -581,7 +581,7 @@ b1   b1   b1   b1   b1   b1   bG1
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=10)
         self.assertNoFriendliesKilled(map, general, allyGen)
         self.assertNoRepetition(simHost, minForRepetition=3)
 
@@ -599,7 +599,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_leave_all_its_army_on_edge_when_out_of_play_gathering")
@@ -618,7 +618,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_gather_far_non_leaves_first")
@@ -637,7 +637,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_gather_far_non_leaves_first")
@@ -659,7 +659,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.assertEqual(1, playerMap.GetTile(19, 5).army)
@@ -687,7 +687,7 @@ b1   b1   b1   b1   b1   b1   bG1
         bot.cities_gathered_this_cycle.add(playerMap.GetTile(5, 9))
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertIsNone(winner)
 
         self.assertGreater(bot.sum_friendly_army_near_or_on_tiles([playerMap.GetTile(2, 7)]), 15)
@@ -716,7 +716,7 @@ b1   b1   b1   b1   b1   b1   bG1
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.1, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.1, turns=11)
         self.assertIsNone(winner)
         city = self.get_player_tile(17, 10, simHost.sim, general.player)
         self.assertEqual(general.player, city.player)
@@ -741,7 +741,7 @@ b1   b1   b1   b1   b1   b1   bG1
             # army.expectedPaths.append(Path.from_string(playerMap, '8,6->11,6->11,5->12,5->12,4->16,4->16,3->17,3->17,1->19,1->19,0->20,0'))
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
             self.assertIsNone(winner)
 
             self.assertEqual(11, playerMap.GetTile(7, 2).army)
@@ -761,7 +761,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
     def test_should_not_pull_tiles_from_enemy_territory(self):
@@ -778,7 +778,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_not_pull_tiles_from_enemy_territory")
@@ -800,7 +800,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=27)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=27)
         self.assertNoFriendliesKilled(map, general)
 
         for tile in [
@@ -838,7 +838,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=12)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
         self.assertNoFriendliesKilled(map, general)
 
         tilesShouldHaveGathered = [playerMap.GetTile(x, 3) for x in range(4, 13)]
@@ -859,7 +859,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         self.assertNoFriendliesKilled(map, general)
 
         tilesShouldHaveGathered = [playerMap.GetTile(x, 3) for x in range(10, 13)]
@@ -880,7 +880,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_do_horrible_things_when_trying_to_gather")
@@ -899,7 +899,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for shouldnt_throw_errors_doing_max_set_gath")
@@ -920,7 +920,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         self.skipTest("TODO add asserts for gather_should_not_crash_in_2v2")
@@ -939,7 +939,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         # good enough that it doesn't crash
@@ -958,7 +958,7 @@ b1   b1   b1   b1   b1   b1   bG1
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertGatheredNear(simHost, general.player, 4, 15, 3, requiredAvgTileValue=1.4)

@@ -32,7 +32,7 @@ class OffensiveMicroUnitTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
                 self.assertIsNone(winner)
 
                 self.assertTileDifferentialGreaterThan(3, simHost)

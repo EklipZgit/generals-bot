@@ -70,7 +70,7 @@ class EarlyExpandUtilsTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.01, turns=50 - map.turn)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.01, turns=50 - map.turn)
         self.assertNoFriendliesKilled(map, general)
 
         playerTc = playerMap.players[general.player].tileCount
@@ -1004,7 +1004,7 @@ class EarlyExpandUtilsTests(TestBase):
         if debugMode:
             self.render_expansion_plan(map, plan)
         self.assertEqual(plan.tile_captures, 22)
-    
+
     def test_should_expand_away_from_allied_general_2v2(self):
         # TODO need to pretend time passed in the sim so the bots dont get infinite time each turn to make a multi-turn calculation.
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1033,25 +1033,25 @@ class EarlyExpandUtilsTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=48)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=48)
         self.assertNoFriendliesKilled(map, general, allyGen)
         # 48 is easily possible
         self.assertGreater(playerMap.players[general.player].tileCount + playerMap.players[allyGen.player].tileCount, 47)
-    
+
     def test_should_be_capable_of_expanding_out_of_stupid_spawn_near_ally(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_be_capable_of_expanding_out_of_stupid_spawn_near_ally___S1yUekSXM---2--2.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 2, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=2)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=48)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=48)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     def test_should_respect_time_limit_when_doing_city_exp_piggyback(self):
@@ -1060,7 +1060,7 @@ class EarlyExpandUtilsTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 82, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=82)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1069,18 +1069,18 @@ class EarlyExpandUtilsTests(TestBase):
 
         self.begin_capturing_logging()
         simHost.respect_turn_time_limit = True
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertEqual(0, simHost.dropped_move_counts_by_player[general.player])
-    
+
     def test_should_use_general_army_effectively_with_early_expand_piggyback(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_use_general_army_effectively_with_early_expand_piggyback___W-GNJ-jH4---0--86.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 86, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=86)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1088,11 +1088,11 @@ class EarlyExpandUtilsTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=14)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=14)
         self.assertIsNone(winner)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 47, '?')
-    
+
     def test_should_branch_towards_multiple_possible_opp_spawns_1v1(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_branch_towards_multiple_possible_opp_spawns_1v1___SlGQiHT4p---1--20.txtmap'
@@ -1106,7 +1106,7 @@ class EarlyExpandUtilsTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=34)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=34)
         self.assertIsNone(winner)
 
         self.assertEqual(25, playerMap.players[general.player].tileCount)
@@ -1127,7 +1127,7 @@ class EarlyExpandUtilsTests(TestBase):
 
                 self.begin_capturing_logging()
                 self.add_lag_on_turns(simHost, [lagTurn])
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.05, turns=34)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.05, turns=34)
                 self.assertIsNone(winner)
 
                 self.assertGreater(playerMap.players[general.player].tileCount, 23)
@@ -1150,7 +1150,7 @@ class EarlyExpandUtilsTests(TestBase):
                 self.begin_capturing_logging()
                 self.add_lag_on_turns(simHost, [lagTurn], general.player)
                 self.add_lag_on_turns(simHost, [lagTurn], allyGen.player)
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=34)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=34)
                 self.assertNoFriendliesKilled(map, general, allyGen)
 
                 self.assertGreater(playerMap.players[general.player].tileCount, 21)
@@ -1172,7 +1172,7 @@ class EarlyExpandUtilsTests(TestBase):
 
                 self.begin_capturing_logging()
                 self.add_lag_on_turns(simHost, [lagTurn, lagTurn + 1, lagTurn + 2])
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.05, turns=34)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.05, turns=34)
                 self.assertIsNone(winner)
 
                 expectedMoreThan = 22
@@ -1180,14 +1180,14 @@ class EarlyExpandUtilsTests(TestBase):
                     # if we drop moves later here, the bot can't recover one of the moves, and we actually go down from 25 to 22 result.
                     expectedMoreThan = 21
                 self.assertGreater(playerMap.players[general.player].tileCount, expectedMoreThan)
-    
+
     def test_should_find_simple_11_perfect_start_out_of_corner(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_find_simple_11_perfect_start_out_of_corner___uGYmcqZ_T---0--2.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 2, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=2)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -1195,7 +1195,7 @@ class EarlyExpandUtilsTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=48)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=48)
         self.assertNoFriendliesKilled(map, general)
 
     def test_can_attempt_backwards_initial_paths_for_higher_land_count(self):
@@ -1222,7 +1222,7 @@ class EarlyExpandUtilsTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 80, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=80)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,5->9,4')
@@ -1233,18 +1233,18 @@ class EarlyExpandUtilsTests(TestBase):
         EarlyExpandUtils.DEBUG_ASSERTS = True
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=20)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertPlayerTileCountGreater(simHost, general.player, 50, 'ref replay for successful 50 with one wasted capture due to exception, so 51 for sure possible')
-    
+
     def test_should_prefer_capping_enemy_tiles_when_expanding_after_first_25(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_prefer_capping_enemy_tiles_when_expanding_after_first_25___V3qX0HRRZ---1--142.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 142, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=142)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         #proof
@@ -1255,7 +1255,7 @@ class EarlyExpandUtilsTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
 
         with self.subTest(careLess=False):

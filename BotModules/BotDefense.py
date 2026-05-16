@@ -235,6 +235,8 @@ class BotDefense:
                                     bot.info(f'Must def, int move {interceptMove} (prunedT {sumPrunedTurns}, threat {threat.turns}, anyLeafIsSameDistAsThreat {anyLeafIsSameDistAsThreat})')
                                     return interceptMove, interceptPath
 
+                                minimalDefenseTurns = sumPrunedTurns
+                                minimalDefenseValue = sumPruned
                                 pruned = [node.deep_clone() for node in gatherNodes]
                                 sumPrunedTurns, sumPruned, pruned = Gather.prune_mst_to_max_army_per_turn_with_values(
                                     pruned,
@@ -249,6 +251,15 @@ class BotDefense:
 
                                 bot.gatherNodes = pruned
                                 move = BotGatherOps.get_tree_move_default(bot, pruned, move_closest_value_func)
+                                move = BotDefense.replace_bad_gather_defense_move_with_direct_threat_move(bot, threat, move)
+                                if minimalDefenseTurns == threat.turns and not anyLeafIsSameDistAsThreat and not BotPathingUtils.is_move_towards_enemy(bot, move):
+                                    BotComms.communicate_threat_to_ally(bot, threat, sumPruned, pruned)
+                                    isRealThreat = False
+                                    if not bot.best_defense_leaves:
+                                        bot.best_defense_leaves = GatherTreeNode.get_tree_leaves(pruned)
+                                        BotDefense.set_defensive_blocks_against(bot, threat)
+                                    bot.info(f'Delaying exact-turn maxVT defense gather because move {move} is not towards enemy general (minDef {minimalDefenseValue:.1f} in {minimalDefenseTurns}t)')
+                                    continue
                                 BotComms.communicate_threat_to_ally(bot, threat, sumPruned, pruned)
                                 bot.info(
                                     f'{flags}GathDefRaw-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {move} val {valueGathered:.1f}/p{sumPruned:.1f}/{survivalThreshold} turns {turnsUsed}/p{sumPrunedTurns}/{threat.turns}')
@@ -345,6 +356,7 @@ class BotDefense:
                     bot.redGatherTreeNodes = gatherNodes
                     bot.gatherNodes = None
 
+                move = BotDefense.replace_bad_gather_defense_move_with_direct_threat_move(bot, threat, move)
                 bot.info(
                     f'{flags}GathDef-{str(threat.path.start.tile)}@{str(threat.path.tail.tile)}:  {move} val {valueGathered:.1f}/{survivalThreshold} turns {turnsUsed}/{threat.turns} (abandThresh {abandonDefenseThreshold:.0f})')
                 if isRealThreat or BotRepetition.detect_repetition_tile(bot, move.source, turns=8, numReps=3):
@@ -725,8 +737,11 @@ class BotDefense:
                 if len(BotDefense.get_danger_tiles(bot)) > 0:
                     negatives.add(bot.general)
 
+        # TODO maybe we need directional blocking to be supported instead of treating blocked tiles as fully negative.
+        negatives.update(bot.blocking_tile_info.keys())
+
         if additionalNegatives is not None:
-            negatives.update(negatives)
+            negatives.update(additionalNegatives)
 
         prioMatrix = MapMatrix(bot._map, 0.0)
         for tile in bot._map.pathable_tiles:
@@ -750,6 +765,7 @@ class BotDefense:
             includeGatherTreeNodesThatGatherNegative=True,
             priorityMatrix=prioMatrix,
             distPriorityMap=threatDistMap,
+            depthPriorityMap=threats[0].armyAnalysis.bMap,
             # maximizeArmyGatheredPerTurn=gatherMax,  # this just immediately breaks the whole gather, prunes everything but the largest tile basically.
             shouldLog=shouldLog,
             fastMode=fastMode)
@@ -1493,6 +1509,20 @@ class BotDefense:
         return mv, interceptPath, interceptingOption, isDelayed
 
     @staticmethod
+    def replace_bad_gather_defense_move_with_direct_threat_move(bot: EklipZBot, threat: ThreatObj, move: Move | None) -> Move | None:
+        if move is None:
+            return None
+
+        threatTile = threat.path.start.tile
+        if move.source in threatTile.movable and move.dest != threatTile:
+            badMove = move
+            goodMove = Move(move.source, threatTile, move.move_half)
+            bot.info(f'GathDef replacing bad {badMove} with {goodMove} direct')
+            return goodMove
+
+        return move
+
+    @staticmethod
     def check_defense_hybrid_intercept_moves(bot: EklipZBot, threat: ThreatObj, defensePlan: typing.List[GatherTreeNode], missingDefense: int, defenseNegatives: typing.Set[Tile]) -> typing.Tuple[Move | None, Path | None, bool, typing.List[GatherTreeNode]]:
         """
         Returns [replacementMove, replacementPath, isDelayed, updatedDefenseNodes]
@@ -1959,7 +1989,7 @@ class BotDefense:
             if (
                     bot.army_out_of_play
                     and not bot.opponent_tracker.winning_on_army(byRatio=1.6)
-                    and bot.opponent_tracker.winning_on_economy(byRatio=1.1, offset=0)
+                    and bot.opponent_tracker.winning_on_economy(byRatio=1.2, offset=-10, cityValue=25)
                     and genPlayer.tileCount < 120
                     and not bot.flanking
             ):
@@ -1998,7 +2028,7 @@ class BotDefense:
         if bot._map.turn >= 100:
             econRatio = 1.16
             armyRatio = 1.42
-            enemyCatchUpOffset = -15
+            enemyCatchUpOffset = -25
 
             winningEcon = bot.opponent_tracker.winning_on_economy(econRatio, cityValue=20, againstPlayer=bot.targetPlayer, offset=enemyCatchUpOffset)
             winningArmy = bot.opponent_tracker.winning_on_army(armyRatio)

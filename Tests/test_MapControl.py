@@ -21,7 +21,7 @@ class MapControlTests(TestBase):
         bot.info_render_leaf_move_values = True
 
         return bot
-    
+
     def test_should_prevent_large_attack_from_running_around_right_bottom(self):
         # around turn 187 opp starts moving down the right size in the fog, which the bot can guess based on tiles being captured.
         # TODO realistically, the bot should have already explored this land instead of just the land up above.
@@ -30,7 +30,7 @@ class MapControlTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 152, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=152)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -38,16 +38,16 @@ class MapControlTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=35)
         self.assertNoFriendliesKilled(map, general)
-    
+
     def test_expansion_should_prefer_tiles_moving_towards_flank_routes(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/expansion_should_prefer_tiles_moving_towards_flank_routes___qPcfqRptY---1--187.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 187, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=187)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -56,7 +56,7 @@ class MapControlTests(TestBase):
 
         self.begin_capturing_logging()
         if debugMode:
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=0)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=0)
 
         leaves = [l for l in bot.prioritize_expansion_leaves(bot.leafMoves) if l.dest.player == -1]
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import typing
+from dataclasses import dataclass
 
 import logbook
 
@@ -14,6 +15,7 @@ from Interfaces.TilePlanInterface import PathMove
 from Models import Move
 from Interfaces import TilePlanInterface, MapMatrixInterface
 from Path import Path
+from ViewInfo import TargetStyle
 from base.client.map import MapBase, Tile
 
 # TODO remove me once things fixed
@@ -68,6 +70,16 @@ class ThreatBlockInfo(object):
 
     def __str__(self) -> str:
         return f'{str(self.tile)}:{str(self.amount_needed_to_block)}@{"|".join([str(t) for t in self.blocked_destinations])}'
+
+
+@dataclass(slots=True)
+class InterceptCollisionResult:
+    turns_left: int
+    friendly_army_at_intercept: int
+    best_case_intercept_turn: int
+    worst_case_intercept_turn: int
+    enemy_intercept_point_node: PathMove
+    enemy_physical_army_at_intercept: int
 
 
 class InterceptPointTileInfo(object):
@@ -253,6 +265,7 @@ class ArmyInterception(object):
         'ignored_threats',
         'base_threat_army',
         'common_intercept_chokes',
+        'middlest_intercept_tiles',
         'furthest_common_intercept_distances',
         'target_tile',
         'kill_enemy_threat',
@@ -272,6 +285,7 @@ class ArmyInterception(object):
 
         self.base_threat_army: int = 0
         self.common_intercept_chokes: typing.Dict[Tile, InterceptPointTileInfo] = {}
+        self.middlest_intercept_tiles: typing.Set[Tile] = set()
         self.furthest_common_intercept_distances: MapMatrixInterface[int] = None
         self.target_tile: Tile = threats[0].threat.path.start.tile
 
@@ -354,17 +368,20 @@ class ArmyInterceptor(object):
         'map',
         'board_analysis',
         'log_debug',
+        'view_info',
     )
 
     def __init__(
         self,
         map: MapBase,
         boardAnalysis: BoardAnalyzer,
-        useDebugLogging: bool = False
+        useDebugLogging: bool = False,
+        viewInfo: typing.Any | None = None
     ):
         self.map: MapBase = map
         self.board_analysis: BoardAnalyzer = boardAnalysis
         self.log_debug: bool = useDebugLogging
+        self.view_info = viewInfo
 
     def get_interception_plan(
         self,
@@ -408,6 +425,14 @@ class ArmyInterceptor(object):
                 interception.base_threat_army = self._get_threats_army_amount(interception.threats)
 
                 interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles)
+
+        if len(interception.intercept_options) == 0:
+            logbook.warning(f'No intercept options found, retrying non-middlest positive-depth intercept points')
+            interception.intercept_options = self._get_intercept_plan_options(
+                interception,
+                turnsLeftInCycle,
+                otherThreatsBlockingTiles,
+                includeNonMiddlestPositiveDepthFallback=True)
 
         return interception
 
@@ -655,12 +680,17 @@ class ArmyInterceptor(object):
         """
         middlest_tiles: typing.Set[Tile] = set()
 
-        # Use the best enemy threat's tileDistancesLookup as the reference
-        best_threat = interception.best_enemy_threat.threat
-        if best_threat.armyAnalysis is None:
-            return middlest_tiles
-
-        tile_distances_lookup = best_threat.armyAnalysis.tileDistancesLookup
+        tile_distances_lookup: typing.Dict[int, typing.Set[Tile]] = {}
+        for threatValueInfo in interception.threat_values:
+            threat = threatValueInfo.threat
+            if threat.armyAnalysis is None:
+                continue
+            for dist, tiles in threat.armyAnalysis.tileDistancesLookup.items():
+                if not tiles:
+                    continue
+                distTiles = tile_distances_lookup.setdefault(dist, set())
+                for tile in tiles:
+                    distTiles.add(tile)
 
         for dist, tiles in tile_distances_lookup.items():
             if not tiles:
@@ -668,16 +698,16 @@ class ArmyInterceptor(object):
 
             if len(tiles) == 1:
                 # Always include single tiles (threat start, target, etc.)
-                middlest_tiles.add(tiles[0])
+                middlest_tiles.update(tiles)
             else:
                 # Compute average position (centroid) of all tiles at this distance
                 avg_x = sum(t.x for t in tiles) / len(tiles)
                 avg_y = sum(t.y for t in tiles) / len(tiles)
 
                 # Find tile closest to centroid by Manhattan distance
-                best_tile = tiles[0]
-                best_dist = abs(best_tile.x - avg_x) + abs(best_tile.y - avg_y)
-                for tile in tiles[1:]:
+                best_tile: Tile = None
+                best_dist = 10000
+                for tile in tiles:
                     tile_dist = abs(tile.x - avg_x) + abs(tile.y - avg_y)
                     if tile_dist < best_dist:
                         best_dist = tile_dist
@@ -883,7 +913,7 @@ class ArmyInterceptor(object):
             searchingPlayer: int,
             targetPlayer: int,
             turnsLeftInCycle: int,
-            friendlyRemainingArmy: int = 0,
+            friendlyRemainingArmy: int | None = None,
             includeRecaptureEffectiveStartDist: int = -1
     ) -> typing.Tuple[float, int, int, float]:
         """
@@ -952,7 +982,7 @@ class ArmyInterceptor(object):
 
         # account for we considered the first tile in the list a move, when it is just the start tile
         curTurn -= 1
-        if friendlyRemainingArmy != 0:
+        if friendlyRemainingArmy is not None:
             armyLeft = friendlyRemainingArmy
 
         rawVal = val
@@ -975,7 +1005,8 @@ class ArmyInterceptor(object):
             self,
             interception: ArmyInterception,
             turnsLeftInCycle: int,
-            otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None
+            otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None,
+            includeNonMiddlestPositiveDepthFallback: bool = False
     ) -> typing.Dict[int, InterceptionOptionInfo]:
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
 
@@ -985,8 +1016,7 @@ class ArmyInterceptor(object):
         furthestBackCommonIntercept = max(interception.common_intercept_chokes.keys(), key=lambda t: interception.threats[0].armyAnalysis.bMap[t])
         interception.furthest_common_intercept_distances = self.map.distance_mapper.get_tile_dist_matrix(furthestBackCommonIntercept)
         threatDistFromCommon = interception.furthest_common_intercept_distances.raw[interception.target_tile.tile_index]
-        longestThreat = max(interception.threats, key=lambda t: t.turns)
-        maxDepth = longestThreat.turns + 1
+        maxDepth = self._get_max_interception_search_depth(interception.threats)
 
         averageEnemyPositionByTurn: typing.List[typing.Tuple[float, float] | None] = [None] * max(interception.kill_enemy_threat.threat.path.length + 1, maxDepth)
         for i in range(0, interception.kill_enemy_threat.threat.path.length):
@@ -1031,8 +1061,12 @@ class ArmyInterceptor(object):
         # Get the "middlest" tiles at each distance - only consider intercept points at these tiles
         # This reduces the search space while still covering all distances the threat can reach
         middlest_tiles = self._get_middlest_intercept_tiles_by_distance(interception)
+        interception.middlest_intercept_tiles = middlest_tiles
         if self.log_debug:
-            logbook.info(f'Middlest tiles selected for intercept: {[str(t) for t in middlest_tiles]}')
+            logbook.info(f'Final middlest tiles selected for intercept ({len(middlest_tiles)}): {", ".join(str(t) for t in sorted(middlest_tiles, key=lambda mt: (mt.y, mt.x)))}')
+        if self.view_info is not None:
+            for tile in middlest_tiles:
+                self.view_info.add_targeted_tile(tile, TargetStyle.ORANGE)
 
         bestInterceptTable: typing.Dict[int, InterceptionOptionInfo] = {}
 
@@ -1047,13 +1081,16 @@ class ArmyInterceptor(object):
 
             # Only intercept at the "middlest" tiles for each distance
             # This ensures we check all distances but only the most representative tile(s) at each
-            if tile not in middlest_tiles:
+            isNonMiddlestPositiveDepthFallback = includeNonMiddlestPositiveDepthFallback and tile not in middlest_tiles and interceptInfo.max_search_dist > 0
+            if tile not in middlest_tiles and not isNonMiddlestPositiveDepthFallback:
                 if self.log_debug:
                     logbook.info(f'Skipping tile {str(tile)} - not a middlest tile for its distance')
                 continue
 
             turnsToIntercept = interceptInfo.max_delay_turns
             depth = interceptInfo.max_search_dist
+            if isNonMiddlestPositiveDepthFallback:
+                depth += 1
             if depth <= 0:
                 if self.log_debug:
                     logbook.info(f'\r\n\r\nSkipping tile {str(tile)} with depth (max_search_dist) {depth}')
@@ -1084,10 +1121,6 @@ class ArmyInterceptor(object):
                         logbook.info(f'bypassed city-source intercept plan {str(path)}')
                     continue
 
-                if DEBUG_BYPASS_BAD_INTERCEPTIONS and path.start.tile.army <= debugBadCutoff:
-                    logbook.error(f'bypassed bad intercept plan {str(path)}')
-                    continue
-
                 addlTurnsToReachThreatWorstCase = interceptPointDist
                 """The number of additional turns beyond the path length that will need to be travelled to recoup our current tile-differential...? to reach the threat tile."""
                 if not interception.target_tile.isCity:
@@ -1108,6 +1141,10 @@ class ArmyInterceptor(object):
                 shouldDelay, shouldSplit = self._should_delay_or_split(tile, path, interception.threat_values, turnsLeftInCycle)
                 splittingForSafetyOnSingleIntercept = shouldSplit
                 """This will be true when we split just against this intercept (and thus intend to use both halves of this split army for the intercept recapture, still."""
+
+                if DEBUG_BYPASS_BAD_INTERCEPTIONS and path.start.tile.army <= debugBadCutoff and not shouldDelay and not shouldSplit:
+                    logbook.error(f'bypassed bad intercept plan {str(path)}')
+                    continue
 
                 if shouldDelay and self.log_debug:
                     logbook.info(f'DETERMINED SHOULD DELAY FOR {tile} {path}')
@@ -1177,6 +1214,14 @@ class ArmyInterceptor(object):
                 baseLen = turnsUsed - recapTurnsUsed
                 if self.log_debug:
                     logbook.info(f'baseLen:{baseLen}, recapTurns:{recapTurnsUsed}, interceptPointDist:{interceptPointDist}, addlTurnsToReachThreatWorstCase:{fullAddlTurnsToGuaranteedIntercept}, effectiveDist:{effectiveDist}, turnsUsed:{turnsUsed}, blockedAmount:{blockedDamage}, maxExtraMoves:{interceptInfo.max_extra_moves_to_capture}, worstCaseInterceptMoves:{worstCaseInterceptMoves}')
+                    logbook.info(
+                        f'DIAG_INTERCEPT_VAL path {path}, start {path.start.tile}, tail {path.tail.tile}, '
+                        f'startIsGeneral {path.start.tile.isGeneral}, startArmy {path.start.tile.army}, pathLen {path.length}, '
+                        f'rawValue {rawValue:.2f}, rawValueNoRecap {rawValueNoRecap:.2f}, blockedDamage {blockedDamage:.2f}, '
+                        f'newValueBeforeRecap {newValue:.2f}, turnsUsed {turnsUsed}, recapTurnsUsed {recapTurnsUsed}, '
+                        f'baseLen {baseLen}, bestCaseInterceptMoves {bestCaseInterceptMoves}, worstCaseInterceptMoves {worstCaseInterceptMoves}, '
+                        f'enemyArmyLeftAfterIntercept {enemyArmyLeftAfterIntercept}, enemyArmyCollidedWithAtIntercept {enemyArmyCollidedWithAtIntercept}, '
+                        f'shouldDelay {shouldDelay}, shouldSplit {shouldSplit}, fullAddlTurnsToGuaranteedIntercept {fullAddlTurnsToGuaranteedIntercept}')
 
                 # for curDist in range(path.length + addlTurnsToReachThreatWorstCase, turnsUsed + 1):
                 # baseLen = worstCaseInterceptMoves  # TODO this?
@@ -1202,10 +1247,16 @@ class ArmyInterceptor(object):
                         friendlyArmyReachingIntercept=enemyArmyCollidedWithAtIntercept - enemyArmyLeftAfterIntercept)
 
                     opt.intercept = interception
+                    if self.log_debug and DebugHelper.is_debug_or_unit_test_mode() and path.start.tile.coords in [(2, 10), (2, 11), (4, 11)] and path.tail.tile.coords in [(5, 8), (5, 9)]:
+                        logbook.warning(f'DIAG_INTERCEPT_OPTION start {path.start.tile} tail {path.tail.tile} curDist {curDist}, opt.length {opt.length}, opt.turns {opt.turns}, path.length {path.length}, baseLen {baseLen}, turnsUsed {turnsUsed}, recapTurns {recapTurns}, recapTurnsUsed {recapTurnsUsed}, rawValue {rawValue:.2f}, rawValueNoRecap {rawValueNoRecap:.2f}, newValue {newValue:.2f}, thisValue {thisValue:.2f}, blockedDamage {blockedDamage:.2f}, enemyArmyLeftAfterIntercept {enemyArmyLeftAfterIntercept}, enemyArmyCollidedWithAtIntercept {enemyArmyCollidedWithAtIntercept}, friendlyArmyReachingIntercept {opt.friendly_army_reaching_intercept}, bestCaseInterceptMoves {bestCaseInterceptMoves}, worstCaseInterceptMoves {worstCaseInterceptMoves}, maxExtraMoves {interceptInfo.max_extra_moves_to_capture}, fullAddlTurnsToGuaranteedIntercept {fullAddlTurnsToGuaranteedIntercept}, interceptPointDist {interceptPointDist}, effectiveDist {effectiveDist}')
 
                     if existing is None:
                         if self.log_debug:
                             logbook.info(f'setting bestInterceptTable[dist {curDist}]:\n  new  {str(opt)}')
+                            logbook.info(
+                                f'DIAG_INTERCEPT_CHOICE dist {curDist} action set-empty, thisValue {thisValue:.2f}, '
+                                f'recapTurns {recapTurns}, pathStart {path.start.tile}, pathTail {path.tail.tile}, '
+                                f'damageBlocked {blockedDamage:.2f}, rawValueNoRecap {rawValueNoRecap:.2f}, baseLen {baseLen}')
                         bestInterceptTable[curDist] = opt
                         continue
 
@@ -1213,7 +1264,26 @@ class ArmyInterceptor(object):
                         if thisValue > existing.econValue or worstCaseInterceptMoves < existing.worst_case_intercept_moves:
                             if self.log_debug:
                                 logbook.info(f'replacing bestInterceptTable[dist {curDist}]:\n  prev {str(existing)}\n  new  {str(opt)}')
+                                logbook.info(
+                                    f'DIAG_INTERCEPT_CHOICE dist {curDist} action replace, thisValue {thisValue:.2f}, '
+                                    f'existingValue {existing.econValue:.2f}, recapTurns {recapTurns}, '
+                                    f'newStart {path.start.tile}, newTail {path.tail.tile}, existingStart {existing.path.start.tile}, existingTail {existing.path.tail.tile}, '
+                                    f'newDamageBlocked {blockedDamage:.2f}, existingDamageBlocked {existing.damage_blocked:.2f}, '
+                                    f'newRawValueNoRecap {rawValueNoRecap:.2f}, existingRecaptureTurns {existing.recapture_turns}, '
+                                    f'newWorstCase {worstCaseInterceptMoves}, existingWorstCase {existing.worst_case_intercept_moves}, baseLen {baseLen}')
                             bestInterceptTable[curDist] = opt
+                        elif self.log_debug:
+                            logbook.info(
+                                f'DIAG_INTERCEPT_CHOICE dist {curDist} action tie-kept-existing, thisValue {thisValue:.2f}, '
+                                f'existingValue {existing.econValue:.2f}, newWorstCase {worstCaseInterceptMoves}, '
+                                f'existingWorstCase {existing.worst_case_intercept_moves}, newStart {path.start.tile}, existingStart {existing.path.start.tile}')
+                    elif self.log_debug:
+                        logbook.info(
+                            f'DIAG_INTERCEPT_CHOICE dist {curDist} action keep-existing, thisValue {thisValue:.2f}, '
+                            f'existingValue {existing.econValue:.2f}, recapTurns {recapTurns}, '
+                            f'newStart {path.start.tile}, newTail {path.tail.tile}, existingStart {existing.path.start.tile}, existingTail {existing.path.tail.tile}, '
+                            f'newDamageBlocked {blockedDamage:.2f}, existingDamageBlocked {existing.damage_blocked:.2f}, '
+                            f'newRawValueNoRecap {rawValueNoRecap:.2f}, existingRecaptureTurns {existing.recapture_turns}, baseLen {baseLen}')
 
         if self.log_debug:
             for i in range(interception.threats[0].armyAnalysis.shortestPathWay.distance + 1):
@@ -1290,6 +1360,20 @@ class ArmyInterceptor(object):
         for intInfo in toBypassFullSearch:
             # intInfo.max_search_dist = min(intInfo.max_search_dist, 1)
             intInfo.max_search_dist = min(intInfo.max_search_dist, 2 - intInfo.max_choke_width)
+
+    def _get_max_interception_search_depth(self, threats: typing.List[ThreatObj]) -> int:
+        """
+        Econ-only intercept searches are capped at 2/3rds of the longest threat path plus one, using the maximum length of all threat paths for this tile rather than whichever threat has the best value. General and city target threats still require full-depth checks, so their length is a floor on the capped econ search distance.
+        """
+        maxThreatLen = 0
+        minLen = 0
+        for threat in threats:
+            maxThreatLen = max(threat.turns, maxThreatLen)
+            if threat.path.tail.tile.isGeneral or threat.path.tail.tile.isCity:
+                minLen = max(minLen, threat.turns)
+
+        lengthToCheck = int(maxThreatLen * 2 / 3) + 1
+        return max(lengthToCheck, minLen)
 
     def _get_intercept_paths(
             self,
@@ -1490,14 +1574,13 @@ class ArmyInterceptor(object):
         blockable = best_enemy_threat_info.econ_value
 
         # TODO we dont need to recalculate this for the enemy threat every time...
-        (
-            turnsLeft,
-            armyAccumulatedByInterceptPath,
-            bestCaseInterceptTurn,
-            worstCaseInterceptTurn,
-            enInterceptPointPathNode,
-            enPhysicalArmyAtTile,
-        ) = self._get_result_of_executing_paths_to_intercept_point(interception, best_enemy_threat, interceptPath, turnsLeftInCycle)
+        collisionResult = self._get_result_of_executing_paths_to_intercept_point(interception, best_enemy_threat, interceptPath, turnsLeftInCycle)
+        turnsLeft = collisionResult.turns_left
+        armyAccumulatedByInterceptPath = collisionResult.friendly_army_at_intercept
+        bestCaseInterceptTurn = collisionResult.best_case_intercept_turn
+        worstCaseInterceptTurn = collisionResult.worst_case_intercept_turn
+        enInterceptPointPathNode = collisionResult.enemy_intercept_point_node
+        enPhysicalArmyAtTile = collisionResult.enemy_physical_army_at_intercept
         if self.log_debug:
             logbook.info(f'_get_result_of_executing_paths_to_intercept_point {interceptPath}:' +
                         f'\nturnsLeft: {turnsLeft}' +
@@ -1599,8 +1682,10 @@ class ArmyInterceptor(object):
         #     leftoverNode = leftoverNode.prev
         #     leftoverEnLen -= 1
 
-        enemyArmyCollidedWithAtIntercept = enArmy + armyAccumulatedByInterceptPath
-        enemyArmyLeftAtInterceptPointBeforeRemainingCapture = enArmy
+        # enemyArmyCollidedWithAtIntercept = enArmy + armyAccumulatedByInterceptPath
+        # enemyArmyLeftAtInterceptPointBeforeRemainingCapture = enArmy
+        enemyArmyLeftAtInterceptPointBeforeRemainingCapture = enPhysicalArmyAtTile - armyAccumulatedByInterceptPath
+        enemyArmyCollidedWithAtIntercept = enPhysicalArmyAtTile
         if enemyTailNode.tile == enInterceptPointTile:
             # determine intercept remainder. This means we stopped the army AT the intercept, effectively means this is a capture, no enemy army remaining.
             if self.log_debug:
@@ -1622,7 +1707,8 @@ class ArmyInterceptor(object):
                 if self.log_debug:
                     logbook.error(f'wtf broke somewhere other than the expected intercept spot? node.tile {enemyTailNode.tile} vs enInterceptPointTile {enInterceptPointTile}. enemyArmyLeftAtInterceptPointBeforeRemainingCapture {enemyArmyLeftAtInterceptPointBeforeRemainingCapture}')
 
-        if self.log_debug:
+        if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info(f'intercept remainder details for {interceptPath}: physicalEnemyAtIntercept {enPhysicalArmyAtTile}, friendlyAtIntercept {armyAccumulatedByInterceptPath}, physicalEnemyLeft {enPhysicalArmyAtTile - armyAccumulatedByInterceptPath}, backwardDamageWalkEnemyLeft {enArmy}, collidedEnemyArmy {enemyArmyCollidedWithAtIntercept}, enInterceptPointTile {enInterceptPointTile}, enemyTailNode {enemyTailNode.tile if enemyTailNode is not None else None}')
             logbook.info(f'blocked {econValueBlocked} econ dmg, ({armyAccumulatedByInterceptPath} army), at interceptDist {interceptDistFromTarget}, enemy army left at intercept {enemyArmyLeftAtInterceptPointBeforeRemainingCapture}. bestCaseInterceptTurn {bestCaseInterceptTurn}, worstCaseInterceptTurn {worstCaseInterceptTurn}: path {str(interceptPath)}')
 
         return enInterceptPointTile, econValueBlocked, enemyArmyLeftAtInterceptPointBeforeRemainingCapture, enemyArmyCollidedWithAtIntercept, bestCaseInterceptTurn, worstCaseInterceptTurn
@@ -1634,7 +1720,7 @@ class ArmyInterceptor(object):
             best_enemy_threat: ThreatObj,
             interceptPath: Path,
             turnsLeftInCycle: int
-    ) -> typing.Tuple[int, int, int, int, PathMove, int]:
+    ) -> InterceptCollisionResult:
         """
         returns turnsLeft, armyAccumulatedByInterceptPath, bestCaseInterceptTurn, worstCaseInterceptTurn, enInterceptPointTile, enPhysicalArmyAtTile
 
@@ -1655,33 +1741,92 @@ class ArmyInterceptor(object):
         turnsUsed = 0
         hasPrio = True  #self.map.player_has_priority_over_other(self.map.player_index, best_enemy_threat.threatPlayer, self.map.turn)
         lastAtDist = self.emptySet
+        closestApproachTile: Tile | None = None
+        closestApproachEnemyTile: Tile | None = None
+        closestApproachEnemyPathNode: PathMove | None = None
+        closestApproachManhattanDist = 1000
+        closestApproachTurnsUsed = 0
+        closestApproachFriendlyArmy = 0
+        closestApproachEnemyPhysicalArmy = 0
+        directTailAdjacentTile: Tile | None = None
+        directTailAdjacentEnemyPhysicalArmy = 0
+        directTailAdjacentFriendlyArmy = 0
+        directConcreteAdjacentEnemyPathNode: PathMove | None = None
+        directConcreteAdjacentEnemyPhysicalArmy: int | None = None
+        directConcreteAdjacentFriendlyArmy: int | None = None
+        directSameTileEnemyPhysicalArmy: int | None = None
+        directSameTileFriendlyArmy: int | None = None
 
         i = 0
         node = interceptPath.start
         while node is not None:
             tile = node.tile
+            # There are three collision shapes handled below, and they must stay separate:
+            # 1. Same-tile direct collision: both armies land on the same tile this turn. If the tile is friendly,
+            #    our move lands first and the enemy attacks the reinforced tile, so the enemy collided army is the
+            #    pre-capture enemy moving army and our defending army includes the full friendly destination garrison.
+            # 2. Movable-adjacent intercept: the armies end adjacent and one can attack the other on the next move;
+            #    if this is adjacent to the concrete best-threat path node, it is a real collision candidate and must
+            #    not be overwritten later by the broader closest-distance approximation.
+            # 3. Closest-distance approximation: no real same-tile or adjacent collision was found, so we approximate
+            #    by chasing from the closest approach. This intentionally remains a fallback after real collisions fail.
             # hasPrio = not hasPrio
             if turnsLeft == 0:
                 break
             if enPathNode is None:
                 break
 
-            if enPathNode.tile.player in threatPlayers:
-                enPhysicalArmy += enPathNode.tile.army - 1
-            else:
-                enPhysicalArmy -= enPathNode.tile.army + 1
+            enemyPhysicalArmyBeforeCurrentTile = enPhysicalArmy
+            friendlyArmyBeforeCurrentTile = armyAccumulatedByInterceptPath
+            enPhysicalArmy = self._advance_enemy_physical_army(enPhysicalArmy, enPathNode.tile, threatPlayers)
             enInterceptPointPathNode = enPathNode
 
             turnsLeft -= 1
             # if tile not in best_enemy_threat.path.tileSet:  # TODO why was this here? This is preventing intercepts from valuing meeting a tile in front of them
-            if self.map.is_tile_friendly(tile):
-                armyAccumulatedByInterceptPath += tile.army - 1
-            else:
-                armyAccumulatedByInterceptPath -= tile.army + 1
+            armyAccumulatedByInterceptPath = self._advance_friendly_intercept_army(armyAccumulatedByInterceptPath, tile)
 
             tilesAtDist = best_enemy_threat.armyAnalysis.tileDistancesLookup.get(i, None)
             directIntercept = False
 
+            if tilesAtDist:
+                # When intercepting against middle tiles that do not actually collide with the threat under evaluation,
+                # this is a heuristic to approximate worst case damage. MAY BE REPLACED LATER.
+                #
+                # We keep evaluating against best_enemy_threat because that is the current intercept value model, but
+                # some candidate intercept paths aim at representative "middle" tiles rather than a concrete tile on
+                # best_enemy_threat.path. In those cases bestCaseInterceptTurn/worstCaseInterceptTurn can stay at 1000
+                # even though this path got close enough to plausibly chase the real best threat. To prevent dropping
+                # those candidates entirely, track the closest friendly path tile to the threat's average position at
+                # this same turn/distance. If no real collision is found, we later pretend that the army at this closest
+                # approach tile chases the best threat for the true Manhattan distance from that tile to the closest
+                # concrete threat tile at that distance, and then collides at the resulting best-threat path node.
+                #
+                # Example from test_should_correctly_value_intercept_from_general:
+                #   friendly 2,11 -> ... -> 4,9 while enemy middle is 7,7 = manhattan 5
+                #   friendly 2,11 -> ... -> 5,9 while enemy middle is 7,8 = manhattan 3
+                #   friendly 2,11 -> ... -> 5,8 while enemy middle is 7,9 = manhattan 3
+                # The earliest shortest approach is 5,9 <-> 7,8. We then allow 3 extra enemy moves and value the
+                # collision against the best threat at that later path node, rather than incorrectly treating the whole
+                # candidate as unreachable against best_enemy_threat.
+                xSum = 0
+                ySum = 0
+                for t in tilesAtDist:
+                    xSum += t.x
+                    ySum += t.y
+                avgX = xSum / len(tilesAtDist)
+                avgY = ySum / len(tilesAtDist)
+                closestEnemyTileAtDist = min(tilesAtDist, key=lambda t: abs(t.x - avgX) + abs(t.y - avgY))
+                manhattanDist = abs(tile.x - closestEnemyTileAtDist.x) + abs(tile.y - closestEnemyTileAtDist.y)
+                if manhattanDist < closestApproachManhattanDist:
+                    closestApproachTile = tile
+                    closestApproachEnemyTile = closestEnemyTileAtDist
+                    closestApproachEnemyPathNode = enPathNode
+                    closestApproachManhattanDist = manhattanDist
+                    closestApproachTurnsUsed = i
+                    closestApproachFriendlyArmy = armyAccumulatedByInterceptPath
+                    closestApproachEnemyPhysicalArmy = enPhysicalArmy
+                    if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                        logbook.info(f'closest middle-tile intercept heuristic candidate for {interceptPath}: friendly {tile}, enemyMiddle {closestEnemyTileAtDist}, dist {manhattanDist}, turn {i}, friendlyArmy {armyAccumulatedByInterceptPath}, enemyPhysicalArmy {enPhysicalArmy}')
 
             if i == 0:
                 if tilesAtDist and len(tilesAtDist) == 1:
@@ -1706,8 +1851,19 @@ class ArmyInterceptor(object):
                         if not hasPrio:
                             offs += 1
                         bestCaseInterceptTurn = min(bestCaseInterceptTurn, i + offs)
+                        if t == enPathNode.tile and directConcreteAdjacentEnemyPathNode is None:
+                            directConcreteAdjacentEnemyPathNode = enPathNode
+                            directConcreteAdjacentEnemyPhysicalArmy = enPhysicalArmy
+                            directConcreteAdjacentFriendlyArmy = armyAccumulatedByInterceptPath
+                        if tile == interceptPath.tail.tile:
+                            directTailAdjacentTile = t
+                            directTailAdjacentEnemyPhysicalArmy = enPhysicalArmy
+                            directTailAdjacentFriendlyArmy = armyAccumulatedByInterceptPath
                     elif t == tile:
                         foundAtDist = True
+                        if tile == interceptPath.tail.tile and self.map.is_tile_friendly(tile):
+                            directSameTileEnemyPhysicalArmy = enemyPhysicalArmyBeforeCurrentTile
+                            directSameTileFriendlyArmy = friendlyArmyBeforeCurrentTile + tile.army
                         if len(tilesAtDist) == 1:
                             directIntercept = True
                             worstCaseInterceptTurn = min(i, worstCaseInterceptTurn)
@@ -1750,15 +1906,111 @@ class ArmyInterceptor(object):
             node = node.next
             i += 1
 
+        # Scenario 1: same-tile direct collision at the candidate tail.
+        #
+        # This branch finalizes an exact same-tile collision that was discovered while walking the friendly path.
+        # It intentionally only runs when the exact collision was found at the tail, because non-tail same-tile
+        # collisions should be represented by a shorter candidate path that actually ends on that collision tile.
+        #
+        # This cannot be collapsed into the movable-adjacent branches below because same-tile combat uses different
+        # pre-resolution army accounting: if the destination is friendly, our arriving army reinforces the tile before
+        # the enemy attack resolves, so enemy physical army and friendly defending army must be captured from the
+        # pre-current-tile values recorded inside the loop.
+        if worstCaseInterceptTurn == 1000 and bestCaseInterceptTurn < 1000 and closestApproachTile == interceptPath.tail.tile:
+            worstCaseInterceptTurn = bestCaseInterceptTurn
+            if directSameTileEnemyPhysicalArmy is not None and directSameTileFriendlyArmy is not None:
+                enPhysicalArmy = directSameTileEnemyPhysicalArmy
+                armyAccumulatedByInterceptPath = directSameTileFriendlyArmy
+            if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                logbook.info(f'Using direct tail-adjacent intercept timing for {interceptPath}: closestFriendly {closestApproachTile}, closestEnemyMiddle {closestApproachEnemyTile}, directTailAdjacentTile {directTailAdjacentTile}, directTailAdjacentEnemyPhysicalArmy {directTailAdjacentEnemyPhysicalArmy}, directTailAdjacentFriendlyArmy {directTailAdjacentFriendlyArmy}, bestCaseInterceptTurn {bestCaseInterceptTurn}')
+
+        # Scenario 2a: concrete movable-adjacent intercept found while both paths are still advancing together.
+        #
+        # During the main loop, the friendly candidate tile and the concrete best_enemy_threat path node are evaluated
+        # at the same turn index. If those concrete tiles are movable-adjacent, this is a real collision opportunity,
+        # not merely an average-position or middle-tile approximation. The first such concrete adjacent collision wins
+        # because later adjacent positions would overstate how long the enemy can keep moving before contact.
+        #
+        # This cannot be collapsed into the tail-wait branch below because this branch handles synchronized movement:
+        # friendly and enemy are both consuming one path node per loop iteration. The tail-wait branch handles a
+        # different timing shape where the friendly path has already ended and only the enemy continues moving.
+        if worstCaseInterceptTurn == 1000 and directConcreteAdjacentEnemyPathNode is not None:
+            worstCaseInterceptTurn = bestCaseInterceptTurn
+            if directConcreteAdjacentEnemyPhysicalArmy is not None and directConcreteAdjacentFriendlyArmy is not None:
+                enPhysicalArmy = directConcreteAdjacentEnemyPhysicalArmy
+                armyAccumulatedByInterceptPath = directConcreteAdjacentFriendlyArmy
+            enInterceptPointPathNode = directConcreteAdjacentEnemyPathNode
+            enPathNode = directConcreteAdjacentEnemyPathNode.next
+            if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                logbook.info(f'Using concrete movable-adjacent intercept timing for {interceptPath}: friendlyArmy {armyAccumulatedByInterceptPath}, enemyPhysicalArmy {enPhysicalArmy}, enemyInterceptTile {enInterceptPointPathNode.tile}, bestCaseInterceptTurn {bestCaseInterceptTurn}')
+
+        # Scenario 2b: concrete movable-adjacent intercept after friendly reaches the candidate tail and waits.
+        #
+        # Some valid candidate paths end before the enemy is adjacent. In the simulator, the friendly army does not
+        # disappear or continue along a hypothetical chase path; it waits on interceptPath.tail. If the concrete enemy
+        # threat path later moves next to that tail tile, the collision is still a real movable-adjacent intercept.
+        #
+        # This is the case covered by the near-candidate path 4,11->4,10->4,9->5,9: production previously stopped
+        # concrete collision detection when the friendly path ended, then fell through to the closest-distance fallback
+        # and valued the wrong enemy tile/army. Continuing only the enemy path here preserves the simulator timing:
+        # friendly army stays fixed at the accumulated tail army, while enemy physical army advances along the concrete
+        # best_enemy_threat path until adjacency occurs.
+        #
+        # This cannot be collapsed into Scenario 2a because Scenario 2a requires a current friendly path node at the
+        # same turn index as the enemy path node. Once node is None, there is no synchronized friendly step left to
+        # compare. It also cannot be collapsed into Scenario 3 below because this branch is not heuristic: it uses a
+        # concrete enemy path node and a concrete adjacency relation with the actual friendly tail tile. Scenario 3 is
+        # deliberately approximate and should only run after all concrete same-tile/adjacent collisions fail.
+        if worstCaseInterceptTurn == 1000 and enPathNode is not None and interceptPath.tail is not None:
+            tailTile = interceptPath.tail.tile
+            waitingEnemyPathNode = enPathNode
+            waitingEnemyPhysicalArmy = enPhysicalArmy
+            waitingTurn = i
+            while waitingEnemyPathNode is not None and waitingTurn < turnsLeftInCycle:
+                waitingEnemyPhysicalArmy = self._advance_enemy_physical_army(waitingEnemyPhysicalArmy, waitingEnemyPathNode.tile, threatPlayers)
+                if tailTile in waitingEnemyPathNode.tile.movable:
+                    bestCaseInterceptTurn = waitingTurn
+                    worstCaseInterceptTurn = waitingTurn
+                    turnsLeft = turnsLeftInCycle - waitingTurn
+                    enPhysicalArmy = waitingEnemyPhysicalArmy
+                    enInterceptPointPathNode = waitingEnemyPathNode
+                    enPathNode = waitingEnemyPathNode.next
+                    if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                        logbook.info(f'Using tail-wait movable-adjacent intercept timing for {interceptPath}: tailTile {tailTile}, enemyInterceptTile {waitingEnemyPathNode.tile}, friendlyArmy {armyAccumulatedByInterceptPath}, enemyPhysicalArmy {enPhysicalArmy}, interceptTurn {waitingTurn}')
+                    break
+                waitingEnemyPathNode = waitingEnemyPathNode.next
+                waitingTurn += 1
+
+        if worstCaseInterceptTurn == 1000 and closestApproachEnemyPathNode is not None:
+            # Closest-middle-tile fallback: no exact collision was found against best_enemy_threat, so value this as a
+            # heuristic chase from the closest approach. This intentionally uses the shortest turn where the minimum
+            # Manhattan distance was reached, then advances the enemy along best_enemy_threat.path by that distance.
+            # This is approximate and may be replaced later by per-threat/multi-threat concrete collision evaluation.
+            fallbackEnemyPathNode = closestApproachEnemyPathNode
+            fallbackEnemyPhysicalArmy = closestApproachEnemyPhysicalArmy
+            extraEnemyMoves = 0
+            while extraEnemyMoves < closestApproachManhattanDist and fallbackEnemyPathNode.next is not None:
+                fallbackEnemyPathNode = fallbackEnemyPathNode.next
+                fallbackEnemyPhysicalArmy = self._advance_enemy_physical_army(fallbackEnemyPhysicalArmy, fallbackEnemyPathNode.tile, threatPlayers)
+                extraEnemyMoves += 1
+
+            fallbackInterceptTurn = closestApproachTurnsUsed + extraEnemyMoves
+            bestCaseInterceptTurn = fallbackInterceptTurn
+            worstCaseInterceptTurn = fallbackInterceptTurn
+            turnsLeft = turnsLeftInCycle - fallbackInterceptTurn
+            armyAccumulatedByInterceptPath = closestApproachFriendlyArmy
+            enPhysicalArmy = fallbackEnemyPhysicalArmy
+            enInterceptPointPathNode = fallbackEnemyPathNode
+            enPathNode = fallbackEnemyPathNode.next
+            if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                logbook.info(f'Using closest middle-tile intercept heuristic for {interceptPath}: closestFriendly {closestApproachTile}, closestEnemyMiddle {closestApproachEnemyTile}, closestDist {closestApproachManhattanDist}, extraEnemyMoves {extraEnemyMoves}, fallbackInterceptTile {fallbackEnemyPathNode.tile}, fallbackInterceptTurn {fallbackInterceptTurn}, friendlyArmy {armyAccumulatedByInterceptPath}, enemyPhysicalArmy {enPhysicalArmy}')
+
         turnsUsed = turnsLeftInCycle - turnsLeft
         while turnsUsed < worstCaseInterceptTurn and enPathNode:
             turnsUsed += 1
             turnsLeft -= 1
 
-            if enPathNode.tile.player in threatPlayers:
-                enPhysicalArmy += enPathNode.tile.army - 1
-            else:
-                enPhysicalArmy -= enPathNode.tile.army + 1
+            enPhysicalArmy = self._advance_enemy_physical_army(enPhysicalArmy, enPathNode.tile, threatPlayers)
             enInterceptPointPathNode = enPathNode
 
             enPathNode = enPathNode.next
@@ -1812,14 +2064,31 @@ class ArmyInterceptor(object):
         movesToThisPoint = turnsLeftInCycle - turnsLeft
         armyPostCollision = armyAccumulatedByInterceptPath - enPhysicalArmy
 
-        logbook.info(f'We expect to intercept threat @{best_enemy_threat.path.start.tile} -> {best_enemy_threat.path.tail.tile} at {enInterceptPointPathNode.tile} after {movesToThisPoint} turns with {turnsLeft} left in cycle and {armyPostCollision} army post-collision.'
-                     f'\r\n     bestCaseInterceptTurn {bestCaseInterceptTurn}, worstCaseInterceptTurn {worstCaseInterceptTurn} (us: {armyAccumulatedByInterceptPath}a, them: {enPhysicalArmy}a at {enInterceptPointPathNode.tile})')
+        if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info(f'We expect to intercept threat @{best_enemy_threat.path.start.tile} -> {best_enemy_threat.path.tail.tile} at {enInterceptPointPathNode.tile} after {movesToThisPoint} turns with {turnsLeft} left in cycle and {armyPostCollision} army post-collision.'
+                         f'\r\n     bestCaseInterceptTurn {bestCaseInterceptTurn}, worstCaseInterceptTurn {worstCaseInterceptTurn} (us: {armyAccumulatedByInterceptPath}a, them: {enPhysicalArmy}a at {enInterceptPointPathNode.tile})')
 
-        if bestCaseInterceptTurn == 1000:
+        if bestCaseInterceptTurn == 1000 and self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
             logbook.warning(f'INTERCEPT UNREACHABLE: threat @{best_enemy_threat.path.start.tile} -> {best_enemy_threat.path.tail.tile}, our intercept path ends at {interceptPath.tail.tile} which was never found on threat path tileSet {best_enemy_threat.path.tileSet}')
 
         bestCaseInterceptTurn = min(bestCaseInterceptTurn, worstCaseInterceptTurn)
-        return turnsLeft, armyAccumulatedByInterceptPath, bestCaseInterceptTurn, worstCaseInterceptTurn, enInterceptPointPathNode, enPhysicalArmy
+        return InterceptCollisionResult(
+            turnsLeft,
+            armyAccumulatedByInterceptPath,
+            bestCaseInterceptTurn,
+            worstCaseInterceptTurn,
+            enInterceptPointPathNode,
+            enPhysicalArmy)
+
+    def _advance_enemy_physical_army(self, enemyPhysicalArmy: int, tile: Tile, threatPlayers: typing.List[int]) -> int:
+        if tile.player in threatPlayers:
+            return enemyPhysicalArmy + tile.army - 1
+        return enemyPhysicalArmy - tile.army - 1
+
+    def _advance_friendly_intercept_army(self, friendlyArmy: int, tile: Tile) -> int:
+        if self.map.is_tile_friendly(tile):
+            return friendlyArmy + tile.army - 1
+        return friendlyArmy - tile.army - 1
 
     def get_intercept_blocking_tiles_for_split_hinting(
             self,
@@ -1926,7 +2195,14 @@ class ArmyInterceptor(object):
         shouldSplit = False
         shouldDelay = False
         firstThreat = threats[0].threat
-        isTwoAway = firstThreat.armyAnalysis.bMap[interceptionPath.start.tile] == 2
+        isTwoAway = firstThreat.armyAnalysis.bMap.raw[interceptionPath.start.tile.tile_index] == 2
+
+        if not isTwoAway and interceptionPath.start.tile.isGeneral:
+            lowGeneralArmyCutoff = max(1, firstThreat.threatValue // 10)
+            tilesAtDist = firstThreat.armyAnalysis.tileDistancesLookup.get(1, None)
+            if tilesAtDist is not None and len(tilesAtDist) == 1 and interceptionPath.start.tile.army <= lowGeneralArmyCutoff:
+                shouldDelay = True
+            return shouldDelay, shouldSplit
 
         if not isTwoAway:
             return shouldDelay, shouldSplit

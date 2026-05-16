@@ -1080,7 +1080,7 @@ class BotCityOps:
             forceNeutralCapture: bool,
             targetCity: Tile | None = None
     ) -> bool:
-        cityCost = 44
+        cityCost = 50
         if bot._map.walled_city_base_value is not None:
             cityCost = bot._map.walled_city_base_value
         if targetCity is not None:
@@ -1091,20 +1091,25 @@ class BotCityOps:
 
         if bot.targetPlayer != -1:
             cycleLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
-            threatTurns = cycleLeft - 12
+            threatTurns = cycleLeft - 20
             minFogDist = bot.shortest_path_to_target_player.length // 2 + 3
             if bot.enemy_attack_path:
                 enFogged = bot.enemy_attack_path.get_subsegment_excluding_trailing_visible()
                 minFogDist = bot.distance_from_general(enFogged.tail.tile) + 1
             if threatTurns < minFogDist:
                 threatTurns = minFogDist
-            attackDefTimer = bot.perf_timer.begin_move_event(f'approximate attack / def ({threatTurns}t)') if DebugHelper.is_debug_or_unit_test_mode() else contextlib.nullcontext()
-            with attackDefTimer:
-                defTurns = threatTurns
-                generalContribution = defTurns // 2
+            if threatTurns < 6:
+                threatTurns = 6
 
-                cityContribution = (defTurns - len(bot.city_capture_plan_tiles)) // 2
-                cityDefVal = generalContribution + cityContribution - 2
+            with bot.perf_timer.begin_move_event(f'approximate attack / def ({threatTurns}t, minFogDist {minFogDist})'):
+                defTurns = threatTurns
+                distPenalty = bot.distance_from_general(targetCity) if targetCity is not None else 4
+                enDistPenalty = bot.shortest_path_to_target_player.length - bot.board_analysis.intergeneral_analysis.bMap.raw[targetCity.tile_index] if targetCity is not None else 0
+                enDistPenalty = max(0, enDistPenalty)
+                generalContribution = max(0, defTurns // 2 - 2 - distPenalty - enDistPenalty)
+                cityContribution = max(0, (defTurns - len(bot.city_capture_plan_tiles)) // 2 - 3)
+
+                cityDefVal = generalContribution + cityContribution
                 if not bot.was_allowing_neutral_cities_last_turn:
                     cityDefVal -= 10
                 searchNegs = set()
@@ -1112,15 +1117,14 @@ class BotCityOps:
                     bot.viewInfo.add_stats_line(f'updating existing city capture plan tiles. cityDefVal {cityDefVal}')
                     searchNegs.update(bot.city_capture_plan_tiles)
                 else:
-                    cityDefVal -= cityCost
                     tgCities = [targetCity] if targetCity is not None else list(bot.cityAnalyzer.city_scores.keys())
                     if len(tgCities) > 0:
+                        cityDefVal -= tgCities[0].army
                         playerTilesNearCity = SearchUtils.get_player_tiles_near_up_to_army_amount(map=bot._map, fromTiles=tgCities, armyAmount=tgCities[0].army, asPlayer=bot.general.player, tileAmountCutoff=1)
                         for t in playerTilesNearCity:
                             cityDefVal += t.army - 1
                         searchNegs.update(playerTilesNearCity)
-                        if DebugHelper.is_debug_or_unit_test_mode():
-                            bot.viewInfo.add_stats_line(f'new city capture plan tiles? cityDefVal {cityDefVal}')
+                        bot.viewInfo.add_stats_line(f'new city capture plan tiles? cityDefVal {cityDefVal}')
                     else:
                         bot.viewInfo.add_stats_line(f'bypassing neut cities, 0 neut cities available :( cityDefVal {cityDefVal}')
                         return False
@@ -1137,6 +1141,10 @@ class BotCityOps:
                     forceFogRisk=True,
                     negativeTiles=attackNegs)
 
+                # We do this to try to prevent us from changing our mind about taking the city mid-round. We have to be pretty convinced we want to take it early in the round
+                roundTimingOffset = threatTurns // 2
+                risk += roundTimingOffset
+
                 requiredDefenseArmy = risk + cityCost - cityDefVal
                 turns, defValue = bot.win_condition_analyzer.get_dynamic_turns_visible_defense_against([defTile], defTurns, asPlayer=bot.general.player, minArmy=requiredDefenseArmy, negativeTiles=searchNegs)
 
@@ -1146,7 +1154,7 @@ class BotCityOps:
             if bot.opponent_tracker.even_or_up_on_cities(bot.targetPlayer):
                 if risk > defAfterCity + hackToEnsureCity and risk > 5:
                     bot.is_blocking_neutral_city_captures = True
-                    bot.viewInfo.add_stats_line(f'bypassing neut cities, danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) and risk > 5, armyBonusDef {armyBonusDefense} (defTurns {defTurns}, cycleLeft {cycleLeft})')
+                    bot.viewInfo.add_stats_line(f'bypassing neut cities, danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) and risk > 5, armyBonusDef {armyBonusDefense} (defTurns {defTurns}, cycleLeft {cycleLeft}, distPenalty {distPenalty}, enDistPenalty {enDistPenalty}, rtOffs {roundTimingOffset})')
                     return False
 
                 if bot.is_blocking_neutral_city_captures:
@@ -1158,9 +1166,9 @@ class BotCityOps:
                 return False
 
             if risk <= defAfterCity:
-                bot.viewInfo.add_stats_line(f'ALLOW neut cities, danger {risk} in {threatTurns} <= {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) (defTurns {defTurns}, cycleLeft {cycleLeft})')
+                bot.viewInfo.add_stats_line(f'ALLOW neut cities, danger {risk} in {threatTurns} <= {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) (defTurns {defTurns}, cycleLeft {cycleLeft}, distPenalty {distPenalty}, enDistPenalty {enDistPenalty}, rtOffs {roundTimingOffset})')
             else:
-                bot.viewInfo.add_stats_line(f'ALLOW neut cities DESPITE danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) (defTurns {defTurns}, cycleLeft {cycleLeft})')
+                bot.viewInfo.add_stats_line(f'ALLOW neut cities DESPITE danger {risk} in {threatTurns} > {defAfterCity} ({defValue} + cityDefVal {cityDefVal}) (defTurns {defTurns}, cycleLeft {cycleLeft}, distPenalty {distPenalty}, enDistPenalty {enDistPenalty}, rtOffs {roundTimingOffset})')
 
         proactivelyTakeCity = BotCityOps.should_proactively_take_cities(bot, ) or forceNeutralCapture
         safeFromThreat = (

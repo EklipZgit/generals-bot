@@ -32,7 +32,7 @@ class GeneralPredictionTests(TestBase):
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
@@ -59,7 +59,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertOwned(general.player, playerMap.GetTile(2, 14), 'should instantly dive the gen when dead')
 
     def test_should_dive_corner_for_near_100_percent_kill_chance_instead_of_dying(self):
@@ -91,7 +91,7 @@ class GeneralPredictionTests(TestBase):
                 playerMap.GetTile(5, 14).lastMovedTurn = playerMap.turn
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=turns)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=turns)
                 self.assertEqual(map.player_index, winner)
 
     def test_should_dive_when_obviously_correct_to_do_so(self):
@@ -108,7 +108,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertGreater(playerMap.GetTile(1, 14).army, 185)
@@ -128,9 +128,9 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
         self.assertEqual(winner, map.player_index)
-    
+
     def test_should_keep_diving_wtf(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_keep_diving_wtf___77gwInmiz---0--375.txtmap'
@@ -139,7 +139,7 @@ class GeneralPredictionTests(TestBase):
         enemyGeneral.army = 4
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=375)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '14,9->10,9')
@@ -147,9 +147,9 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertEqual(map.player_index, winner)
-    
+
     def test_should_not_dive_few_fog_tiles_when_cannot_kill(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill__actual___Je4XxW4D9---1--77.txtmap'
@@ -157,7 +157,7 @@ class GeneralPredictionTests(TestBase):
 
         mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill___Je4XxW4D9---1--77.txtmap'
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=77)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,7->8,6  8,8->10,8')
@@ -166,12 +166,12 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(2, 6), 'should expand away from general, not into it')
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(3, 6), 'should expand away from general, not into it')
-    
+
     def test_should_not_dive_few_fog_tiles_when_cannot_kill__pre_split(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill__actual___Je4XxW4D9---1--76.txtmap'
@@ -179,7 +179,7 @@ class GeneralPredictionTests(TestBase):
 
         mapFile = 'GameContinuationEntries/should_not_dive_few_fog_tiles_when_cannot_kill___Je4XxW4D9---1--76.txtmap'
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=76)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,8->8,7z  8,8->12,8->12,6')
@@ -188,7 +188,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
         self.assertIsNone(winner)
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(2, 6), 'should expand away from general, not into it')
         self.assertOwned(enemyGeneral.player, playerMap.GetTile(3, 6), 'should expand away from general, not into it')
@@ -203,7 +203,7 @@ class GeneralPredictionTests(TestBase):
 # 15f, 79p after fixing the ever_owned_by_player order issue with drop_chained_bad_fog on tile-discovered-as-neutral
 # 15f, 90p after adding limits for emergences from obvious locations based on pure, raw unfettered standing army.
 
-# TODO also need to fix where they launch in a straight line only from like, 17, and then launch in a straight line again for round 2 and wrap the whole map emerging somewhere totally unexpected at like turn 80.    
+# TODO also need to fix where they launch in a straight line only from like, 17, and then launch in a straight line again for round 2 and wrap the whole map emerging somewhere totally unexpected at like turn 80.
     def test_should_dive_when_dead(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         for i in range(10):
@@ -221,7 +221,7 @@ class GeneralPredictionTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=4)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
             self.assertNoFriendliesKilled(map, general)
             self.assertEqual(winner, map.player_index)
             debugMode = False
@@ -242,11 +242,11 @@ class GeneralPredictionTests(TestBase):
             playerMap = simHost.get_player_map(general.player)
 
             self.begin_capturing_logging()
-            winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=6)
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
             self.assertNoFriendliesKilled(map, general)
             self.assertEqual(winner, map.player_index)
             debugMode = False
-    
+
     def test_should_not_dive_when_dies(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dive_when_dies___xv8It9CZ7---0--782.txtmap'
@@ -254,7 +254,7 @@ class GeneralPredictionTests(TestBase):
         enemyGeneral = self.move_enemy_general(map, enemyGeneral, 0, 13)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=782)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '8,2->10,2->10,4->12,4->12,6->13,6')
@@ -262,9 +262,9 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         self.assertNoFriendliesKilled(map, general)
-    
+
     def test_should_keep_diving_when_all_in_and_not_much_left_to_search_regardless_of_opp_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
@@ -287,7 +287,7 @@ class GeneralPredictionTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
                 self.assertEqual(general.player, winner)
 
     def test_quick_kill_should_not_find_ridiculous_paths_and_override_defense_with_long_kills(self):
@@ -296,7 +296,7 @@ class GeneralPredictionTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 1034, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=1034)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,8->5,8->5,7->3,7')
@@ -304,13 +304,13 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=11)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=11)
         self.assertNoFriendliesKilled(map, general)
 
 
 # 8f, 6p, 0s After splitting tests out from our dear friend GeneralPrediction tests.
 # 1f, 17p, 0s After making defense take kill probability into account for death-races, and never chosing worse-but-shorter kill-chance king-kill-paths in the race searcher.
-    
+
     def test_should_not_miscalculate_the_max_distance_to_kill_for_double_back_paths(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_miscalculate_the_max_distance_to_kill_for_double-back_paths___k3lQmUUTN---0--137.txtmap'
@@ -318,7 +318,7 @@ class GeneralPredictionTests(TestBase):
         self.move_enemy_general(map, enemyGeneral, 7, 12)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '14,13->15,13->15,5->16,5')
@@ -334,16 +334,16 @@ class GeneralPredictionTests(TestBase):
         self.assertEqual(10, maxKillTurns, 'having to doubleback from the left means it takes 10t to reach bottom. Not 8...')
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=10)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertEqual(map.player_index, winner)
-    
+
     def test_should_not_dive_something_that_definitely_cant_kill_while_behind_on_cities(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dive_something_that_definitely_cant_kill_while_behind_on_cities___toBfrn5Br---1--363.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 363, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=363)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -351,7 +351,7 @@ class GeneralPredictionTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_dive_something_that_definitely_cant_kill_while_behind_on_cities")

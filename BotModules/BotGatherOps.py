@@ -343,8 +343,8 @@ class BotGatherOps:
             if move.dest.isCity and move.dest.player == bot.player.index and move.dest in bot.cities_gathered_this_cycle:
                 bot.cities_gathered_this_cycle.remove(move.dest)
 
-            if not isinstance(bot.curPath, MoveListPath):
-                bot.curPath = None
+            # if not isinstance(bot.curPath, MoveListPath):
+                # bot.curPath = None
             bot.info(
                 f"GATHER {gathString}! Gather move: {move} Duration {time.perf_counter() - gathStartTime:.4f}")
             return BotRepetition.move_half_on_repetition(bot, move, 6, 4)
@@ -561,6 +561,7 @@ class BotGatherOps:
             maximizeArmyGatheredPerTurn: bool = False,
             additionalIncrement: int = 0,
             distPriorityMap: MapMatrix[int] | None = None,
+            depthPriorityMap: MapMatrix[int] | None = None,
             priorityMatrix: MapMatrixInterface[float] | None = None,
             skipTiles: TileSet | None = None,
             shouldLog: bool = False,
@@ -578,6 +579,7 @@ class BotGatherOps:
             gatherTurns,
             targetArmy,
             distPriorityMap=distPriorityMap,
+            depthPriorityMap=depthPriorityMap,
             negativeTiles=negativeSet,
             searchingPlayer=bot.general.player,
             viewInfo=bot.viewInfo if bot.info_render_gather_values else None,

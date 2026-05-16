@@ -33,7 +33,7 @@ class OffensiveMicroTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
                 self.assertIsNone(winner)
 
                 self.assertTileDifferentialGreaterThan(3, simHost)
@@ -44,7 +44,7 @@ class OffensiveMicroTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -52,7 +52,7 @@ class OffensiveMicroTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
         self.assertGreaterEqual(12, playerMap.GetTile(12, 11).army, 'should have split to cap land even at slight econ loss when ahead on round caps')
@@ -72,7 +72,7 @@ class OffensiveMicroTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
     def test_should_race_when_cant_defend_and_high_kill_probability(self):
@@ -81,7 +81,7 @@ class OffensiveMicroTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 342, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=342)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -89,11 +89,11 @@ class OffensiveMicroTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts for should_race_when_cant_defend_and_high_kill_probability")
-    
+
     def test_should_not_dive_general_instead_of_capturing_cities_when_very_unlikely_to_kill(self):
         # TODO: shift finding king-kills out into something that gets shoved in the RoundPlanner
         # TODO: king kill dives should include a kill likelihood, which heavily weights their perceived econValue (especially given that if they dont kill they allow recaptures and should be negatively weighted as such).
@@ -104,7 +104,7 @@ class OffensiveMicroTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 510, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=510)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -114,7 +114,7 @@ class OffensiveMicroTests(TestBase):
         army.expectedPaths.append(SearchUtils.a_star_find([army.tile], general))
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         city1 = playerMap.GetTile(10, 6)
@@ -122,7 +122,7 @@ class OffensiveMicroTests(TestBase):
 
         self.assertOwned(general.player, city1)
         self.assertOwned(general.player, city2)
-    
+
     def test_should_not_dive_general_instead_of_capturing_cities_when_very_unlikely_to_kill__longer(self):
         # TODO why the f is this not reproducing...?
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -130,7 +130,7 @@ class OffensiveMicroTests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 509, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=509)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '3,5->4,5')
@@ -139,7 +139,7 @@ class OffensiveMicroTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
 
         city1 = playerMap.GetTile(10, 6)
@@ -147,7 +147,7 @@ class OffensiveMicroTests(TestBase):
 
         self.assertOwned(general.player, city1)
         self.assertOwned(general.player, city2)
-    
+
     def test_should_not_find_illegitimate_depth_increasing_killpaths(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         for genReduction in [1, 0]:
@@ -167,7 +167,7 @@ class OffensiveMicroTests(TestBase):
                 playerMap = simHost.get_player_map(general.player)
                 killMove, kingKillPath, chance = bot.check_for_king_kills_and_races(bot.threat)
 
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertIsNone(killMove, 'should not have found a depth increasing killpath that does not kill....')

@@ -328,9 +328,9 @@ aG20 a1        b1   bG1
 
         Layout (6 rows, 7 cols):
           a1   a1   a1   a1   b1   a1   b1
-          aG20 a1   a1   b1   a3   b1   bG1  ← outpost1 at (col4,row1)
+          aG20 a1   a1   b1   a1   b1   bG1  ← outpost1 at (col4,row1)
           a1   a1   a1   b1   M    b1   b1
-          a1   a1   a1   b1   b1   a3   M    ← outpost2 at (col5,row3)
+          a1   a1   a1   b1   b1   a1   M    ← outpost2 at (col5,row3)
           a1   a1   a30  b1   b1   b1   b1
           a1   a1   b1   b1   M    M    M
 
@@ -344,9 +344,9 @@ aG20 a1        b1   bG1
         mapData = """
 |    |    |    |    |    |    |
 a1   a1   a1   a1   b1   a1   b1
-aG20 a1   a1   b1   a3   b1   bG1
+aG20 a1   a1   b1   a1   b1   bG1
 a1   a1   a1   b1   M    b1   b1
-a1   a1   a1   b1   b1   a3   M
+a1   a1   a1   b1   b1   a1   M
 a1   a1   a30  b1   b1   b1   b1
 a1   a1   b1   b1   M    M    M
 |    |    |    |    |    |    |
@@ -710,11 +710,10 @@ b1   b1   b1   b1   b1   b1   b1
             self.assertNotIn(isl.unique_id, target_crossable,
                              f'Multi-tile outpost leaf at {label} must NOT be target-crossable (parent meets threshold)')
 
-    def test_target_crossable__three_tile_chain_outpost__all_crossable(self):
+    def test_target_crossable__three_tile_chain_outpost__not_crossable_without_direct_anchor(self):
         """
-        A 3-tile friendly outpost in a vertical chain, fully enclosed by enemy tiles, must
-        have ALL three tiles detected as target-crossable when the parent island size is below
-        the 1/5 threshold.
+        A 3-tile friendly outpost in a vertical chain must not become target-crossable
+        if the flow graph does not produce a direct non-friendly-flow anchor.
 
         Layout (7 rows, 7 cols):
           b1   b1   b1   b1   b1   b1   b1
@@ -738,13 +737,13 @@ b1   b1   b1   b1   b1   b1   b1
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |    |    |    |
-b1   b1   b1   b1   b1   b1   b1
-aG1  a1   a1   a1   b1   a1   b1
-a1   a1   a1   a1   b1   a1   b1
-a1   a1   a1   a1   b1   a1   bG1
-a1   a1   a1   a1   b1   b1   b1
-a1   a1   a1   a1   b1   b1   b1
-b1   b1   b1   b1   b1   b1   b1
+b2   b2   b2   b2   b2   b2   b2
+aG1  a1   a1   a1   b2   a1   b2
+a1   a1   a1   a1   b2   a1   b2
+a1   a1   a1   a1   b2   a1   bG2
+a1   a1   a1   a1   b2   b2   b2
+a1   a1   a1   a1   b2   b2   b2
+b2   b2   b2   b2   b2   b2   b2
 |    |    |    |    |    |    |
         """
         map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
@@ -781,9 +780,47 @@ b1   b1   b1   b1   b1   b1   b1
                         f'Outpost parent_tile_count=3 must be < threshold={threshold} → IS crossable')
 
         for isl, label in [(outpost_top, '(5,1)'), (outpost_mid, '(5,2)'), (outpost_bot, '(5,3)')]:
-            self.assertIn(isl.unique_id, target_crossable,
-                          f'Outpost tile {label} must be target-crossable: fully enclosed in enemy territory')
+            self.assertNotIn(isl.unique_id, target_crossable,
+                             f'Outpost tile {label} must not be target-crossable without a direct non-friendly-flow anchor')
 
         main_island = builder.tile_island_lookup.raw[map.GetTile(0, 1).tile_index]
         self.assertNotIn(main_island.unique_id, target_crossable,
                          'Main large friendly island must NOT be target-crossable')
+
+    def test_target_crossable__outpost_with_more_army_than_neighboring_enemies__not_crossable(self):
+        """
+        A small friendly outpost that otherwise looks target-crossable must NOT be marked
+        crossable when it has more army than its neighboring enemy islands combined.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |
+a1   a1   a1   M    b1   b1
+aG20 a1   a1   b1   a5   bG1
+a1   a1   a1   M    b1   b1
+a1   a1   a1   M    b1   b1
+a1   a1   a1   a1   b1   b1
+|    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        expander = self._build_expander_v2(map, builder)
+        target_crossable = expander._detect_target_crossable_friendly_islands(
+            builder, expander.flow_graph, expander.team, expander.target_team
+        )
+
+        outpost_tile = map.GetTile(4, 1)
+        outpost_island = builder.tile_island_lookup.raw[outpost_tile.tile_index]
+        neighboring_enemy_army = sum(border_island.sum_army for border_island in outpost_island.border_islands if border_island.team == expander.target_team)
+
+        self.assertGreater(outpost_island.sum_army, neighboring_enemy_army,
+                           'Test setup should have more outpost army than neighboring enemy army')
+        self.assertNotIn(outpost_island.unique_id, target_crossable,
+                         'Friendly outpost with more army than neighboring enemies must not be target-crossable')

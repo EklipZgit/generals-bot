@@ -51,9 +51,12 @@ class ThreatObj(object):
             # if dist is None:
             dist = self.armyAnalysis.aMap.raw[tile.tile_index] + offset
             newDist = dist
+            # we always have 1 turn to hit the threat itself. If we pass in nonstandard offsets we still only want 1 move for this
+            if tile == self.path.start.tile:
+                newDist -= 0 - offset
 
             if allowNonChoke:
-                distDict[tile] = dist
+                distDict[tile] = newDist
             if tile.isGeneral:
                 # need to gather to general 1 turn earlier than otherwise necessary. hasPriority here means we moved TO the general on a non-priority turn...?
                 # newDist += 1
@@ -67,9 +70,17 @@ class ThreatObj(object):
                 if allowNonChoke or (interceptChoke is not None and interceptChoke < 3):
                     if chokeWidth is not None:
                         newDist = dist + chokeWidth - 1  # this 2 is almost certainly wrong, but makes some tests pass.
+                        if chokeWidth <= 2 and interceptChoke is not None and interceptChoke > 0:
+                            newDist -= interceptChoke
+
+                        # THIS IS WRONG, WE ALREADY HAVE AN EXTRA TURN. WE'RE PREFERRING GATHERING BACKWARDS THOUGH BECAUSE THE BACKWARDS CHOKES AROUND THE CORNER HAVE A LOWER DISTANCE AND GET POPPED FIRST REGARDLESS OF IF WE WOULD MOVE TO THE FURTHER TILE.
+                        # # we always have 1 turn to hit the threat itself. If we pass in nonstandard offsets we still only want 1 move for this
+                        # if tile == self.path.start.tile:
+                        #     newDist -= 0 - offset
                         # newDist += interceptChoke + 1
                         logbook.info(f'Threat path tile {str(tile)} dist {dist} changed to {newDist} based on chokeWidth {chokeWidth} / interceptChoke {interceptChoke}.')
                         distDict[tile] = newDist
+
 
         if stripBad:
             # og = distDict.copy()
@@ -122,6 +133,7 @@ class DangerAnalyzer(object):
         self.largeVisibleEnemyTiles: typing.List[Tile] = []
 
         self.defenseless_modifier: bool = self.map.modifiers_by_id[MODIFIER_DEFENSELESS]
+        self._army_analysis_cache: typing.Dict[typing.Tuple[int, int, int, int], ArmyAnalyzer] = {}
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -134,6 +146,7 @@ class DangerAnalyzer(object):
         self.map = None
 
     def analyze(self, defenseTiles: typing.List[Tile], depth: int, armies: typing.Dict[Tile, Army]):
+        self._army_analysis_cache.clear()
         general = self.map.generals[self.map.player_index]
         self.scan(general)
 
@@ -209,7 +222,7 @@ class DangerAnalyzer(object):
             army = curThreat.start.tile
             if curThreat.start.tile in armies:
                 army = armies[army]
-            analysis = ArmyAnalyzer(self.map, threatenedGen, army)
+            analysis = self._get_army_analysis(threatenedGen, army)
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Vision, None, analysis)
         logbook.info(f"VISION threat analyzer took {time.perf_counter() - startTime:.3f}")
         return threatObj
@@ -597,7 +610,7 @@ class DangerAnalyzer(object):
             army = curThreat.start.tile
             if curThreat.start.tile in armies:
                 army = armies[army]
-            analysis = ArmyAnalyzer(self.map, curThreat.tail.tile, army)
+            analysis = self._get_army_analysis(curThreat.tail.tile, army)
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
             return threatObj
         else:
@@ -606,6 +619,27 @@ class DangerAnalyzer(object):
 
     def getHighestThreat(self, general: Tile, depth: int, armies: typing.Dict[Tile, Army]):
         return self.fastestThreat
+
+    def _get_army_analysis(
+            self,
+            armyA: Tile | Army,
+            armyB: Tile | Army,
+            bypassRetraverseThreshold: int = -1,
+            maxDist: int = 100
+    ) -> ArmyAnalyzer:
+        tileA = armyA.tile if isinstance(armyA, Army) else armyA
+        tileB = armyB.tile if isinstance(armyB, Army) else armyB
+        key = (tileA.tile_index, tileB.tile_index, bypassRetraverseThreshold, maxDist)
+        analysis = self._army_analysis_cache.get(key, None)
+        if analysis is None:
+            analysis = ArmyAnalyzer(
+                self.map,
+                armyA,
+                armyB,
+                bypassRetraverseThreshold=bypassRetraverseThreshold,
+                maxDist=maxDist)
+            self._army_analysis_cache[key] = analysis
+        return analysis
 
     def scan(self, general: Tile):
         self.largeVisibleEnemyTiles = []

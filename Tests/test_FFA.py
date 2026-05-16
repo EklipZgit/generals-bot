@@ -16,7 +16,7 @@ class FFATests(TestBase):
         enemyGeneral = self.move_enemy_general(map, enemyGeneral, 6, 20)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=379)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '9,6->9,4->14,4->14,5->15,5->15,6->17,6->17,5->20,5->20,4->22,4->22,7->21,7->21,8->10,8')
@@ -25,9 +25,9 @@ class FFATests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=100)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=100)
         self.assertIsNone(winner)
-    
+
     def test_should_find_kill_in_ffa_position(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_find_kill_in_ffa_position___eW64nZ8rZ---2--69.txtmap'
@@ -35,7 +35,7 @@ class FFATests(TestBase):
         enemyGeneral.army = 10
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=69)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -43,19 +43,19 @@ class FFATests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
         self.assertIsNone(winner)
 
         self.assertEqual(general.player, enemyGeneral.player, 'should have captured fincher')
 
-    # 0f 2p    
+    # 0f 2p
     def test_should_not_time_out_on_win_condition_in_ffa(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_time_out_on_win_condition_in_ffa___uu_dzfs6v---1--1275.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 1275, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=1275)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '17,21->18,21->18,17->20,17->20,6->18,6->18,4->20,4->20,0->21,0')
@@ -63,7 +63,7 @@ class FFATests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=35)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=35)
         self.assertIsNone(winner)
 
     def test_should_gather_for_large_attacks_out_of_vision_range_in_rounds(self):
@@ -72,7 +72,7 @@ class FFATests(TestBase):
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -81,7 +81,7 @@ class FFATests(TestBase):
 
         self.begin_capturing_logging()
         bot.timings = None
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
         # 12 moves minimum to gather out of vision
         self.assertNoFriendliesKilled(map, general)
 

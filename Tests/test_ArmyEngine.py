@@ -20,22 +20,22 @@ from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 
 SIM_VS_ENGINE_ALL_TILE_TYPES_TEST_MAP = """
-|    |    |    |    |    
+|    |    |    |    |
           b60
-b20  cG3  aG55 c2          
+b20  cG3  aG55 c2
           c0
-d3   d3             
-a5   b5                    
+d3   d3
+a5   b5
 c3   c3
-               b1     
-     a55  C45  bC5  b1      
-     aC5       b55     
-     a1        a0       
-                    
-          d0          
+               b1
+     a55  C45  bC5  b1
+     aC5       b55
+     a1        a0
+
+          d0
      d2   bG55 dG3  a20
-          a60       
-|    |    |    |    |    
+          a60
+|    |    |    |    |
 player_index=0
 teams=0,1,0,1
 mode=team
@@ -153,18 +153,18 @@ class ArmyEngineTests(TestBase):
     def test_engine__armies_suicide(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         rawMap = """
-|    |    |    |    |    
-          aG1          
-                    
-                    
-                    
-     a25               
-               b25     
-                    
-                    
-                    
-          bG1          
-|    |    |    |    |    
+|    |    |    |    |
+          aG1
+
+
+
+     a25
+               b25
+
+
+
+          bG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -628,17 +628,17 @@ bTiles=20
     def test_engine__recognizes_general_race_winner__by_priority(self):
         rawMap = """
 |    |    |    |    |    |
-     M    aG1  M        
-     M         M           
-     M         M           
-     M         M           
+     M    aG1  M
+     M         M
+     M         M
+     M         M
      M    b25  M
-     M         M     
-     M    a25  M        
-     M         M           
-     M         M           
-     M         M           
-     M    bG1  M        
+     M         M
+     M    a25  M
+     M         M
+     M         M
+     M         M
+     M    bG1  M
 |    |    |    |    |    |
 player_index=0
 bot_target_player=1
@@ -681,17 +681,17 @@ bTiles=20
     def test_engine__recognizes_general_race_winner__by_priority__forced(self):
         rawMap = """
 |    |    |    |    |    |
-     M    aG1  M        
-     M         M           
-     M         M           
-     M         M           
+     M    aG1  M
+     M         M
+     M         M
+     M         M
      M    b25  M
-     M         M     
-     M    a25  M        
-     M         M           
-     M         M           
-     M         M           
-     M    bG1  M        
+     M         M
+     M    a25  M
+     M         M
+     M         M
+     M         M
+     M    bG1  M
 |    |    |    |    |    |
 player_index=0
 bot_target_player=1
@@ -733,15 +733,15 @@ bTiles=20
     def test_engine__recognizes_general_race_winner__by_priority__odd_distance(self):
         rawMap = """
 |    |    |    |    |    |
-          aG1          
+          aG1
 
 
           b25
 
-          a25          
+          a25
 
 
-          bG1          
+          bG1
 |    |    |    |    |    |
 player_index=0
 bot_target_player=1
@@ -785,15 +785,15 @@ bTiles=20
     def test_engine__recognizes_general_race_winner__by_priority__odd_distance__misbehaving(self):
         rawMap = """
 |    |    |    |    |    |
-          aG1          
+          aG1
 
 
           b25
 
-          a25          
+          a25
 
 
-          bG1          
+          bG1
 |    |    |    |    |    |
 player_index=0
 bot_target_player=1
@@ -836,15 +836,15 @@ bTiles=20
     def test_engine__recognizes_general_race_winner__by_priority__odd_distance__forced(self):
         rawMap = """
 |    |    |    |    |    |
-     M    aG1  M        
-     M         M           
-     M         M           
-     M    b25  M    
-     M         M        
-     M    a25  M          
-     M         M           
-     M         M           
-     M    bG1  M        
+     M    aG1  M
+     M         M
+     M         M
+     M    b25  M
+     M         M
+     M    a25  M
+     M         M
+     M         M
+     M    bG1  M
 |    |    |    |    |    |
 player_index=0
 bot_target_player=1
@@ -885,18 +885,18 @@ bTiles=20
 
     def test_engine__a_can_cap_b_tiles_with_kill_threat(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
-                    
-     M               
+|    |    |    |    |
+          aG1
+
+     M
                     b1
-                
-                    
-                    
-                    
-a25  M    b25          
-          bG1          
-|    |    |    |    |    
+
+
+
+
+a25  M    b25
+          bG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -936,21 +936,21 @@ bTiles=20
 
     def test_engine__detects_running_from_scrim_is_good(self):
         rawMap = """
-|    |    |    |    |    
-          aG10          
+|    |    |    |    |
+          aG10
      M    M    M    M
-     M          
-                    
-                   
+     M
+
+
                a1   a1
                     a1
           b20       a20
 
 
 a1
-a1                
-a1        bG17          
-|    |    |    |    |    
+a1
+a1        bG17
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -996,10 +996,10 @@ bTiles=20
 
     def test_engine__doesnt_blow_up_on_1_army_armies(self):
         rawMap = """
-|    |    |    |    |    
-          aG10          
+|    |    |    |    |
+          aG10
      M    M    M    M
-     M          
+     M
 
 
                a1   a1
@@ -1008,9 +1008,9 @@ bTiles=20
 
 
 a1
-a1                
-a1        bG20          
-|    |    |    |    |    
+a1
+a1        bG20
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -1058,21 +1058,21 @@ bTiles=20
 
     def test_engine__detects_running_from_scrim_is_good_DEBUG(self):
         rawMap = """
-|    |    |    |    |    
-          aG10          
+|    |    |    |    |
+          aG10
      M    M    M    M
-     M          
+     M
 
 
           M    a1   a1
                     a1
      M    b20       a20
-     M         M 
-     M         M                 
-     M         M   
-     M         M   
-b1   M    bG20 M    a1     
-|    |    |    |    |    
+     M         M
+     M         M
+     M         M
+     M         M
+b1   M    bG20 M    a1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -1114,18 +1114,18 @@ bTiles=20
 
     def test_engine__detects_basic_forced_move__and_waits_to_react_with_priority(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
-     M    M           
+     M    M
                     b1
 
 
 
-     M         
-     b25  M        
-a25       bG1          
-|    |    |    |    |    
+     M
+     b25  M
+a25       bG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -1176,18 +1176,18 @@ bTiles=20
 
     def test_engine__detects_basic_forced_move__can_only_move_towards_gen(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
-     M    M           
+     M    M
                     b1
 
 
 
-     M         
-     b25  M        
-a25       bG1          
-|    |    |    |    |    
+     M
+     b25  M
+a25       bG1
+|    |    |    |    |
 loadAsIs=True
 player_index=0
 bot_target_player=1
@@ -1231,18 +1231,18 @@ bTiles=20
 
     def test_engine__detects_basic_forced_move(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
-     M    M           
+     M    M
                     b1
 
 
 
-     M         
-     b25  M        
-a25       bG1          
-|    |    |    |    |    
+     M
+     b25  M
+a25       bG1
+|    |    |    |    |
 loadAsIs=True
 player_index=0
 bot_target_player=1
@@ -1293,18 +1293,18 @@ bTiles=20
 
     def test_engine__detects_basic_forced_move__big_tiles(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
-     M    M           
+     M    M
                     b1
 
 
 
-     M         
-     b50  M        
-a50       bG1          
-|    |    |    |    |    
+     M
+     b50  M
+a50       bG1
+|    |    |    |    |
 loadAsIs=True
 player_index=0
 bot_target_player=1
@@ -1355,18 +1355,18 @@ bTiles=20
 
     def test_engine__detects_chase_save(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
-     M    M           
+     M    M
                     b1
 
           M
      M    b25  M
-     M    a25  M   
-     M         M 
-          bG1          
-|    |    |    |    |    
+     M    a25  M
+     M         M
+          bG1
+|    |    |    |    |
 loadAsIs=True
 player_index=0
 bot_target_player=1
@@ -1410,18 +1410,18 @@ bTiles=20
 
     def test_engine__detects_wins_on_priority(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
-     M    M           
+     M    M
                     b1
 
 
-     M         M 
+     M         M
      M    b25  M
-     M    a25  M   
-          bG1          
-|    |    |    |    |    
+     M    a25  M
+          bG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -1549,23 +1549,23 @@ bTiles=20
                     self.assertFalse(result.best_result_state.captured_by_enemy)
                     self.assertFalse(result.best_result_state.captures_enemy)
                     simHost.queue_player_move(general.player, result.expected_best_moves[0][0])
-                    winner = simHost.execute_turn(run_real_time=debugMode, turn_time=0.5)
+                    winner = simHost.execute_turn(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5)
                     self.assertIsNone(winner)
 
     def test_engine__does_not_over_recognize_wins_on_general_distances(self):
         rawMap = """
-|    |    |    |    |    
-          aG1             
+|    |    |    |    |
+          aG1
 
 
-          
+
 a24
           b25
 
 
-              
-          bG1          
-|    |    |    |    |    
+
+          bG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -1601,18 +1601,18 @@ bTiles=20
 
     def test_engine__recognizes_losses_on_general_distances(self):
         rawMap = """
-|    |    |    |    |    
-     bG1               
+|    |    |    |    |
+     bG1
 
 
 
           b25       a25
-                 
 
-     
-M              
-          aG1          
-|    |    |    |    |    
+
+
+M
+          aG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -1648,18 +1648,18 @@ bTiles=20
 
     def test_engine__a_can_cap_b_tiles_with_kill_threat__v2(self):
         rawMap = """
-|    |    |    |    |    
-          aG1     
-                    
-               M     
-                    
-                    
-                    
-                    
-                   
-a25  M              
-     bG1  b25      
-|    |    |    |    | 
+|    |    |    |    |
+          aG1
+
+               M
+
+
+
+
+
+a25  M
+     bG1  b25
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -1714,18 +1714,18 @@ bTiles=20
 
     def test_b_can_chase_as_army(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
-                    
-                     
-                    
-                    
-                    
-                    
-                    
-                    
-     a23  bG25          
-|    |    |    |    |    
+|    |    |    |    |
+          aG1
+
+
+
+
+
+
+
+
+     a23  bG25
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=15
@@ -1791,17 +1791,17 @@ bTiles=15
 
     def test_armies_that_move_through_each_other_cancel_out(self):
         rawMap = """
-|    |    |    |     
-          aG1          
+|    |    |    |
+          aG1
 
 
 
      b23  a23
-     
 
 
-     bG1          
-|    |    |    |     
+
+     bG1
+|    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=15
@@ -1859,17 +1859,17 @@ bTiles=15
 
     def test_armies_that_move_through_each_other__biggest_wins_and_remains_army(self):
         rawMap = """
-|    |    |    |     
-          aG7          
+|    |    |    |
+          aG7
 
 
 
      b23  a23
-     
 
 
-     bG7          
-|    |    |    |     
+
+     bG7
+|    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=15
@@ -1955,18 +1955,18 @@ bTiles=15
 
     def test_engine__a_can_cap_bs_general(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
 
 
 
 
                b25
-     M              
+     M
 
-a25       bG1          
-|    |    |    |    |    
+a25       bG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -1998,18 +1998,18 @@ bTiles=20
 
     def test_engine__a_can_cap_bs_general_point_blank(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
 
 
 
 
                b25
-     M              
+     M
 
-     a25  bG1          
-|    |    |    |    |    
+     a25  bG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -2040,18 +2040,18 @@ bTiles=20
 
     def test_engine__a_can_cap_bs_general_point_blank_forced(self):
         rawMap = """
-|    |    |    |    |    
-          aG1          
+|    |    |    |    |
+          aG1
 
 
 
 
 
                b25
-     M              
      M
-M    a25  bG1          
-|    |    |    |    |    
+     M
+M    a25  bG1
+|    |    |    |    |
 player_index=0
 bot_target_player=1
 aTiles=20
@@ -2234,7 +2234,7 @@ bTiles=20
         # player b should be capping as many tiles as possible
         for aMove, bMove in result.expected_best_moves[0:4]:
             self.assertIsNotNone(bMove)
-    
+
     def test_should_intercept_army_and_kill_incoming_before_it_does_damage(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         for turn in [0, 1]:
@@ -2277,9 +2277,9 @@ bTiles=20
 
                 # # some of these will be illegal if the bot does its thing and properly kills the inbound army
                 # simHost.queue_player_moves_str(enemyGeneral.player, '12,12 -> 11,12 -> 10,12 -> 9,12 -> 8,12 -> 7,12')
-                # winner = simHost.run_sim(run_real_time=debugMode, turn_time=5.0, turns=3)
+                # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=5.0, turns=3)
                 # self.assertPlayerTileCount(simHost, enemyGeneral.player, 66)
-    
+
     def test_should_just_kill_army_not_dodge_off_general_into_death(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_just_kill_army_not_dodge_off_general_into_death___re2uZGNTn---b--445.txtmap'
@@ -2289,13 +2289,13 @@ bTiles=20
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=445)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # # alert enemy of the player general
         # simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
         #
-        # winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         # self.assertIsNone(winner)
 
         m = simHost.sim.players[general.player].map
@@ -2344,7 +2344,7 @@ bTiles=20
         if debugMode:
             self.render_step_engine_analysis(armyEngine, simHost.sim, result, aArmy, bArmy)
             # self.render_sim_analysis(m, result)
-    
+
     def test_should_not_generate_idkQQ_error_in_scrim_8_11__7_12(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_generate_idkQQ_error_in_scrim_8_11__7_12___rxjjRQqTn---b--484.txtmap'
@@ -2354,7 +2354,7 @@ bTiles=20
 
         # Grant the general the same fog vision they had at the turn the map was exported
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=484)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
 
         # simHost.make_player_afk(enemyGeneral.player)
@@ -2363,11 +2363,11 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
 
         self.skipTest("TODO add asserts")  #  for should_not_generate_idkQQ_error_in_scrim_8_11__7_12
-    
+
     def test_should_not_lock_up_mcts(self):
         for i in range(10):
             with self.subTest(i=i):
@@ -2386,9 +2386,9 @@ bTiles=20
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
                 self.assertIsNone(winner)
-    
+
     def test_should_not_lock_up_mcts_2(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
@@ -2408,9 +2408,9 @@ bTiles=20
                 simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
                 self.begin_capturing_logging()
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
                 self.assertIsNone(winner)
-    
+
     def test_should_not_die_scrimming_general_at_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_die_scrimming_general_at_threat___BgX63UBAn---1--439.txtmap'
@@ -2419,16 +2419,16 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=439)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '4,6->3,6->2,6')
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
         self.assertIsNone(winner)
-    
+
     def test_should_not_dance_around_armies_standing_still(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_dance_around_armies_standing_still___HeEzmHU03---0--269.txtmap'
@@ -2437,7 +2437,7 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=269)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
@@ -2465,7 +2465,7 @@ bTiles=20
         self.assertNotEqual(map.GetTile(9, 8), result.expected_best_moves[0][0].dest, "should not do ridiculous dancing around on friendly tiles.")
         self.assertEqual(bArmy.tile, result.expected_best_moves[0][0].dest, "should immediately capture enemy army threatening to capture tiles.")
         self.assertGreater(result.net_economy_differential, 7, 'might be inconsistent depending on the depth MCTS / Brute force reach but should cap enemy army then cap tiles resulting in positive econ')
-    
+
     def test_should_complete_scrim_army_intercept_instead_of_letting_enemy_cap_tiles(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_complete_scrim_army_intercept_instead_of_letting_enemy_cap_tiles___Bgk8TIUR2---0--86.txtmap'
@@ -2474,7 +2474,7 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=86)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '5,14->4,14->3,14->2,14->2,13->2,12')
         simHost.queue_player_moves_str(general.player, '2,16->3,16')
@@ -2482,7 +2482,7 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=5)
         self.assertIsNone(winner)
         shouldNotBeCapped = self.get_player_tile(2, 13, simHost.sim, general.player)
         self.assertEqual(general.player, shouldNotBeCapped.player)
@@ -2495,16 +2495,16 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=224)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '17,13->17,14->17,15->17,16->16,16')
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=3.0, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=3.0, turns=5)
         self.assertIsNone(winner)
-    
+
     def test_should_intercept_army__should_not_repetition_against_non_moving_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_intercept_army_not_leave_gen_defenseless___Svxvcvovg---1--223.txtmap'
@@ -2513,13 +2513,13 @@ bTiles=20
         self.enable_search_time_limits_and_disable_debug_asserts()
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=223)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=15)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=2)
 
@@ -2539,7 +2539,7 @@ bTiles=20
 
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=8)
         self.assertIsNone(winner)
         self.assertNoRepetition(simHost, minForRepetition=2)
 
@@ -2632,7 +2632,7 @@ bTiles=20
                     else:
                         self.assertFalse(result.best_result_state.captures_enemy)
                         self.assertFalse(result.best_result_state.captured_by_enemy, 'the bot can save from this position on even turns.')
-    
+
     def test_should_not_scrim_into_pocket(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_scrim_into_pocket____xd-FYFud---0--529.txtmap'
@@ -2641,7 +2641,7 @@ bTiles=20
         # self.enable_search_time_limits_and_disable_debug_asserts()
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=529)
-        
+
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         bot = self.get_debug_render_bot(simHost, general.player)
         bot.engine_army_nearby_tiles_range = 0
@@ -2650,7 +2650,7 @@ bTiles=20
         simHost.reveal_player_general(playerToReveal=general.player, playerToRevealTo=enemyGeneral.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
         tgTile = self.get_player_tile(15, 19, simHost.sim, general.player)
         self.assertEqual(general.player, tgTile.player)
@@ -2665,7 +2665,7 @@ bTiles=20
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 204, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=204)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -2918,5 +2918,5 @@ bTiles=20
                                 #
                                 # self.assertGreater(valueGathered, threat.threatValue)
                                 #
-                                # winner = simHost.run_sim(run_real_time=debugMode, turn_time=2.5, turns=13)
+                                # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=2.5, turns=13)
                                 # self.assertIsNone(winner)

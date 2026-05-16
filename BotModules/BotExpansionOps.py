@@ -18,6 +18,7 @@ from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotRendering import BotRendering
 from BotModules.BotDefense import BotDefense
 from BotModules.BotComms import BotComms
+from BotModules.BotCombatOps import BotCombatOps
 
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotRepetition import BotRepetition
@@ -263,7 +264,7 @@ class BotExpansionOps:
             expNegs = set(defenseCriticalTileSet)
             if not haveFullExpPlanAlready or BotStateQueries.is_all_in(bot, ):
                 with bot.perf_timer.begin_move_event('checking launch move'):
-                    attackLaunchMove = BM.BotCombatOps.BotCombatOps.check_for_attack_launch_move(bot, expNegs)
+                    attackLaunchMove = BotCombatOps.check_for_attack_launch_move(bot, expNegs)
                 if attackLaunchMove is not None and not haveFullExpPlanAlready:
                     return attackLaunchMove
 
@@ -1108,7 +1109,7 @@ class BotExpansionOps:
         if len(toReveal) == 0:
             return None
 
-        startArmies = sorted(BM.BotCombatOps.BotCombatOps.get_largest_tiles_as_armies(bot, bot.general.player, limit=3), key=lambda t: bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, t.tile))
+        startArmies = sorted(BotCombatOps.get_largest_tiles_as_armies(bot, bot.general.player, limit=3), key=lambda t: bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, t.tile))
 
         bestArmy = None
         bestThresh = None
@@ -1748,7 +1749,7 @@ class BotExpansionOps:
 
         remainingCycleTurns = 50 - bot._map.turn % 50
         potentialGenBonus = remainingCycleTurns // 2
-        sumArmy = BM.BotCombatOps.BotCombatOps.sum_player_army_near_tile(bot, neutCity, distance=100, player=bot.general.player)
+        sumArmy = BotCombatOps.sum_player_army_near_tile(bot, neutCity, distance=100, player=bot.general.player)
         if sumArmy + potentialGenBonus - 3 > neutCity.army:
             path, move = BM.BotCityOps.BotCityOps.capture_cities(bot, negativeTiles=set(), forceNeutralCapture=True)
             if move is not None:

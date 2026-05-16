@@ -17,7 +17,7 @@ class BoardAnalyzerTests(TestBase):
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         self.assertTileNearOtherTile(playerMap, playerMap.GetTile(14, 13), bot.board_analysis.central_defense_point)
@@ -38,7 +38,7 @@ class BoardAnalyzerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
     def test_should_gather_to_hold_central_point_of_defense_nearest_to_contestable_cities(self):
@@ -55,7 +55,7 @@ class BoardAnalyzerTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertIsNone(winner)
 
         self.assertTileNearOtherTile(playerMap, playerMap.GetTile(9, 6), bot.board_analysis.central_defense_point, distance=2)

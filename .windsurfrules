@@ -2,15 +2,47 @@
 2. Prefer adding logging to be certain what an issue is rather than guessing. This is a very complex system and random changes can have a lot of cascading effects.
 3. You use the `python3.14` command, not `python` for anything you run in this project.
 4. You are using a PowerShell terminal, not bash.
-5. You run tests like this:
-    .\generals-bot\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target test_Expansion.ExpansionTests.test_shouldnt_create_broken_islands_after_captures
-    .\generals-bot\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --path D:\2019_reformat_Backup\generals-bot\UnitTests\FlowExpansionSubtests
+5. Tests are run with unittest, not pytest. Run them from the repo root `D:\2019_reformat_Backup\generals-bot`, not from `D:\2019_reformat_Backup`.
+    Tests that import [TestBase](cci:2://file:///d:/2019_reformat_Backup/generals-bot/Tests/TestBase.py:55:0-2748:73) directly require `PYTHONPATH` to include both the repo root and `Tests`.
+
+    Single test target:
+    $env:PYTHONPATH='D:\2019_reformat_Backup\generals-bot\Tests;D:\2019_reformat_Backup\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
+
+    Single test file/module target examples:
+    $env:PYTHONPATH='D:\2019_reformat_Backup\generals-bot\Tests;D:\2019_reformat_Backup\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target Tests.test_Expansion.ExpansionTests.test_shouldnt_create_broken_islands_after_captures
+    $env:PYTHONPATH='D:\2019_reformat_Backup\generals-bot\Tests;D:\2019_reformat_Backup\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --path D:\2019_reformat_Backup\generals-bot\UnitTests\FlowExpansionSubtests
+
+    If a test has `debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True`, run it with `bypass_ui=True` instead of editing the test file:
+    $env:bypass_ui='True'; $env:PYTHONPATH='D:\2019_reformat_Backup\generals-bot\Tests;D:\2019_reformat_Backup\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
+
+    Write temporary test/debug output outside the repo at:
+D:\2019_reformat_Backup\cascade-debug-output\generals-bot
+
+Use cmd /c OS-level redirection, not PowerShell pipes:
+cmd /c "... > D:\2019_reformat_Backup\cascade-debug-output\generals-bot\raw_test.txt 2>&1"
+
 6. You should ask me (the prompter) questions clarifying any assumptions you are unsure about rather than going down the wrong path.
 7. When asked to fix something, you are expected to try to reproduce it with a test first if at all possible. You should have assertions that fail before fixing the bug and seeing the assertions pass.
 8. We don't EVER do imports inside of functions. Always do imports at the top of the file and reorganize code if necessary to work around circular imports.
 9. Tests are run with unittest, not pytest.
 10. Do not EVER unstage or stash staged git changes. Don't ever stage git changes. The user will do all git staging and unstaging, you are allowed read-only git commands only.
 11. For Python structured data passed across functions, never use ad-hoc nested dicts when fields are known; use dataclasses with type annotations and slots instead, and only convert to/from dict at serialization or logging boundaries.
+
+--- RunUnittestBaseline.py ---
+1. Use RunUnittestBaseline.py from the repo root to create stable unittest pass/fail baselines before risky changes.
+2. It writes raw and summary output outside the repo by default:
+   D:\2019_reformat_Backup\cascade-debug-output\generals-bot
+3. Example:
+   .\.venv\Scripts\python.exe RunUnittestBaseline.py --target UnitTests.test_ArmyInterceptionUnit --name army_interceptor_before_fix
+4. Output files:
+   <name>_raw.txt contains full verbose unittest output.
+   <name>_summary.txt contains stable PASS/FAIL/ERROR lines for each discovered test method.
+5. After changes, run it again with a new name:
+   .\.venv\Scripts\python.exe RunUnittestBaseline.py --target UnitTests.test_ArmyInterceptionUnit --name army_interceptor_after_fix
+6. Diff the two summary files to detect regressions:
+   Compare PASS/FAIL/ERROR status per test name.
+7. The script sets PYTHONPATH to include both repo root and Tests, and sets bypass_ui=True.
+8. The script returns the unittest process exit code, so a nonzero exit means at least one test failed or errored.
 
 --- GetLogsForScopeByTurn.ps1 ---
 1. GetLogsForScopeByTurn.ps1 is a PowerShell script at the repo root that extracts per-turn log slices for a named scope from bot test output.

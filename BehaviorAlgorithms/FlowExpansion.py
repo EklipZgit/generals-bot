@@ -275,10 +275,68 @@ class ArmyFlowExpanderV2:
         total = 0
         for plan in plans:
             total += plan.length
+        if DebugHelper.is_debug_or_unit_test_mode():
+            friendly_players = self._get_players_for_team(self.team)
+            target_players = self._get_players_for_team(self.target_team)
+            for idx, plan in enumerate(plans):
+                logbook.warning(
+                    f"FE_RETURN_OPTION idx={idx} type={type(plan).__name__} "
+                    f"first={self._format_plan_first_move_for_log(plan)} "
+                    f"len={plan.length} delay={plan.requiredDelay} econ={plan.econValue:.2f} "
+                    f"pathTiles={self._format_plan_tile_sequence_for_log(plan.tileList, friendly_players, target_players)} "
+                    f"tileSet={self._format_plan_tile_sequence_for_log(sorted(plan.tileSet, key=lambda t: (t.y, t.x)), friendly_players, target_players)} "
+                    f"plan={plan}"
+                )
         if total > turns:
             raise AssertionError(f'Requested {turns} but received {total} turns worth of plans.\r\n  {"\r\n    ".join(f"{opt}: {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: self.island_builder.intergeneral_analysis.aMap.raw[t2.tile_index]))}" for opt in plans)}')
         result.flow_plans = plans
         return result
+
+    def _get_players_for_team(self, team: int) -> list[int]:
+        return [
+            player_index
+            for player_index, player_team in enumerate(self.map.team_ids_by_player_index)
+            if player_team == team
+        ]
+
+    def _format_plan_first_move_for_log(self, plan: TilePlanInterface | None) -> str:
+        if plan is None:
+            return 'None'
+        move = plan.get_first_move()
+        if move is None:
+            return 'None'
+        return f'{move.source}->{move.dest} srcArmy={move.source.army} destPlayer={move.dest.player} destArmy={move.dest.army}'
+
+    def _format_plan_tile_sequence_for_log(
+            self,
+            tiles: typing.Iterable[Tile],
+            friendly_players: list[int],
+            target_players: list[int]
+    ) -> str:
+        return '[' + ', '.join(
+            self._format_plan_tile_for_log(tile, friendly_players, target_players)
+            for tile in tiles
+        ) + ']'
+
+    def _format_plan_tile_for_log(
+            self,
+            tile: Tile,
+            friendly_players: list[int],
+            target_players: list[int]
+    ) -> str:
+        if tile.player in friendly_players:
+            kind = 'friendly'
+        elif tile.player in target_players:
+            kind = 'enemy'
+        elif tile.player < 0:
+            kind = 'neutral'
+        else:
+            kind = 'other'
+        return (
+            f'({tile.x},{tile.y})'
+            f':{kind}:p{tile.player}:team{self._diag_tile_team(tile)}'
+            f':army{tile.army}:vis{tile.visible}:disc{tile.discovered}'
+        )
 
     def _get_tile_army(self, tile: Tile) -> int:
         """Returns the army amount for a tile, using army_override_matrix if set."""
@@ -387,7 +445,7 @@ class ArmyFlowExpanderV2:
         for friendly_island in islands.tile_islands_by_team_id[my_team]:
             if friendly_island.unique_id in target_crossable_islands:
                 if self.log_debug:
-                    logbook.info(f"Skipping target-crossable friendly island {friendly_island}")
+                    logbook.info(f"Skipping target-crossable friendly island {self._diag_island_summary(friendly_island)}")
                 continue
 
             for target_island in sorted(friendly_island.border_islands, key=lambda b: b.tile_count_all_adjacent_friendly, reverse=True):
@@ -397,7 +455,7 @@ class ArmyFlowExpanderV2:
                 # Verify there's actual flow support between these islands
                 if not self._is_flow_supported(friendly_island, target_island, flow_graph):
                     if self.log_debug:
-                        logbook.info(f"Skipping border pair {friendly_island.unique_id}->{target_island.unique_id}: no flow support")
+                        logbook.info(f"Skipping border pair {self._diag_island_anchor(friendly_island)}->{self._diag_island_anchor(target_island)}: no flow support")
                     continue
 
                 border_pair = FlowBorderPairKey(
@@ -406,7 +464,7 @@ class ArmyFlowExpanderV2:
                 )
                 border_pairs.append(border_pair)
                 if self.log_debug:
-                    logbook.info(f"Added border pair: friendly {friendly_island} -> target {target_island}")
+                    logbook.info(f"Added border pair: friendly {self._diag_island_summary(friendly_island)} -> target {self._diag_island_summary(target_island)}")
 
         return border_pairs
 
@@ -496,17 +554,26 @@ class ArmyFlowExpanderV2:
         A friendly island is target crossable when:
         - it is a friendly island
         - the max-flow graph shows more non-friendly flow sources than friendly flow sources
-        - its parent island contains less than 1/5 of the friendly team's total tile count
+        - its parent island contains no more than 1/3 of the friendly team's total tile count
+        - it does not contain more army than its neighboring enemy islands combined
         - the max-flow graph shows pathing into the friendly island from non-friendly sources
         """
         target_crossable = set()
 
-        # Calculate total friendly tile count for the 1/5 threshold
+        # Calculate total friendly tile count for the 1/3 threshold
         total_friendly_tiles = sum(
             island.tile_count
             for island in islands.tile_islands_by_team_id[my_team]
         )
-        threshold_tiles = total_friendly_tiles // 5
+        max_crossable_parent_tiles = total_friendly_tiles / 3
+
+        def _is_small_enough_to_cross(island) -> bool:
+            parent_tile_count = island.full_island.tile_count if island.full_island is not None else island.tile_count
+            return parent_tile_count <= max_crossable_parent_tiles
+
+        def _has_no_more_army_than_neighboring_enemies(island) -> bool:
+            neighboring_enemy_army = sum(border_island.sum_army for border_island in island.border_islands if border_island.team == target_team)
+            return island.sum_army <= neighboring_enemy_army
 
         for island in islands.all_tile_islands:
             if island.team != my_team:
@@ -540,18 +607,18 @@ class ArmyFlowExpanderV2:
             if non_friendly_flow_in_count <= friendly_flow_in_count:
                 continue
 
-            # Check if island is small enough (< 1/5 of total friendly tiles)
-            # Use the parent (full_island) tile count per design: "parent island contains < 1/5 of total"
-            parent_tile_count = island.full_island.tile_count if island.full_island is not None else island.tile_count
-            if parent_tile_count >= threshold_tiles:
+            if not _is_small_enough_to_cross(island):
+                continue
+
+            if not _has_no_more_army_than_neighboring_enemies(island):
                 continue
 
             if has_non_friendly_flow_in:
                 target_crossable.add(island.unique_id)
-                if self.log_debug:
-                    logbook.info(f"Marked island {island.unique_id} as target-crossable: "
+                if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                    logbook.info(f"Marked island {self._diag_island_summary(island)} as target-crossable: "
                              f"non_friendly_flow_in={non_friendly_flow_in_count}, friendly_flow_in={friendly_flow_in_count}, "
-                             f"size={island.tile_count}, threshold={threshold_tiles}")
+                             f"size={island.tile_count}, max_crossable_parent_tiles={max_crossable_parent_tiles:.2f}")
 
         # Propagate crossability via island border adjacency: any friendly island that borders
         # an already-crossable island and passes conditions 1-3 is also crossable.
@@ -565,9 +632,9 @@ class ArmyFlowExpanderV2:
                     continue
                 if island.team != my_team:
                     continue
-                # Check size threshold (condition 3)
-                parent_tc = island.full_island.tile_count if island.full_island is not None else island.tile_count
-                if parent_tc >= threshold_tiles:
+                if not _is_small_enough_to_cross(island):
+                    continue
+                if not _has_no_more_army_than_neighboring_enemies(island):
                     continue
                 # Must touch at least one enemy island (condition 2 relaxed: eb >= 1 sufficient
                 # during propagation, since the chain anchor already established enemy contact)
@@ -579,15 +646,19 @@ class ArmyFlowExpanderV2:
                     if border_island.unique_id in target_crossable:
                         target_crossable.add(island.unique_id)
                         changed = True
-                        if self.log_debug:
-                            logbook.info(f"Propagated island {island.unique_id} as target-crossable via border adjacency: "
-                                     f"size={island.tile_count}, threshold={threshold_tiles}")
+                        if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                            logbook.info(f"Propagated island {self._diag_island_summary(island)} as target-crossable via border adjacency: "
+                                     f"via={self._diag_island_summary(border_island)}, size={island.tile_count}, max_crossable_parent_tiles={max_crossable_parent_tiles:.2f}")
                         break
 
         # Update cache
         self._target_crossable_cache = target_crossable
 
-        logbook.info(f"[TARGET_CROSSABLE] EXIT: found {len(target_crossable)} target-crossable islands: {sorted(target_crossable)}")
+        if DebugHelper.is_debug_or_unit_test_mode():
+            logbook.info(
+                f"[TARGET_CROSSABLE] EXIT: found {len(target_crossable)} target-crossable islands: "
+                f"{[self._diag_island_summary(island) for island in islands.all_tile_islands if island.unique_id in target_crossable]}"
+            )
 
         return target_crossable
 
@@ -680,11 +751,11 @@ class ArmyFlowExpanderV2:
 
         if self.log_debug:
             logbook.info(
-                f'STREAM_DATA bp={border_pair.friendly_island_id}->{border_pair.target_island_id}: '
+                f'STREAM_DATA bp={self._diag_border_pair_anchor(border_pair)}: '
                 f'friendly_stream=['
-                + ', '.join(f'{n.island.unique_id}({n.island.tile_count}t {n.island.sum_army}a flow_from={[e.source_flow_node.island.unique_id for e in n.flow_from]})' for n in friendly_stream)
+                + ', '.join(f'{self._diag_island_anchor(n.island)}({n.island.tile_count}t {n.island.sum_army}a flow_from={[self._diag_island_anchor(e.source_flow_node.island) for e in n.flow_from]})' for n in friendly_stream)
                 + f'] target_stream=['
-                + ', '.join(f'{n.island.unique_id}({n.island.tile_count}t)' for n in target_stream)
+                + ', '.join(f'{self._diag_island_anchor(n.island)}({n.island.tile_count}t)' for n in target_stream)
                 + f'] econ_potential={econ_value_potential:.1f} cap_army={cap_army_potential} '
                 f'gather_turns={gather_turns_potential} gather_army={gather_army_potential}'
             )
@@ -823,7 +894,7 @@ class ArmyFlowExpanderV2:
                 if DebugHelper.is_debug_or_unit_test_mode():
                     logbook.warning(
                         f"FE_DIAG_ORDER_DOWNSTREAM_SKIP_VISITED "
-                        f"start={start_node.island.unique_id} dest={self._diag_island_summary(dest_island)}"
+                        f"start={self._diag_island_anchor(start_node.island)} dest={self._diag_island_summary(dest_island)}"
                     )
                 return
 
@@ -835,7 +906,7 @@ class ArmyFlowExpanderV2:
                 if DebugHelper.is_debug_or_unit_test_mode():
                     logbook.warning(
                         f"FE_DIAG_ORDER_DOWNSTREAM_SKIP_NOT_TARGET "
-                        f"start={start_node.island.unique_id} dest={self._diag_island_summary(dest_island)}"
+                        f"start={self._diag_island_anchor(start_node.island)} dest={self._diag_island_summary(dest_island)}"
                     )
                 return
 
@@ -848,7 +919,7 @@ class ArmyFlowExpanderV2:
             heapq.heappush(frontier, (-heuristic, dest_island.unique_id, frontier_sequence, dest_node))
             if DebugHelper.is_debug_or_unit_test_mode():
                 logbook.warning(
-                    f"FE_DIAG_ORDER_DOWNSTREAM_ENQUEUE start={start_node.island.unique_id} "
+                    f"FE_DIAG_ORDER_DOWNSTREAM_ENQUEUE start={self._diag_island_anchor(start_node.island)} "
                     f"dest={self._diag_island_summary(dest_island)} heuristic={heuristic:.4f} "
                     f"econ={econ_value:.2f} army={army_sum} frontierSize={len(frontier)}"
                 )
@@ -872,7 +943,7 @@ class ArmyFlowExpanderV2:
         if self.log_debug:
             econ_val = self._calculate_island_econ_value(start_node.island, target_crossable_islands)
             logbook.info(
-                f'DOWNSTREAM_PQ start node={start_node.island.unique_id}({start_node.island!r}) '
+                f'DOWNSTREAM_PQ start node={self._diag_island_anchor(start_node.island)}({start_node.island!r}) '
                 f'econ={econ_val:.1f} army={start_node.island.sum_army}'
             )
 
@@ -884,7 +955,7 @@ class ArmyFlowExpanderV2:
             if current_island.unique_id in visited:
                 if DebugHelper.is_debug_or_unit_test_mode():
                     logbook.warning(
-                        f"FE_DIAG_ORDER_DOWNSTREAM_POP_SKIP_VISITED start={start_node.island.unique_id} "
+                        f"FE_DIAG_ORDER_DOWNSTREAM_POP_SKIP_VISITED start={self._diag_island_anchor(start_node.island)} "
                         f"selected={self._diag_island_summary(current_island)}"
                     )
                 continue
@@ -893,15 +964,15 @@ class ArmyFlowExpanderV2:
             stream.append(current_node)
             if DebugHelper.is_debug_or_unit_test_mode():
                 logbook.warning(
-                    f"FE_DIAG_ORDER_DOWNSTREAM_POP start={start_node.island.unique_id} "
+                    f"FE_DIAG_ORDER_DOWNSTREAM_POP start={self._diag_island_anchor(start_node.island)} "
                     f"selected={self._diag_island_summary(current_island)} "
-                    f"stream={[n.island.unique_id for n in stream]}"
+                    f"stream={[self._diag_island_anchor(n.island) for n in stream]}"
                 )
 
             if self.log_debug:
                 econ_val = self._calculate_island_econ_value(current_island, target_crossable_islands)
                 logbook.info(
-                    f'DOWNSTREAM_PQ node={current_island.unique_id}({current_island!r}) '
+                    f'DOWNSTREAM_PQ node={self._diag_island_anchor(current_island)}({current_island!r}) '
                     f'heuristic={econ_val / max(current_island.sum_army, 1):.4f} '
                     f'econ={econ_val:.1f} army={current_island.sum_army}'
                 )
@@ -1093,7 +1164,7 @@ class ArmyFlowExpanderV2:
             friendly_contribs, target_contribs = self._preprocess_flow_stream_tilecounts(stream_data, border_pair)
             if diag_relevant:
                 logbook.warning(
-                    f"FE_DIAG_STREAM {border_pair.friendly_island_id}->{border_pair.target_island_id}: "
+                    f"FE_DIAG_STREAM {self._diag_border_pair_anchor(border_pair)}: "
                     f"friendlyStream={[self._diag_island_summary(n.island) for n in stream_data.friendly_stream]} "
                     f"targetStream={[self._diag_island_summary(n.island) for n in stream_data.target_stream]} "
                     f"targetContribs={[self._diag_contribution_summary(c) for c in target_contribs]}"
@@ -1134,13 +1205,13 @@ class ArmyFlowExpanderV2:
             lookup_tables.append(lookup_table)
             if diag_relevant:
                 logbook.warning(
-                    f"FE_DIAG_LOOKUP {border_pair.friendly_island_id}->{border_pair.target_island_id}: "
+                    f"FE_DIAG_LOOKUP {self._diag_border_pair_anchor(border_pair)}: "
                     f"captureEntries={[self._diag_entry_summary(e) for e in capture_lookup if e is not None and e.turns <= 10]} "
                     f"gatherEntries={[self._diag_entry_summary(e) for e in gather_lookup if e is not None and e.turns <= 10]}"
                 )
 
             if self.log_debug:
-                logbook.info(f"Generated lookup table for border pair {border_pair.friendly_island_id}->{border_pair.target_island_id}: "
+                logbook.info(f"Generated lookup table for border pair {self._diag_border_pair_anchor(border_pair)}: "
                              f"capture_entries={len([e for e in capture_lookup if e is not None])}, "
                              f"gather_entries={len([e for e in gather_lookup if e is not None])}")
 
@@ -1160,21 +1231,36 @@ class ArmyFlowExpanderV2:
 
     def _diag_island_summary(self, island) -> str:
         return (
-            f"{island.unique_id}:team{island.team}:tc{island.tile_count}:army{island.sum_army}:"
+            f"{self._diag_island_anchor(island)}:team{island.team}:tc{island.tile_count}:army{island.sum_army}:"
             f"{sorted((t.x, t.y) for t in island.tile_set)}"
         )
 
+    def _diag_island_anchor(self, island) -> str:
+        tile = island.tiles_by_army[0]
+        return f"{island.unique_id}@({tile.x},{tile.y})"
+
+    def _diag_border_pair_anchor(self, border_pair: FlowBorderPairKey) -> str:
+        return f"{self._diag_island_id_anchor(border_pair.friendly_island_id)}->{self._diag_island_id_anchor(border_pair.target_island_id)}"
+
+    def _diag_island_id_anchor(self, island_id: int) -> str:
+        if self.island_builder is None:
+            return str(island_id)
+        for island in self.island_builder.all_tile_islands:
+            if island.unique_id == island_id:
+                return self._diag_island_anchor(island)
+        return str(island_id)
+
     def _diag_contribution_summary(self, contribution: FlowStreamIslandContribution) -> str:
         return (
-            f"{contribution.island_id}:friendly{contribution.is_friendly}:cross{contribution.is_crossing}:"
+            f"{self._diag_island_anchor(contribution.flow_node.island)}:friendly{contribution.is_friendly}:cross{contribution.is_crossing}:"
             f"tiles{contribution.tile_count}:army{contribution.army_amount}:score{contribution.sort_score:.3f}"
         )
 
     def _diag_entry_summary(self, entry: FlowTurnsEntry) -> str:
         return (
             f"t{entry.turns}:req{entry.required_army}:econ{entry.econ_value:.2f}:gath{entry.gathered_army}:"
-            f"targets{[n.island.unique_id for n in entry.included_target_flow_nodes]}:"
-            f"friends{[n.island.unique_id for n in entry.included_friendly_flow_nodes]}:"
+            f"targets{[self._diag_island_anchor(n.island) for n in entry.included_target_flow_nodes]}:"
+            f"friends{[self._diag_island_anchor(n.island) for n in entry.included_friendly_flow_nodes]}:"
             f"incT{entry.incomplete_target_island_id}/{entry.incomplete_target_tile_count}:"
             f"incF{entry.incomplete_friendly_island_id}/{entry.incomplete_friendly_tile_count}"
         )
@@ -1278,7 +1364,7 @@ class ArmyFlowExpanderV2:
                     incomplete_target_tile_count=island.tile_count - i
                 )
                 if self.log_debug:
-                    logbook.info(f"CAPTURES: {border_pair.friendly_island_id}->{border_pair.target_island_id}  (cur {island.unique_id}) - Adding capture entry @{tile} for turn {current_turn} with econ value {current_econ_value:.2f}, army cost {current_army_cost}, "
+                    logbook.info(f"CAPTURES: {self._diag_border_pair_anchor(border_pair)}  (cur {self._diag_island_anchor(island)}) - Adding capture entry @{tile} for turn {current_turn} with econ value {current_econ_value:.2f}, army cost {current_army_cost}, "
                                  f"army remaining {current_army_remaining}, gathered army {current_gathered_army}, required army {required_army_for_entry}, incomplete {lookup[current_turn].incomplete_target_tile_count}")
 
             if current_turn > max_turns:
@@ -1854,10 +1940,10 @@ class ArmyFlowExpanderV2:
                 econ_values.append(enriched.capture_entry.econ_value)
                 item_descriptions.append(
                     f"flow idx={len(items) - 1} group={group_idx} "
-                    f"bp={lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id} "
+                    f"bp={self._diag_border_pair_anchor(lookup_table.border_pair)} "
                     f"weight={enriched.combined_turn_cost} value={enriched.capture_entry.econ_value:.2f} "
-                    f"targets={[n.island.unique_id for n in enriched.capture_entry.included_target_flow_nodes]} "
-                    f"friends={[n.island.unique_id for n in enriched.gather_entry.included_friendly_flow_nodes]}"
+                    f"targets={[self._diag_island_anchor(n.island) for n in enriched.capture_entry.included_target_flow_nodes]} "
+                    f"friends={[self._diag_island_anchor(n.island) for n in enriched.gather_entry.included_friendly_flow_nodes]}"
                 )
                 friendly_island_sets.append(frozenset(
                     n.island.unique_id for n in enriched.gather_entry.included_friendly_flow_nodes
@@ -1875,13 +1961,13 @@ class ArmyFlowExpanderV2:
                 ))
                 if diag_lookup:
                     logbook.warning(
-                        f"FE_DIAG_MKCP_ITEM {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
+                        f"FE_DIAG_MKCP_ITEM {self._diag_border_pair_anchor(lookup_table.border_pair)}: "
                         f"group={group_idx} weight={enriched.combined_turn_cost} "
                         f"value={int(1000 * enriched.capture_entry.econ_value) - enriched.combined_turn_cost} "
                         f"econ={enriched.capture_entry.econ_value:.2f} "
                         f"density={enriched.combined_value_density:.3f} "
-                        f"targets={[n.island.unique_id for n in enriched.capture_entry.included_target_flow_nodes]} "
-                        f"friends={[n.island.unique_id for n in enriched.gather_entry.included_friendly_flow_nodes]}"
+                        f"targets={[self._diag_island_anchor(n.island) for n in enriched.capture_entry.included_target_flow_nodes]} "
+                        f"friends={[self._diag_island_anchor(n.island) for n in enriched.gather_entry.included_friendly_flow_nodes]}"
                     )
                 if self.log_debug:
                     logbook.info(f"  MKCP item: group={group_idx} weight={enriched.combined_turn_cost} "
@@ -2030,7 +2116,7 @@ class ArmyFlowExpanderV2:
             item_descriptions=item_descriptions,
             max_iterations=32,
         )
-        grouped_result = solve_grouped_knapsack_input(grouped_input, noLog=not self.log_debug)
+        grouped_result = solve_grouped_knapsack_input(grouped_input, noLog=not self.log_debug, perfTimer=self.perf_timer)
         chosen_items = [items[index] for index in grouped_result.chosen_indices]
         max_value = grouped_result.max_value
 

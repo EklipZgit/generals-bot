@@ -53,7 +53,7 @@ class FogLandBuilderTests(TestBase):
             tile.player = -1
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=211)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=True)
         simHost.queue_player_moves_str(general.player, '9,13->9,14->9,15')
@@ -69,7 +69,7 @@ class FogLandBuilderTests(TestBase):
             self.assertEqual(enemyGeneral.player, playerTile.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
         for tile in badTiles:
@@ -92,7 +92,7 @@ class FogLandBuilderTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=15)
         self.assertIsNone(winner)
 
         self.assertGreater(len(playerMap.players[enemyGeneral.player].tiles), 16)
@@ -118,7 +118,7 @@ class FogLandBuilderTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.5, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.5, turns=3)
         self.assertIsNone(winner)
 
         self.assertGreater(len(playerMap.players[enemyGeneral.player].tiles), 10)
@@ -135,7 +135,7 @@ class FogLandBuilderTests(TestBase):
         rawMap.GetTile(19, 16).reset_wrong_undiscovered_fog_guess()
         rawMap.GetTile(20, 16).reset_wrong_undiscovered_fog_guess()
         rawMap.GetTile(20, 15).reset_wrong_undiscovered_fog_guess()
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -143,7 +143,7 @@ class FogLandBuilderTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.assertTrue(bot._map.euclidDist(20, 14, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y) < 5)
@@ -155,7 +155,7 @@ class FogLandBuilderTests(TestBase):
         map.GetTile(9, 11).army = 3
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=570)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '6,9->7,9')
@@ -163,18 +163,18 @@ class FogLandBuilderTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
         self.skipTest('need to add new assertions for the fog land builder specifically')
-    
+
     def test_fog_land_builder_should_not_take_ages_to_build__when_just_one_big_massive_emergence_set_from_ffa_capture(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/fog_land_builder_should_not_take_ages_to_build___Sx5Tl3mwJ---2--880.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 880, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=880)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
@@ -187,14 +187,14 @@ class FogLandBuilderTests(TestBase):
         bot.armyTracker.update_fog_prediction(enemyGeneral.player, bot.opponent_tracker.get_player_fog_tile_count_dict(enemyGeneral.player), bot.targetPlayerExpectedGeneralLocation, force=True)
         duration = time.perf_counter() - start
         self.assertLess(duration, 0.003, 'should not take ages to build fog land')
-    
+
     def test_shouldnt_over_build_fog_land_on_vision_loss__when_enemy_out_of_cave_tiles_but_has_wallbreak_city(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/shouldnt_over_build_fog_land_on_vision_loss_and_fog_adjacent_captures___oNee0ECyL---0--206.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 206, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=206)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '16,15->16,16->15,16->15,17->7,17')
@@ -203,7 +203,7 @@ class FogLandBuilderTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
         self.assertOwned(-1, playerMap.GetTile(18, 17), 'this OBVIOUSLY was not captured, at no point could it have been')
         self.assertOwned(-1, playerMap.GetTile(17, 16), 'this OBVIOUSLY was not captured, at no point could it have been')
@@ -225,10 +225,10 @@ class FogLandBuilderTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=8)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
         self.assertOwned(-1, playerMap.GetTile(9, 17), 'this cannot have been captured yet. Fog land builder should expand armies in the fog before rebuilding and redistributing.')
-    
+
     def test_shouldnt_pick_wonky_far_city_just_because_wall_breach(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/shouldnt_pick_wonky_far_city_just_because_wall_breach___C2LBGDHPN---0--179.txtmap'
@@ -236,7 +236,7 @@ class FogLandBuilderTests(TestBase):
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=179)
         rawMap.GetTile(19, 11).reset_wrong_undiscovered_fog_guess()
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_leafmoves(enemyGeneral.player)
@@ -244,7 +244,7 @@ class FogLandBuilderTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(-1, playerMap.GetTile(19, 11))

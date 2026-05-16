@@ -1608,9 +1608,9 @@ class OpponentTracker(object):
 
         cityCount = scores.cityCount
         if cityCount <= cityLimit:
-            return max(0, totalAmt - 3 * cityCount)
+            return max(0, totalAmt - max(0, 3 * (cityCount - 2)))
 
-        amtPerCity = totalAmt // cityCount
+        amtPerCity = totalAmt // max(1, cityCount - 1)
 
         return amtPerCity * cityLimit
 

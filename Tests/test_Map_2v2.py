@@ -14,22 +14,22 @@ from bot_ek0x45 import EklipZBot
 from test_MapBaseClass import MapTestsBase
 
 ALL_SCENARIOS_TEAM_MAP = data = """
-|    |    |    |    |    
+|    |    |    |    |
           b60
-b20  cG3  aG55 c2          
+b20  cG3  aG55 c2
           c0
-d3   d3             
-a5   b5                    
+d3   d3
+a5   b5
 c3   c3
-               b1     
-     a55  C45  bC5  b1      
-     aC5       b55     
-     a1        a0       
-                    
-          d0          
+               b1
+     a55  C45  bC5  b1
+     aC5       b55
+     a1        a0
+
+          d0
      d2   bG55 dG3  a20
-          a60       
-|    |    |    |    |    
+          a60
+|    |    |    |    |
 player_index=0
 teams=0,1,0,1
 mode=team
@@ -114,12 +114,12 @@ dTiles=27
 
     def test_tile_delta_against_friendly(self):
         mapRaw = """
-|  
+|
 aG7
-a1 
+a1
 
 
-| 
+|
 """
         map, general = self.load_map_and_general_from_string(mapRaw, turn=12, player_index=0)
 
@@ -201,14 +201,14 @@ a1
 
         self.begin_capturing_logging()
         self.run_all_scenarios_team_test(debugMode=debugMode, aMove=((2, 1), (3, 1), True), bMove=((0, 1), (1, 1), True), turn=96)
-    
+
     def test_should_not_think_2v2_move_is_from_neut_city(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_think_2v2_move_is_from_neut_city___HeB_SpEW6---2--65.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 65, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=65)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=2, playerMapVision=rawMap, allAfkExceptMapPlayer=False, botInitOnly=True)
         simHost.queue_player_moves_str(0, '6,7->5,7  None')
@@ -222,16 +222,16 @@ a1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=2)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=2)
         self.assertIsNone(winner)
-    
+
     def test_should_handle_fog_island_capture_in_2v2(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_handle_fog_island_capture_in_2v2___F6_mInEvD---0--264.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 264, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=264)
-        
+
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, botInitOnly=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '11,14->11,15->11,16')
@@ -242,7 +242,7 @@ a1
 
         self.begin_capturing_logging()
         simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-        winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.2, turns=3)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.2, turns=3)
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     def test_should_not_try_to_set_ally_general_to_other_player(self):
@@ -267,7 +267,7 @@ a1
 
                 self.begin_capturing_logging()
                 simHost.run_between_turns(lambda: self.assertCorrectArmyDeltas(simHost))
-                winner = simHost.run_sim(run_real_time=debugMode, turn_time=0.25, turns=1)
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
                 self.assertNoFriendliesKilled(map, general, allyGen)
 
 # 4788f, 4005p

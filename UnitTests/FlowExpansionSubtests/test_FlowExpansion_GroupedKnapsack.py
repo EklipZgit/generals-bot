@@ -97,6 +97,73 @@ class FlowExpansionGroupedKnapsackTests(TestBase):
     def test_grouped_knapsack__logged_repro_template(self):
         self.skipTest('Paste FE_KNAPSACK_REPRO_BEGIN output here when debugging grouped knapsack conflict repair')
 
+    def test_grouped_knapsack__should_choose_two_local_enemy_captures_over_one_general_rally(self):
+        self.begin_capturing_logging()
+        repro = GroupedKnapsackPreGroupInput(
+            turn_budget=8,
+            items=[
+                GroupedKnapsackPreGroupItem(
+                    border_pair=(729, 695),
+                    external_group_id=None,
+                    is_external=False,
+                    weight=4,
+                    value=5676,
+                    econ_value=5.68,
+                    friendly_island_set=[729, 733],
+                    target_island_set=[684, 695, 723],
+                    item_tile_set=[79, 80, 98, 116, 117],
+                    description="flow idx=0 group=0 bp=729@(8,6)->695@(8,5) weight=4 value=5.68 targets=['695@(8,5)', '684@(8,4)', '723@(7,4)'] friends=['729@(8,6)', '733@(9,6)']"),
+                GroupedKnapsackPreGroupItem(
+                    border_pair=(349, 708),
+                    external_group_id=None,
+                    is_external=False,
+                    weight=2,
+                    value=4602,
+                    econ_value=4.604,
+                    friendly_island_set=[349],
+                    target_island_set=[696, 708],
+                    item_tile_set=[228, 246, 264],
+                    description="flow idx=1 group=1 bp=349@(12,14)->708@(12,13) weight=2 value=4.60 targets=['708@(12,13)', '696@(12,12)'] friends=['349@(12,14)']"),
+                GroupedKnapsackPreGroupItem(
+                    border_pair=(349, 708),
+                    external_group_id=None,
+                    is_external=False,
+                    weight=8,
+                    value=6998,
+                    econ_value=7.006,
+                    friendly_island_set=[348, 349, 351, 356, 358, 360],
+                    target_island_set=[686, 696, 708],
+                    item_tile_set=[210, 228, 246, 263, 264, 281, 299, 316, 317],
+                    description="flow idx=2 group=1 bp=349@(12,14)->708@(12,13) weight=8 value=7.01 targets=['708@(12,13)', '696@(12,12)', '686@(12,11)'] friends=['349@(12,14)', '348@(11,14)', '356@(11,15)', '351@(11,16)', '358@(11,17)', '360@(10,17)']"),
+                GroupedKnapsackPreGroupItem(
+                    border_pair=None,
+                    external_group_id=1000001,
+                    is_external=True,
+                    weight=1,
+                    value=2201,
+                    econ_value=2.202,
+                    friendly_island_set=[],
+                    target_island_set=[],
+                    item_tile_set=[117, 118],
+                    description='external idx=3 group=1000001 weight=1 value=2201 econ=2.20 type=Path plan=[4a 2.20v 1t] 9,6->10,6'),
+                GroupedKnapsackPreGroupItem(
+                    border_pair=None,
+                    external_group_id=1000002,
+                    is_external=True,
+                    weight=1,
+                    value=2201,
+                    econ_value=2.202,
+                    friendly_island_set=[],
+                    target_island_set=[],
+                    item_tile_set=[246, 264],
+                    description='external idx=4 group=1000002 weight=1 value=2201 econ=2.20 type=Path plan=[3a 2.20v 1t] 12,14->12,13'),
+            ],
+            max_iterations=32)
+        result = ArmyFlowExpanderV2._solve_grouped_knapsack_pre_group_input(repro, noLog=False)
+        self.assertEqual(6, result.chosen_weight)
+        self.assertEqual([1, 0], result.chosen_indices)
+        self._assert_no_duplicate_repro_item_tile_use([t.item_tile_set for t in repro.items], result.chosen_indices)
+
     def test_grouped_knapsack__should_not_do_retarded_shit_at_end_of_round_instead_of_flowing_4and2_and_7and2_into_enemy_land_despite_common_upstream(self):
         self.begin_capturing_logging()
         repro = GroupedKnapsackPreGroupInput(

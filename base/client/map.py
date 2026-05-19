@@ -2500,11 +2500,18 @@ AttributeError: 'Map' object has no attribute 'grid'
                     if potentialDest.delta.oldOwner in skipCapturedPlayers:
                         continue
 
-                    if potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated:
+                    sourceOwnerWouldHaveCapturedNeutral = (
+                            self.remainingPlayers == 2
+                            and sourceTile.delta.oldOwner >= 0
+                            and self.players[sourceTile.delta.oldOwner].unexplainedTileDelta == 0
+                            and potentialDest.delta.oldOwner == -1
+                            and sourceTile.delta.oldArmy > potentialDest.delta.oldArmy - 1
+                    )
+                    if potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated and not sourceOwnerWouldHaveCapturedNeutral:
                         logbook.info(
                             f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated, INCLUDING IT AS POTENTIAL DEST')
                         potentialDests.append(potentialDest)
-                    elif self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest):
+                    elif not sourceOwnerWouldHaveCapturedNeutral and self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest):
                         logbook.info(
                             f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest), INCLUDING IT AS POTENTIAL DEST')
                         potentialDests.append(potentialDest)

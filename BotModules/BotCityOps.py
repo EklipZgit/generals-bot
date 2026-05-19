@@ -35,6 +35,10 @@ if typing.TYPE_CHECKING:
 
 class BotCityOps:
     @staticmethod
+    def _format_city_safety_tiles(tiles: typing.Iterable[Tile]) -> str:
+        return ' | '.join(sorted([f'{t.x},{t.y}:p{t.player}:a{t.army}:vis{t.visible}:disc{t.discovered}' for t in tiles]))
+
+    @staticmethod
     def capture_cities(
             bot: EklipZBot,
             negativeTiles: typing.Set[Tile],
@@ -1093,13 +1097,53 @@ class BotCityOps:
             cycleLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
             threatTurns = cycleLeft - 20
             minFogDist = bot.shortest_path_to_target_player.length // 2 + 3
+            initialThreatTurns = threatTurns
+            initialMinFogDist = minFogDist
+            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                targetCityText = 'None' if targetCity is None else f'{targetCity.x},{targetCity.y}:p{targetCity.player}:a{targetCity.army}:vis{targetCity.visible}:disc{targetCity.discovered}'
+                shortestPath: Path = bot.shortest_path_to_target_player
+                shortestPathHeadText = 'None' if shortestPath.start is None else f'{shortestPath.start.tile.x},{shortestPath.start.tile.y}:p{shortestPath.start.tile.player}:a{shortestPath.start.tile.army}:vis{shortestPath.start.tile.visible}:disc{shortestPath.start.tile.discovered}'
+                shortestPathTailText = 'None' if shortestPath.tail is None else f'{shortestPath.tail.tile.x},{shortestPath.tail.tile.y}:p{shortestPath.tail.tile.player}:a{shortestPath.tail.tile.army}:vis{shortestPath.tail.tile.visible}:disc{shortestPath.tail.tile.discovered}'
+                targetCityFriendlyDist = 'None' if targetCity is None else bot.board_analysis.intergeneral_analysis.aMap.raw[targetCity.tile_index]
+                targetCityEnemyDist = 'None' if targetCity is None else bot.board_analysis.intergeneral_analysis.bMap.raw[targetCity.tile_index]
+                logbook.info(
+                    f'CITY_SAFETY_THREAT_TURNS_RAW turn={bot._map.turn} turnMod50={bot._map.turn % 50} '
+                    f'targetCity={targetCityText} cycleLeft={cycleLeft} cycleLeftMinus20={cycleLeft - 20} '
+                    f'shortestPathLen={bot.shortest_path_to_target_player.length} shortestPathMinFogDist={initialMinFogDist} '
+                    f'hasEnemyAttackPath={bot.enemy_attack_path is not None} enemyAttackPath={bot.enemy_attack_path}'
+                )
+                logbook.info(
+                    f'CITY_SAFETY_SHORTEST_PATH turn={bot._map.turn} shortestPathId={id(shortestPath)} '
+                    f'shortestPathLength={shortestPath.length} shortestPathValue={shortestPath.value} '
+                    f'shortestPathHead={shortestPathHeadText} shortestPathTail={shortestPathTailText} '
+                    f'targetCityFriendlyDist={targetCityFriendlyDist} targetCityEnemyDist={targetCityEnemyDist} '
+                    f'shortestPath={shortestPath}'
+                )
             if bot.enemy_attack_path:
                 enFogged = bot.enemy_attack_path.get_subsegment_excluding_trailing_visible()
                 minFogDist = bot.distance_from_general(enFogged.tail.tile) + 1
+                if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                    logbook.info(
+                        f'CITY_SAFETY_THREAT_TURNS_ENEMY_PATH turn={bot._map.turn} '
+                        f'enFogged={enFogged} enFoggedTail={enFogged.tail.tile.x},{enFogged.tail.tile.y}:p{enFogged.tail.tile.player}:a{enFogged.tail.tile.army}:vis{enFogged.tail.tile.visible}:disc{enFogged.tail.tile.discovered} '
+                        f'enFoggedTailDistFromGeneral={bot.distance_from_general(enFogged.tail.tile)} enemyPathMinFogDist={minFogDist}'
+                    )
             if threatTurns < minFogDist:
                 threatTurns = minFogDist
             if threatTurns < 6:
                 threatTurns = 6
+            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                targetCityText = 'None' if targetCity is None else f'{targetCity.x},{targetCity.y}:p{targetCity.player}:a{targetCity.army}:vis{targetCity.visible}:disc{targetCity.discovered}'
+                enemyAttackPathText = 'None' if bot.enemy_attack_path is None else str(bot.enemy_attack_path)
+                logbook.info(
+                    f'CITY_SAFETY_SETUP turn={bot._map.turn} targetCity={targetCityText} cityCost={cityCost} '
+                    f'cycleLeft={cycleLeft} initialThreatTurns={initialThreatTurns} initialMinFogDist={initialMinFogDist} '
+                    f'finalMinFogDist={minFogDist} finalThreatTurns={threatTurns} shortestPathLen={bot.shortest_path_to_target_player.length} '
+                    f'enemyAttackPath={enemyAttackPathText} forceNeutralCapture={forceNeutralCapture} '
+                    f'wasAllowingLastTurn={bot.was_allowing_neutral_cities_last_turn} blockingNow={bot.is_blocking_neutral_city_captures} '
+                    f'cityPlanLastUpdated={bot.city_capture_plan_last_updated} cityPlanCount={len(bot.city_capture_plan_tiles)} '
+                    f'cityPlanTiles={BotCityOps._format_city_safety_tiles(bot.city_capture_plan_tiles)}'
+                )
 
             with bot.perf_timer.begin_move_event(f'approximate attack / def ({threatTurns}t, minFogDist {minFogDist})'):
                 defTurns = threatTurns
@@ -1116,6 +1160,11 @@ class BotCityOps:
                 if bot.city_capture_plan_last_updated > bot._map.turn - 2 and targetCity in bot.city_capture_plan_tiles:
                     bot.viewInfo.add_stats_line(f'updating existing city capture plan tiles. cityDefVal {cityDefVal}')
                     searchNegs.update(bot.city_capture_plan_tiles)
+                    if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                        logbook.info(
+                            f'CITY_SAFETY_NEGS existing-plan turn={bot._map.turn} searchNegCount={len(searchNegs)} '
+                            f'searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)}'
+                        )
                 else:
                     tgCities = [targetCity] if targetCity is not None else list(bot.cityAnalyzer.city_scores.keys())
                     if len(tgCities) > 0:
@@ -1125,6 +1174,13 @@ class BotCityOps:
                             cityDefVal += t.army - 1
                         searchNegs.update(playerTilesNearCity)
                         bot.viewInfo.add_stats_line(f'new city capture plan tiles? cityDefVal {cityDefVal}')
+                        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                            logbook.info(
+                                f'CITY_SAFETY_NEGS new-plan turn={bot._map.turn} targetCandidates={BotCityOps._format_city_safety_tiles(tgCities)} '
+                                f'nearCityCount={len(playerTilesNearCity)} searchNegCount={len(searchNegs)} '
+                                f'nearCityTiles={BotCityOps._format_city_safety_tiles(playerTilesNearCity)} '
+                                f'searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)}'
+                            )
                     else:
                         bot.viewInfo.add_stats_line(f'bypassing neut cities, 0 neut cities available :( cityDefVal {cityDefVal}')
                         return False
@@ -1134,6 +1190,15 @@ class BotCityOps:
                     defTile = targetCity
                 attackNegs = set(searchNegs)
                 attackNegs.update(bot.largePlayerTiles)
+                if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                    logbook.info(
+                        f'CITY_SAFETY_ATTACK_INPUT turn={bot._map.turn} defTile={defTile.x},{defTile.y}:p{defTile.player}:a{defTile.army}:vis{defTile.visible}:disc{defTile.discovered} '
+                        f'threatTurns={threatTurns} defTurns={defTurns} distPenalty={distPenalty} enDistPenalty={enDistPenalty} '
+                        f'generalContribution={generalContribution} cityContribution={cityContribution} cityDefVal={cityDefVal} '
+                        f'largePlayerTileCount={len(bot.largePlayerTiles)} searchNegCount={len(searchNegs)} attackNegCount={len(attackNegs)} '
+                        f'largePlayerTiles={BotCityOps._format_city_safety_tiles(bot.largePlayerTiles)} '
+                        f'attackNegs={BotCityOps._format_city_safety_tiles(attackNegs)}'
+                    )
                 risk = bot.win_condition_analyzer.get_approximate_attack_against(
                     [defTile],
                     inTurns=threatTurns,
@@ -1147,6 +1212,12 @@ class BotCityOps:
 
                 requiredDefenseArmy = risk + cityCost - cityDefVal
                 turns, defValue = bot.win_condition_analyzer.get_dynamic_turns_visible_defense_against([defTile], defTurns, asPlayer=bot.general.player, minArmy=requiredDefenseArmy, negativeTiles=searchNegs)
+                if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                    logbook.info(
+                        f'CITY_SAFETY_RESULT turn={bot._map.turn} riskAfterOffset={risk} roundTimingOffset={roundTimingOffset} '
+                        f'requiredDefenseArmy={requiredDefenseArmy} defenseTurnsReturned={turns} defValue={defValue} '
+                        f'searchNegCount={len(searchNegs)} searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)}'
+                    )
 
             armyBonusDefense = 1 * max(0, defTurns - cycleLeft)
             hackToEnsureCity = 30 if bot.was_allowing_neutral_cities_last_turn and bot.targetPlayerObj.tileCount > 60 else 0

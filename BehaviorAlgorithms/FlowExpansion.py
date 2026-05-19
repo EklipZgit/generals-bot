@@ -30,7 +30,8 @@ from Interfaces import MapMatrixInterface, TilePlanInterface
 from MapMatrix import MapMatrix
 from PerformanceTimer import PerformanceTimer
 
-OUTPUT_KNAPSACK_TEST_REPRO_LOGS = True
+OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
+SHOULD_LOG_DEBUG_BY_DEFAULT = False
 
 if typing.TYPE_CHECKING:
     from Algorithms import TileIsland
@@ -174,7 +175,7 @@ class ArmyFlowExpanderV2:
         # Configuration options
         self.method: FlowGraphMethod = FlowGraphMethod.OrToolsSimpleMinCost
         self.use_simple_flow_stream_maximization: bool = True
-        self.log_debug: bool = DebugHelper.IS_DEBUGGING
+        self.log_debug: bool = SHOULD_LOG_DEBUG_BY_DEFAULT
         self.debug_render_capture_count_threshold: int = 10000
         """If there are more captures in any given plan option than this, then the option will be rendered inline as generated in a new debug viewer window."""
         self.use_debug_asserts: bool = DebugHelper.IS_DEBUGGING
@@ -275,7 +276,7 @@ class ArmyFlowExpanderV2:
         total = 0
         for plan in plans:
             total += plan.length
-        if DebugHelper.is_debug_or_unit_test_mode():
+        if self.log_debug:
             friendly_players = self._get_players_for_team(self.team)
             target_players = self._get_players_for_team(self.target_team)
             for idx, plan in enumerate(plans):
@@ -343,6 +344,12 @@ class ArmyFlowExpanderV2:
         if self.army_override_matrix is not None:
             return self.army_override_matrix.raw[tile.tile_index]
         return tile.army
+
+    def _get_island_army(self, island: TileIsland) -> int:
+        """Returns the army amount for an island, using army_override_matrix if set."""
+        if self.army_override_matrix is not None:
+            return sum(self.army_override_matrix.raw[tile.tile_index] for tile in island.tile_set)
+        return island.sum_army
 
     def _get_networkx_finder(self) -> NetworkXFlowDirectionFinder:
         """Lazily construct the NetworkX-backed flow direction finder."""
@@ -615,7 +622,7 @@ class ArmyFlowExpanderV2:
 
             if has_non_friendly_flow_in:
                 target_crossable.add(island.unique_id)
-                if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                if self.log_debug:
                     logbook.info(f"Marked island {self._diag_island_summary(island)} as target-crossable: "
                              f"non_friendly_flow_in={non_friendly_flow_in_count}, friendly_flow_in={friendly_flow_in_count}, "
                              f"size={island.tile_count}, max_crossable_parent_tiles={max_crossable_parent_tiles:.2f}")
@@ -646,7 +653,7 @@ class ArmyFlowExpanderV2:
                     if border_island.unique_id in target_crossable:
                         target_crossable.add(island.unique_id)
                         changed = True
-                        if self.log_debug and DebugHelper.is_debug_or_unit_test_mode():
+                        if self.log_debug:
                             logbook.info(f"Propagated island {self._diag_island_summary(island)} as target-crossable via border adjacency: "
                                      f"via={self._diag_island_summary(border_island)}, size={island.tile_count}, max_crossable_parent_tiles={max_crossable_parent_tiles:.2f}")
                         break
@@ -654,7 +661,7 @@ class ArmyFlowExpanderV2:
         # Update cache
         self._target_crossable_cache = target_crossable
 
-        if DebugHelper.is_debug_or_unit_test_mode():
+        if self.log_debug:
             logbook.info(
                 f"[TARGET_CROSSABLE] EXIT: found {len(target_crossable)} target-crossable islands: "
                 f"{[self._diag_island_summary(island) for island in islands.all_tile_islands if island.unique_id in target_crossable]}"
@@ -725,7 +732,7 @@ class ArmyFlowExpanderV2:
         # border pairs that share the same friendly node (friendly.flow_to often
         # contains multiple target neighbours, each of which is its own border pair).
         target_stream = self._build_downstream_stream(
-            target_node, target_crossable_islands, flow_graph, turn_budget
+            target_node, target_crossable_islands, flow_graph, turn_budget, border_pair
         )
 
         # Calculate potential values from streams
@@ -850,6 +857,7 @@ class ArmyFlowExpanderV2:
         target_crossable_islands: set[int],
         flow_graph: IslandMaxFlowGraph,
         max_stream_size: int,
+        border_pair: FlowBorderPairKey | None = None,
     ) -> list[IslandFlowNode]:
         """Build downstream traversal starting AT the target border node.
 
@@ -887,13 +895,23 @@ class ArmyFlowExpanderV2:
         frontier_sequence = 0
 
         flow_lookup = flow_graph.flow_node_lookup_by_island_no_neut
+        should_log_stream_diag = self.log_debug or OUTPUT_KNAPSACK_TEST_REPRO_LOGS
 
-        def _enqueue_candidate(dest_node: IslandFlowNode) -> None:
+        if should_log_stream_diag:
+            logbook.warning(
+                f"FE_DOWNSTREAM_STREAM_BEGIN {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
+                f"start={self._diag_island_summary(start_node.island)} "
+                f"flowTo={[f'{self._diag_island_anchor(edge.target_flow_node.island)}:{edge.edge_army}' for edge in start_node.flow_to]} "
+                f"borders={[self._diag_island_summary(neighbor) for neighbor in start_node.island.border_islands]}"
+            )
+
+        def _enqueue_candidate(dest_node: IslandFlowNode, routed_flow_amount: int) -> None:
             dest_island = dest_node.island
             if dest_island.unique_id in visited:
-                if DebugHelper.is_debug_or_unit_test_mode():
+                if should_log_stream_diag:
                     logbook.warning(
                         f"FE_DIAG_ORDER_DOWNSTREAM_SKIP_VISITED "
+                        f"{self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
                         f"start={self._diag_island_anchor(start_node.island)} dest={self._diag_island_summary(dest_island)}"
                     )
                 return
@@ -903,32 +921,44 @@ class ArmyFlowExpanderV2:
                          dest_island.team == -1 or
                          dest_island.unique_id in target_crossable_islands)
             if not is_target:
-                if DebugHelper.is_debug_or_unit_test_mode():
+                if should_log_stream_diag:
                     logbook.warning(
                         f"FE_DIAG_ORDER_DOWNSTREAM_SKIP_NOT_TARGET "
+                        f"{self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
                         f"start={self._diag_island_anchor(start_node.island)} dest={self._diag_island_summary(dest_island)}"
                     )
                 return
 
             econ_value = self._calculate_island_econ_value(dest_island, target_crossable_islands)
-            army_sum = max(dest_island.sum_army, 1)  # Avoid division by zero
-            heuristic = econ_value / army_sum
+            army_sum = max(self._get_island_army(dest_island), 1)  # Avoid division by zero
+            if routed_flow_amount > 0:
+                heuristic = routed_flow_amount * 1000 + econ_value
+            else:
+                heuristic = econ_value / army_sum
 
             nonlocal frontier_sequence
             frontier_sequence += 1
             heapq.heappush(frontier, (-heuristic, dest_island.unique_id, frontier_sequence, dest_node))
-            if DebugHelper.is_debug_or_unit_test_mode():
+            if should_log_stream_diag:
                 logbook.warning(
-                    f"FE_DIAG_ORDER_DOWNSTREAM_ENQUEUE start={self._diag_island_anchor(start_node.island)} "
+                    f"FE_DIAG_ORDER_DOWNSTREAM_ENQUEUE {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
+                    f"start={self._diag_island_anchor(start_node.island)} "
                     f"dest={self._diag_island_summary(dest_island)} heuristic={heuristic:.4f} "
-                    f"econ={econ_value:.2f} army={army_sum} frontierSize={len(frontier)}"
+                    f"econ={econ_value:.2f} army={army_sum} routedFlow={routed_flow_amount} frontierSize={len(frontier)}"
                 )
 
         def _enqueue_downstream(node: IslandFlowNode) -> None:
+            if should_log_stream_diag:
+                logbook.warning(
+                    f"FE_DOWNSTREAM_EXPAND {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
+                    f"node={self._diag_island_summary(node.island)} "
+                    f"flowTo={[f'{self._diag_island_anchor(edge.target_flow_node.island)}:{edge.edge_army}' for edge in node.flow_to]} "
+                    f"borders={[self._diag_island_summary(neighbor) for neighbor in node.island.border_islands]}"
+                )
             # 1) Routed flow_to edges (preferred: preserves prior behavior for
             #    pairs where MinCostFlow already routed into neutrals).
             for edge in node.flow_to:
-                _enqueue_candidate(edge.target_flow_node)
+                _enqueue_candidate(edge.target_flow_node, edge.edge_army)
             # 2) Physical-adjacency fallback: include neutral/enemy neighbors
             #    that MinCostFlow did not route to. Dedup via `visited` prevents
             #    doubling of candidates already enqueued through flow_to.
@@ -938,13 +968,13 @@ class ArmyFlowExpanderV2:
                 neighbor_node = flow_lookup.get(neighbor_island.unique_id)
                 if neighbor_node is None:
                     continue
-                _enqueue_candidate(neighbor_node)
+                _enqueue_candidate(neighbor_node, 0)
 
-        if self.log_debug:
+        if should_log_stream_diag:
             econ_val = self._calculate_island_econ_value(start_node.island, target_crossable_islands)
-            logbook.info(
+            logbook.warning(
                 f'DOWNSTREAM_PQ start node={self._diag_island_anchor(start_node.island)}({start_node.island!r}) '
-                f'econ={econ_val:.1f} army={start_node.island.sum_army}'
+                f'econ={econ_val:.1f} army={self._get_island_army(start_node.island)}'
             )
 
         _enqueue_downstream(start_node)
@@ -953,28 +983,30 @@ class ArmyFlowExpanderV2:
             _, _, _, current_node = heapq.heappop(frontier)
             current_island = current_node.island
             if current_island.unique_id in visited:
-                if DebugHelper.is_debug_or_unit_test_mode():
+                if should_log_stream_diag:
                     logbook.warning(
-                        f"FE_DIAG_ORDER_DOWNSTREAM_POP_SKIP_VISITED start={self._diag_island_anchor(start_node.island)} "
+                        f"FE_DIAG_ORDER_DOWNSTREAM_POP_SKIP_VISITED {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
+                        f"start={self._diag_island_anchor(start_node.island)} "
                         f"selected={self._diag_island_summary(current_island)}"
                     )
                 continue
             visited.add(current_island.unique_id)
 
             stream.append(current_node)
-            if DebugHelper.is_debug_or_unit_test_mode():
+            if should_log_stream_diag:
                 logbook.warning(
-                    f"FE_DIAG_ORDER_DOWNSTREAM_POP start={self._diag_island_anchor(start_node.island)} "
+                    f"FE_DIAG_ORDER_DOWNSTREAM_POP {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
+                    f"start={self._diag_island_anchor(start_node.island)} "
                     f"selected={self._diag_island_summary(current_island)} "
                     f"stream={[self._diag_island_anchor(n.island) for n in stream]}"
                 )
 
-            if self.log_debug:
+            if should_log_stream_diag:
                 econ_val = self._calculate_island_econ_value(current_island, target_crossable_islands)
-                logbook.info(
+                logbook.warning(
                     f'DOWNSTREAM_PQ node={self._diag_island_anchor(current_island)}({current_island!r}) '
-                    f'heuristic={econ_val / max(current_island.sum_army, 1):.4f} '
-                    f'econ={econ_val:.1f} army={current_island.sum_army}'
+                    f'heuristic={econ_val / max(self._get_island_army(current_island), 1):.4f} '
+                    f'econ={econ_val:.1f} army={self._get_island_army(current_island)}'
                 )
 
             _enqueue_downstream(current_node)
@@ -1092,7 +1124,7 @@ class ArmyFlowExpanderV2:
                           node.island.unique_id in self._target_crossable_cache)
 
             # Calculate capture cost and value
-            army_cost = node.island.sum_army if not is_crossing else 0  # Crossing nodes have no direct capture cost
+            army_cost = self._get_island_army(node.island) if not is_crossing else 0  # Crossing nodes have no direct capture cost
             tile_count = node.island.tile_count
 
             # Heuristic score: prefer lower army-per-tile and better downstream potential
@@ -1332,17 +1364,28 @@ class ArmyFlowExpanderV2:
                     # Target-crossable friendly island: only turn cost, no econ value
                     current_army_cost -= self._get_tile_army(tile)
                 else:
+                    priority_value = 0.0
                     if prio_mat is not None:
-                        current_econ_value += prio_mat.raw[tile.tile_index]
+                        priority_value = prio_mat.raw[tile.tile_index]
+                        current_econ_value += priority_value
                     # Regular capture (enemy or neutral)
                     current_army_cost += self._get_tile_army(tile)
 
                     if island.team == self.target_team:
                         # Enemy island capture
-                        current_econ_value += ITERATIVE_EXPANSION_EN_CAP_VAL
+                        base_capture_value = ITERATIVE_EXPANSION_EN_CAP_VAL
                     else:
                         # Neutral island capture
-                        current_econ_value += 1.0
+                        base_capture_value = 1.0
+                    current_econ_value += base_capture_value
+                    if self.log_debug or OUTPUT_KNAPSACK_TEST_REPRO_LOGS:
+                        logbook.warning(
+                            f"FE_PRIORITY_CAPTURE_TILE {self._diag_border_pair_anchor(border_pair)} "
+                            f"turn={current_turn} tile={tile.x},{tile.y} idx={tile.tile_index} "
+                            f"island={self._diag_island_anchor(island)} "
+                            f"team={island.team} army={self._get_tile_army(tile)} "
+                            f"priority={priority_value:.4f} base={base_capture_value:.4f} "
+                            f"runningEcon={current_econ_value:.4f}")
 
                 # Create entry for this exact turn count if within bounds
                 # required_army = sum(defender_armies) + tiles_traversed + 1
@@ -1448,7 +1491,7 @@ class ArmyFlowExpanderV2:
         while bfs_queue:
             _, depth, _, _, num_friendly_1s_traversed, node_bfs = heapq.heappop(bfs_queue)
             iid = node_bfs.island.unique_id
-            if DebugHelper.is_debug_or_unit_test_mode():
+            if self.log_debug:
                 logbook.warning(
                     f"FE_DIAG_ORDER_GATHER_BFS_POP "
                     f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
@@ -1460,7 +1503,7 @@ class ArmyFlowExpanderV2:
             if iid in bfs_visited:
                 continue
 
-            if DebugHelper.is_debug_or_unit_test_mode() and self.island_builder is not None:
+            if self.log_debug and self.island_builder is not None:
                 flow_from_ids = {edge.source_flow_node.island.unique_id for edge in node_bfs.flow_from}
                 adjacent_friendlies: dict[int, list[tuple[int, int]]] = {}
                 for tile in node_bfs.island.tile_set:
@@ -1481,7 +1524,7 @@ class ArmyFlowExpanderV2:
                     )
 
             if depth > max_turns:
-                if DebugHelper.is_debug_or_unit_test_mode():
+                if self.log_debug:
                     logbook.warning(
                         f"FE_DIAG_ORDER_GATHER_BFS_SKIP_DEPTH "
                         f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
@@ -1571,7 +1614,7 @@ class ArmyFlowExpanderV2:
                         bfs_queue,
                         (-_get_gather_queue_priority(src, next_depth), next_depth, src.island.unique_id, bfs_sequence, next_num_friendly_1s_traversed, src)
                     )
-                    if DebugHelper.is_debug_or_unit_test_mode():
+                    if self.log_debug:
                         logbook.warning(
                             f"FE_DIAG_ORDER_GATHER_BFS_ENQUEUE "
                             f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
@@ -1922,7 +1965,7 @@ class ArmyFlowExpanderV2:
 
         for lookup_table in sorted(goodLookupTables, key=lambda t: groupLookup[t.border_pair]):
             group_idx = groupLookup[lookup_table.border_pair]
-            diag_lookup = DebugHelper.is_debug_or_unit_test_mode() and self._is_diag_lookup_table(lookup_table)
+            diag_lookup = self.log_debug and self._is_diag_lookup_table(lookup_table)
             if diag_lookup:
                 logbook.warning(
                     f"FE_DIAG_MKCP_GROUP {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
@@ -1994,7 +2037,7 @@ class ArmyFlowExpanderV2:
                 target_island_sets.append(frozenset())
                 item_tile_sets.append(frozenset(tile.tile_index for tile in ext_opt.tile_set))
                 is_external_item[idx] = True
-                if DebugHelper.is_debug_or_unit_test_mode():
+                if self.log_debug:
                     logbook.warning(
                         f"FE_DIAG_MKCP_EXTERNAL group={ext_opt.group_id} weight={ext_opt.turns} "
                         f"value={external_value} econ={ext_opt.econ_value:.2f} "
@@ -2006,7 +2049,7 @@ class ArmyFlowExpanderV2:
         if not items:
             return {}
 
-        if OUTPUT_KNAPSACK_TEST_REPRO_LOGS and DebugHelper.is_debug_or_unit_test_mode():
+        if OUTPUT_KNAPSACK_TEST_REPRO_LOGS:
             pre_group_items: list[GroupedKnapsackPreGroupItem] = []
             for idx, item in enumerate(items):
                 if isinstance(item, ExternalPlanOption):
@@ -2218,7 +2261,7 @@ class ArmyFlowExpanderV2:
                 # External options are already TilePlanInterface (e.g., InterceptionOptionInfo)
                 # Return them directly without materialization
                 plans.append(item.plan)
-                if DebugHelper.is_debug_or_unit_test_mode():
+                if self.log_debug:
                     logbook.warning(
                         f"FE_DIAG_MATERIALIZE_EXTERNAL key={key} type={type(item.plan).__name__} "
                         f"turns={item.turns} econ={item.econ_value:.2f} "
@@ -2378,6 +2421,7 @@ class ArmyFlowExpanderV2:
                     intergeneral_analysis=self.island_builder.intergeneral_analysis,
                 )
                 plan._turns = len(gathing) + len(capping) - 1
+                plan.econValue = capture_entry.econ_value
                 if self.log_debug and self._is_diag_border_pair(border_pair):
                     first_move = plan.get_first_move() if plan.get_move_list() else None
                     logbook.warning(
@@ -2497,7 +2541,7 @@ class ArmyFlowExpanderV2:
         entry = min(entry_points, key=lambda t: (t.x, t.y))
         queue.append((entry, 0))
         distances[entry] = 0
-        if DebugHelper.is_debug_or_unit_test_mode():
+        if self.log_debug:
             logbook.warning(
                 f"FE_DIAG_ORDER_PARTIAL_CAPTURE_START island={self._diag_island_summary(island)} "
                 f"tilesToCapture={tiles_to_capture} friendlyTiles={sorted((t.x, t.y) for t in friendly_tiles)} "
@@ -2507,7 +2551,7 @@ class ArmyFlowExpanderV2:
         while queue and len(selected) < tiles_to_capture:
             tile, dist = queue.popleft()
             selected.add(tile)
-            if DebugHelper.is_debug_or_unit_test_mode():
+            if self.log_debug:
                 logbook.warning(
                     f"FE_DIAG_ORDER_PARTIAL_CAPTURE_POP island={island.unique_id} "
                     f"tile={(tile.x, tile.y)} dist={dist} selected={sorted((t.x, t.y) for t in selected)} "
@@ -2517,7 +2561,7 @@ class ArmyFlowExpanderV2:
                 if neighbor in island.tile_set and neighbor not in distances:
                     distances[neighbor] = dist + 1
                     queue.append((neighbor, dist + 1))
-                    if DebugHelper.is_debug_or_unit_test_mode():
+                    if self.log_debug:
                         logbook.warning(
                             f"FE_DIAG_ORDER_PARTIAL_CAPTURE_ENQUEUE island={island.unique_id} "
                             f"from={(tile.x, tile.y)} neighbor={(neighbor.x, neighbor.y)} dist={dist + 1}"
@@ -2618,7 +2662,7 @@ class ArmyFlowExpanderV2:
         exit_tile = min(exit_points, key=lambda t: (t.x, t.y))
         queue.append((exit_tile, 0))
         distances[exit_tile] = 0
-        if DebugHelper.is_debug_or_unit_test_mode():
+        if self.log_debug:
             logbook.warning(
                 f"FE_DIAG_ORDER_PARTIAL_GATHER_START island={self._diag_island_summary(island)} "
                 f"tilesToGather={tiles_to_gather} captureIds={sorted(capture_island_ids)} "
@@ -2630,7 +2674,7 @@ class ArmyFlowExpanderV2:
         while queue and len(selected) < tiles_to_gather:
             tile, dist = queue.popleft()
             selected.add(tile)
-            if DebugHelper.is_debug_or_unit_test_mode():
+            if self.log_debug:
                 logbook.warning(
                     f"FE_DIAG_ORDER_PARTIAL_GATHER_POP island={island.unique_id} "
                     f"tile={(tile.x, tile.y)} dist={dist} selected={sorted((t.x, t.y) for t in selected)} "
@@ -2640,7 +2684,7 @@ class ArmyFlowExpanderV2:
                 if neighbor in island.tile_set and neighbor not in distances:
                     distances[neighbor] = dist + 1
                     queue.append((neighbor, dist + 1))
-                    if DebugHelper.is_debug_or_unit_test_mode():
+                    if self.log_debug:
                         logbook.warning(
                             f"FE_DIAG_ORDER_PARTIAL_GATHER_ENQUEUE island={island.unique_id} "
                             f"from={(tile.x, tile.y)} neighbor={(neighbor.x, neighbor.y)} dist={dist + 1}"

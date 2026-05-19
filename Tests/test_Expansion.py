@@ -3,6 +3,7 @@ import time
 import typing
 
 import SearchUtils
+from BehaviorAlgorithms import FlowExpansion
 from ExpandUtils import get_round_plan_with_expansion
 from Interfaces import TilePlanInterface
 from Models import Move
@@ -24,6 +25,8 @@ class ExpansionTests(TestBase):
         bot.info_render_leaf_move_values = True
         bot.info_render_tile_islands = True
         bot.info_render_flow_expand = True
+        FlowExpansion.OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
+        FlowExpansion.SHOULD_LOG_DEBUG_BY_DEFAULT = True
         # bot.info_render_tile_states = True
         # bot.expansion_use_legacy = False
 
@@ -595,16 +598,16 @@ bot_target_player=1
         self.assertPlayerTileCountGreater(simHost, general.player, 58)
 
     def test_should_perform_early_gather_to_tendrils__cramped(self):
-        debugMode = False
+        debugMode = True
         MapBase.DO_NOT_RANDOMIZE = True
         mapFile = 'GameContinuationEntries/should_perform_early_gather_to_tendrils___SlFziucN6---0--50.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
-
-        self.enable_search_time_limits_and_disable_debug_asserts()
-        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        #
+        # self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
         bot.tileIslandBuilder.use_debug_asserts = True

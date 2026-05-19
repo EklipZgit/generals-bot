@@ -826,12 +826,23 @@ def _knapsack_max_set_gather_iterative_prune(
                     bestTurns = curTurns
 
                 if bestVal / max(1, bestTurns) > gatherVal * 1.04 / max(1, curTurns):
-                    msg = f'  -- overriding poor re-plan {gatherVal:.1f}/{len(rootForestSubset)} back to bestVal {bestVal:.1f}/{len(bestSet)}'
+                    lowValueTiles = sorted(
+                        rootForestSubset,
+                        key=lambda t: rewardMatrix.raw[t.tile_index]
+                    )[:25]
+                    lowValueTileLog = ' | '.join(
+                        f'{t} val={rewardMatrix.raw[t.tile_index]:.3f} armyCost={armyCostMatrix.raw[t.tile_index]:.3f} pl={t.player} army={t.army} city={t.isCity} gen={t.isGeneral} swamp={t.isSwamp}'
+                        for t in lowValueTiles
+                    )
+                    bestSetSize = len(bestSet) if bestSet is not None else 0
+                    msg = f'  -- overriding poor re-plan {gatherVal:.1f}/{len(rootForestSubset)} armySum {armySum:.1f} curTurns {curTurns} back to bestVal {bestVal:.1f}/{bestSetSize} bestTurns {bestTurns}'
                     logEntries.append(msg)
+                    logEntries.append(f'  -- poor re-plan lowest value tiles: {lowValueTileLog}')
                     if liveRenderer:
                         liveRenderer.view_info.add_info_line(msg)
-                    newStartTilesDict = bestStart.copy()
-                    rootForestSubset = bestSet.copy()
+                    if bestSet is not None:
+                        newStartTilesDict = bestStart.copy()
+                        rootForestSubset = bestSet.copy()
 
             if pruneToTurns == fullTurns:
                 break

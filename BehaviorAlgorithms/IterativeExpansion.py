@@ -2220,9 +2220,10 @@ class ArmyFlowExpander(object):
             ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.enemy_backfill_nodes_inc_neut, Colors.LIGHT_BLUE)
 
         if noNeut:
-            viewInfo.add_info_line_opt_log(f'BLACK/PINK = NO neutral max flows', noLog=noLog)
+            # viewInfo.add_info_line_opt_log(f'BLACK/PINK = NO neutral max flows', noLog=noLog)
             if lastRun is not None:
-                viewInfo.add_info_line_opt_log(lastRun.flow_stats_no_neut.summary_line('NO neut'), noLog=noLog)
+                pass
+                # viewInfo.add_info_line_opt_log(lastRun.flow_stats_no_neut.summary_line('NO neut'), noLog=noLog)
             else:
                 viewInfo.add_info_line_opt_log(ArmyFlowExpander._get_flow_graph_summary_line(flowGraph.root_flow_nodes_no_neut, flowGraph.enemy_backfill_nodes_no_neut, flowGraph.flow_node_lookup_by_island_no_neut, 'NO neut'), noLog=noLog)
             ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.enemy_backfill_nodes_no_neut, Colors.WHITE_PURPLE)

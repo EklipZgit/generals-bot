@@ -605,7 +605,9 @@ class GameSimulatorHost(object):
             botHost.eklipz_bot.initialize_from_map_for_first_time(player.map)
             # botHost.eklipz_bot.player = (botHost.eklipz_bot.general.player + 1) % 2
             # botHost.eklipz_bot.targetPlayerObj = botHost.eklipz_bot._map.players[botHost.eklipz_bot.player]
+            botHost.eklipz_bot.is_pre_resume_init_turn = playerMapVision is not None and playerIndex == playerMapVision.player_index
             botHost.receive_update_no_move(player.map, time.time_ns() / NS_CONVERTER)
+
             # botHost.eklipz_bot.init_turn()
             # botHost.make_move(player.map, time.time_ns() / NS_CONVERTER)
 
@@ -623,7 +625,6 @@ class GameSimulatorHost(object):
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()
                 botHost.eklipz_bot.teammate_communicator.begin_next_turn()
             botHost.eklipz_bot.viewInfo.clear_for_next_turn()
-
             if playerMapVision is not None and playerIndex == playerMapVision.player_index:
                 botHost.eklipz_bot.load_resume_data(playerMapVision.resume_data)
 

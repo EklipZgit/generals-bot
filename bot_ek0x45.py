@@ -207,6 +207,7 @@ class EklipZBot(object):
         self.redGatherTreeNodes = None
         self.isInitialized = False
         self.last_init_turn: int = 0
+        self.is_pre_resume_init_turn: bool = False
         """
         Mainly just for testing purposes, prevents the bot from performing a turn update more than once per turn,
         which tests sometimes need to trigger ahead of time in order to check bot state ahead of a move.
@@ -241,7 +242,15 @@ class EklipZBot(object):
 
         self.target_player_gather_targets: typing.Set[Tile] = set()
         self.target_player_gather_path: Path | None = None
+        """
+        This path may be from the general, or from a forward city, or from the central_defense_point etc, and will often be shorter than the true distance between generals.
+        """
+
         self.shortest_path_to_target_player: Path | None = None
+        """
+        This path should always be from the general to the opponents general.
+        """
+
         self.defensive_spanning_tree: typing.Set[Tile] = set()
         """Main defensive spanning tree using cities_in_play (cities not further from enemy than our gen is)."""
         self.last_central_defense_signature: tuple[int | None, tuple[tuple[int, int], ...]] | None = None
@@ -516,7 +525,11 @@ class EklipZBot(object):
 
             if move is not None and self.curPath is not None:
                 curPathMove = self.curPath.get_first_move()
-                if curPathMove.source == move.source and curPathMove.dest != move.dest:
+                if curPathMove is None:
+                    self.info("Returned a move while curPath had no next move. Resetting path...")
+                    self.curPath = None
+                    self.curPathPrio = -1
+                elif curPathMove.source == move.source and curPathMove.dest != move.dest:
                     self.info("Returned a move using the tile that was curPath, but wasn't the next path move. Resetting path...")
                     self.curPath = None
                     self.curPathPrio = -1
@@ -672,10 +685,11 @@ class EklipZBot(object):
                             if self.armyTracker.try_find_army_sink(player.index, annihilatedFog, tookNeutCity=BotCityOps.did_player_just_take_fog_city(self, player.index)):
                                 break
 
-        with self.perf_timer.begin_move_event('ArmyTracker fog land builder'):
-            fogTileCounts = self.opponent_tracker.get_all_player_fog_tile_count_dict()
-            for player in self._map.players:
-                self.armyTracker.update_fog_prediction(player.index, fogTileCounts[player.index], self.targetPlayerExpectedGeneralLocation)
+        if not self.is_pre_resume_init_turn:
+            with self.perf_timer.begin_move_event('ArmyTracker fog land builder'):
+                fogTileCounts = self.opponent_tracker.get_all_player_fog_tile_count_dict()
+                for player in self._map.players:
+                    self.armyTracker.update_fog_prediction(player.index, fogTileCounts[player.index], self.targetPlayerExpectedGeneralLocation)
 
         self._evaluatedUndiscoveredCache = []
         with self.perf_timer.begin_move_event('get_predicted_target_player_general_location'):
@@ -809,7 +823,10 @@ class EklipZBot(object):
         if self.curPath is not None:
             nextMove = self.curPath.get_first_move()
 
-            if nextMove and nextMove.dest is not None and nextMove.dest.isMountain:
+            if nextMove is None:
+                self.viewInfo.add_info_line(f'Killing curPath because it has no next move.')
+                self.curPath = None
+            elif nextMove.dest is not None and nextMove.dest.isMountain:
                 self.viewInfo.add_info_line(f'Killing curPath because it moved through a mountain.')
                 self.curPath = None
 
@@ -1133,12 +1150,18 @@ class EklipZBot(object):
 
         if kingKillPath is not None and threat.threatType == ThreatType.Kill:
             attackingWithSavePath = defenseSavePath is not None and defenseSavePath.start.tile == kingKillPath.start.tile
+            attackingWithSelectedExpansionPlan = (
+                    self.expansion_plan is not None
+                    and self.expansion_plan.selected_option is not None
+                    and self.expansion_plan.selected_option.start is not None
+                    and self.expansion_plan.selected_option.start.tile == kingKillPath.start.tile
+            )
             attackingWithRestrictedArmyMovement = False
             blocks = self.blocking_tile_info.get(kingKillPath.start.tile)
             if blocks:
                 if kingKillPath.start.next.tile in blocks.blocked_destinations:
                     attackingWithRestrictedArmyMovement = True
-            if not attackingWithSavePath and not attackingWithRestrictedArmyMovement:
+            if not attackingWithSavePath and not attackingWithSelectedExpansionPlan and not attackingWithRestrictedArmyMovement:
                 if defenseSavePath is not None:
                     logbook.info(f"savePath was {str(defenseSavePath)}")
                 else:
@@ -1156,7 +1179,7 @@ class EklipZBot(object):
                 else:
                     logbook.info("savePath was NONE")
                 logbook.info(
-                    f"savePath tile was also kingKillPath tile, skipped kingKillPath {str(kingKillPath)}")
+                    f"savePath or expansion plan tile was also kingKillPath tile, skipped kingKillPath {str(kingKillPath)}")
 
         with self.perf_timer.begin_move_event('ARMY SCRIMS'):
             armyScrimMove = BotCombatOps.check_for_army_movement_scrims(self)
@@ -1689,6 +1712,8 @@ class EklipZBot(object):
             self.opponent_tracker.targetPlayer = self.targetPlayer
         if f'targetPlayerExpectedGeneralLocation' in resume_data:  # ={self.targetPlayerExpectedGeneralLocation.x},{self.targetPlayerExpectedGeneralLocation.y}')
             self.targetPlayerExpectedGeneralLocation = BotStateQueries.parse_tile_str(self, resume_data[f'targetPlayerExpectedGeneralLocation'])
+        if f'bot_locked_launch_point' in resume_data:
+            self.locked_launch_point = BotStateQueries.parse_tile_str(self, resume_data[f'bot_locked_launch_point'])
         if f'bot_is_all_in_losing' in resume_data:  # ={self.is_all_in_losing}')
             self.is_all_in_losing = BotStateQueries.parse_bool(self, resume_data[f'bot_is_all_in_losing'])
         if f'bot_all_in_losing_counter' in resume_data:  # ={self.all_in_losing_counter}')
@@ -1760,6 +1785,10 @@ class EklipZBot(object):
             tiles = BotSerialization.convert_string_to_tile_set(self, resume_data[f'TempFogTiles'])
             for tile in tiles:
                 tile.isTempFogPrediction = True
+            if len(tiles) > 0:
+                for player in self._map.players:
+                    if not self._map.is_player_on_team_with(self._map.player_index, player.index):
+                        self.armyTracker.should_recalc_fog_land_by_player[player.index] = False
         if f'DiscoveredNeutral' in resume_data:
             tiles = BotSerialization.convert_string_to_tile_set(self, resume_data[f'DiscoveredNeutral'])
             for tile in tiles:
@@ -1821,6 +1850,7 @@ class EklipZBot(object):
         # force a rebuild
         self.cityAnalyzer.reset_reachability()
         self.last_central_defense_signature = None
+        self.is_pre_resume_init_turn = False
 
         return
 
@@ -1851,7 +1881,7 @@ class EklipZBot(object):
 
             # self.undiscovered_priorities = None
 
-            self.shortest_path_to_target_player = BotTargeting.get_path_to_target_player(self, isAllIn=BotStateQueries.is_all_in(self), cutLength=None)
+            self.shortest_path_to_target_player = BotTargeting.get_path_to_target_player(self, isAllIn=BotStateQueries.is_all_in(self), cutLength=None, fromTile=self.general)
             self.info(f'DEBUG: shortest_path_to_target_player {self.shortest_path_to_target_player}')
             if self.shortest_path_to_target_player is None:
                 self.shortest_path_to_target_player = Path()
@@ -1860,7 +1890,9 @@ class EklipZBot(object):
 
             self.enemy_attack_path = BotDefense.get_enemy_probable_attack_path(self, self.targetPlayer)
 
-            self.target_player_gather_path = self.shortest_path_to_target_player
+            self.target_player_gather_path = BotTargeting.get_path_to_target_player(self, isAllIn=BotStateQueries.is_all_in(self), cutLength=None)
+            if self.target_player_gather_path is None:
+                self.target_player_gather_path = self.shortest_path_to_target_player
 
             # limit = max(self._map.cols, self._map.rows)
             # if self.target_player_gather_path is not None and self.target_player_gather_path.length > limit and self._map.players[self.general.player].cityCount > 1:

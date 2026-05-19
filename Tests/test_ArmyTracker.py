@@ -7,6 +7,7 @@ import logbook
 import Gather
 import SearchUtils
 from Algorithms import MapSpanningUtils
+from BehaviorAlgorithms import FlowExpansion
 from Gather import GatherDebug
 from Models import Move
 from Path import Path
@@ -23,6 +24,7 @@ class ArmyTrackerTests(TestBase):
         bot.info_render_tile_deltas = True
         bot.info_render_army_emergence_values = True
         # bot.info_render_general_undiscovered_prediction_values = True
+        FlowExpansion.OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
 
         return bot
 
@@ -2546,3 +2548,71 @@ a1   b1   b1   bG1
         self.assertNoArmyOn(playerMap.At(7, 5), bot)
         self.assertNoArmyOn(playerMap.At(7, 6), bot)
         self.assertNoArmyOn(playerMap.At(6, 6), bot)
+
+
+    def test_should_not_incorrectly_infer_movement_from_city_on_obvious_collision(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_incorrectly_infer_movement_from_city_on_obvious_collision___6uDG4jdyD---0--82.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 82, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=82)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,3->11,3')
+        simHost.queue_player_moves_str(general.player, '11,3->11,2')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertNoFogMismatches(simHost, general.player, excludeTempFogPredictions=True, aroundTile=playerMap.At(12,3))
+
+    def test_should_know_the_general_is_literally_right_there__wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFileReal = 'GameContinuationEntries/should_know_the_general_is_literally_right_there__wtf___xN8uaKs6h---1--92_real.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFileReal, 92, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_know_the_general_is_literally_right_there__wtf___xN8uaKs6h---1--92.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '2,15->3,15')
+        simHost.queue_player_moves_str(general.player, '4,16->4,17')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertValidGeneralPositionXY(bot, 2, 15, enemyGeneral.player) # Real position needs to still be valid
+        self.assertInvalidGeneralPositionXY(bot, 1, 12, enemyGeneral.player) # For SURE this shouldn't be valid
+        self.assertInvalidGeneralPositionXY(bot, 2, 13, enemyGeneral.player) # This technically shouldn't be valid, we should know it can only be within 1 or perhaps 2 in this case...?
+
+
+    def test_fog_land_builder_should_not_overly_reduce_land(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFileReal = 'GameContinuationEntries/should_know_the_general_is_literally_right_there__wtf___xN8uaKs6h---1--92_real.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFileReal, 92, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_know_the_general_is_literally_right_there__wtf___xN8uaKs6h---1--92.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '2,15->3,15')
+        simHost.queue_player_moves_str(general.player, '4,16->4,17')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertValidGeneralPositionXY(bot, 2, 15, enemyGeneral.player) # Real position needs to still be valid
+        self.assertInvalidGeneralPositionXY(bot, 1, 12, enemyGeneral.player) # For SURE this shouldn't be valid
+        self.assertInvalidGeneralPositionXY(bot, 2, 13, enemyGeneral.player) # This technically shouldn't be valid, we should know it can only be within 1 or perhaps 2 in this case...?

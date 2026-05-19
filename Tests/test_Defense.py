@@ -20,16 +20,16 @@ class DefenseTests(TestBase):
     def __init__(self, testName):
         super().__init__(testName)
 
-        TestBase.GLOBAL_BYPASS_REAL_TIME_TEST = True
-        TestBase.GLOBAL_BYPASS_RENDERING = True
+        # TestBase.GLOBAL_BYPASS_REAL_TIME_TEST = True
+        # TestBase.GLOBAL_BYPASS_RENDERING = True
+        GatherDebug.USE_DEBUG_ASSERTS = False
+        DebugHelper.IS_DEBUGGING = True
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
         bot = super().get_debug_render_bot(simHost, player)
 
         bot.info_render_gather_values = True
         bot.info_render_centrality_distances = True
-        GatherDebug.USE_DEBUG_ASSERTS = False
-        DebugHelper.IS_DEBUGGING = True
 
         return bot
 
@@ -2997,3 +2997,81 @@ class DefenseTests(TestBase):
 # 98f 74p threatDist and depthDist swapped
 # 87f 84p realDist moved first
 # 84f 124p 4ig nextTileDepthDist + bMap[nextTile] as priority heuristic for defense, plus some choke tweaks
+
+    def test_should_hit_threat_tile_not_parallel(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_hit_threat_tile_not_parallel___IODJNqzum---0--294.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 294, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=294)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,7->17,7->17,6')
+        simHost.queue_player_moves_str(general.player, '18,6->18,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertLess(playerMap.At(17,6).army, 23, 'Should block the big tile not the little tile?')
+
+    def test_should_hit_both_threat_tiles_ideally(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_hit_threat_tile_not_parallel___IODJNqzum---0--294.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 294, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=294)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '16,7->17,7->17,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(17, 6, 'should have moved onto the 22 probably')
+
+    def test_shouldnt_think_dead_when_not_dead(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_think_dead_when_not_dead___8XnaeeVOh---0--395.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 395, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=395)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,15->7,15->7,16->17,16')
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '9,15->7,15  13,12->13,14->12,14->12,15')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+
+    def test_shouldnt_think_dead_when_not_dead_p2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_think_dead_when_not_dead_p2___AIQRj8HWK---0--139.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 139, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=139)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '9,9->19,9->19,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
+        self.assertNoFriendliesKilled(map, general)
+

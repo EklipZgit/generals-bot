@@ -1371,6 +1371,26 @@ class OpponentTracker(object):
         player = self.map.players[playerIndex]
         return self.get_player_gather_queue(player.index).get_amount_dict()
 
+    def get_max_possible_general_army_after_emergence(self, playerIndex: int, emergenceAmount: int) -> int:
+        currentCycleStats = self.get_current_cycle_stats_by_player(playerIndex)
+        if currentCycleStats is None:
+            return -1
+
+        fogArmy = currentCycleStats.approximate_fog_army_available_total - abs(emergenceAmount)
+        fogCityArmy = currentCycleStats.approximate_fog_city_army
+        while fogArmy < 0 and fogCityArmy > 1:
+            cityArmyPulled = fogCityArmy // 2
+            fogArmy += cityArmyPulled
+            fogCityArmy -= cityArmyPulled
+
+        if fogArmy < 0:
+            fogArmy = 0
+        if fogCityArmy < 0:
+            fogCityArmy = 0
+
+        _, __, fogCityCount = self.calculate_player_fog_tile_data(playerIndex)
+        return fogArmy + max(0, fogCityArmy - fogCityCount)
+
     def _check_missing_fog_gather_tiles(self, currentCycleStats: CycleStatsData):
         for playerIdx in currentCycleStats.players:
             playerFogTileCount, playerFogArmyAmount, playerFogCityCount = self.calculate_player_fog_tile_data(playerIdx)
@@ -1443,19 +1463,20 @@ class OpponentTracker(object):
         # .90 seemed high
         thresh = (teamTotalFogEmergenceEstAvailable - 1) * 0.87
         fullFogReset = False
-        if emergence > thresh:
+        if emergence > thresh and (not tile.delta.gainedSight or emergence > 4):
             logbook.info(
                 f'E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable})')
             if emergence > teamTotalFogEmergenceEstAvailable:
-                msg = f'UNDEREST BY {emergence - teamTotalFogEmergenceEstAvailable}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable})'
+                msg = f'UNDEREST OppTrack BY {emergence - teamTotalFogEmergenceEstAvailable}! E+: fullFogReset - emergence {emergence} > thresh {thresh:.1f} (based on teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable})'
                 logbook.error(msg)
                 if self.view_info is not None:
                     self.view_info.add_info_line(msg)
                     self.view_info.add_targeted_tile(tile, TargetStyle.ORANGE)
             fullFogReset = True
+            # where the fuck did the magic -4 and + 2 below come from?
             if emergence >= teamTotalFogEmergenceEstAvailable + cityDistanceWasteApprox - 4 and not (tile.delta.gainedSight and tile.army < emergence):
                 maxDist = max(1, teamTotalFogEmergenceEstAvailable + cityDistanceWasteApprox - emergence + 2) * 2
-                self.view_info.add_info_line(f'BC emgnce {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable}+cityWaste{cityDistanceWasteApprox}, CONF WITHIN {maxDist} {tile}')
+                self.view_info.add_info_line(f'BC emgnce {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable}+cityWaste{cityDistanceWasteApprox}, CONF WITHIN {maxDist} general limit to {tile}')
                 self.send_general_distance_notification(maxDist, tile, generalConfidence=teamScores.cityCount == 1)
 
         logbook.info(

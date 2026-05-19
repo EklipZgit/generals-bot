@@ -358,6 +358,8 @@ class BotRendering:
         data.append(f'bot_target_player={bot.targetPlayer}')
         if bot.targetPlayerExpectedGeneralLocation and bot.targetPlayer != -1:
             data.append(f'targetPlayerExpectedGeneralLocation={bot.targetPlayerExpectedGeneralLocation.x},{bot.targetPlayerExpectedGeneralLocation.y}')
+        if bot.locked_launch_point is not None:
+            data.append(f'bot_locked_launch_point={bot.locked_launch_point.x},{bot.locked_launch_point.y}')
         data.append(f'bot_is_all_in_losing={bot.is_all_in_losing}')
         data.append(f'bot_all_in_losing_counter={bot.all_in_losing_counter}')
 

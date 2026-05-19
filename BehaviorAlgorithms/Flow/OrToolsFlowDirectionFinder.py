@@ -15,6 +15,8 @@ from BehaviorAlgorithms.Flow.NxFlowGraphData import NxFlowGraphData
 from MapMatrix import MapMatrix
 from PerformanceTimer import PerformanceTimer
 
+DEMAND_SATURATION_FROM_GENERAL_ONLY = False
+
 if typing.TYPE_CHECKING:
     from Algorithms import TileIslandBuilder, TileIsland
     from ArmyAnalyzer import ArmyAnalyzer
@@ -282,8 +284,63 @@ class DirectOrToolsGraphBuilder(object):
             node_supply_map[fake_node] = cumulative_demand
             all_node_ids.add(fake_node)
             fake_node_excess_supply = max(0, cumulative_demand)
-            fake_node_enemy_general_fallback_capacity = (fake_node_excess_supply + 1) // 2
-            fake_node_friendly_general_fallback_capacity = fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
+            fake_node_enemy_general_fallback_capacity: int
+            friendly_pressure_capacities_by_island_id: typing.Dict[int, int]
+            if DEMAND_SATURATION_FROM_GENERAL_ONLY:
+                fake_node_enemy_general_fallback_capacity = (fake_node_excess_supply + 1) // 2
+                friendly_pressure_capacities_by_island_id = {
+                    fr_general_island.unique_id: fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
+                }
+                logbook.warning(
+                    f'FLOW_DEMAND_SATURATION mode=general_only fakeNode={fake_node} excess={fake_node_excess_supply} '
+                    f'enemyGeneralIsland={target_general_island.unique_id} enemyCapacity={fake_node_enemy_general_fallback_capacity} '
+                    f'friendlyGeneralIsland={fr_general_island.unique_id} friendlyCapacity={friendly_pressure_capacities_by_island_id[fr_general_island.unique_id]}'
+                )
+            else:
+                fake_node_enemy_general_fallback_capacity = (fake_node_excess_supply * 35 + 50) // 100
+                friendly_fallback_capacity = fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
+                pressure_islands_by_id: typing.Dict[int, 'TileIsland'] = {fr_general_island.unique_id: fr_general_island}
+                pressure_tiles = sorted(
+                    (
+                        tile
+                        for island in islands.all_tile_islands
+                        if island.team == team
+                        for tile in island.tile_set
+                        if tile.army >= 7
+                    ),
+                    key=lambda candidate: (candidate.army, -candidate.tile_index),
+                    reverse=True,
+                )
+                for pressure_tile in pressure_tiles:
+                    if len(pressure_islands_by_id) >= 11:
+                        break
+                    pressure_island = islands.tile_island_lookup.raw[pressure_tile.tile_index]
+                    if pressure_island is not None:
+                        pressure_islands_by_id[pressure_island.unique_id] = pressure_island
+                pressure_islands = list(pressure_islands_by_id.values())
+                friendly_pressure_capacities_by_island_id = {}
+                pressure_island_count = len(pressure_islands)
+                base_pressure_capacity = friendly_fallback_capacity // pressure_island_count
+                remainder_pressure_capacity = friendly_fallback_capacity - base_pressure_capacity * pressure_island_count
+                for pressure_island in pressure_islands:
+                    friendly_pressure_capacities_by_island_id[pressure_island.unique_id] = base_pressure_capacity
+                if pressure_islands:
+                    friendly_pressure_capacities_by_island_id[pressure_islands[0].unique_id] += remainder_pressure_capacity
+                pressure_island_log = [
+                    (
+                        pressure_island.unique_id,
+                        pressure_island.sum_army,
+                        pressure_island.tile_count,
+                        friendly_pressure_capacities_by_island_id[pressure_island.unique_id],
+                        [(tile.x, tile.y, tile.army) for tile in pressure_island.tiles_by_army[:4]],
+                    )
+                    for pressure_island in pressure_islands
+                ]
+                logbook.warning(
+                    f'FLOW_DEMAND_SATURATION mode=distributed fakeNode={fake_node} excess={fake_node_excess_supply} '
+                    f'enemyGeneralIsland={target_general_island.unique_id} enemyCapacity={fake_node_enemy_general_fallback_capacity} '
+                    f'friendlyCapacityTotal={friendly_fallback_capacity} pressureIslands={pressure_island_log}'
+                )
 
             # Edges to/from neutral sinks
             neut_sink_weight = 10 if use_neutral_flow else 0
@@ -321,12 +378,16 @@ class DirectOrToolsGraphBuilder(object):
             arc_costs.append(backpressure_weight)
             all_node_ids.add(target_general_island.unique_id)
 
-            # fakeNode → frGeneralIsland.unique_id
-            arc_starts.append(fake_node)
-            arc_ends.append(fr_general_island.unique_id)
-            arc_caps.append(fake_node_friendly_general_fallback_capacity)
-            arc_costs.append(10000)
-            all_node_ids.add(fr_general_island.unique_id)
+            for friendly_pressure_island_id, friendly_pressure_capacity in friendly_pressure_capacities_by_island_id.items():
+                logbook.warning(
+                    f'FLOW_DEMAND_SATURATION_ARC fakeNode={fake_node} targetIsland={friendly_pressure_island_id} '
+                    f'capacity={friendly_pressure_capacity} cost=10000'
+                )
+                arc_starts.append(fake_node)
+                arc_ends.append(friendly_pressure_island_id)
+                arc_caps.append(friendly_pressure_capacity)
+                arc_costs.append(10000)
+                all_node_ids.add(friendly_pressure_island_id)
 
         # ----------------------------------------------------------------
         # Phase 4: build sorted node index arrays (mirrors NxToOrToolsConverter)
@@ -557,6 +618,7 @@ class OrToolsFlowComputer(object):
 
                 from_is_fake = abs(from_orig) in fake_nodes
                 to_is_fake = abs(to_orig) in fake_nodes
+                is_fake_saturation_arc = from_is_fake or to_is_fake
 
                 if self.log_debug:
                     logbook.info(
@@ -572,6 +634,12 @@ class OrToolsFlowComputer(object):
                     logbook.warning(
                         f'FLOW_DIAG_SOLVED_ARC arc={arc_idx} {from_orig}->{to_orig} flow={flow_amount} '
                         f'cost={int(graph_data.unit_costs[arc_idx])} cap={int(graph_data.capacities[arc_idx])} '
+                        f'from_fake={from_is_fake} to_fake={to_is_fake}'
+                    )
+                if is_fake_saturation_arc:
+                    logbook.warning(
+                        f'FLOW_DEMAND_SATURATION_SOLVED_ARC arc={arc_idx} {from_orig}->{to_orig} '
+                        f'flow={flow_amount} cost={int(graph_data.unit_costs[arc_idx])} cap={int(graph_data.capacities[arc_idx])} '
                         f'from_fake={from_is_fake} to_fake={to_is_fake}'
                     )
 

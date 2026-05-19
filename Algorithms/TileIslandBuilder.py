@@ -679,9 +679,12 @@ class TileIslandBuilder(object):
         # Snapshot full_island parents before clearing child pointers so they remain
         # available as reuse candidates in _rebuild_leaf_islands_from_component.
         priorParentsByLeaf: typing.Dict[int, TileIsland] = {}
+        priorParentChildrenByParent: typing.Dict[TileIsland, typing.Set[TileIsland]] = {}
         for island in impactedLeafIslands:
             if island.full_island is not None:
                 priorParentsByLeaf[island.unique_id] = island.full_island
+                if island.full_island not in priorParentChildrenByParent:
+                    priorParentChildrenByParent[island.full_island] = set(island.full_island.child_islands or [])
 
         # Remove impacted islands from all neighbors' border_islands to prevent phantom borders
         for island in impactedLeafIslands:
@@ -722,7 +725,12 @@ class TileIslandBuilder(object):
                 lambda cur, nxt: not nxt.isObstacle and self.teams[nxt.player] == team
             )
             componentPriorLeafIslands = {priorLeafIslandByTile[t] for t in componentTiles if t in priorLeafIslandByTile and priorLeafIslandByTile[t].team == team}
-            componentPriorParents = {priorParentsByLeaf[leaf.unique_id] for leaf in componentPriorLeafIslands if leaf.unique_id in priorParentsByLeaf}
+            componentPriorParents = {
+                priorParentsByLeaf[leaf.unique_id]
+                for leaf in componentPriorLeafIslands
+                if leaf.unique_id in priorParentsByLeaf
+                and priorParentChildrenByParent[priorParentsByLeaf[leaf.unique_id]].issubset(componentPriorLeafIslands)
+            }
             rebuiltIslands.extend(self._rebuild_leaf_islands_from_component(componentTiles, team, changedArmyTiles, changedOwnerTiles, componentPriorLeafIslands, mode, componentPriorParents))
 
         # Build refreshTiles and refreshIslands AFTER the rebuild so tile_island_lookup reflects
@@ -1654,10 +1662,9 @@ class TileIslandBuilder(object):
                 if priorIsland is not None:
                     self._update_island_state(priorIsland, tileSet, island.team, len(tileSet), sum(t.army for t in tileSet))
                     newIsland = priorIsland
-                    newIsland.name = namedTileSet.name
                 else:
                     newIsland = TileIsland(tileSet, island.team)
-                    newIsland.name = namedTileSet.name
+                newIsland.name = namedTileSet.name
                 newIsland.full_island = rootIsland
                 newIsland.sum_army_all_adjacent_friendly = island.sum_army_all_adjacent_friendly
                 newIsland.tile_count_all_adjacent_friendly = island.tile_count_all_adjacent_friendly

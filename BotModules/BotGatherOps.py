@@ -71,7 +71,7 @@ class BotGatherOps:
         player = bot._map.players[bot.general.player]
         enemyGather = False
         if (
-                BM.BotDefense.BotDefense.get_approximate_fog_risk_deficit(bot, ) < 10
+                BM.BotDefense.BotDefense.get_approximate_fog_risk_deficit(bot) < 10
                 and not bot._map.remainingPlayers > 2
                 and not bot.opponent_tracker.winning_on_economy(byRatio=1.1, cityValue=0)
         ):
@@ -172,12 +172,12 @@ class BotGatherOps:
             enemyGather = False
             neutralGather = False
 
-        if (enemyGather or neutralGather) and not BotStateQueries.is_all_in(bot, ) and bot._map.turn >= 150:
+        if (enemyGather or neutralGather) and not BotStateQueries.is_all_in(bot) and bot._map.turn >= 150:
             gathString += f" +leaf(enemy {enemyGather})"
             leafPruneStartTime = time.perf_counter()
 
             shortestLength = bot.shortest_path_to_target_player.length
-            if not BotStateQueries.is_all_in(bot, ) and not bot.defend_economy and enemyGather and bot._map.turn >= 150 and leafMoves and not isNonDominantFfa:
+            if not BotStateQueries.is_all_in(bot) and not bot.defend_economy and enemyGather and bot._map.turn >= 150 and leafMoves and not isNonDominantFfa:
                 goodLeaves = bot.board_analysis.find_flank_leaves(
                     leafMoves,
                     minAltPathCount=2,
@@ -219,9 +219,9 @@ class BotGatherOps:
 
             logbook.info(f"pruning leaves and stuff took {time.perf_counter() - leafPruneStartTime:.4f}")
 
-        forceGatherToEnemy = BM.BotDefense.BotDefense.should_force_gather_to_enemy_tiles(bot, )
+        forceGatherToEnemy = BM.BotDefense.BotDefense.should_force_gather_to_enemy_tiles(bot)
 
-        gatherPriorities = BotGatherOps.get_gather_tiebreak_matrix(bot, )
+        gatherPriorities = BotGatherOps.get_gather_tiebreak_matrix(bot)
 
         usingNeedToKill = len(needToKillTiles) > 0 and not bot.flanking and not bot.defend_economy
 
@@ -330,7 +330,7 @@ class BotGatherOps:
                 distancePriorities=distancePriorities,
                 useTrueValueGathered=useTrueValueGathered,
                 targetTurns=tgTurns,
-                pruneToValuePerTurn=bot.defend_economy)
+                pruneToValuePerTurn=False)
 
         if move is not None:
             if move.dest.player != bot.player.index and move.dest not in bot.target_player_gather_targets and not bot.flanking and needToKillTiles is not None and move.dest in needToKillTiles:
@@ -343,8 +343,8 @@ class BotGatherOps:
             if move.dest.isCity and move.dest.player == bot.player.index and move.dest in bot.cities_gathered_this_cycle:
                 bot.cities_gathered_this_cycle.remove(move.dest)
 
-            # if not isinstance(bot.curPath, MoveListPath):
-                # bot.curPath = None
+            if not isinstance(bot.curPath, MoveListPath):
+                bot.curPath = None
             bot.info(
                 f"GATHER {gathString}! Gather move: {move} Duration {time.perf_counter() - gathStartTime:.4f}")
             return BotRepetition.move_half_on_repetition(bot, move, 6, 4)
@@ -411,14 +411,15 @@ class BotGatherOps:
         turnOffset = bot._map.turn + bot.timings.offsetTurns
         turnCycleOffset = turnOffset % bot.timings.cycleTurns
 
-        gatherNodeMoveSelectorFunc = BotGatherOps._get_tree_move_default_value_func(bot, )
-        if bot.likely_kill_push:
-            potThreat = bot.dangerAnalyzer.fastestPotentialThreat
-            if potThreat is None and bot.enemy_attack_path is not None:
-                aa = ArmyAnalyzer(bot._map, bot.enemy_attack_path.start.tile, bot.enemy_attack_path.tail.tile)
-                potThreat = ThreatObj(bot.enemy_attack_path.length, bot.enemy_attack_path.value, bot.enemy_attack_path, ThreatType.Vision, armyAnalysis=aa)
-            if potThreat is not None:
-                gatherNodeMoveSelectorFunc = BM.BotDefense.BotDefense.get_defense_tree_move_prio_func(bot, potThreat)
+        gatherNodeMoveSelectorFunc = BotGatherOps.get_tree_move_default_value_func(bot) if not bot.defend_economy and not bot.likely_kill_push else BotGatherOps.get_tree_move_most_army_value_func(bot)
+        # if bot.likely_kill_push:
+        #     potThreat = bot.dangerAnalyzer.fastestPotentialThreat
+        #     if potThreat is None and bot.enemy_attack_path is not None:
+        #         aa = ArmyAnalyzer(bot._map, bot.enemy_attack_path.start.tile, bot.enemy_attack_path.tail.tile)
+        #         potThreat = ThreatObj(bot.enemy_attack_path.length, bot.enemy_attack_path.value, bot.enemy_attack_path, ThreatType.Vision, armyAnalysis=aa)
+        #     if potThreat is not None:
+        #         gatherNodeMoveSelectorFunc = BM.BotDefense.BotDefense.get_defense_tree_move_prio_func(bot, potThreat)
+
 
         if force or (bot._map.turn >= 50 and turnCycleOffset < bot.timings.splitTurns and startTiles is not None and len(startTiles) > 0):
             bot.finishing_exploration = False
@@ -472,6 +473,7 @@ class BotGatherOps:
                     includeGatherTreeNodesThatGatherNegative=includeGatherTreeNodesThatGatherNegative,
                     skipTiles=skipTiles,
                     distPriorityMap=distancePriorities,
+                    leafMoveSelectionValueFunc=gatherNodeMoveSelectorFunc,
                     priorityMatrix=priorityMatrix,
                     shouldLog=logStuff,
                 )
@@ -537,7 +539,7 @@ class BotGatherOps:
                 move = BotGatherOps.get_tree_move_default(bot, bot.gatherNodes, gatherNodeMoveSelectorFunc)
                 if move is not None:
                     bot.curPath = None
-                    bot.curPath = BotGatherOps.convert_gather_to_move_list_path(bot, gatherNodes, turnsUsed, value, gatherNodeMoveSelectorFunc)
+                    # bot.curPath = BotGatherOps.convert_gather_to_move_list_path(bot, gatherNodes, turnsUsed, value, gatherNodeMoveSelectorFunc)
                     return BotRepetition.move_half_on_repetition(bot, move, 6, 4)
                 else:
                     logbook.info("NO MOVE WAS RETURNED FOR timing_gather?????????????????????")
@@ -814,30 +816,72 @@ class BotGatherOps:
         return thisNodeFoundCity, count
 
     @staticmethod
-    def _get_tree_move_default_value_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+    def get_tree_move_default_value_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+        frPlayers = bot._map.get_teammates(bot.player.index)
         def default_value_func(currentTile, currentPriorityObject):
-            negCityCount = negDistFromPlayArea = army = unfriendlyTileCount = 0
-            curIsOurCity = True
+            negCityCount = army = unfriendlyTileCount = 0
+            isNotEnemyCity = True
             if currentPriorityObject is not None:
-                (_, nextIsOurCity, negCityCount, unfriendlyTileCount, negDistFromPlayArea, army, curIsOurCity) = currentPriorityObject
+                (_, nextIsNotEnemyCity, negCityCount, unfriendlyTileCount, negDistFromPlayArea, army, isNotEnemyCity) = currentPriorityObject
                 army -= 1
-            nextIsOurCity = curIsOurCity
-            curIsOurCity = True
-            if bot._map.is_tile_friendly(currentTile):
+            nextIsNotEnemyCity = isNotEnemyCity
+            isNotEnemyCity = True
+            if currentTile.player in frPlayers:
                 if currentTile.isGeneral or currentTile.isCity:
                     negCityCount -= 1
             else:
                 if currentTile.isGeneral or currentTile.isCity and army + 2 <= currentTile.army:
-                    curIsOurCity = False
+                    isNotEnemyCity = False
                 unfriendlyTileCount += 1
 
-            negDistFromPlayArea = 0 - bot.board_analysis.intergeneral_analysis.bMap.raw[currentTile.tile_index]
+            negDistFromPlayArea = 0 - bot.board_analysis.intergeneral_analysis.aMap.raw[currentTile.tile_index]
 
-            if bot._map.is_tile_friendly(currentTile):
+            if currentTile.player in frPlayers:
                 army += currentTile.army
             else:
                 army -= currentTile.army
-            return currentTile.isSwamp, nextIsOurCity, negCityCount, unfriendlyTileCount, negDistFromPlayArea, army, curIsOurCity
+            return currentTile.isSwamp, nextIsNotEnemyCity, negCityCount, unfriendlyTileCount, negDistFromPlayArea, army, isNotEnemyCity
+
+        return default_value_func
+
+    @staticmethod
+    def get_tree_move_most_army_value_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+        frPlayers = bot._map.get_teammates(bot.player.index)
+        def default_value_func(currentTile, currentPriorityObject):
+            negCityCount = army = 0
+            isNotEnemyCity = True
+            if currentPriorityObject is not None:
+                (army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity) = currentPriorityObject
+                army -= 1
+            nextIsNotEnemyCity = isNotEnemyCity
+            isNotEnemyCity = True
+            if currentTile.player in frPlayers:
+                if currentTile.isGeneral or currentTile.isCity:
+                    negCityCount -= 1
+            else:
+                if currentTile.isGeneral or currentTile.isCity and army + 2 <= currentTile.army:
+                    isNotEnemyCity = False
+
+            negDistFromPlayArea = 0 - bot.board_analysis.intergeneral_analysis.aMap.raw[currentTile.tile_index]
+
+            if currentTile.player in frPlayers:
+                logbook.info(f'army at {currentTile} = {army} (+ curTile = {army + currentTile.army}')
+                army += currentTile.army
+            else:
+                army -= currentTile.army
+            return army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity
+
+        return default_value_func
+
+    @staticmethod
+    def get_tree_move_biggest_tile_value_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+        def default_value_func(currentTile, currentPriorityObject):
+            if currentPriorityObject is not None:
+                (army, negDistFromPlayArea) = currentPriorityObject
+
+            negDistFromPlayArea = 0 - bot.board_analysis.intergeneral_analysis.aMap.raw[currentTile.tile_index]
+            army = currentTile.army
+            return army, negDistFromPlayArea
 
         return default_value_func
 
@@ -849,7 +893,7 @@ class BotGatherOps:
             pop: bool = False
     ) -> Move | None:
         if valueFunc is None:
-            valueFunc = BotGatherOps._get_tree_move_default_value_func(bot, )
+            valueFunc = BotGatherOps.get_tree_move_default_value_func(bot)
 
         move = Gather.get_tree_move(gathers, valueFunc, pop=pop)
         if move is not None and move.source.player != bot.general.player:
@@ -880,7 +924,7 @@ class BotGatherOps:
             includeGatherTreeNodesThatGatherNegative=False,
             maximizeArmyGatheredPerTurn: bool = False,
             additionalIncrement: int = 0,
-            distPriorityMap: MapMatrix[int] | None = None,
+            distPriorityMap: MapMatrixInterface[int] | None = None,
             priorityMatrix: MapMatrixInterface[float] | None = None,
             skipTiles: TileSet | None = None,
             shouldLog: bool = False,
@@ -977,8 +1021,8 @@ class BotGatherOps:
                 targetArmy = targetArmy + additionalIncrement * gatherTurns // 2
             if bot.gather_use_max_set and not isinstance(targets, dict):
                 with bot.perf_timer.begin_move_event(f'gath_max_set {gatherTurns}t'):
-                    gatherMatrix = BotGatherOps.get_gather_tiebreak_matrix(bot, )
-                    captureMatrix = BM.BotExpansionOps.BotExpansionOps.get_expansion_weight_matrix(bot, )
+                    gatherMatrix = BotGatherOps.get_gather_tiebreak_matrix(bot)
+                    captureMatrix = BM.BotExpansionOps.BotExpansionOps.get_expansion_weight_matrix(bot)
                     valueMatrix = Gather.build_gather_capture_pure_value_matrix(
                         bot._map,
                         bot.general.player,

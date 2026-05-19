@@ -1368,6 +1368,18 @@ class TestBase(unittest.TestCase):
         newTiles = set()
 
         genDistMap = self.get_from_general_weight_map(map, general)
+        playerLandDistByTile: typing.Dict[Tile, int] = {}
+        playerLandTiles = SearchUtils.where(map.pathable_tiles, lambda tile: tile.player == general.player)
+        SearchUtils.breadth_first_foreach_dist(
+            map,
+            playerLandTiles,
+            100,
+            lambda tile, dist: playerLandDistByTile.setdefault(tile, dist) is None,
+            noLog=True)
+
+        def get_player_land_dist(tile: Tile) -> int:
+            return playerLandDistByTile.get(tile, 100000)
+
         countTilesGeneral = SearchUtils.Counter(
             SearchUtils.count(map.pathable_tiles, lambda tile: tile.player == general.player))
         countScoreGeneral = SearchUtils.Counter(general.army)
@@ -1541,7 +1553,7 @@ class TestBase(unittest.TestCase):
                 newAndTemp.add(tile)
                 # countScoreEnemy.value += tile.army
 
-        newAndTempOrdered = sorted(newAndTemp, key=lambda t: (t == enemyGeneral, genDistMap[t]), reverse=True)
+        newAndTempOrdered = sorted(newAndTemp, key=lambda t: (t == enemyGeneral, get_player_land_dist(t), 0 - enemyMap[t]), reverse=True)
         if enemyGeneralTargetScore is not None:
             for tile in newAndTempOrdered:
                 while tile not in protectedFileVisibleTiles and tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
@@ -1574,7 +1586,7 @@ class TestBase(unittest.TestCase):
                 finalDropCandidates = SearchUtils.where(
                     newTiles,
                     lambda t: t not in protectedFileVisibleTiles and t.player == enemyGeneral.player and not t.isGeneral and not t.isCity)
-                finalDropCandidates.sort(key=lambda t: (t.army, -genDistMap[t]))
+                finalDropCandidates.sort(key=lambda t: (t.army, get_player_land_dist(t), enemyMap[t]))
                 for tile in finalDropCandidates:
                     if scoreOverflow <= 0:
                         break

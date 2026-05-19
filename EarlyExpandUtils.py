@@ -512,6 +512,9 @@ def optimize_first_25(
 
     launchTurn = mapTurnAtStart
     maxTiles = 0
+    if maxResultPaths is not None and not SearchUtils.any_where(maxResultPaths, lambda path: path is not None):
+        maxResultPaths = []
+        maxVal = EMPTY_COMBINATION
     if maxResultPaths is not None:
         for path in maxResultPaths:
             if path is not None:

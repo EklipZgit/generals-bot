@@ -361,7 +361,7 @@ class BotExpansionOps:
                         for m in planPath.get_move_list():
                             moveListPath.add_next_move(m)
 
-                    bot.curPath = moveListPath
+                    bot.curPath = moveListPath if moveListPath.get_first_move() is not None else None
                     bot.city_expand_plan = None
 
                     bot.info(f'F25PLAN {moveListPath}')
@@ -1336,161 +1336,63 @@ class BotExpansionOps:
             return None
 
         if bot.curPath is not None:
-            if bot.curPath.start.tile.army - 1 > bot.curPath.start.next.tile.army:
+            if bot.general in bot.curPath.tileSet:
+                bot.info(f'f50 clearing general-containing curPath before flow expansion reuse {bot.curPath}')
+                bot.curPath = None
+            elif bot.curPath.start is not None and bot.curPath.start.next is not None and bot.curPath.start.tile.army - 1 > bot.curPath.start.next.tile.army:
                 (foundMove, move) = BotPathingUtils.continue_cur_path(bot, threat=None, defenseCriticalTileSet=set())
                 if foundMove:
                     return move
 
-            bot.curPath = None
+        expansionMap = BotExpansionOps.get_expansion_weight_matrix(bot, )
+        nearbyGeneralCapturePaths = [
+            move.dest
+            for move in bot.captureLeafMoves
+            if move.source == bot.general
+               and move.source.army - 1 > move.dest.army
+               and not move.dest.isObstacle
+               and not bot._map.is_tile_friendly(move.dest)
+        ]
+        reservedGeneralCapture = None
+        if len(nearbyGeneralCapturePaths) > 0:
+            reservedGeneralCapture = max(nearbyGeneralCapturePaths, key=lambda tile: expansionMap.raw[tile.tile_index])
+            bot.viewInfo.add_targeted_tile(reservedGeneralCapture, TargetStyle.GREEN, radiusReduction=8)
 
-        expMap = BotExpansionOps.get_expansion_weight_matrix(bot, )
+        if bot.expansion_plan is None or bot.expansion_plan.calculated_turn != bot._map.turn:
+            return None
 
-        leafMoves = [m for m in bot.leafMoves if m.source.army > 1]
-        enDists = bot._alt_en_gen_position_distances[bot.targetPlayer]
-        leafMovesClosestToGen = list(sorted(leafMoves, key=lambda m: BotPathingUtils.distance_from_general(bot, m.dest)))
-        leafMoves = leafMovesClosestToGen[7:]
-        if len(leafMoves) > 0:
-            return leafMoves[-1]
+        selectedPath = bot.expansion_plan.selected_option
+        allPaths = [
+            path
+            for path in bot.expansion_plan.all_paths
+            if reservedGeneralCapture is None or reservedGeneralCapture not in path.tileSet
+        ]
+        if selectedPath is not None and reservedGeneralCapture is not None and reservedGeneralCapture in selectedPath.tileSet:
+            selectedPath = allPaths[0] if len(allPaths) > 0 else None
+        for path in allPaths:
+            move = path.get_first_move()
+            if move is not None and not move.source.isGeneral and BotPathingUtils.is_move_safe_valid(bot, move):
+                if selectedPath is not path:
+                    bot.info(f'f50 delaying general launch for flow path {path}')
+                selectedPath = path
+                break
+        if selectedPath is not None:
+            selectedMove = selectedPath.get_first_move()
+            if selectedMove is not None and selectedMove.source.isGeneral:
+                for path in allPaths:
+                    move = path.get_first_move()
+                    if move is not None and not move.source.isGeneral and BotPathingUtils.is_move_safe_valid(bot, move):
+                        bot.info(f'f50 delaying general launch for flow path {path}')
+                        selectedPath = path
+                        selectedMove = move
+                        break
 
-        tilePathLookup = {}
-        for p in bot.expansion_plan.all_paths:
-            tilePathLookup[p.tileList[0]] = p
-        maxPath: Path | None = None
-        possibleGenTargets = bot.alt_en_gen_positions[bot.targetPlayer]
-        enDists = bot._alt_en_gen_position_distances[bot.targetPlayer]
-        mustGather = set(bot.player.tiles)
-        mustGatherTo = set(bot.target_player_gather_path.tileList)
-        for tile in bot.target_player_gather_path.tileList:
-            mustGather.discard(tile)
+            if selectedMove is not None and BotPathingUtils.is_move_safe_valid(bot, selectedMove):
+                bot.info(f'f50 FlowExpansion {selectedPath.econValue:.2f}/{selectedPath.length}t {selectedMove}')
+                return selectedMove
 
-        negTiles = set()
-
-        bypass = set()
-
-        def foreachFunc(tile: Tile) -> bool:
-            if tile.tile_index in bypass or enDists.raw[tile.tile_index] > enDists.raw[bot.general.tile_index] + 1:
-                return True
-
-            anyMovable = False
-            bestMv = None
-            bestMvDist = 1000
-            for t in tile.movable:
-                if not t.isObstacle and bot._map.team_ids_by_player_index[t.player] != bot._map.team_ids_by_player_index[bot.general.player] and enDists.raw[t.tile_index] <= enDists.raw[tile.tile_index]:
-                    if bestMvDist > enDists.raw[t.tile_index]:
-                        bestMvDist = enDists.raw[t.tile_index]
-                        bestMv = t
-                    anyMovable = True
-                    break
-
-            if anyMovable and tile.player == bot.general.player:
-                mustGatherTo.add(bestMv)
-                logbook.info(f'INCL {tile}->{bestMv}')
-
-                def foreachSkipNearby(nearbyTile: Tile) -> bool:
-                    if nearbyTile.player != bot.general.player:
-                        return True
-                    bypass.add(nearbyTile.tile_index)
-
-                SearchUtils.breadth_first_foreach_fast_no_neut_cities(bot._map, [tile], 5, foreachSkipNearby)
-
-        SearchUtils.breadth_first_foreach_fast_no_neut_cities(
-            bot._map,
-            bot.alt_en_gen_positions[bot.targetPlayer],
-            maxDepth=150,
-            foreachFunc=foreachFunc,
-        )
-
-        for tile in bot.player.tiles:
-            if tile.army == 1:
-                mustGather.discard(tile)
-
-        for tile in bot.target_player_gather_path.tileList:
-            mustGather.discard(tile)
-            if not bot._map.is_tile_friendly(tile):
-                mustGatherTo.discard(tile)
-
-        for move in leafMoves:
-            mustGather.discard(move.source)
-
-        for tile in mustGatherTo:
-            bot.viewInfo.add_targeted_tile(tile, TargetStyle.GREEN, radiusReduction=8)
-
-        gatherTieBreaks = BotGatherOps.get_gather_tiebreak_matrix(bot, )
-        for tile in mustGather:
-            gatherTieBreaks.raw[tile.tile_index] += 0.5
-            bot.viewInfo.add_targeted_tile(tile, TargetStyle.YELLOW, radiusReduction=8)
-
-        gathTurns = len(mustGather)
-
-        gathTargets = {}
-        for tile in mustGatherTo:
-            path = tilePathLookup.get(tile, None)
-            if path is None:
-                gathTargets[tile] = 0
-                continue
-
-            allowedAddlArmy = path.length - tile.army + 1
-
-            depth = gathTurns - allowedAddlArmy
-            logbook.info(f'setting {str(tile)} to depth {depth} / {gathTurns} (army {tile.army}, path len {path.length}, allowedAddlArmy {allowedAddlArmy})')
-            gathTargets[tile] = depth
-
-        move, valGathered, gathTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
-            bot,
-            gathTargets,
-            0.1,
-            gatherTurns=gathTurns,
-            priorityMatrix=gatherTieBreaks
-        )
-
-        if bot.timings.splitTurns - bot._map.cycleTurn < gathTurns:
-            newSplit = bot._map.cycleTurn + gathTurns
-            bot.info(f'increasing gather duration from {bot.timings.splitTurns} to {newSplit}')
-            bot.timings.splitTurns = newSplit
-            if bot.timings.launchTiming < bot.timings.splitTurns:
-                bot.timings.launchTiming = bot.timings.splitTurns
-
-        if move is not None:
-            if move.source in bot.out_of_play_tiles or enDists.raw[move.source.tile_index] > enDists.raw[bot.general.tile_index]:
-                bot.info(f'f50 out of play {move}')
-                return move
-
-        if gatherNodes:
-            sendPath: Path | None = None
-            expansionPathsByStartTile = {}
-            for p in bot.expansion_plan.all_paths:
-                expansionPathsByStartTile[p.tileList[0]] = p
-
-            for node in gatherNodes:
-                if node.gatherTurns == 0 and node.tile not in bot.target_player_gather_path.tileSet:
-                    path = expansionPathsByStartTile.get(node.tile, None)
-                    if path:
-                        bot.curPath = path
-                        bot.info(f'f50 0 node path {str(path)}')
-                        return BotPathingUtils.get_first_path_move(bot, path)
-
-        for tile in possibleGenTargets:
-            bot.viewInfo.add_targeted_tile(tile, TargetStyle.RED, radiusReduction=8)
-
-        if maxPath is not None:
-            useMaxPath = True
-            if gatherNodes:
-                maxPathNodes = SearchUtils.where(gatherNodes, lambda n: n.tile == maxPath.start.tile)
-                if len(maxPathNodes) > 0:
-                    gathNode = maxPathNodes[0]
-                    if gathNode.gatherTurns != 0:
-                        useMaxPath = False
-            if useMaxPath:
-                bot.curPath = maxPath
-                bot.info(f'f50 maxpath {str(maxPath)}')
-                return BotPathingUtils.get_first_path_move(bot, maxPath)
-
-        if gatherNodes:
-            bot.gatherNodes = gatherNodes
-            move = BotGatherOps.get_tree_move_default(bot, gatherNodes)
-            if move is not None:
-                bot.info(f'f50 Expansion gather {move}')
-                return move
+            bot.info(f'f50 unsafe FlowExpansion {selectedMove}')
+            return None
 
         bot.completed_first_100 = True
 
@@ -1772,7 +1674,10 @@ class BotExpansionOps:
         if bot.expansion_plan is None:
             return None
         for path in bot.expansion_plan.all_paths:
-            if path.get_first_move().source.army < armyCutoff:
+            firstMove = path.get_first_move()
+            if firstMove is None:
+                continue
+            if firstMove.source.army < armyCutoff:
                 continue
 
             containsFogCount = 0
@@ -1792,7 +1697,10 @@ class BotExpansionOps:
             if skip or containsFogCount < path.length:
                 continue
 
-            if maxPath is None or maxPath.get_first_move().source.army < path.get_first_move().source.army:
+            maxPathMove = None
+            if maxPath is not None:
+                maxPathMove = maxPath.get_first_move()
+            if maxPath is None or maxPathMove is None or maxPathMove.source.army < firstMove.source.army:
                 maxPath = path
 
         if maxPath is not None:

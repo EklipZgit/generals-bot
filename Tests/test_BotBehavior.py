@@ -3274,3 +3274,65 @@ whoever has less extra troops will always get ahead
             playerMap.At(9,6),
         ]
         self.assertMinArmyNearTiles(playerMap, tiles, general.player, 140, 2, 'We need to defend the choke AND contest the cities.')
+    def test_should_gather_100_army_from_corner_fucking_obviously_when_threat_known(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_100_army_from_corner_fucking_obviously_when_threat_known___b64vQgK19---1--922.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 922, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=922)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.info_render_gather_values = True
+        bot.info_render_gather_locality_values = True
+        bot.info_render_gather_matrix_values = True
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertGreater(2, playerMap.At(15, 0).army, 'should have gathered all this army asap')
+        self.assertGreater(2, playerMap.At(14, 0).army, 'should have gathered all this army asap')
+        self.assertGreater(2, playerMap.At(14, 1).army, 'should have gathered all this army asap')
+        self.assertGreater(2, playerMap.At(13, 1).army, 'should have gathered all this army asap')
+        self.assertGreater(2, playerMap.At(12, 1).army, 'should have gathered all this army asap')
+
+    def test_should_not_gather_backwards_into_a_cave_after_taking_a_city_LOL(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_gather_backwards_into_a_cave_after_taking_a_city_LOL___GZzT5rnso---0--169.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 169, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=169)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_gather_backwards_into_a_cave_after_taking_a_city_LOL")
+
+    def test_should_not_launch_skipping_use_of_core_city_army_in_the_cave(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_launch_skipping_use_of_core_city_army_in_the_cave___GZzT5rnso---0--217.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 217, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=217)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_launch_skipping_use_of_core_city_army_in_the_cave")

@@ -84,6 +84,20 @@ class EarlyExpandUtilsTests(TestBase):
     def render_expansion_plan(self, map: MapBase, plan: EarlyExpandUtils.CityExpansionPlan):
         self.render_paths(map, plan.plan_paths, f'{str(plan.tile_captures)}')
 
+    def test_optimize_first_25_does_not_rebuild_no_op_plan_after_launch_windows(self):
+        turn = 27
+        map, general = self.load_turn_1_map_and_general('EarlyExpandUtilsTestMaps/corner.txtmap')
+        map.turn = turn
+        general.army = 14
+
+        weightMap = self.get_opposite_general_distance_map(map, general)
+        skipTiles = {tile for tile in map.pathable_tiles if tile != general}
+        plan = EarlyExpandUtils.optimize_first_25(map, general, weightMap, skipTiles=skipTiles, no_log=False)
+
+        self.assertEqual([], plan.plan_paths)
+        self.assertEqual(0, plan.tile_captures)
+        self.assertEqual(turn, plan.launch_turn)
+
     def test_takes_1_move_final_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         # test both odd and even turns

@@ -3,6 +3,7 @@ import time
 import typing
 
 import Gather
+from BehaviorAlgorithms import FlowExpansion
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -17,6 +18,8 @@ class CityGatherTests(TestBase):
         bot.info_render_city_priority_debug_info = True
         # bot.info_render_general_undiscovered_prediction_values = True
         bot.info_render_gather_values = True
+        FlowExpansion.SHOULD_LOG_DEBUG_BY_DEFAULT = False
+        FlowExpansion.OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
 
         return bot
 
@@ -1885,3 +1888,29 @@ class CityGatherTests(TestBase):
         self.assertEqual(2, playerMap.players[general.player].cityCount)
         self.assertOwned(-1, playerMap.At(3, 1))
 
+
+    def test_shouldnt_take_150_army_out_of_the_way_to_capture_a_city_lmao(self):
+        self.skipTest('Fucking, bot wont take the city in test like it did in game. Bunch of bugs fixed kind of but didn\'t fix the actual target of this test')
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_take_150_army_out_of_the_way_to_capture_a_city_lmao___b64vQgK19---1--771.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 771, fill_out_tiles=True)
+        # general.army += 100 #force city taking
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=771)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.is_blocking_neutral_city_captures = False
+        playerMap = simHost.get_player_map(general.player)
+        bot.city_capture_plan_tiles = {playerMap.At(13, 8), playerMap.At(16, 1)}
+        bot.city_capture_plan_last_updated = playerMap.turn
+        bot.force_city_take = True
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=22)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertGreater(playerMap.At(13, 8).army, 70) # should split to cap the city
+        self.assertGreater(playerMap.At(13, 7).army, 30) # should split again since theres >25 on the way to the city

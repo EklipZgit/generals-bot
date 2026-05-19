@@ -8,7 +8,7 @@ import Gather
 import SearchUtils
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode, IslandNamer
-from BehaviorAlgorithms import IterativeExpansion
+from BehaviorAlgorithms import IterativeExpansion, FlowExpansion
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode, FlowGraphMethod
 from BoardAnalyzer import BoardAnalyzer
@@ -29,6 +29,8 @@ class FlowExpansionUnitTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
         GatherDebug.USE_DEBUG_ASSERTS = True
+        FlowExpansion.OUTPUT_KNAPSACK_TEST_REPRO_LOGS = True
+        FlowExpansion.SHOULD_LOG_DEBUG_BY_DEFAULT = True
         IslandNamer.reset()
         super().__init__(methodName)
 
@@ -2097,3 +2099,25 @@ player_index=0
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_not_bypass_enemy_land_flow_with_fake_general_flow")
+
+    def test_should_flow_32_into_enemy_land_obviously(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flow_32_into_enemy_land_obviously___aMujH8JM2---0--134.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 134, fill_out_tiles=True)
+        # self.render_map(map)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=134)
+        # self.render_map(rawMap)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(10, 10)
+        self.assertGreater(playerMap.At(10, 10).army, 10)

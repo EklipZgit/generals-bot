@@ -737,8 +737,9 @@ class BotDefense:
                 if len(BotDefense.get_danger_tiles(bot)) > 0:
                     negatives.add(bot.general)
 
-        # TODO maybe we need directional blocking to be supported instead of treating blocked tiles as fully negative.
-        negatives.update(bot.blocking_tile_info.keys())
+        if not threat.path.tail.tile.isGeneral:
+            # TODO maybe we need directional blocking to be supported instead of treating blocked tiles as fully negative.
+            negatives.update(bot.blocking_tile_info.keys())
 
         if additionalNegatives is not None:
             negatives.update(additionalNegatives)
@@ -867,6 +868,11 @@ class BotDefense:
         pathStart = interceptPath.start
         if pathStart is None or pathStart.next is None:
             return False
+
+        potentialThreat = bot.dangerAnalyzer.fastestPotentialThreat
+        if potentialThreat is not None and potentialThreat is not threat:
+            if pathStart.tile in potentialThreat.path.tileSet and pathStart.next.tile not in potentialThreat.path.tileSet:
+                return True
 
         if not threat.path.tail.tile.isGeneral:
             return False
@@ -2478,27 +2484,29 @@ class BotDefense:
 
     @staticmethod
     def set_defensive_blocks_against(bot: EklipZBot, threat: ThreatObj):
-        for defensiveTile in threat.path.tileList:
-            if defensiveTile.player != bot.player.index:
+        for threatPathTile in threat.path.tileList:
+            if threatPathTile.player != bot.player.index or threatPathTile.army < 3:
+                continue
+            if threatPathTile == threat.path.tail.tile:
                 continue
 
-            block = bot.blocking_tile_info.get(defensiveTile, None)
-            amountNecessary = max(0, threat.threatValue - defensiveTile.army)
+            block = bot.blocking_tile_info.get(threatPathTile, None)
+            amountNecessary = max(0, threat.threatValue - threatPathTile.army)
             if not block:
                 block = ThreatBlockInfo(
-                    defensiveTile,
-                    amount_needed_to_block=min(defensiveTile.army, amountNecessary),
+                    threatPathTile,
+                    amount_needed_to_block=min(threatPathTile.army, amountNecessary),
                 )
-                bot.blocking_tile_info[defensiveTile] = block
+                bot.blocking_tile_info[threatPathTile] = block
 
-            block.amount_needed_to_block = min(defensiveTile.army, max(block.amount_needed_to_block, amountNecessary))
-            defDist = threat.armyAnalysis.interceptDistances.raw[defensiveTile.tile_index]
+            block.amount_needed_to_block = min(threatPathTile.army, max(block.amount_needed_to_block, amountNecessary))
+            defDist = threat.armyAnalysis.interceptDistances.raw[threatPathTile.tile_index]
             if defDist is None:
-                if threat.armyAnalysis.pathWayLookupMatrix.raw[defensiveTile.tile_index] is not None:
-                    defDist = threat.armyAnalysis.pathWayLookupMatrix.raw[defensiveTile.tile_index].distance
+                if threat.armyAnalysis.pathWayLookupMatrix.raw[threatPathTile.tile_index] is not None:
+                    defDist = threat.armyAnalysis.pathWayLookupMatrix.raw[threatPathTile.tile_index].distance
                 else:
                     defDist = 100
-            for t in defensiveTile.movable:
+            for t in threatPathTile.movable:
                 tDist = threat.armyAnalysis.interceptDistances.raw[t.tile_index]
                 if tDist is None:
                     if threat.armyAnalysis.pathWayLookupMatrix.raw[t.tile_index] is not None:
@@ -2507,7 +2515,7 @@ class BotDefense:
                         tDist = 100
                 if defDist < tDist:
                     block.add_blocked_destination(t)
-            bot.info(f'blocking {defensiveTile} from moving to {"|".join([str(t) for t in block.blocked_destinations])}')
+            bot.info(f'blocking threatPath {threatPathTile} from moving to {"|".join([str(t) for t in block.blocked_destinations])}')
 
         for gatherTreeNode in bot.best_defense_leaves:
             defensiveTile = gatherTreeNode.tile
@@ -2538,7 +2546,7 @@ class BotDefense:
                         tDist = 100
                 if defDist < tDist:
                     block.add_blocked_destination(t)
-            bot.info(f'blocking {defensiveTile} from moving to {"|".join([str(t) for t in block.blocked_destinations])}')
+            bot.info(f'blocking defensive {defensiveTile} from moving to {"|".join([str(t) for t in block.blocked_destinations])}')
 
 
 BM.BotDefense = BotDefense

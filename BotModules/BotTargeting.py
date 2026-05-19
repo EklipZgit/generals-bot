@@ -423,7 +423,7 @@ class BotTargeting:
         return bestTurns, BotPathingUtils.get_path_to_target(bot, tgTile)
 
     @staticmethod
-    def get_path_to_target_player(bot: EklipZBot, isAllIn=False, cutLength: int | None = None) -> Path | None:
+    def get_path_to_target_player(bot: EklipZBot, isAllIn=False, cutLength: int | None = None, fromTile: Tile | None = None) -> Path | None:
         maxTile = bot.targetPlayerExpectedGeneralLocation
         if maxTile is None:
             return None
@@ -451,27 +451,28 @@ class BotTargeting:
             enemyDistMap = bot._map.distance_mapper.get_tile_dist_matrix(bot.targetPlayerExpectedGeneralLocation)
             logbook.info('DONE building distmap after rebuilding intergen analysis')
 
-        fromTile = bot.general
-        if bot.locked_launch_point is None and bot._map.is_2v2 and bot.teammate_general is not None and bot.targetPlayerObj is not None:
-            fromTile = BotTargeting.get_2v2_launch_point(bot)
-            bot.locked_launch_point = fromTile
+        if fromTile is None:
+            fromTile = bot.general
+            if bot.locked_launch_point is None and bot._map.is_2v2 and bot.teammate_general is not None and bot.targetPlayerObj is not None:
+                fromTile = BotTargeting.get_2v2_launch_point(bot)
+                bot.locked_launch_point = fromTile
 
-        if bot.locked_launch_point is not None:
-            fromTile = bot.locked_launch_point
-        else:
-            startTime = time.perf_counter()
-            targetPlayerObj = None
-            if bot.targetPlayer != -1:
-                targetPlayerObj = bot._map.players[bot.targetPlayer]
-            if targetPlayerObj is None or not targetPlayerObj.knowsKingLocation:
-                for genLaunchPoint in bot.launchPoints:
-                    if genLaunchPoint is None:
-                        logbook.info("wtf genlaunchpoint was none????")
-                    elif enemyDistMap[genLaunchPoint] < enemyDistMap[fromTile]:
-                        logbook.info(f"using launchPoint {genLaunchPoint}")
-                        fromTile = genLaunchPoint
+            if bot.locked_launch_point is not None:
+                fromTile = bot.locked_launch_point
+            else:
+                startTime = time.perf_counter()
+                targetPlayerObj = None
+                if bot.targetPlayer != -1:
+                    targetPlayerObj = bot._map.players[bot.targetPlayer]
+                if targetPlayerObj is None or not targetPlayerObj.knowsKingLocation:
+                    for genLaunchPoint in bot.launchPoints:
+                        if genLaunchPoint is None:
+                            logbook.info("wtf genlaunchpoint was none????")
+                        elif enemyDistMap[genLaunchPoint] < enemyDistMap[fromTile]:
+                            logbook.info(f"using launchPoint {genLaunchPoint}")
+                            fromTile = genLaunchPoint
 
-            bot.locked_launch_point = fromTile
+                bot.locked_launch_point = fromTile
 
         preferNeut = not isAllIn and not BotTargeting.is_ffa_situation(bot)
         preferEn = not isAllIn

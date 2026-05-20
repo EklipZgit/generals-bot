@@ -30,6 +30,8 @@ class BotCentralDefense:
 
         citiesInPlay = BotCentralDefense._get_central_defense_cities_in_play(bot)
         signature = BotCentralDefense._get_central_defense_signature(bot, citiesInPlay)
+        logbook.info(
+            f'CENTRAL_DEFENSE_SIGNATURE turn={bot._map.turn} force={force} previous={bot.last_central_defense_signature} current={signature} centralDefensePoint={bot.board_analysis.central_defense_point} citiesInPlay={[str(city) for city in citiesInPlay] if citiesInPlay is not None else None}')
         if not force and bot.last_central_defense_signature == signature and bot.board_analysis.central_defense_point is not None:
             # logbook.info(f'CENTRAL_DEFENSE_POINT skipped calculation current={bot.board_analysis.central_defense_point} because signature unchanged {signature}')
             return
@@ -73,7 +75,13 @@ class BotCentralDefense:
         lowestAvgTile: Tile = bot.general
         topCentralityTiles: typing.List[typing.Tuple[tuple[float, int, int], Tile]] = []
 
-        for tile in bot.defensive_spanning_tree:
+        centralDefenseCandidateTiles = bot.defensive_spanning_tree
+        if len(centralDefenseCandidateTiles) < 8 and bot.shortest_path_to_target_player is not None:
+            centralDefenseCandidateTiles = set(bot.shortest_path_to_target_player.tileList[:max(1, bot.shortest_path_to_target_player.length // 3)])
+            logbook.info(
+                f'CENTRAL_DEFENSE_POINT using shortest path candidates because defensive_spanning_tree len {len(bot.defensive_spanning_tree)} < 8 candidates={[str(tile) for tile in centralDefenseCandidateTiles]}')
+
+        for tile in centralDefenseCandidateTiles:
             # if not bot._map.is_tile_on_team_with(tile, bot.general.player):
             #     continue
 

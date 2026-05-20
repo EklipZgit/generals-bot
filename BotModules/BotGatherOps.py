@@ -297,7 +297,7 @@ class BotGatherOps:
             includeGatherTreeNodesThatGatherNegative = bot.defend_economy
             distancePriorities = bot.board_analysis.intergeneral_analysis.bMap
             if bot.defend_economy:
-                tgTurns = -1
+                tgTurns = bot.timings.splitTurns + 5 - bot.timings.get_turn_in_cycle(bot._map.turn) + bot.distance_from_general(bot.board_analysis.central_defense_point)
                 useTrueValueGathered = True
 
                 gatherTargets = {bot.board_analysis.central_defense_point}
@@ -346,7 +346,7 @@ class BotGatherOps:
             if not isinstance(bot.curPath, MoveListPath):
                 bot.curPath = None
             bot.info(
-                f"GATHER {gathString}! Gather move: {move} Duration {time.perf_counter() - gathStartTime:.4f}")
+                f"GATHER {gathString}! Gather move: {move} Duration {time.perf_counter() - gathStartTime:.3f}, {tgTurns}t")
             return BotRepetition.move_half_on_repetition(bot, move, 6, 4)
         else:
             logbook.info("No gather move found")
@@ -408,6 +408,23 @@ class BotGatherOps:
             distancePriorities: MapMatrixInterface[int] | None = None,
             logStuff: bool = False
     ) -> Move | None:
+        """
+
+        :param bot:
+        :param startTiles:
+        :param negativeTiles:
+        :param skipTiles:
+        :param force:
+        :param priorityTiles:
+        :param targetTurns: If -1 means
+        :param includeGatherTreeNodesThatGatherNegative:
+        :param useTrueValueGathered:
+        :param pruneToValuePerTurn:
+        :param priorityMatrix:
+        :param distancePriorities:
+        :param logStuff:
+        :return:
+        """
         turnOffset = bot._map.turn + bot.timings.offsetTurns
         turnCycleOffset = turnOffset % bot.timings.cycleTurns
 

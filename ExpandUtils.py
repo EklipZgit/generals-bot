@@ -19,7 +19,7 @@ from base.client.map import Tile, MapBase
 
 
 USE_DEBUG_LOGGING = False
-ENEMY_TILE_CAP_VALUE = 2.2
+ENEMY_TILE_CAP_VALUE = 2.05
 
 
 def _format_plan_first_move_for_log(plan: TilePlanInterface | None) -> str:
@@ -70,7 +70,15 @@ def _format_plan_tile_for_log(
         kind = 'neutral'
     else:
         kind = 'other'
-    return f'({tile.x},{tile.y}):{kind}:p{tile.player}:army{tile.army}:vis{tile.visible}:disc{tile.discovered}'
+    ownership = 'vis' if tile.visible else 'hid'
+    return f'{tile.x},{tile.y}:p{tile.player}:a{tile.army}:{ownership}'
+
+
+def _plan_captures_city(plan: TilePlanInterface, friendlyPlayers: typing.List[int]) -> bool:
+    for tile in plan.tileSet:
+        if tile.isCity and tile.player not in friendlyPlayers:
+            return True
+    return False
 
 
 class RoundPlan(object):
@@ -2792,6 +2800,7 @@ def find_optimal_expansion_path_to_move_first(
     pathVals: typing.Dict[TilePlanInterface, float] = {}
     pathTurns: typing.Dict[TilePlanInterface, int] = {}
     pathUncertaintyRatings: typing.Dict[TilePlanInterface, float] = {}
+    cityCapturePaths: typing.Set[TilePlanInterface] = set()
     for p in maxPaths:
         thisVal = postPathEvalFunction(p, originalNegativeTiles)
         thisTurns = p.length
@@ -2807,6 +2816,8 @@ def find_optimal_expansion_path_to_move_first(
         pathVals[p] = thisVal
         pathTurns[p] = thisTurns
         pathUncertaintyRatings[p] = thisUncertainty
+        if _plan_captures_city(p, friendlyPlayers):
+            cityCapturePaths.add(p)
 
         if valueOverrides is not None and p in valueOverrides:
             continue
@@ -2839,22 +2850,27 @@ def find_optimal_expansion_path_to_move_first(
         thisTurns = pathTurns[p]
         thisVt = thisVal / thisTurns
         thisUncertainty = pathUncertaintyRatings[p]
+        thisCityCapturePriority = 1 if p in cityCapturePaths else 0
+        maxCityCapturePriority = 1 if path in cityCapturePaths else 0
 
-
-        # if thisVt > maxVt or (thisVt == maxVt and thisUncertainty > maxUncertainty):   # TODO value per turn
-        # if thisUncertainty > maxUncertainty or (thisUncertainty == maxUncertainty and thisVt > maxVt):    # TODO uncertainty first
-        if thisUncertainty + thisVt > maxUncertainty + maxVt:    # TODO uncertainty mixed with v/t
+        if (
+                thisCityCapturePriority > maxCityCapturePriority
+                or (
+                    thisCityCapturePriority == maxCityCapturePriority
+                    and thisUncertainty + thisVt > maxUncertainty + maxVt
+                )
+        ):
             if p not in waitingPaths:
-                logbook.info(f'    path vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} > vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
+                logbook.info(f'    path city{thisCityCapturePriority} vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} > city{maxCityCapturePriority} vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
                 path = p
                 maxVal = thisVal
                 maxVt = thisVt
                 maxUncertainty = thisUncertainty
             else:
                 logbook.info(
-                    f'    waiting on city path vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} > vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} because path_has_cities_and_should_wait')
+                    f'    waiting on city path city{thisCityCapturePriority} vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} > city{maxCityCapturePriority} vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} because path_has_cities_and_should_wait')
         else:
-            logbook.info(f'    -path vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} < vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)}')
+            logbook.info(f'    -path city{thisCityCapturePriority} vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} < city{maxCityCapturePriority} vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)}')
 
     return path
 

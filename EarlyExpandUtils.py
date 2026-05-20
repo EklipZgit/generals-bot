@@ -666,7 +666,7 @@ def _sub_optimize_first_25_specific_wasted(
                 if tile in visited_set and tile != general:
                     allow_wasted_moves -= 1
                 # we get more wasted moves when we capture enemy tiles because we spend more army per.
-                elif tile.player >= 0:
+                elif tile.player >= 0 and tile != general:
                     allow_wasted_moves += 1
                 visited_set.add(tile)
 
@@ -1139,7 +1139,7 @@ def _optimize_25_launch_segment(
             elif nextTile.player == -1:
                 pathCappedNeg -= 1
             elif nextTile.player not in friendlyPlayers:
-                pathCappedNeg -= 2.2
+                pathCappedNeg -= 2.05
                 repeats -= 1
                 cur_force_wasted_moves -= 1
                 armyLeft -= nextTile.army
@@ -1267,7 +1267,7 @@ def _optimize_25_launch_segment(
         maxTurns=turns_left,
         useGlobalVisitedSet=use_global_visited_set,  # has to be false so we try multiple combinations of deviations from the re-traversal in one go.
         includePath=True,
-        maxTime=1000)
+        maxTime=1000 if not use_global_visited_set else 0.1)
 
     # if not no_log:
     #     logbook.info(f'  found {path}')

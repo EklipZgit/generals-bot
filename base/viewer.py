@@ -1675,10 +1675,10 @@ class GeneralsViewer(object):
                         raise
 
                     # only draw team score data once
-                    playerCycleSubtext = f"{str(risk).ljust(3)}  g:{teamCycleData.approximate_army_gathered_this_cycle:3d}  Δt:{teamCycleData.tiles_gained:2d}  Δc:{teamCycleData.cities_gained:d}   a:{teamCycleData.approximate_fog_army_available_total:3d}/c:{teamCycleData.approximate_fog_city_army:2d} (tru:{teamCycleData.approximate_fog_army_available_total_true:3d}), cum {approxArmy}"
+                    playerCycleSubtext = f"{str(risk).ljust(4)} ga:{teamCycleData.approximate_army_gathered_this_cycle:3d} - gc:{teamCycleData.neutral_city_army_spent:2d}  Δt:{teamCycleData.tiles_gained:2d}  Δc:{teamCycleData.cities_gained:d}   a:{teamCycleData.approximate_fog_army_available_total:3d}/c:{teamCycleData.approximate_fog_city_army:2d} (tru:{teamCycleData.approximate_fog_army_available_total_true:3d}), cum {approxArmy}"
                     self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                       (team_pos_left + 3, pos_top + 2 + 3.9 * self._medFont.get_height()))
-                    playerCycleSubtext = f"MV: g{gathMoves}/c{capMoves}  fcap:{teamCycleData.moves_spent_capturing_fog_tiles:2d}  vcap:{teamCycleData.moves_spent_capturing_visible_tiles:2d}  fg:{teamCycleData.moves_spent_gathering_fog_tiles:2d}  vg:{teamCycleData.moves_spent_gathering_visible_tiles:2d}"
+                    playerCycleSubtext = f"MV: g{gathMoves} - gc{teamCycleData.moves_spent_gathering_neutral_city_capture:2d} / c{capMoves}  fcap:{teamCycleData.moves_spent_capturing_fog_tiles:2d}  vcap:{teamCycleData.moves_spent_capturing_visible_tiles:2d}  fg:{teamCycleData.moves_spent_gathering_fog_tiles:2d}  vg:{teamCycleData.moves_spent_gathering_visible_tiles:2d}"
                     self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                       (team_pos_left + 3, pos_top + 2 + 4.8 * self._medFont.get_height()))
 
@@ -1704,7 +1704,7 @@ class GeneralsViewer(object):
                         self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                           (team_pos_left + 3, pos_top + 2 + 5.7 * self._medFont.get_height()))
 
-                        playerCycleSubtext = f"LAST MV: g{gathMoves}/c{capMoves}  fcap:{teamLastCycleData.moves_spent_capturing_fog_tiles:2d}  vcap:{teamLastCycleData.moves_spent_capturing_visible_tiles:2d}  fg:{teamLastCycleData.moves_spent_gathering_fog_tiles:2d}  vg:{teamLastCycleData.moves_spent_gathering_visible_tiles:2d}"
+                        playerCycleSubtext = f"LAST MV: g{gathMoves}/c{capMoves}  fcap:{teamLastCycleData.moves_spent_capturing_fog_tiles:2d}  vcap:{teamLastCycleData.moves_spent_capturing_visible_tiles:2d}  fg:{teamLastCycleData.moves_spent_gathering_fog_tiles:2d}  vg:{teamLastCycleData.moves_spent_gathering_visible_tiles:2d}  ncg:{teamLastCycleData.moves_spent_gathering_neutral_city_capture:2d}  nca:{teamLastCycleData.neutral_city_army_spent:2d}"
                         self._screen.blit(self._medFont.render(playerCycleSubtext, True, WHITE),
                                           (team_pos_left + 3, pos_top + 2 + 6.6 * self._medFont.get_height()))
 

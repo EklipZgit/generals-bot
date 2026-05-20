@@ -2036,15 +2036,16 @@ class BotCombatOps:
                 f"  T Launch window {inAttackWindow} - minArmy {minArmy}, pathVal {path.value}, timingTurn {timingTurn} < launchTiming + origPathLength {origPathLength} / 3 {bot.timings.launchTiming + origPathLength / 2:.1f}")
 
             if path is not None and path.length > 0 and pathWorth > minArmy and inAttackWindow and path.start.tile.player == bot.general.player:
-                move = BotPathingUtils.get_first_path_move(bot, path)
-                if BotDefense.is_move_safe_against_threats(bot, move):
-                    logbook.info(
-                        f"  attacking because NEW worth_attacking_target(), pathWorth {pathWorth}, minArmy {minArmy}: {str(path)}")
-                    bot.lastTargetAttackTurn = bot._map.turn
-                    if bot.timings.is_early_flank_launch:
-                        path.start.move_half = True
-                    bot.curPath = path
-                    return move
+                # move = BotPathingUtils.get_first_path_move(bot, path)
+                # if BotDefense.is_move_safe_against_threats(bot, move):
+                #     logbook.info(
+                #         f"  attacking because NEW worth_attacking_target(), pathWorth {pathWorth}, minArmy {minArmy}: {str(path)}")
+                #     bot.lastTargetAttackTurn = bot._map.turn
+                #     if bot.timings.is_early_flank_launch:
+                #         path.start.move_half = True
+                #     bot.curPath = path
+                #     return move
+                bot.info(f'NO LAUNCH, let flow expand cook')
 
             elif path is not None:
                 logbook.info(

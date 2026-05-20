@@ -262,6 +262,7 @@ class BotExpansionOps:
 
         if haveFullExpPlanAlready or havePotentialIntercept or ((bot.curPath is None or bot.curPath.start is None or bot.curPath.start.next is None) and not bot.defend_economy or bot._map.turn < 100):
             expNegs = set(defenseCriticalTileSet)
+            logbook.info(f'DEFENSE_NEG_COPY context=main_timing_expansion source=defenseCriticalTileSet copiedTiles={[str(t) for t in expNegs]}')
             if not haveFullExpPlanAlready or BotStateQueries.is_all_in(bot, ):
                 with bot.perf_timer.begin_move_event('checking launch move'):
                     attackLaunchMove = BotCombatOps.check_for_attack_launch_move(bot, expNegs)
@@ -309,12 +310,14 @@ class BotExpansionOps:
             return None
 
         expansionNegatives = defenseCriticalTileSet.copy()
+        logbook.info(f'DEFENSE_NEG_COPY context=try_find_expansion_move source=defenseCriticalTileSet copiedTiles={[str(t) for t in expansionNegatives]}')
         splitTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
         if (not forceBypassLaunch and splitTurn < bot.timings.launchTiming and bot._map.turn > 50) or (bot.target_player_gather_path is not None and bot.target_player_gather_path.start.tile in expansionNegatives):
             bot.viewInfo.add_info_line(
                 f"splitTurn {splitTurn} < launchTiming {bot.timings.launchTiming}...?")
             for tile in bot.target_player_gather_targets:
-                if bot._map.is_tile_friendly(tile):
+                if bot._map.is_tile_friendly(tile) and tile not in expansionNegatives:
+                    logbook.info(f'DEFENSE_NEG_ADD context=try_find_expansion_move source=target_player_gather_targets tile={tile}')
                     expansionNegatives.add(tile)
 
         tilesWithArmy = SearchUtils.where(
@@ -446,9 +449,14 @@ class BotExpansionOps:
                 if tile.army > bot.general.army - 1:
                     numDanger += 1
         if numDanger > 1:
-            expansionNegatives.add(bot.general)
+            if bot.general not in expansionNegatives:
+                logbook.info(f'DEFENSE_NEG_ADD context=build_expansion_plan source=general_adjacent_danger tile={bot.general} numDanger={numDanger}')
+                expansionNegatives.add(bot.general)
 
-        expansionNegatives.update(bot.blocking_tile_info.keys())
+        for tile in bot.blocking_tile_info.keys():
+            if tile not in expansionNegatives:
+                logbook.info(f'DEFENSE_NEG_ADD context=build_expansion_plan source=blocking_tile_info tile={tile}')
+                expansionNegatives.add(tile)
 
         remainingCycleTurns = bot.timings.cycleTurns - bot.timings.get_turn_in_cycle(bot._map.turn)
         if overrideTurns > -1:
@@ -467,14 +475,20 @@ class BotExpansionOps:
                     timeLimit = 0.05
 
             if bot.teammate_general is not None:
-                expansionNegatives.add(bot.teammate_general)
+                if bot.teammate_general not in expansionNegatives:
+                    logbook.info(f'DEFENSE_NEG_ADD context=build_expansion_plan source=teammate_general tile={bot.teammate_general}')
+                    expansionNegatives.add(bot.teammate_general)
 
                 for army in bot.armyTracker.armies.values():
                     if army.player in bot._map.teammates and army.last_moved_turn > bot._map.turn - 3:
-                        expansionNegatives.add(army.tile)
+                        if army.tile not in expansionNegatives:
+                            logbook.info(f'DEFENSE_NEG_ADD context=build_expansion_plan source=teammate_recent_army tile={army.tile} army={army} lastMovedTurn={army.last_moved_turn}')
+                            expansionNegatives.add(army.tile)
 
                 if bot.threat is not None and bot.threat.turns < 2 and bot.threat.path.tail.tile == bot.general:
-                    expansionNegatives.add(bot.general)
+                    if bot.general not in expansionNegatives:
+                        logbook.info(f'DEFENSE_NEG_ADD context=build_expansion_plan source=immediate_general_threat tile={bot.general} threatTurns={bot.threat.turns}')
+                        expansionNegatives.add(bot.general)
 
             interceptOptionsSet: typing.Set[TilePlanInterface] = set()
             addlOptions: typing.List[TilePlanInterface] = []
@@ -484,6 +498,12 @@ class BotExpansionOps:
                     interceptOptionsSet.add(option)
 
                     bot.info(f'intOpt {option.econValue / option.length:.2f} ({option.econValue:.1f}e/{option.length}t) {str(option)}')
+            if bot.city_capture_plan_option is not None:
+                addlOptions.append(bot.city_capture_plan_option)
+                bot.info(f'cityOpt {bot.city_capture_plan_option.econValue / max(bot.city_capture_plan_option.length, 1):.2f} ({bot.city_capture_plan_option.econValue:.1f}e/{bot.city_capture_plan_option.length}t) {str(bot.city_capture_plan_option)}')
+            if bot.quick_kill_city_plan_option is not None:
+                addlOptions.append(bot.quick_kill_city_plan_option)
+                bot.info(f'quickKillCityOpt {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) {str(bot.quick_kill_city_plan_option)}')
 
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
@@ -507,41 +527,35 @@ class BotExpansionOps:
                         # intergeneral path with the predicted fog army amount and reward econ value.
                         armyOverrideMatrix = get_tile_army_mapmatrix(bot._map)
                         bonusCapturePointMatrixForFlow = bonusCapturePointMatrix
-                        opponentCycleStats = bot.opponent_tracker.get_current_cycle_stats_by_player(bot.targetPlayer)
-                        if (
-                            bot.target_player_gather_path is not None
-                            and opponentCycleStats is not None
-                            and opponentCycleStats.approximate_fog_army_available_total > 0
-                        ):
+                        if bot.target_player_gather_path is not None and not bot.opponent_tracker.did_player_already_attack_this_round(bot.targetPlayer):
                             # Walk from the enemy-general end (tail) toward our general (start).
                             # Find the last non-visible tile before the first visible tile —
                             # i.e., the fog-boundary tile closest to our side.
-                            lastFogTile = None
-                            for pathTile in reversed(bot.target_player_gather_path.tileList):
+                            enemyFogAttackFromTile = None
+                            distToEnFog = 0
+                            for pathTile in bot.shortest_path_to_target_player.tileList:
                                 if not pathTile.visible:
-                                    lastFogTile = pathTile
-                                elif lastFogTile is not None:
-                                    # We've crossed from fog into visible; stop here.
+                                    enemyFogAttackFromTile = pathTile
                                     break
-                            if lastFogTile is not None:
-                                predictedArmy = opponentCycleStats.approximate_fog_army_available_total
-                                armyOverrideMatrix.raw[lastFogTile.tile_index] = predictedArmy
+                                distToEnFog += 1
+
+                            if enemyFogAttackFromTile is not None:
+                                predictedArmy = bot.opponent_tracker.get_approximate_fog_army_risk(bot.targetPlayer, None, inTurns=min(20, max(1, bot.opponent_tracker.get_predicted_attack_turn_by_dist_to_fog(bot.targetPlayer, distToEnFog))))
+                                armyOverrideMatrix.raw[enemyFogAttackFromTile.tile_index] = predictedArmy
                                 # Clone the bonus matrix so we don't mutate the shared one
-                                bonusCapturePointMatrixForFlow = MapMatrix(bot._map, 0.0)
-                                for i in range(len(bonusCapturePointMatrix.raw)):
-                                    bonusCapturePointMatrixForFlow.raw[i] = bonusCapturePointMatrix.raw[i]
-                                bonusCapturePointMatrixForFlow.raw[lastFogTile.tile_index] = float(remainingCycleTurns)
+                                bonusCapturePointMatrixForFlow = bonusCapturePointMatrix.copy()
+                                bonusCapturePointMatrixForFlow.raw[enemyFogAttackFromTile.tile_index] = float(remainingCycleTurns) // 2 + 5
                                 logbook.info(
-                                    f'FE fog override: tile ({lastFogTile.x},{lastFogTile.y}) '
+                                    f'FE fog override: tile ({enemyFogAttackFromTile.x},{enemyFogAttackFromTile.y}) '
                                     f'army={predictedArmy} econ={remainingCycleTurns}'
                                 )
-                                bot.info(f'FE enemy fog of {predictedArmy} on tile {lastFogTile} val {remainingCycleTurns}')
-                                bot.viewInfo.add_targeted_tile(lastFogTile, TargetStyle.PURPLE)
-                                bot.viewInfo.bottomLeftGridText.raw[lastFogTile.tile_index] = str(predictedArmy)
-                                bot.viewInfo.bottomMidLeftGridText.raw[lastFogTile.tile_index] = str(remainingCycleTurns)
+                                bot.info(f'FE enemy fog of {predictedArmy} on tile {enemyFogAttackFromTile} val {remainingCycleTurns} fogDist {distToEnFog}')
+                                bot.viewInfo.add_targeted_tile(enemyFogAttackFromTile, TargetStyle.PURPLE)
+                                bot.viewInfo.bottomLeftGridText.raw[enemyFogAttackFromTile.tile_index] = str(predictedArmy)
+                                bot.viewInfo.bottomMidLeftGridText.raw[enemyFogAttackFromTile.tile_index] = str(remainingCycleTurns)
 
-                        # Pass intercepts into FlowExpansion for integrated knapsacking
-                        additionalOptionsToInclude = [opt for opt in addlOptions if isinstance(opt, InterceptionOptionInfo)]
+                        # Pass external plan options into FlowExpansion for integrated knapsacking
+                        additionalOptionsToInclude = list(addlOptions)
                         if bot.expansion_allow_leaf_moves:
                             for leafMove in bot.captureLeafMoves:
                                 if leafMove.source.army - 1 <= leafMove.dest.army:
@@ -707,7 +721,7 @@ class BotExpansionOps:
         elif remainingCycleTurns > 28:
             interceptVtCutoff = 2.3
         elif remainingCycleTurns > 22:
-            interceptVtCutoff = 2.2
+            interceptVtCutoff = 2.04
 
         if len(addlOptions) > 0:
             for otherPath in plan.all_paths:

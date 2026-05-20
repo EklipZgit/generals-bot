@@ -2,6 +2,12 @@ from TestBase import TestBase
 
 
 class TestMapLoadingTests(TestBase):
+    def test_fill_out_tiles_preserves_target_score_when_enemy_already_has_target_tiles(self):
+        mapFile = 'GameContinuationEntries/should_play_defensively_when_equalizing_on_cities_and_up_massively_on_tiles___aRLuObTKX---1--214.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 214, fill_out_tiles=True)
+
+        self.assertEqual(185, map.players[enemyGeneral.player].score)
+
     def test_fill_out_tiles_does_not_change_visible_enemy_armies(self):
         testData = """
 |    |    |    |    |    |

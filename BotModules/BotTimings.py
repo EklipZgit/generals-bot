@@ -357,7 +357,7 @@ class BotTimings:
             cycle = 50
             if bot.timings is not None:
                 cycle = bot.timings.cycleTurns
-            launchTiming = cycle - bot.shortest_path_to_target_player.length - 1
+            launchTiming = cycle - bot.shortest_path_to_target_player.length - 1 + bot.behavior_launch_timing_offset
             launchTiming += countEnOnPath // 2
             launchTiming += countNeutOnPath // 2
             launchTiming -= countFrOnPath // 2
@@ -440,8 +440,8 @@ class BotTimings:
             launchTiming += 50
             gatherSplit += 50
 
-        if launchTiming > 28:
-            launchTiming = 28
+        if launchTiming > 30:
+            launchTiming = 30
         if gatherSplit > 22:
             gatherSplit = 22
 

@@ -1752,6 +1752,45 @@ a1   b1   b1   bG1
         self.assertEqual(1, len(army1.entangledArmies))
         self.assertEqual(1, len(army2.entangledArmies))
 
+    def test_should_reduce_entangled_fog_army_when_city_sink_not_found(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_push_fog_army_further_into_fog___re0YBRP4a---1--352.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 352, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=352)
+        rawMap.GetTile(1, 17).reset_wrong_undiscovered_fog_guess()
+        rawMap.GetTile(2, 17).army = 46
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '4,18->3,18')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+
+        tile1 = playerMap.GetTile(1, 17)
+        tile2 = playerMap.GetTile(2, 16)
+        army1 = bot.armyTracker.armies.get(tile1, None)
+        army2 = bot.armyTracker.armies.get(tile2, None)
+        self.assertIsNotNone(army1)
+        self.assertIsNotNone(army2)
+        army1.last_seen_turn = playerMap.turn
+        army2.last_seen_turn = playerMap.turn
+        bot.armyTracker.find_next_fog_city_candidate_near_tile = lambda cityPlayer, tile, cutoffDist=10, distanceWeightReduction=3, wallBreakWeight=2.0, emergenceWeight=1.0, doNotConvert=False, forceConnected=False: None
+        army1ValueBefore = army1.value
+        army2ValueBefore = army2.value
+
+        didReduce = bot.armyTracker.try_find_army_sink(enemyGeneral.player, 20, tookNeutCity=True)
+
+        self.assertTrue(didReduce)
+        self.assertEqual(army1ValueBefore - 20, army1.value)
+        self.assertEqual(army2ValueBefore - 20, army2.value)
+        self.assertEqual(tile1.army - 1, army1.value)
+        self.assertEqual(tile2.army - 1, army2.value)
+
     def test_should_not_duplicate_visible_army_collision_into_fog(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_duplicate_visible_army_collision_into_fog___re0YBRP4a---1--355.txtmap'
@@ -2616,3 +2655,30 @@ a1   b1   b1   bG1
         self.assertValidGeneralPositionXY(bot, 2, 15, enemyGeneral.player) # Real position needs to still be valid
         self.assertInvalidGeneralPositionXY(bot, 1, 12, enemyGeneral.player) # For SURE this shouldn't be valid
         self.assertInvalidGeneralPositionXY(bot, 2, 13, enemyGeneral.player) # This technically shouldn't be valid, we should know it can only be within 1 or perhaps 2 in this case...?
+
+    def test_should_not_say_neut_city_threat_is_larger_after_op_takes_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_say_neut_city_threat_is_larger_after_op_takes_city___aRLuObTKX---1--186.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 186, fill_out_tiles=True)
+
+        mapFile = 'GameContinuationEntries/should_not_say_neut_city_threat_is_larger_after_op_takes_city___aRLuObTKX---1--186_orig.txtmap'
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=186)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,17->13,17')
+        simHost.queue_player_moves_str(general.player, '11,3->12,3')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertLess(playerMap.At(5, 16).army, 13)
+        self.assertLess(playerMap.At(5, 17).army, 13)
+        self.assertLess(playerMap.At(5, 18).army, 13)
+        self.assertLess(playerMap.At(4, 17).army, 13)
+        self.assertLess(playerMap.At(4, 18).army, 13)
+        self.assertLess(playerMap.At(3, 17).army, 13)
+        self.assertLess(playerMap.At(3, 18).army, 13)

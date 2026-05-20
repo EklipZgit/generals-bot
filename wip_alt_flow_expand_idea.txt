@@ -1,0 +1,41 @@
+Look at the latest test in @test_FlowExpansion.py .
+
+For this map, we have an issue where we picked the wrong direction at an enemy land fork and now have our 11 out in neutral land several tiles away from the enemy land. However, there is a pure-neutral-caps line back to the enemy land for the 11, which we definitely should use to dump the 11 as time-effectively as possible.
+
+The problem is our current @OrToolsFlowDirectionFinder.py fails to route flow in that manner, because the 11 can be used to effectively flow to the nearby neutrals instead.
+
+Heres what I want to do:
+
+Add a new AStarEnemyFlowDirectionFinder.py file that implements the same direction finder interface.
+
+Instead of using the OrTools solve, I want you to inside of it to implement the following algorithm:
+
+Just flow from full island borders with an A*, filling the target land as we go, preferring enemy first and filling neutral second? We could just dequeue where all of the army should go to this way and stop filling target islands as we go like that. That would give us flow directions prioritizing enemy land and sounds tbh pretty fucking simple lol.
+
+PseudoCode something like this:
+
+fullIslands = set()
+for island in builder.all_tile_islands:
+   fullIslands.add(island.full_island)
+
+pq = MaxHeapPriorityQueue()
+
+for fullIsland in fullIslands:
+  if fullIsland.team == targetTeam or fullIsland.team == -1:
+    flowToIsland = None # we will fill the fullIsland.child_islands later, not important for figuring out initial flow
+    neededFlow = fullIsland.tile_count + full_island.sum_army # gets decremented as we fill islands.
+    neededTileCaps = fullIsland.tile_count
+    cappableValue = neededTileCaps  # if we cross more en/neut islands to reach this island, those values get added to this value. As we consume tiles and increment the capindexes, we decrease this value.
+    if fullIsland.team == targetTeam:
+        cappableValue = neededTileCaps * IterativeExpansion.EN_CAP_VALUE # or whatever
+
+    currentCapIslands = [fullIsland]  # if we cross a neutral / enemy island to reach this island in our search we will clone this list and append the neutral / enemy island we cross to the list.
+    currentIslandCapIndex = 0 # the initial full island. We may add more islands to the list of to-cap if we need to cross neutral islands or something in order to reach the enemy island, so once we fill the initial one, we need to fill the next one and so on. When we move to the next island, currentCappedIndex returns to 0 while currentIslandCapIndex increments by one.
+    currentCappedIndex = 0
+    partialArmyAlreadyCapturedAtCurrentCapIndex = 0 # if this is > 0 then it means we have already spent some of the army necessary to capture fullIsland.tiles_by_army[currentCappedIndex].army, and the remaining demand is  fullIsland.tiles_by_army[currentCappedIndex].army - partialArmyAlreadyCapturedAtCurrentCapIndex.
+    islandDepth = 0
+    priority = (
+        cappableValue / neededTileCaps, # we always want to dequeue the highest value per turn flows first.
+        cappableValue, # break ties by preferring to pop smallest first
+        neededFlow, # prefer
+    pq.push(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logbook
 import typing
 
+import Path
 from ArmyTracker import Army
 from StrategyModels import CycleStatsData, PlayerMoveCategory
 from ViewInfo import ViewInfo, TargetStyle
@@ -542,6 +543,8 @@ class OpponentTracker(object):
                 data.append(f'ot_{team}_stats_moves_spent_capturing_visible_tiles={stats.moves_spent_capturing_visible_tiles}')
                 data.append(f'ot_{team}_stats_moves_spent_gathering_fog_tiles={stats.moves_spent_gathering_fog_tiles}')
                 data.append(f'ot_{team}_stats_moves_spent_gathering_visible_tiles={stats.moves_spent_gathering_visible_tiles}')
+                data.append(f'ot_{team}_stats_moves_spent_gathering_neutral_city_capture={stats.moves_spent_gathering_neutral_city_capture}')
+                data.append(f'ot_{team}_stats_neutral_city_army_spent={stats.neutral_city_army_spent}')
                 data.append(f'ot_{team}_stats_approximate_army_gathered_this_cycle={stats.approximate_army_gathered_this_cycle}')
                 data.append(f'ot_{team}_stats_army_annihilated_visible={stats.army_annihilated_visible}')
                 data.append(f'ot_{team}_stats_army_annihilated_fog={stats.army_annihilated_fog}')
@@ -577,6 +580,8 @@ class OpponentTracker(object):
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_visible_tiles={stats.moves_spent_capturing_visible_tiles}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_fog_tiles={stats.moves_spent_gathering_fog_tiles}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_visible_tiles={stats.moves_spent_gathering_visible_tiles}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_neutral_city_capture={stats.moves_spent_gathering_neutral_city_capture}')
+                    data.append(f'ot_{team}_c_{cycleTurn}_stats_neutral_city_army_spent={stats.neutral_city_army_spent}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_approximate_army_gathered_this_cycle={stats.approximate_army_gathered_this_cycle}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_visible={stats.army_annihilated_visible}')
                     data.append(f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_fog={stats.army_annihilated_fog}')
@@ -628,6 +633,10 @@ class OpponentTracker(object):
                     stats.moves_spent_capturing_visible_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_capturing_visible_tiles'])
                     stats.moves_spent_gathering_fog_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_fog_tiles'])
                     stats.moves_spent_gathering_visible_tiles = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_visible_tiles'])
+                    if f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_neutral_city_capture' in data:
+                        stats.moves_spent_gathering_neutral_city_capture = int(data[f'ot_{team}_c_{cycleTurn}_stats_moves_spent_gathering_neutral_city_capture'])
+                    if f'ot_{team}_c_{cycleTurn}_stats_neutral_city_army_spent' in data:
+                        stats.neutral_city_army_spent = int(data[f'ot_{team}_c_{cycleTurn}_stats_neutral_city_army_spent'])
                     stats.approximate_army_gathered_this_cycle = int(data[f'ot_{team}_c_{cycleTurn}_stats_approximate_army_gathered_this_cycle'])
                     stats.army_annihilated_visible = int(data[f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_visible'])
                     stats.army_annihilated_fog = int(data[f'ot_{team}_c_{cycleTurn}_stats_army_annihilated_fog'])
@@ -657,6 +666,10 @@ class OpponentTracker(object):
                 stats.moves_spent_capturing_visible_tiles = int(data[f'ot_{team}_stats_moves_spent_capturing_visible_tiles'])
                 stats.moves_spent_gathering_fog_tiles = int(data[f'ot_{team}_stats_moves_spent_gathering_fog_tiles'])
                 stats.moves_spent_gathering_visible_tiles = int(data[f'ot_{team}_stats_moves_spent_gathering_visible_tiles'])
+                if f'ot_{team}_stats_moves_spent_gathering_neutral_city_capture' in data:
+                    stats.moves_spent_gathering_neutral_city_capture = int(data[f'ot_{team}_stats_moves_spent_gathering_neutral_city_capture'])
+                if f'ot_{team}_stats_neutral_city_army_spent' in data:
+                    stats.neutral_city_army_spent = int(data[f'ot_{team}_stats_neutral_city_army_spent'])
                 stats.approximate_army_gathered_this_cycle = int(data[f'ot_{team}_stats_approximate_army_gathered_this_cycle'])
                 stats.army_annihilated_visible = int(data[f'ot_{team}_stats_army_annihilated_visible'])
                 stats.army_annihilated_fog = int(data[f'ot_{team}_stats_army_annihilated_fog'])
@@ -691,6 +704,10 @@ class OpponentTracker(object):
 
         for team in self._team_indexes:
             self._update_cycle_stats_and_moves_no_checks(team, self.map.get_team_stats_by_team_id(team), self.get_last_cycle_end_turn(), skipTurn=True)
+
+        if self.map.is_army_bonus_turn:
+            for team in self._team_indexes:
+                self.team_score_data_history[team][self.map.turn] = self.map.get_team_stats_by_team_id(team)
 
         self.skip_this_turn = True
 
@@ -811,6 +828,8 @@ class OpponentTracker(object):
                 reason = 'attacked another player'
                 if tookCity:
                     reason = 'captured city'
+                    if currentCycleStats.team != self.map.team_ids_by_player_index[self.map.player_index]:
+                        currentCycleStats.neutral_city_army_spent += teamAnnihilatedFog
 
                 logbook.info(f'Assuming p{player.index} {reason} under fog, annihilated {playerAnnihilated}.')
                 # player is fighting a player in the fog and capped their tile (or attacked neutral non-zero tiles)
@@ -868,6 +887,9 @@ class OpponentTracker(object):
             currentCycleStats.army_annihilated_visible -= source.delta.armyDelta
             if dest.player == player.index:
                 currentCycleStats.army_annihilated_visible -= dest.army - dest.delta.expectedDelta
+
+            if dest.delta.oldOwner == -1 and dest.isCity:
+                currentCycleStats.neutral_city_army_spent += dest.delta.oldArmy
 
             self.last_player_move_type[player.index] = PlayerMoveCategory.VisibleCapture
 
@@ -1407,6 +1429,20 @@ class OpponentTracker(object):
     def get_current_team_scores_by_player(self, player: int) -> TeamStats:
         return self.current_team_scores[self._team_lookup_by_player[player]]
 
+    def record_neutral_city_capture_gather_turn(self, player: int):
+        stats = self.get_current_cycle_stats_by_player(player)
+        if stats is None:
+            return
+
+        stats.moves_spent_gathering_neutral_city_capture += 1
+
+    def record_neutral_city_capture_army_spent(self, player: int, armySpent: int):
+        stats = self.get_current_cycle_stats_by_player(player)
+        if stats is None:
+            return
+
+        stats.neutral_city_army_spent += armySpent
+
     def _execute_emergence(self, currentCycleStats: CycleStatsData, tile: Tile, emergence: int, player: int):
         if player == -2:
             player = tile.player
@@ -1509,6 +1545,20 @@ class OpponentTracker(object):
             self.view_info.add_info_line(f'team{currentCycleStats.team} approximate_fog_city_army NEG?? {currentCycleStats.approximate_fog_city_army} setting 0')
             currentCycleStats.approximate_fog_city_army = teamScores.cityCount
 
+    def _estimate_neutral_city_capture_gather_turns(self, stats: CycleStatsData) -> int:
+        if stats.moves_spent_gathering_neutral_city_capture > 0:
+            return stats.moves_spent_gathering_neutral_city_capture
+
+        if stats.neutral_city_army_spent <= 0 or stats.approximate_army_gathered_this_cycle <= 0:
+            return 0
+
+        turnsSpentGathering = stats.moves_spent_gathering_fog_tiles + stats.moves_spent_gathering_visible_tiles
+        if turnsSpentGathering <= 0:
+            return 0
+
+        estimatedTurns = (stats.neutral_city_army_spent * turnsSpentGathering + stats.approximate_army_gathered_this_cycle - 1) // stats.approximate_army_gathered_this_cycle
+        return min(turnsSpentGathering, estimatedTurns)
+
     def check_gather_move_differential(self, player: int, otherPlayer: int) -> int:
         """Positive means we spent more turns gathering, negative means they did."""
         playerStats = self.get_current_cycle_stats_by_player(player)
@@ -1516,13 +1566,14 @@ class OpponentTracker(object):
         if playerStats is None or otherPlayerStats is None:
             return 0
 
-        playerTurnsSpentGathering = playerStats.moves_spent_gathering_fog_tiles + playerStats.moves_spent_gathering_visible_tiles
-        otherPlayerTurnsSpentGathering = otherPlayerStats.moves_spent_gathering_fog_tiles + otherPlayerStats.moves_spent_gathering_visible_tiles
+        playerTurnsSpentGathering = playerStats.moves_spent_gathering_fog_tiles + playerStats.moves_spent_gathering_visible_tiles - self._estimate_neutral_city_capture_gather_turns(playerStats)
+        otherPlayerTurnsSpentGathering = otherPlayerStats.moves_spent_gathering_fog_tiles + otherPlayerStats.moves_spent_gathering_visible_tiles - self._estimate_neutral_city_capture_gather_turns(otherPlayerStats)
 
         return playerTurnsSpentGathering - otherPlayerTurnsSpentGathering
 
     def get_approximate_greedy_turns_available(self, againstPlayer: int, ourArmyNonIncrement: int, cityLimit: int | None = None, opponentArmyOffset: int = 0) -> int:
         stats = self.get_current_cycle_stats_by_player(againstPlayer)
+        ourStats = self.get_current_cycle_stats_by_player(self.map.player_index)
         ourScores = self.get_current_team_scores_by_player(self.map.player_index)
 
         ourCities = ourScores.cityCount
@@ -1575,6 +1626,11 @@ class OpponentTracker(object):
 
             i += 1
             turn += 1
+
+        if ourStats is not None:
+            i -= ourStats.moves_spent_gathering_neutral_city_capture
+        if i < 0:
+            i = 0
 
         logbook.info('\n'.join(logEntries))
         return i
@@ -1634,6 +1690,10 @@ class OpponentTracker(object):
         amtPerCity = totalAmt // max(1, cityCount - 1)
 
         return amtPerCity * cityLimit
+
+    def get_predicted_attack_turn_by_dist_to_fog(self, forPlayer: int, distToEnemyFog: int):
+        # TODO this needs to take into account the enemies historical emergence distances and timings.
+        return self.map.remainingCycleTurns - distToEnemyFog - 5
 
     def notify_army_moved(self, army: Army):
         tile = army.tile
@@ -1796,6 +1856,15 @@ class OpponentTracker(object):
             teamAnnihilatedFog += ourFightingDiff
 
         return teamAnnihilatedFog
+
+    def did_player_already_attack_this_round(self, player: int) -> bool:
+        stats = self.current_team_cycle_stats[self.map.team_ids_by_player_index[player]]
+        gathered = stats.approximate_army_gathered_this_cycle
+        gathered -= stats.army_annihilated_visible + stats.army_annihilated_fog
+
+        if stats._approximate_fog_army_available_total <= gathered: # gathered // 2 ?
+            return True
+        return False
 
     def _validate_army_totals(self, curTurnScores: TeamStats, currentCycleStats: CycleStatsData):
         team = currentCycleStats.team

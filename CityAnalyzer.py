@@ -66,8 +66,7 @@ class CityScoreData(object):
         A single neutral city directly next to the city will score as 1/3 the distance between generals."""
 
         self.neighboring_city_relevance: float = 0
-        """Cumulative score of nearby friendly cities vs nearby enemy cities
-        """
+        """Cumulative score of nearby friendly cities vs nearby enemy cities"""
 
         self.distance_from_player_general: int = 1000
         self.distance_from_enemy_general: int = 1000
@@ -113,6 +112,8 @@ class CityAnalyzer(object):
 
         self.reachability_costs_matrix: MapMatrixInterface[int] = None
         self.reachable_from_matrix: MapMatrixInterface[Tile | None] = None
+
+        self.last_targeted_neut_city: Tile | None = None
 
         self.ensure_reachability_matrix_built()
 
@@ -204,13 +205,21 @@ class CityAnalyzer(object):
 
             # if tile.isCity:
             if tile.isNeutral:
+                if self.last_targeted_neut_city == tile:
+                    score.city_relevance_score += 50
+                    score.city_relevance_score *= 1.05
+
                 self.city_scores[tile] = score
             elif isFriendly:
                 self.player_city_scores[tile] = score
                 if self.is_contested(tile):
                     self.owned_contested_cities.add(tile)
                 # City is "in play" if it's not further from enemy general than our general is
-                if score.distance_from_enemy_general <= board_analysis.intergeneral_analysis.bMap.raw[board_analysis.general.tile_index]:
+                centralDefenseEnemyGeneralThreshold = board_analysis.intergeneral_analysis.bMap.raw[board_analysis.general.tile_index]
+                isCityInPlay = score.distance_from_enemy_general <= centralDefenseEnemyGeneralThreshold
+                logbook.info(
+                    f'CENTRAL_DEFENSE_CITY_IN_PLAY_DECISION turn={self.map.turn} city={tile} player={tile.player} enemyDist={score.distance_from_enemy_general} generalEnemyDist={centralDefenseEnemyGeneralThreshold} playerDist={score.distance_from_player_general} inPlay={isCityInPlay}')
+                if isCityInPlay:
                     self.cities_in_play.add(tile)
             else:
                 self.enemy_city_scores[tile] = score
@@ -227,6 +236,8 @@ class CityAnalyzer(object):
             foreachFunc=foreachFunc,
             bypassDefaultSkip=True
         )
+        logbook.info(
+            f'CENTRAL_DEFENSE_CITY_SCAN_SUMMARY turn={self.map.turn} playerCities={[str(city) for city in self.player_city_scores.keys()]} citiesInPlay={[str(city) for city in self.cities_in_play]}')
 
     def reset_reachability(self):
         self.reachability_costs_matrix = None

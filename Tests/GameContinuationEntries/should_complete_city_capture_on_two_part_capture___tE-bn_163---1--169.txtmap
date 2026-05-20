@@ -1,9 +1,9 @@
 |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
-          M              M              M              M         M    b2   bG21 M    a1D  a2D
-     M         M                             M         M    M    M    b2   C43       a1D  MD
-               M    M              M         M         M         M    b2   b26  C42  a1D  D
-M                                  M         M                        M    b1   a1   a1D  D
-          M              M                        M         M         C44  b1   a12  M
+          M              M              M              M         M    b2   bG21 M    b1   a2D
+     M         M                             M         M    M    M    b2   C43       b1   MD
+               M    M              M         M         M         M    b2   b26  C42  b1   D
+M                                  M         M                        M    b1   b1   b1   D
+          M              M                        M         M         C44  b1   b1   M
                                              M                        C45  b1   b1   b1   b1
                     M    M              M         M              M    M    C43  b1   b1   M
           M                             M              M    M         b1   M    b1   M

@@ -1309,7 +1309,7 @@ class ArmyTracker(object):
             return (
                     False
                     or (nextTile.visible and not nextTile.delta.gainedSight and not (wasDiscoveredEnemyTile and self.is_friendly_team(nextTile.player, tile.player)))
-                    or turnsNegative > 6
+                    or turnsNegative > 7
                     or consecutiveUndiscovered > 20
                     or dist > 30
             )
@@ -1337,14 +1337,14 @@ class ArmyTracker(object):
             logbook.info(
                 f"        For new army at tile {str(tile)} we found fog source path???? {str(fogSourcePath)}")
         else:
-            logbook.info(f"        NO fog source path for new army at {str(tile)}")
+            logbook.info(f"        NO fog source path for new army at {str(tile)} depth {depthLimit} for delta {delta}")
         return fogSourcePath
 
     def find_next_fog_city_candidate_near_tile(
             self,
             cityPlayer: int,
             tile: Tile,
-            cutoffDist: int = 10,
+            cutoffDist: int = 12,
             distanceWeightReduction: int = 3,
             wallBreakWeight: float = 2.0,
             emergenceWeight: float = 1.0,
@@ -1370,6 +1370,7 @@ class ArmyTracker(object):
 
         gen = self.map.players[self.map.player_index].general
         genSpan = self.map.get_distance_between(gen, tile)
+        genMapRaw = self._boardAnalysis.intergeneral_analysis.aMap.raw
 
         alliedPlayers = self.map.get_teammates(cityPlayer)
 
@@ -1398,13 +1399,13 @@ class ArmyTracker(object):
             if not isPotentialFogCity:
                 return None
 
-            wallBreakBonus = self._boardAnalysis.enemy_wall_breach_scores[thisTile]
+            wallBreakBonus = self._boardAnalysis.enemy_wall_breach_scores.raw[thisTile.tile_index]
             if not wallBreakBonus or wallBreakBonus < 3:
                 wallBreakBonus = 0
             else:
                 wallBreakBonus = wallBreakBonus * wallBreakWeight
 
-            emergenceVal = (1 + self.emergenceLocationMap[cityPlayer][thisTile] * emergenceWeight + wallBreakBonus) / (dist + distanceWeightReduction)
+            emergenceVal = (1 + self.emergenceLocationMap[cityPlayer].raw[thisTile.tile_index] * emergenceWeight + wallBreakBonus) / (dist + distanceWeightReduction)
             val = emergenceVal
             return val, True  # has to be tuple or logging blows up i guess
 
@@ -1424,13 +1425,13 @@ class ArmyTracker(object):
                     if t.isObstacle:
                         continue
 
-                    if self.map.get_distance_between(self.general, nextTile) + 4 < self.map.get_distance_between(self.general, t) < 150:
+                    if genMapRaw[nextTile.tile_index] + 4 < genMapRaw[t.tile_index] < 150:
                         dist -= 2
 
             if not validLocation:
                 dist += 0.5
 
-            if dist > 3:
+            if dist > 1:
                 validLocation = True
 
             return dist, 0, validLocation
@@ -1447,7 +1448,6 @@ class ArmyTracker(object):
             # logbook.info("nextTile {}: negArmy {}".format(nextTile.toString(), negArmy))
             return (
                     (nextTile.visible and not nextTile.delta.gainedSight)
-                    or (nextTile.discoveredAsNeutral and self.map.turn < 400)
                     or dist > cutoffDist
             )
 
@@ -1481,7 +1481,7 @@ class ArmyTracker(object):
             return newFogCity
 
         else:
-            logbook.info(f"        NO alternate fog city found for {str(tile)}")
+            logbook.info(f"        NO alternate fog city found for {str(tile)} depth ")
 
         return None
 
@@ -3505,44 +3505,66 @@ class ArmyTracker(object):
 
         # likelyArmy = None
 
-        for army in possibleArmies:
-            seenAgo = self.map.turn - army.last_seen_turn
-            if seenAgo > 8:
-                continue
-            if tookNeutCity:
-                cutoff = 8 - seenAgo
-                logbook.info(f"try_find_army_sink FINDING NEXT FOG CITY FOR PLAYER {player} for not-fog-city tile {str(army.tile)} (dist {cutoff})")
-                potentialCity = self.find_next_fog_city_candidate_near_tile(player, army.tile, cutoffDist=cutoff)
-                if potentialCity is not None:
-                    self.convert_fog_city_to_player_owned(potentialCity, player)
-                    split = army.get_split_for_fog([army.tile, potentialCity])
-                    ogArmySplit = split[0]
-                    # likelyArmy = ogArmySplit
-                    self.armies[army.tile] = ogArmySplit
-                    army = split[1]
-                    # army.tile.army = army.value + 1
-                    army.path = Path()
-                    army.update_tile(potentialCity)
-                    potentialCity.army = max(1, army.value - annihilatedFogArmy)
-                    army.value = max(0, army.value - annihilatedFogArmy)
-                    army.tile.army = army.value + 1
-                    for entangled in army.entangledArmies:
-                        entangled.value = max(0, entangled.value - annihilatedFogArmy)
-                        entangled.tile.army = entangled.value + 1
-                    army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
-                    self.armies[army.tile] = army
-                    army.last_moved_turn = self.map.turn
+        for (fromRange, toRange) in [
+            (0, 5),
+            (5, 9),
+            (9, 15),
+        ]:
+            for army in possibleArmies:
+                seenAgo = self.map.turn - army.last_seen_turn
+                if seenAgo >= toRange:
+                    continue
+                if seenAgo < fromRange:
+                    continue
+                if tookNeutCity:
+                    cutoff = min(14, 1 + seenAgo)
+                    logbook.info(f"try_find_army_sink FINDING NEXT FOG CITY FOR PLAYER {player} for not-fog-city tile {str(army.tile)} (dist {cutoff})")
+                    potentialCity = self.find_next_fog_city_candidate_near_tile(player, army.tile, cutoffDist=cutoff)
+                    if potentialCity is not None:
+                        self.convert_fog_city_to_player_owned(potentialCity, player)
+                        split = army.get_split_for_fog([army.tile, potentialCity])
+                        ogArmySplit = split[0]
+                        # likelyArmy = ogArmySplit
+                        self.armies[army.tile] = ogArmySplit
+                        army = split[1]
+                        # army.tile.army = army.value + 1
+                        army.path = Path()
+                        army.update_tile(potentialCity)
+                        potentialCity.army = max(1, army.value - annihilatedFogArmy)
+                        army.value = max(0, army.value - annihilatedFogArmy)
+                        army.tile.army = army.value + 1
+                        for entangled in army.entangledArmies:
+                            entangled.value = max(0, entangled.value - annihilatedFogArmy)
+                            entangled.tile.army = entangled.value + 1
+                        army.expectedPaths = ArmyTracker.get_army_expected_path(self.map, army, self.general, self.player_targets)
+                        self.armies[army.tile] = army
+                        army.last_moved_turn = self.map.turn
 
-                    break
+                        return True
 
-            else:
-                # likelyArmy = army
-                army.value -= annihilatedFogArmy
-                if army.value < 0:
-                    army.value = 0
-                army.tile.army = army.value + 1
+                    logbook.info(f"try_find_army_sink did not find fog city for {str(army.tile)}, reducing army by {annihilatedFogArmy} anyway.")
+                    self._reduce_army_sink_for_fog_annihilation(army, annihilatedFogArmy)
+                    return True
 
-                break
+                else:
+                    # likelyArmy = army
+                    self._reduce_army_sink_for_fog_annihilation(army, annihilatedFogArmy)
+                    return True
+
+        return False
+
+    def _reduce_army_sink_for_fog_annihilation(
+            self,
+            army: Army,
+            annihilatedFogArmy: int
+    ):
+        army.value -= annihilatedFogArmy
+        if army.value < 0:
+            army.value = 0
+        army.tile.army = army.value + 1
+        for entangled in army.entangledArmies:
+            entangled.value = max(0, entangled.value - annihilatedFogArmy)
+            entangled.tile.army = entangled.value + 1
 
     def _inc_slash_dec_fog_prediction_to_get_player_tile_count_right(
             self,
@@ -4103,7 +4125,7 @@ class ArmyTracker(object):
                 negArmy += nextTile.army
                 if negativeTiles is None or nextTile not in negativeTiles:
                     if map.is_tile_on_team_with(nextTile, general.player):
-                        negCaps -= 2.2
+                        negCaps -= 2.05
                     else:
                         negCaps -= 0.7
 
@@ -4230,4 +4252,13 @@ class ArmyTracker(object):
             maxDist += 1
 
         return maxDist
+
+    def has_player_seen(self, player: int, tile: Tile):
+        # TODO when building ever_owned with an updated tile, just also update a new ever_seen. Also convert both to mapmatrix probably..?
+        everOwned = self.tiles_ever_owned_by_player[player]
+        for v in tile.visibleTo:
+            if v in everOwned:
+                return True
+
+        return False
 

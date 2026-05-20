@@ -28,7 +28,8 @@ class GatherCapturePlan(TilePlanInterface):
             minValueFunc: typing.Callable[[Tile, typing.Tuple], typing.Tuple | None] | None = None,
             friendlyCityCount: int | None = None,
             enemyCityCount: int | None = None,
-            asPlayer: int = -1
+            asPlayer: int = -1,
+            gatherTarget: Tile | None = None,
     ):
         """
 
@@ -64,6 +65,8 @@ class GatherCapturePlan(TilePlanInterface):
         """The number of turns this gather includes from unknown (not included in tileset/tilelist) fog tiles."""
         self.fog_gather_army: int = 0
         """The amount of army this gather includes from unknown (not included in tileset/tilelist) fog tiles."""
+        self.gather_target: Tile | None = gatherTarget
+        """If this is a gather at a specific target (eg a neutral or enemy city), it should be entered here for turn-spent analytics."""
         self._requiredDelay: int = requiredDelay
         self._tileList: typing.List[Tile] | None = None
         self._tileSet: typing.Set[Tile] | None = None
@@ -464,7 +467,7 @@ class GatherCapturePlan(TilePlanInterface):
                     sumArmy -= currentTile.army
                     # sumPoints -= currentTile.army
                 if currentTile.player >= 0:
-                    econValue += 2.2
+                    econValue += 2.05
                     if currentTile.isCity:
                         plan.enemy_city_count += 1
                 else:
@@ -596,7 +599,7 @@ class GatherCapturePlan(TilePlanInterface):
                         sumArmy -= currentTile.army
                         # sumPoints -= currentTile.army
                     if currentTile.player >= 0:
-                        econValue += 2.2
+                        econValue += 2.05
                         if currentTile.isCity:
                             plan.enemy_city_count += 1
                     else:

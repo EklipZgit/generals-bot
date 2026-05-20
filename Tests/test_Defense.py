@@ -3075,3 +3075,22 @@ class DefenseTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
         self.assertNoFriendliesKilled(map, general)
 
+
+    def test_should_defend_city_when_literally_have_to_defend_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_city_when_literally_have_to_defend_city___aRLuObTKX---1--229.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 229, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=229)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,17->4,8->5,8->5,7z->5,5->6,5->6,4->3,4->3,3')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(5, 8)

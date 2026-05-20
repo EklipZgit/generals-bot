@@ -1559,6 +1559,15 @@ class TestBase(unittest.TestCase):
                 while tile not in protectedFileVisibleTiles and tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
                     countScoreEnemy.add(1)
                     tile.army += 1
+            if countScoreEnemy.value < enemyGeneralTargetScore:
+                fallbackEnemyTiles = SearchUtils.where(
+                    map.pathable_tiles,
+                    lambda t: t.player == enemyGeneral.player and not t.isCity)
+                fallbackEnemyTiles.sort(key=lambda t: (t == enemyGeneral, get_player_land_dist(t), 0 - enemyMap[t]), reverse=True)
+                for tile in fallbackEnemyTiles:
+                    while tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
+                        countScoreEnemy.add(1)
+                        tile.army += 1
 
         while generalTargetScore is not None and countScoreGeneral.value < generalTargetScore:
             for tile in map.get_all_tiles():

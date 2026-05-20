@@ -122,7 +122,7 @@ class BotPathingUtils:
 
             else:
                 while bot.curPath is not None:
-                    if nextMove.source in defenseCriticalTileSet and nextMove.source.army > 5:
+                    if nextMove.source in defenseCriticalTileSet and nextMove.source.army > 5 and not (isinstance(bot.curPath, MoveListPath) and nextMove.dest.isCity and nextMove.dest.isNeutral):
                         tile = nextMove.source
                         logbook.info(
                             f"\n\n\n~~~~~~~~~~~\nSKIPPED: Move was from a negative tile {tile.x},{tile.y}\n~~~~~~~~~~~~~\n\n~~~\n")

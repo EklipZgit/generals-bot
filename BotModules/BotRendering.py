@@ -169,13 +169,13 @@ class BotRendering:
 
         if bot.last_flow_expander is not None and bot.last_flow_opt_collection is not None:
             if bot.info_render_flow_expand:
-                BotRendering.render_flow_expand_in_view_info(bot)
+                BotRendering.render_flow_expand_in_view_info(bot, dontLogOpts=True)
             else:
                 if bot.last_flow_expander.log_debug:
                     logbook.warning('FLOW_RENDER_SKIPPED info_render_flow_expand=False')
 
     @staticmethod
-    def render_flow_expand_in_view_info(bot: EklipZBot):
+    def render_flow_expand_in_view_info(bot: EklipZBot, dontLogOpts: bool = False):
         expander = bot.last_flow_expander
         optCollection = bot.last_flow_opt_collection
         vi: ViewInfo = bot.viewInfo
@@ -210,11 +210,12 @@ class BotRendering:
             if enemyGeneral is not None:
                 ArmyFlowExpander.add_flow_expansion_option_to_view_info(bot._map, bestOpt, general.player, enemyGeneral.player, vi)
 
-        vi.add_info_line('-------- v all options --------')
-        for opt in opts:
-            vi.add_info_line_no_log(str(opt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in opt.tileList))
-            if enemyGeneral is not None:
-                ArmyFlowExpander.add_flow_expansion_option_to_view_info(bot._map, opt, general.player, enemyGeneral.player, vi)
+        if not dontLogOpts:
+            vi.add_info_line('-------- v all options --------')
+            for opt in opts:
+                vi.add_info_line_no_log(str(opt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in opt.tileList))
+                if enemyGeneral is not None:
+                    ArmyFlowExpander.add_flow_expansion_option_to_view_info(bot._map, opt, general.player, enemyGeneral.player, vi)
 
         flowGraph = expander.flow_graph
         if flowGraph is not None:
@@ -376,10 +377,13 @@ class BotRendering:
 
         data.append(f'bot_is_rapid_capturing_neut_cities={bot.is_rapid_capturing_neut_cities}')
         data.append(f'bot_is_blocking_neutral_city_captures={bot.is_blocking_neutral_city_captures}')
+        data.append(f'bot_was_allowing_neutral_cities_last_turn={bot.was_allowing_neutral_cities_last_turn}')
         data.append(f'bot_finishing_exploration={bot.finishing_exploration}')
         if bot.targetingArmy:
             data.append(f'bot_targeting_army={bot.targetingArmy.tile.x},{bot.targetingArmy.tile.y}')
         data.append(f'bot_cur_path={str(bot.curPath)}')
+        if bot.last_move is not None:
+            data.append(f'bot_last_move={BotSerialization.convert_move_to_string(bot.last_move)}')
 
         for player in bot._map.players:
             char = charMap[player.index]

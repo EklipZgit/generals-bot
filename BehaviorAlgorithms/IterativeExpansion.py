@@ -33,7 +33,7 @@ from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDire
 from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionFinder
 from BehaviorAlgorithms.Flow.OrToolsFlowDirectionFinder import OrToolsFlowDirectionFinder
 
-ITERATIVE_EXPANSION_EN_CAP_VAL = 2.2
+ITERATIVE_EXPANSION_EN_CAP_VAL = 2.05
 
 
 def _deep_copy_flow_nodes(rootNodes: typing.Iterable[IslandFlowNode], cloneScopeLookup: typing.Dict[int, IslandFlowNode]) -> typing.Iterable[IslandFlowNode]:

@@ -693,7 +693,7 @@ class CityGatherTests(TestBase):
         self.assertEqual(general.player, city.player)
 
     def test_should_complete_city_capture_on_two_part_capture(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_complete_city_capture_on_two_part_capture___tE-bn_163---1--169.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 169, fill_out_tiles=True)
 
@@ -1626,10 +1626,10 @@ class CityGatherTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=16)
         self.assertNoFriendliesKilled(map, general)
 
-        city = playerMap.GetTile(19, 18)
+        city = playerMap.At(19, 18)
         self.assertOwned(general.player, city)
 
     def test_shouldnt_randomly_launch_attack_in_the_middle_of_city_gather(self):
@@ -1914,3 +1914,24 @@ class CityGatherTests(TestBase):
 
         self.assertGreater(playerMap.At(13, 8).army, 70) # should split to cap the city
         self.assertGreater(playerMap.At(13, 7).army, 30) # should split again since theres >25 on the way to the city
+
+    def test_should_complete_3_part_city_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_complete_3_part_city_capture___ZezPXdCs5---1--263.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 263, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=263)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        bot.city_capture_plan_tiles = {playerMap.At(15, 2), playerMap.At(16, 2), playerMap.At(17, 2), playerMap.At(18, 3), playerMap.At(16, 3)}
+        bot.city_capture_plan_last_updated = playerMap.turn
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(17, 3)

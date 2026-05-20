@@ -1,11 +1,35 @@
 from Sim.GameSimulator import GameSimulatorHost
+from Strategy.OpponentTracker import OpponentTracker
 from Strategy import TeamAttackData
+from StrategyModels import CycleStatsData
 from TestBase import TestBase
 from BotModules.BotTimings import BotTimings
 from BotModules.BotGatherOps import BotGatherOps
 
 
 class OpponentTrackerTests(TestBase):
+    def test_should_subtract_neutral_city_capture_gather_turns_from_gather_differential(self):
+        opponentTracker = object.__new__(OpponentTracker)
+        opponentTracker._team_lookup_by_player = [0, 1]
+        playerStats = CycleStatsData(0, [0])
+        otherPlayerStats = CycleStatsData(1, [1])
+        opponentTracker.current_team_cycle_stats = [playerStats, otherPlayerStats]
+
+        playerStats.moves_spent_gathering_visible_tiles = 5
+        otherPlayerStats.moves_spent_gathering_visible_tiles = 2
+        self.assertEqual(3, opponentTracker.check_gather_move_differential(0, 1))
+
+        opponentTracker.record_neutral_city_capture_gather_turn(0)
+        opponentTracker.record_neutral_city_capture_gather_turn(0)
+        opponentTracker.record_neutral_city_capture_army_spent(0, 50)
+        self.assertEqual(1, opponentTracker.check_gather_move_differential(0, 1))
+        self.assertEqual(50, playerStats.neutral_city_army_spent)
+
+        otherPlayerStats.moves_spent_gathering_visible_tiles = 10
+        otherPlayerStats.approximate_army_gathered_this_cycle = 50
+        otherPlayerStats.neutral_city_army_spent = 20
+        self.assertEqual(-3, opponentTracker.check_gather_move_differential(0, 1))
+
     def test_should_convert_city_capture_into_lost_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_convert_city_capture_into_lost_army___4r4HqWsPJ---0--388.txtmap'
@@ -62,6 +86,56 @@ class OpponentTrackerTests(TestBase):
         counts = bot.opponent_tracker.get_all_player_fog_tile_count_dict()
         self.assertEqual(27, counts[1][2])
         self.assertEqual(11, counts[1][1])
+
+    def test_should_preserve_loaded_current_cycle_stats_when_loading_army_bonus_turn(self):
+        def assert_loaded_current_cycle_stats(opponentTracker: OpponentTracker, resumeData: dict[str, str], team: int):
+            stats = opponentTracker.current_team_cycle_stats[team]
+            self.assertIsNotNone(stats)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_moves_spent_capturing_fog_tiles']), stats.moves_spent_capturing_fog_tiles)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_moves_spent_capturing_visible_tiles']), stats.moves_spent_capturing_visible_tiles)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_moves_spent_gathering_fog_tiles']), stats.moves_spent_gathering_fog_tiles)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_moves_spent_gathering_visible_tiles']), stats.moves_spent_gathering_visible_tiles)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_moves_spent_gathering_neutral_city_capture']), stats.moves_spent_gathering_neutral_city_capture)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_neutral_city_army_spent']), stats.neutral_city_army_spent)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_approximate_army_gathered_this_cycle']), stats.approximate_army_gathered_this_cycle)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_army_annihilated_visible']), stats.army_annihilated_visible)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_army_annihilated_fog']), stats.army_annihilated_fog)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_army_annihilated_total']), stats.army_annihilated_total)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_approximate_fog_army_available_total']), stats.approximate_fog_army_available_total)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_approximate_fog_army_available_total_true']), stats.approximate_fog_army_available_total_true)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_number_assumed_two_expansions_that_may_be_fog_distance']), stats.number_assumed_two_expansions_that_may_be_fog_distance)
+            self.assertEqual(int(resumeData[f'ot_{team}_stats_approximate_fog_city_army']), stats.approximate_fog_city_army)
+
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_value_city_catch_up_more_than_meeting_opponent_at_choke___0wUUFHabft---1--200.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 200, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=200)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        simHost.queue_player_moves_str(general.player, '15,9->16,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+
+        self.begin_capturing_logging()
+        for team in map.unique_teams:
+            assert_loaded_current_cycle_stats(bot.opponent_tracker, rawMap.resume_data, team)
+
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+        playerTeam = map.team_ids_by_player_index[general.player]
+        enemyTeam = map.team_ids_by_player_index[enemyGeneral.player]
+        playerStats = bot.opponent_tracker.current_team_cycle_stats[playerTeam]
+        enemyStats = bot.opponent_tracker.current_team_cycle_stats[enemyTeam]
+        self.assertIsNotNone(playerStats)
+        self.assertIsNotNone(enemyStats)
+        self.assertEqual(int(rawMap.resume_data[f'ot_{playerTeam}_stats_moves_spent_capturing_visible_tiles']) + 1, playerStats.moves_spent_capturing_visible_tiles)
+        self.assertEqual(int(rawMap.resume_data[f'ot_{playerTeam}_stats_moves_spent_gathering_neutral_city_capture']) + 2, playerStats.moves_spent_gathering_neutral_city_capture)
+        self.assertEqual(int(rawMap.resume_data[f'ot_{enemyTeam}_stats_moves_spent_gathering_fog_tiles']) + 1, enemyStats.moves_spent_gathering_fog_tiles)
+        self.assertEqual(int(rawMap.resume_data[f'ot_{enemyTeam}_stats_approximate_army_gathered_this_cycle']) + 1, enemyStats.approximate_army_gathered_this_cycle)
+        self.assertEqual(int(rawMap.resume_data[f'ot_{enemyTeam}_stats_approximate_fog_army_available_total']) + 1, enemyStats.approximate_fog_army_available_total)
+        self.assertEqual(int(rawMap.resume_data[f'ot_{enemyTeam}_stats_approximate_fog_army_available_total_true']) + 1, enemyStats.approximate_fog_army_available_total_true)
 
     def test_should_not_count_discovered_tile_towards_fog_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -865,3 +939,4 @@ class OpponentTrackerTests(TestBase):
         self.assertEqual(2, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_army_available_total_true)
         # zero reason to touch city army...
         self.assertEqual(7, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army)
+

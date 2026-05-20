@@ -20,7 +20,7 @@ from BotModules.BotComms import BotComms
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotTimings import BotTimings
 from DangerAnalyzer import ThreatType, ThreatObj
-from Gather import GatherTreeNode
+from Gather import GatherTreeNode, GatherCapturePlan
 from Path import Path, MoveListPath
 from Strategy.WinConditionAnalyzer import WinCondition
 from StrategyModels import ExpansionPotential
@@ -44,9 +44,22 @@ class BotCityOps:
             negativeTiles: typing.Set[Tile],
             forceNeutralCapture: bool = False,
     ) -> typing.Tuple[Path | None, Move | None]:
+        capturePath, move, _ = BotCityOps.capture_cities_with_plan_option(
+            bot,
+            negativeTiles,
+            forceNeutralCapture=forceNeutralCapture,
+        )
+        return capturePath, move
+
+    @staticmethod
+    def capture_cities_with_plan_option(
+            bot: EklipZBot,
+            negativeTiles: typing.Set[Tile],
+            forceNeutralCapture: bool = False,
+    ) -> typing.Tuple[Path | None, Move | None, typing.Any | None]:
         negativeTiles = negativeTiles.copy()
         if BotStateQueries.is_all_in(bot, ) and not bot.all_in_city_behind:
-            return None, None
+            return None, None, None
         logbook.info(f"------------\n     CAPTURE_CITIES (force_city_take {bot.force_city_take}), negative_tiles {str(negativeTiles)}\n--------------")
         killSearchDist = 3
         genDist = min(30, BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation))
@@ -73,7 +86,8 @@ class BotCityOps:
 
         rapidCityPath = BotCityOps.find_rapid_city_path(bot)
         if rapidCityPath is not None:
-            return rapidCityPath, None
+            BotCityOps._apply_city_capture_plan_value(bot, rapidCityPath, rapidCityPath.tail.tile)
+            return rapidCityPath, None, rapidCityPath
 
         with bot.perf_timer.begin_move_event('finding neutral city path'):
             neutPath = BotCityOps.find_neutral_city_path(bot)
@@ -121,7 +135,7 @@ class BotCityOps:
             with bot.perf_timer.begin_move_event(f'Contest Offensive all-in move'):
                 contestMove, contestGatherVal, contestGatherTurns, contestGatherNodes = BotCityOps.get_city_contestation_all_in_move(bot, defenseCriticalTileSet=negativeTiles)
             if contestMove is not None:
-                return None, contestMove
+                return None, contestMove, None
 
         if not mustContestEnemy and shouldAllowNeutralCapture:
             if neutPath and (bot.targetPlayer == -1 or path is None or neutPath.length < path.length / 4):
@@ -142,7 +156,7 @@ class BotCityOps:
                         revealPath, move = bot.hunt_for_fog_neutral_city(negativeTiles, maxTurns=cycleTurn % cityHuntTurns)
                     if move is not None or revealPath is not None:
                         bot.info('hunting fog neutral city')
-                        return revealPath, move
+                        return revealPath, move, revealPath
 
                 if not bot.all_in_city_behind:
                     if cycleTurn < 5:
@@ -159,7 +173,7 @@ class BotCityOps:
 
             bot.all_in_city_behind = False
 
-            return None, None
+            return None, None, None
 
         if bot.all_in_city_behind:
             BotComms.send_teammate_communication(bot, "Ceasing all-in, hold", bot.locked_launch_point)
@@ -170,7 +184,7 @@ class BotCityOps:
 
         target = path.tail.tile
         if player.standingArmy + 5 <= target.army:
-            return None, None
+            return None, None, None
 
         enemyArmyNearDist = 3
         enemyArmyNear = BotCombatOps.sum_enemy_army_near_tile(bot, target, enemyArmyNearDist)
@@ -241,7 +255,7 @@ class BotCityOps:
             allowGather = True
 
         bot.city_capture_plan_tiles = set()
-        capturePath, move = BotCityOps.plan_city_capture(
+        capturePath, move, planOption = BotCityOps.plan_city_capture_with_plan_option(
             bot,
             target,
             path,
@@ -261,7 +275,44 @@ class BotCityOps:
         else:
             BotComms.send_teammate_communication(bot, "Planning to take a city.", target, cooldown=15)
 
-        return capturePath, move
+        return capturePath, move, planOption
+
+    @staticmethod
+    def capture_cities_plan_option(
+            bot: EklipZBot,
+            negativeTiles: typing.Set[Tile],
+            forceNeutralCapture: bool = False,
+    ) -> typing.Any | None:
+        _, _, planOption = BotCityOps.capture_cities_with_plan_option(bot, negativeTiles, forceNeutralCapture=forceNeutralCapture)
+        if planOption is not None:
+            bot.info(f'city capture option {planOption.econValue / max(planOption.length, 1):.2f} ({planOption.econValue:.1f}e/{planOption.length}t) {planOption}')
+        return planOption
+
+    @staticmethod
+    def _apply_city_capture_plan_value(
+            bot: EklipZBot,
+            planOption: GatherCapturePlan,
+            targetCity: Tile,
+    ):
+        remainingTurnsInCycle = bot.timings.get_turns_left_in_cycle(bot._map.turn)
+        cityValue = int(((remainingTurnsInCycle - (planOption.length * 1.5)) // 2) * 1.5) + 6
+        if not bot.opponent_tracker.even_or_up_on_cities(bot.targetPlayer):
+            cityValue += 6
+
+        if targetCity.player != -1:
+            cityValue += 2
+            cityValue *= 2
+
+        bonusCapturePointMatrix = BM.BotExpansionOps.BotExpansionOps.get_expansion_weight_matrix(bot)
+        pathCaptureValue = 0.0
+        friendlyPlayers = bot._map.get_teammates(bot.general.player)
+        for tile in planOption.tileList:
+            if tile == targetCity:
+                continue
+            if tile.player not in friendlyPlayers:
+                pathCaptureValue += bonusCapturePointMatrix.raw[tile.tile_index]
+        planOption.econValue = max(0.0, float(cityValue) + pathCaptureValue)
+        planOption.gather_target = targetCity
 
     @staticmethod
     def should_proactively_take_cities(bot):
@@ -462,6 +513,13 @@ class BotCityOps:
 
     @staticmethod
     def get_quick_kill_on_enemy_cities(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Path | None:
+        planOption = BotCityOps.get_quick_kill_on_enemy_cities_plan_option(bot, defenseCriticalTileSet)
+        if isinstance(planOption, Path):
+            return planOption
+        return None
+
+    @staticmethod
+    def get_quick_kill_on_enemy_cities_plan_option(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> TilePlanInterface | None:
         # Force recompile
         foundCap = None
         enemyCitiesOrderedByPriority = BotCityOps.get_enemy_cities_by_priority(bot)
@@ -482,6 +540,7 @@ class BotCityOps:
 
         if foundCap:
             bot.info(f'returning 1-move-city-kill {foundCap}')
+            BotCityOps._apply_city_capture_plan_value(bot, foundCap, foundCap.tail.tile)
             return foundCap
 
         if bot.opponent_tracker.winning_on_economy(byRatio=1.5, cityValue=50):
@@ -505,6 +564,7 @@ class BotCityOps:
             )
             if killPath is not None:
                 bot.info(f'returning bulk free-army {killPath}')
+                BotCityOps._apply_city_capture_plan_value(bot, killPath, killPath.tail.tile)
                 return killPath
         possibleNeutralCities = []
         possibleNeutralCities.extend(c for c in bot.cityAnalyzer.city_scores.keys() if
@@ -532,6 +592,7 @@ class BotCityOps:
             )
             if killPath is not None:
                 bot.info(f'returning bulk neut low cost city kill {killPath}')
+                BotCityOps._apply_city_capture_plan_value(bot, killPath, killPath.tail.tile)
                 return killPath
 
         tileCountRatio = bot._map.players[bot.general.player].tileCount ** 0.30
@@ -579,6 +640,7 @@ class BotCityOps:
                 logbook.info(f'bypassed singleQuick because best defense was easier for opp. {singleQuick.value} vs {bestDef.value}')
             else:
                 bot.info(f'Quick kill, single quick EN {singleQuick}')
+                BotCityOps._apply_city_capture_plan_value(bot, singleQuick, singleQuick.tail.tile)
                 return singleQuick
 
         shortestKill = None
@@ -690,7 +752,7 @@ class BotCityOps:
             armyToSearch = BotStateQueries.get_target_army_inc_adjacent_enemy(bot, tgCity) + 1
             cityPath = shortestKill.get_subsegment(3, end=True)
             maxDur = int(bot.player.tileCount ** 0.32) + 1
-            path, move = BotCityOps.plan_city_capture(
+            path, move, planOption = BotCityOps.plan_city_capture_with_plan_option(
                 bot,
                 tgCity,
                 cityPath,
@@ -700,17 +762,26 @@ class BotCityOps:
                 killSearchDist=5,
                 gatherMaxDuration=maxDur,
                 negativeTiles=negTilesToUse)
+            if planOption is not None:
+                bot.info(f'plan_city_capture quick kill plan option @{tgCity}')
+                BotCityOps._apply_city_capture_plan_value(bot, planOption, tgCity)
+                return planOption
             if move is not None:
                 bot.info(f'plan_city_capture quick kill @{tgCity}')
                 fakePath = Path()
                 fakePath.add_next(move.source)
                 fakePath.add_next(move.dest)
+                BotCityOps._apply_city_capture_plan_value(bot, fakePath, tgCity)
                 return fakePath
             if path is not None:
-                return path.get_subsegment(1)
+                planPath = path.get_subsegment(1)
+                BotCityOps._apply_city_capture_plan_value(bot, planPath, tgCity)
+                return planPath
             if shortestKill is not None:
                 bot.viewInfo.add_info_line(f'plan_city_capture didnt find plan for {str(tgCity)}, using og kp instead')
-                return shortestKill.get_subsegment(1)
+                planPath = shortestKill.get_subsegment(1)
+                BotCityOps._apply_city_capture_plan_value(bot, planPath, tgCity)
+                return planPath
 
         return None
 
@@ -727,6 +798,33 @@ class BotCityOps:
             negativeTiles: typing.Set[Tile],
             gatherMinDuration: int = 0,
     ) -> typing.Tuple[Path | None, Move | None]:
+        capturePath, move, _ = BotCityOps.plan_city_capture_with_plan_option(
+            bot,
+            targetCity,
+            cityGatherPath,
+            allowGather,
+            targetKillArmy,
+            targetGatherArmy,
+            killSearchDist,
+            gatherMaxDuration,
+            negativeTiles,
+            gatherMinDuration=gatherMinDuration,
+        )
+        return capturePath, move
+
+    @staticmethod
+    def plan_city_capture_with_plan_option(
+            bot: EklipZBot,
+            targetCity: Tile,
+            cityGatherPath: Path | None,
+            allowGather: bool,
+            targetKillArmy: int,
+            targetGatherArmy: int,
+            killSearchDist: int,
+            gatherMaxDuration: int,
+            negativeTiles: typing.Set[Tile],
+            gatherMinDuration: int = 0,
+    ) -> typing.Tuple[Path | None, Move | None, typing.Any | None]:
         if targetGatherArmy < targetKillArmy + targetCity.army:
             raise AssertionError(f'You cant gather less army {targetGatherArmy} to a city than the kill requirement {targetKillArmy} or the kill requirement will never fire and you will gather-loop.')
 
@@ -816,10 +914,11 @@ class BotCityOps:
             killPath.start.move_half = BotCombatOps.should_kill_path_move_half(bot, killPath, targetKillArmy + addlArmy)
             bot.city_capture_plan_tiles.update(killPath.tileList)
             bot.city_capture_plan_last_updated = bot._map.turn
-            return killPath, None
+            BotCityOps._apply_city_capture_plan_value(bot, killPath, targetCity)
+            return killPath, None, killPath
 
         if not allowGather:
-            return None, None
+            return None, None, None
 
         armyAlreadyPrepped = 0
         if cityGatherPath:
@@ -872,12 +971,21 @@ class BotCityOps:
             )
 
             if move is not None:
-                preferPrune = set(bot.expansion_plan.preferred_tiles) if bot.expansion_plan is not None else None
-
-                if preferPrune is not None:
-                    for t in bot.expansion_plan.preferred_tiles:
-                        if t in bot.tiles_gathered_to_this_cycle:
-                            preferPrune.remove(t)
+                preferPrune = None
+                # if bot.expansion_plan is not None and not bot._map.is_army_bonus_turn:
+                #     preferPrune = set(bot.expansion_plan.preferred_tiles)
+                #     if bot.city_capture_plan_tiles:
+                #         preferPrune.difference_update(bot.city_capture_plan_tiles)
+                #
+                # if preferPrune is not None:
+                #     for t in bot.expansion_plan.preferred_tiles:
+                #         if t in bot.tiles_gathered_to_this_cycle:
+                #             preferPrune.remove(t)
+                logbook.info(
+                    f"city capture preferPrune "
+                    f"source={'none_army_bonus_turn' if bot._map.is_army_bonus_turn else 'last_expansion_plan'} "
+                    f"tiles={BotCityOps._format_city_safety_tiles(preferPrune if preferPrune is not None else [])}"
+                )
 
                 if targetCity.isNeutral:
                     prunedTurns, prunedValue, prunedGatherNodes = Gather.prune_mst_to_army_with_values(
@@ -909,7 +1017,7 @@ class BotCityOps:
                     bot.info(
                         f"GC TOO SLOW {str(targetCity)} {move} t{prunedTurns}/{gatherTurns}/{gatherDist}  prun{prunedValue + armyAlreadyPrepped}/pre{gatherValue + armyAlreadyPrepped}/req{targetGatherArmy + armyAlreadyPrepped} -proact {BotCityOps.should_proactively_take_cities(bot, )}")
                     bot.viewInfo.evaluatedGrid[targetCity.x][targetCity.y] = 300
-                    return None, None
+                    return None, None, None
 
                 sameLengthKillPath = SearchUtils.dest_breadth_first_target(
                     bot._map,
@@ -932,7 +1040,8 @@ class BotCityOps:
                         bot.info(f"GC @{str(targetCity)} killpath found optimizing captures")
                         bot.city_capture_plan_tiles.update(sameLengthKillPath.tileList)
                         bot.city_capture_plan_last_updated = bot._map.turn
-                        return sameLengthKillPath, None
+                        BotCityOps._apply_city_capture_plan_value(bot, sameLengthKillPath, targetCity)
+                        return sameLengthKillPath, None, sameLengthKillPath
 
                 move = BotGatherOps.get_tree_move_default(bot, prunedGatherNodes, pop=False)
                 path = None
@@ -955,9 +1064,23 @@ class BotCityOps:
                 bot.info(
                     f"GC {str(targetCity)} {move} t{prunedTurns}/{gatherTurns}/{gatherDist}  prun{prunedValue + armyAlreadyPrepped}/pre{gatherValue + armyAlreadyPrepped}/req{targetGatherArmy + armyAlreadyPrepped} -proact {BotCityOps.should_proactively_take_cities(bot, )}")
                 bot.viewInfo.evaluatedGrid[targetCity.x][targetCity.y] = 300
-                return path, move
+                captures = {targetCity}
+                for target in targets:
+                    if not bot._map.is_player_on_team_with(target.player, bot.general.player):
+                        captures.add(target)
+                planOption = Gather.GatherCapturePlan.build_from_root_nodes(
+                    bot._map,
+                    prunedGatherNodes,
+                    negativeTiles,
+                    bot.general.player,
+                    onlyCalculateFriendlyArmy=False,
+                    captures=captures,
+                    cloneNodes=True,
+                )
+                BotCityOps._apply_city_capture_plan_value(bot, planOption, targetCity)
+                return path, move, planOption
 
-        return None, None
+        return None, None, None
 
     @staticmethod
     def block_neutral_captures(bot: EklipZBot, reason: str = ''):
@@ -1160,6 +1283,9 @@ class BotCityOps:
                 if bot.city_capture_plan_last_updated > bot._map.turn - 2 and targetCity in bot.city_capture_plan_tiles:
                     bot.viewInfo.add_stats_line(f'updating existing city capture plan tiles. cityDefVal {cityDefVal}')
                     searchNegs.update(bot.city_capture_plan_tiles)
+                    for t in bot.city_capture_plan_tiles:
+                        cityDefVal += t.army - 1
+                    cityDefVal -= targetCity.army
                     if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                         logbook.info(
                             f'CITY_SAFETY_NEGS existing-plan turn={bot._map.turn} searchNegCount={len(searchNegs)} '

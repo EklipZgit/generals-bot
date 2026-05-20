@@ -669,7 +669,7 @@ class MoveListPath(Path):
     def get_move_list(self) -> typing.List[Move]:
         return list(self._pathQueue)
 
-    def __iter__(self) -> typing.Iterable[PathMove]:
+    def __iter__(self) -> typing.Iterator[PathMove | None]:
         """
         Does not return path moves that are properly linked.
         :return:

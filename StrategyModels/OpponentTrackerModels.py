@@ -30,6 +30,10 @@ class CycleStatsData:
         self.moves_spent_gathering_visible_tiles: int = 0
         """If the player moves on visible friendly territory, this increments by one."""
 
+        self.moves_spent_gathering_neutral_city_capture: int = 0
+
+        self.neutral_city_army_spent: int = 0
+
         self.approximate_army_gathered_this_cycle: int = 0
         """The expected rough estimate of large tiles (or group of large tiles) gathered by opponent this cycle."""
 
@@ -80,6 +84,8 @@ class CycleStatsData:
         myClone.moves_spent_capturing_visible_tiles = self.moves_spent_capturing_visible_tiles
         myClone.moves_spent_gathering_fog_tiles = self.moves_spent_gathering_fog_tiles
         myClone.moves_spent_gathering_visible_tiles = self.moves_spent_gathering_visible_tiles
+        myClone.moves_spent_gathering_neutral_city_capture = self.moves_spent_gathering_neutral_city_capture
+        myClone.neutral_city_army_spent = self.neutral_city_army_spent
         myClone.approximate_army_gathered_this_cycle = self.approximate_army_gathered_this_cycle
         myClone.army_annihilated_visible = self.army_annihilated_visible
         myClone.army_annihilated_fog = self.army_annihilated_fog

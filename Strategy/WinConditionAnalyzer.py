@@ -322,7 +322,8 @@ class WinConditionAnalyzer(object):
         self.recommended_city_defense_plan_turns = 0
 
         mostForwardCity = None
-        mostForwardDist = 1000
+        # we don't consider cities less than 4 closer to the enemy to require defense.
+        mostForwardDist = self.board_analysis.inter_general_distance - 4
 
         with perfTimer.begin_move_event(f'WCA city contest score loop playerCityScores={len(self.city_analyzer.player_city_scores)}'):
             for city, score in self.city_analyzer.player_city_scores.items():
@@ -479,14 +480,14 @@ class WinConditionAnalyzer(object):
             # priorityTiles=priorityTiles,
             includeGatherTreeNodesThatGatherNegative=True,
             incrementBackward=False,
-            useTrueValueGathered=True,
+            useTrueValueGathered=False,
             cutoffTime=time.perf_counter() + timeLimit,
             shouldLog=False,
             fastMode=True,
             # priorityMatrix=priorityMatrix
         )
 
-        fogVal = self.get_additional_fog_gather_risk(gatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+        fogVal = self.get_additional_fog_gather_risk_for_gather_nodes(gatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
         fogRiskValue = value + fogVal
         if not noLog and DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(
@@ -513,7 +514,7 @@ class WinConditionAnalyzer(object):
             # preferPrune=self.expansion_plan.preferred_tiles if self.expansion_plan is not None else None
             )
 
-        fogVal = self.get_additional_fog_gather_risk(prunedGatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+        fogVal = self.get_additional_fog_gather_risk_for_gather_nodes(prunedGatherNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
         prunedFogRiskValue = prunedValue + fogVal
         if not noLog and DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(
@@ -535,7 +536,7 @@ class WinConditionAnalyzer(object):
         if maxAttack is not None:
             attackPathRiskVal = maxAttack.value
             fakeGathNodes = [maxAttack.convert_to_tree_nodes(self.map, asPlayer)]
-            addlRisk = self.get_additional_fog_gather_risk(fakeGathNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
+            addlRisk = self.get_additional_fog_gather_risk_for_gather_nodes(fakeGathNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk)
             attackPathRiskVal += addlRisk
             if not noLog and DebugHelper.is_debug_or_unit_test_mode():
                 logbook.info(
@@ -800,7 +801,7 @@ class WinConditionAnalyzer(object):
 
             pruneFogRisk = 0
             if playerHasFog:
-                pruneFogRisk = self.get_additional_fog_gather_risk(prunedNodes, asPlayer, prunedTurns)
+                pruneFogRisk = self.get_additional_fog_gather_risk_for_gather_nodes(prunedNodes, asPlayer, prunedTurns)
                 prunedValue += pruneFogRisk
             attackPruned = prunedValue + pruneFogRisk
             self._log_verbose(f'concluded get_dynamic_attack_against prune {tile} gather turns {prunedTurns} for total {attackPruned}, pruned gather {prunedValue}, pruneFogRisk {pruneFogRisk}')
@@ -933,7 +934,7 @@ class WinConditionAnalyzer(object):
     def get_tile_dist_to_enemy(self, tile: Tile) -> int:
         return self.board_analysis.intergeneral_analysis.bMap.raw[tile.tile_index]
 
-    def get_additional_fog_gather_risk(self, gatherNodes: typing.List[GatherTreeNode], asPlayer: int, inTurns: int, forceFogRisk: bool = False) -> int:
+    def get_additional_fog_gather_risk_for_gather_nodes(self, gatherNodes: typing.List[GatherTreeNode], asPlayer: int, inTurns: int, forceFogRisk: bool = False) -> int:
         """
 
         @param gatherNodes:
@@ -956,8 +957,8 @@ class WinConditionAnalyzer(object):
             numFogTiles.value += 1
             if self.map.is_player_on_team_with(node.tile.player, asPlayer):
                 fogValue.value += node.tile.army - 1
-            else:
-                fogValue.value -= node.tile.army + 1
+            # else:
+            #     fogValue.value -= node.tile.army + 1
 
         turnsUsed = 0
         for t in gatherNodes:
@@ -979,7 +980,7 @@ class WinConditionAnalyzer(object):
         distPenalty = max(0, 8 - turnsLeft)
         if DebugHelper.is_debug_or_unit_test_mode():
             logbook.info(f'get_additional_fog_gather_risk fogValue {fogValue.value}, numFogTiles {numFogTiles.value}, inTurns {turnsLeft} ({turnsUsed} used for attack of {inTurns}), result {result}')
-        if numFogTiles.value > inTurns // 7 + 1:
+        if numFogTiles.value > inTurns // 7 + 1:  # Where the fuck did this  // 7 come from? And the 8, and the 10 for distPenalty? This whole function is a complete shitshow
             return max(0, result - distPenalty)
 
         if forceFogRisk:

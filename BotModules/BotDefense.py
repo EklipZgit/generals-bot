@@ -311,7 +311,7 @@ class BotDefense:
                     else:
                         flags = f'DEAD CITY {flags}'
                         pruneToValuePerTurn = True
-                        extraTurns = 5
+                        extraTurns = 10
                         survivalThreshold += extraTurns // 2
 
                     with bot.perf_timer.begin_move_event(f'+{extraTurns} Def Threat Gather {threat.path.start.tile}@{threat.path.tail.tile}'):
@@ -1335,7 +1335,7 @@ class BotDefense:
                 curTile,
             )
             if printDebug and curTile.player == bot.general.player:
-                bot.viewInfo.add_info_line(f'{curTile}: {obj}  (isMov {str(isMovable)[0]}, int1 {str(isInterceptingIn1)[0]}, short {str(inShortest)[0]}, mvNotInt {str(isMovableToThreatButNotIntercepting)[0]})')
+                logbook.info(f'{curTile}: {obj}  (isMov {str(isMovable)[0]}, int1 {str(isInterceptingIn1)[0]}, short {str(inShortest)[0]}, mvNotInt {str(isMovableToThreatButNotIntercepting)[0]})')
 
             return obj
 
@@ -1396,7 +1396,7 @@ class BotDefense:
                 curTile,
             )
             if printDebug and curTile.player == bot.general.player:
-                bot.viewInfo.add_info_line(f'{curTile}: {obj}  (isMov {str(isMovable)[0]}, int1 {str(isInterceptingIn1)[0]}, short {str(inShortest)[0]}, mvNotInt {str(isMovableToThreatButNotIntercepting)[0]})')
+                logbook.info(f'{curTile}: {obj}  (isMov {str(isMovable)[0]}, int1 {str(isInterceptingIn1)[0]}, short {str(inShortest)[0]}, mvNotInt {str(isMovableToThreatButNotIntercepting)[0]})')
 
             return obj
 
@@ -2105,7 +2105,7 @@ class BotDefense:
         if bot.sketchiest_potential_inbound_flank_path is not None:
             sketchDist = bot._map.get_distance_between(bot.general, bot.sketchiest_potential_inbound_flank_path.tail.tile)
 
-        if not bot.opponent_tracker.winning_on_economy(byRatio=1.08, offset=0 - bot.shortest_path_to_target_player.length) and not bot.likely_kill_push:
+        if not bot.opponent_tracker.winning_on_economy(byRatio=1.0, offset=0 - bot.shortest_path_to_target_player.length) and not bot.likely_kill_push:
             return False
 
         if bot.timings.get_turns_left_in_cycle(bot._map.turn) <= max(halfDist, sketchDist):
@@ -2130,13 +2130,15 @@ class BotDefense:
         if oppArmy - gathPathSum > 0 and not bot.timings.in_expand_split(bot._map.turn) and threatPath == bot.enemy_attack_path and not bot.defend_economy and not bot.win_condition_analyzer.is_contesting_cities:
             for tile in threatPath.tileList:
                 if bot._map.is_tile_friendly(tile):
-                    defenseCriticalTileSet.add(tile)
+                    if tile not in defenseCriticalTileSet:
+                        logbook.info(f'DEFENSE_NEG_ADD context=calculate_basic_defense_against_threat_path source=enemy_attack_path_gather_block tile={tile} oppArmy={oppArmy} gathPathSum={gathPathSum}')
+                        defenseCriticalTileSet.add(tile)
                     bot.viewInfo.add_targeted_tile(tile, TargetStyle.YELLOW)
 
             bot.viewInfo.add_info_line(f'updated defenseCriticals with gather path due to oppArmy {oppArmy} - gathPathSum {gathPathSum} > 0: {str(defenseCriticalTileSet)}')
 
         if oppArmy + 10 - halfDist <= playerArmy:
-            if oppArmy + 10 - halfDist >= playerArmy - 40 and bot.likely_kill_push:
+            if oppArmy + 10 - halfDist >= playerArmy - 50 and bot.likely_kill_push:
                 BotCityCaptureControl.block_neutral_captures(bot, "likely_kill_push says capping a city would put us under safe army for the push")
             if cycleDifferential < -halfDist:
                 bot.viewInfo.add_info_line(f'OT oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}, but gathered enough that we dont care?')

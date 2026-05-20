@@ -486,7 +486,7 @@ class BotTargeting:
             if path is None:
                 path = BotPathingUtils.get_path_to_target(bot, maxTile, skipNeutralCities=False, skipEnemyCities=isAllIn, preferNeutral=preferNeut, fromTile=fromTile, preferEnemy=preferEn)
 
-            bot.info(f'DEBUG: cutLen {cutLength} at {maxTile}: path {path}')
+            logbook.info(f'DEBUG: cutLen {cutLength} at {maxTile}: path {path}')
             if path is not None and cutLength is not None and path.length > cutLength:
                 path = path.get_subsegment(cutLength, end=True)
 

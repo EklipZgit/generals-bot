@@ -2702,3 +2702,22 @@ setting bestInterceptTable[dist 1]:
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=27)
         self.assertNoFriendliesKilled(map, general)
 
+
+    def test_should_intercept_army_in_the_open_without_splitting_general_LOL(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_army_in_the_open_without_splitting_general_LOL___ERyMALJ2o---0--134.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 134, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=134)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,14->11,14->11,10->13,10')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTrue(playerMap.At(13, 10).army == 1 or playerMap.At(13, 10).army == 21, 'either should move the whole army or should be grabbing a 4 to help intercept better. Not split off gen')

@@ -21,13 +21,13 @@ from base.client.map import MapBase, Tile
 # TODO remove me once things fixed
 DEBUG_BYPASS_BAD_INTERCEPTIONS = True
 
-TARGET_CAP_VALUE = 2.21
+TARGET_CAP_VALUE = 2.055
 OTHER_PARTY_CAP_VALUE = 0.5
 NEUTRAL_CAP_VALUE = 1.0
 GENERAL_CAP_VALUE = 8.0
 OWNED_CITY_CAP_VALUE_BONUS = 5
 # needs to be high enough to outperform normal expand, or normal expand will try to skip the intercept in favor of dodging the army for captures lmao
-RECAPTURE_VALUE = 2.21
+RECAPTURE_VALUE = 2.055
 
 
 class ThreatValueInfo(object):
@@ -1163,19 +1163,35 @@ class ArmyInterceptor(object):
                     break
 
                 if otherThreatsBlockingTiles is not None:
+                    invalid = False
+                    frTeam = self.map.players[self.map.player_index].team
                     pathNode = path.start
+                    army = 0
                     split = False
                     while pathNode is not None:
                         t = pathNode.tile
+                        if self.map.is_tile_on_team(t, frTeam):
+                            army += t.army - 1
+                        else:
+                            army -= t.army + 1
                         tileHold = otherThreatsBlockingTiles.get(t, None)
                         if tileHold is not None and pathNode.next is not None and pathNode.next.tile in tileHold.blocked_destinations:
+                            if tileHold.amount_needed_to_block > army // 2:
+                                invalid = True
+                                logbook.error(f'bypassed unsplittable intercept plan {str(path)} due to blocker {tileHold} and split army {army}')
+                                break
                             # TODO this is wrong, almost certainly prevents LEGITIMATE splits. This hack was added for  test_should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment and test_should_intercept_instead_of_eating_damage_on_late_attacks_after_defensive_gather_timing_increment (unit test)
                             if enemyArmyLeftAfterIntercept > 0:
                                 if self.log_debug:
                                     logbook.info(f'forcing {pathNode.tile} move half due to blocked destinations in {path}')
                                 pathNode.move_half = True
                                 split = True
+                                splitNow = True
+                                army = army // 2
                         pathNode = pathNode.next
+                    if invalid:
+                        continue
+
                     if split:
                         # recalculate
                         (
@@ -2144,6 +2160,8 @@ class ArmyInterceptor(object):
                         continue
                     if chokeTile.army < otherTile.army // 3:
                         continue
+                    # if chokeTile == threat.path.tail.tile:
+                    #     continue
 
                     # blockAmount = threat.threatValue
                     blockAmount = realThreatVal + chokeTile.army
@@ -2154,7 +2172,9 @@ class ArmyInterceptor(object):
 
                     # if the army is going through this tile AND still killing us, we cant waste time moving this tile at all,
                     # we need to defense gather (and this can't be used for defense gather since threat already goes through it and still kills).
-                    canDie = realThreatVal > 0 and threat.threatType == ThreatType.Kill
+                    #  Note that if blockAmount is > 0, then we can't move this tile out of the way but we CAN intercept with it
+                    # The threat.turns // 2 lets us start intercepts when we dont quite have enough army. Should be 0 but that results in overly safe play
+                    canDie = realThreatVal > threat.turns // 2 and threat.threatType == ThreatType.Kill
 
                     for moveable in chokeTile.movable:
                         # if moveable not in threat.armyAnalysis.shortestPathWay.tiles:

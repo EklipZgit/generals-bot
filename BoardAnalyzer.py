@@ -136,16 +136,7 @@ class BoardAnalyzer:
         closestCities = cities
         if self.intergeneral_analysis is not None:
             # only consider the closest 3 cities to enemy...?
-            closestCities = list(sorted(cities, key=lambda c: self.intergeneral_analysis.bMap[c]))[0:3]
-        logbook.info(
-            'CENTRAL_DEFENSE_POINT defended tiles considered: '
-            + f'general {str(self.general)} enemyDist={self.intergeneral_analysis.bMap.raw[self.general.tile_index] if self.intergeneral_analysis is not None else None}'
-            + ' cities '
-            + ' | '.join(
-                [
-                    f'{str(city)} enemyDist={self.intergeneral_analysis.bMap.raw[city.tile_index] if self.intergeneral_analysis is not None else None} friendlyDist={self.general_distances.raw[city.tile_index]} player={city.player} army={city.army}'
-                    for city in closestCities
-                ]))
+            closestCities = list(sorted(cities, key=lambda c: self.intergeneral_analysis.bMap.raw[c.tile_index]))[0:3]
 
         self.friendly_city_distances = {}
         for city in closestCities:

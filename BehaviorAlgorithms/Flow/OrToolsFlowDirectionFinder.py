@@ -176,9 +176,10 @@ class DirectOrToolsGraphBuilder(object):
                     has_nx_demand_attr = True
                     cumulative_demand += demand
                     friendly_army_supply += island_army_sum - island.tile_count
-                    if island.tiles_by_army[0].army == 1:
-                        # Don't ask me why but 300 works well while like 3 does not.  See test_should_not_waste_a_bunch_of_moves_moving_from_general, which makes suboptimal moves at += 3 but plays great at += 300
-                        cost += 300
+                    # if island.tiles_by_army[0].army == 1:
+                    #     # Don't ask me why but 300 works well while like 3 does not.  See test_should_not_waste_a_bunch_of_moves_moving_from_general, which makes suboptimal moves at += 3 but plays great at += 300
+                    #     cost += 30
+                    cost = max(1, 30 - island.sum_army // island.tile_count)
                 elif island.team == target_team:
                     has_nx_demand_attr = True
                     demand = island_army_sum + island.tile_count
@@ -306,7 +307,7 @@ class DirectOrToolsGraphBuilder(object):
                         for island in islands.all_tile_islands
                         if island.team == team
                         for tile in island.tile_set
-                        if tile.army >= 7
+                        if tile.army >= 6
                     ),
                     key=lambda candidate: (candidate.army, -candidate.tile_index),
                     reverse=True,

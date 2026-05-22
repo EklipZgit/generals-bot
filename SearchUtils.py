@@ -164,7 +164,8 @@ def dest_breadth_first_target(
 ) -> Path | None:
     """
     Gets a path that results in {targetArmy} army on one of the goalList tiles.
-    GoalList can be a dict that maps from start tile to (startDist, goalTargetArmy)
+    Note that if the goal is a city or general, increment will be applied automatically. Only set a custom increment if adding ADDITIONAL increment beyond that.
+    GoalList can be a dict that maps from start tile to (startDist, goalTargetArmy, goalStartingIncrement)
 
     additionalIncrement can be set if for example capturing one of two nearby cities and you want to kill with enough to kill both.
     Positive means gather EXTRA, negative means gather LESS.

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import typing
 
@@ -601,11 +603,11 @@ class BotCityOps:
         singleQuick = SearchUtils.dest_breadth_first_target(
                 bot._map,
                 enemyCitiesOrderedByPriority,
-                1.5,
+                1.0,
                 0.1,
-                3,
+                4,
                 negativeTiles=None,
-                preferCapture=True,
+                preferCapture=False,
                 searchingPlayer=bot.general.player,
                 dontEvacCities=False,
                 additionalIncrement=0,
@@ -615,7 +617,7 @@ class BotCityOps:
             singleQuick = SearchUtils.dest_breadth_first_target(
                     bot._map,
                     enemyCitiesOrderedByPriority,
-                    3.5,
+                    1.5,
                     0.1,
                     7,
                     negativeTiles=None,
@@ -1488,9 +1490,9 @@ class BotCityOps:
                 sketchyArmy += t.army - 1
 
             if sketchyArmy > sketchyOutOfPlayThresh and bot.sketchiest_potential_inbound_flank_path is not None:
-                furthestCity = max(sketchyLargeArmyCities, key=lambda c: bot.board_analysis.intergeneral_analysis.aMap[c])
-                furthestDist = bot.board_analysis.intergeneral_analysis.aMap[furthestCity]
-                fogDist = bot.board_analysis.intergeneral_analysis.aMap[bot.sketchiest_potential_inbound_flank_path.tail.tile]
+                furthestCity = max(sketchyLargeArmyCities, key=lambda c: bot.board_analysis.intergeneral_analysis.aMap.raw[c.tile_index])
+                furthestDist = bot.board_analysis.intergeneral_analysis.aMap.raw[furthestCity.tile_index]
+                fogDist = bot.board_analysis.intergeneral_analysis.aMap.raw[bot.sketchiest_potential_inbound_flank_path.tail.tile.tile_index]
 
                 if fogDist <= furthestDist:
                     negs = defenseCriticalTileSet.copy()

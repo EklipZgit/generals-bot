@@ -1,6 +1,7 @@
 
 
 
+$Script:RunConfig = $null
 $Script:CheapBotCpuAffinityMask = [IntPtr]0x10000
 $Script:HumanPcoreAffinityMasks = @(
     [IntPtr]0x1,
@@ -303,6 +304,9 @@ function Run-BotOnce {
     $logFolder = Get-ConfiguredLogFolder
     $groupedFolder = Get-ConfiguredGroupedFolder
 
+    $null = New-Item -ItemType Directory -Force -Path $logFolder
+    $null = New-Item -ItemType Directory -Force -Path $groupedFolder
+
     $df = Get-Date -format yyyy-MM-dd_hh-mm-ss
     $arguments = [System.Collections.ArrayList]::new()
     $roomName = ''
@@ -360,12 +364,15 @@ function Run-BotOnce {
     `$logName = "`$cleanName-$game-$df$roomName"
     `$logFile = "`$logName.txt"
     `$logPath = "$logFolder/`$logFile"
+    `$stdoutLogPath = "`$logPath.stdout"
+    `$stderrLogPath = "`$logPath.stderr"
+    `$processExitCode = `$null
 
     `$startProcSplat = @{}
     if (-not `$$($nolog.ToString()))
     {
-        #Start-Transcript -path "`$logPath"
-        `$startProcSplat['RedirectStandardError'] = "`$logPath"
+        `$startProcSplat['RedirectStandardOutput'] = "`$stdoutLogPath"
+        `$startProcSplat['RedirectStandardError'] = "`$stderrLogPath"
     }
 
     try
@@ -383,12 +390,27 @@ function Run-BotOnce {
                 `$procArgument
             }
         }
-        `$Process = Start-Process -FilePath '$pythonVer' -ArgumentList ([string]::Join(' ', `$escapedProcArguments)) -PassThru -NoNewWindow @startProcSplat
-        if (`$cpuAffinityMask -ne [IntPtr]::Zero) {
-            `$Process.ProcessorAffinity = `$cpuAffinityMask
+        `$joinedArguments = [string]::Join(' ', `$escapedProcArguments)
+        `$Process = Start-Process -FilePath '$pythonVer' -ArgumentList `$joinedArguments -PassThru -NoNewWindow @startProcSplat
+        if (`$null -ne `$Process -and `$cpuAffinityMask -ne [IntPtr]::Zero) {
+            try {
+                `$Process.ProcessorAffinity = `$cpuAffinityMask
+            }
+            catch {
+                Write-Warning `$_
+            }
         }
-        `$Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-        `$Process | Wait-Process 2>&1
+        if (`$null -ne `$Process) {
+            try {
+                `$Process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+            }
+            catch {
+                Write-Warning `$_
+            }
+            `$Process | Wait-Process 2>&1
+            `$Process.Refresh()
+            `$processExitCode = `$Process.ExitCode
+        }
     }
     catch
     {
@@ -399,52 +421,81 @@ function Run-BotOnce {
         if (-not `$$($nolog.ToString()))
         {
             #stop-transcript
-            `$content = Get-Content `$logPath
-            `$prevLine = [string]::Empty
-            `$repId = `$null
-            if (-not `$content) {
-                Write-Warning "No content found in `$logPath"
+            `$mergedContent = @()
+            if (Test-Path `$stdoutLogPath) {
+                `$mergedContent += Get-Content `$stdoutLogPath
             }
+            if (Test-Path `$stderrLogPath) {
+                `$mergedContent += Get-Content `$stderrLogPath
+            }
+            if (`$mergedContent.Count -gt 0) {
+                `$mergedContent | Set-Content -Path `$logPath -Force
+            }
+            if (-not (Test-Path `$logPath)) {
+                Write-Warning "No crash/output log file found at `$logPath"
+            }
+            else {
+                if (`$processExitCode -ne `$null -and `$processExitCode -ne 0) {
+                    Write-Warning "Bot process exited with code `$processExitCode. Captured output from `${logPath}:"
+                    Get-Content `$logPath | ForEach-Object { Write-Host `$_ }
+                }
+                `$copiedToReplayLog = `$false
+                `$content = Get-Content `$logPath
+                `$prevLine = [string]::Empty
+                `$repId = `$null
+                if (-not `$content) {
+                    Write-Warning "No content found in `$logPath"
+                }
 
-            `$newContent = foreach (`$line in `$content)
-            {
-                if (`$line -ne [string]::Empty)
+                `$newContent = foreach (`$line in `$content)
                 {
-                    `$prevLine = `$line
-                    `$line
-                    if (`$repId -eq `$null -and `$line -match 'replay_id:\[([^\]]+)\]')
+                    if (`$line -ne [string]::Empty)
                     {
-                        `$repId = `$Matches[1]
+                        `$prevLine = `$line
+                        `$line
+                        if (`$repId -eq `$null -and `$line -match 'replay_id:\[([^\]]+)\]')
+                        {
+                            `$repId = `$Matches[1]
+                        }
+                    }
+                    elseif (`$prevLine -eq [string]::Empty)
+                    {
+                        `$line
+                        `$prevLine = `"h`"
+                    }
+                    else
+                    {
+                        `$prevLine = [string]::Empty
                     }
                 }
-                elseif (`$prevLine -eq [string]::Empty)
+
+                if (`$repId -and (`$path -notlike '*historical*'))
                 {
-                    `$line
-                    `$prevLine = `"h`"
+                    `$filter = "*`$cleanName*`$repId*"
+                    Write-Output "filter `$filter"
+                    `$folder = Get-ChildItem "$logFolder" -Filter `$filter -Directory
+                    `$newLogPath = Join-Path `$folder.FullName "_`$logFile"
+                    `$newContent | Set-Content -Path `$newLogPath -Force
+                    `$null = mkdir "$groupedFolder" -Force
+                    `$newFolder = Move-Item `$folder.FullName "$groupedFolder" -PassThru
+                    `$newName = "`$logName---`$repId"
+                    Rename-Item `$newFolder.FullName `$newName -PassThru
+                    `$copiedToReplayLog = `$true
+                    Write-Warning "`$newName"
+                    Write-Warning "`$newName"
+                    Write-Warning "`$newName"
                 }
-                else
-                {
-                    `$prevLine = [string]::Empty
+
+                if (`$copiedToReplayLog) {
+                    Remove-Item `$logPath -Force
                 }
             }
-
-            if (`$repId -and (`$path -notlike '*historical*'))
-            {
-                `$filter = "*`$cleanName*`$repId*"
-                Write-Output "filter `$filter"
-                `$folder = Get-ChildItem "$logFolder" -Filter `$filter -Directory
-                `$newLogPath = Join-Path `$folder.FullName "_`$logFile"
-                `$newContent | Set-Content -Path `$newLogPath -Force
-                `$null = mkdir "$groupedFolder" -Force
-                `$newFolder = Move-Item `$folder.FullName "$groupedFolder" -PassThru
-                `$newName = "`$logName---`$repId"
-                Rename-Item `$newFolder.FullName `$newName -PassThru
-                Write-Warning "`$newName"
-                Write-Warning "`$newName"
-                Write-Warning "`$newName"
+            if (Test-Path `$stdoutLogPath) {
+                Remove-Item `$stdoutLogPath -Force
             }
-
-            Remove-Item `$logPath -Force
+            if (Test-Path `$stderrLogPath) {
+                Remove-Item `$stderrLogPath -Force
+            }
         }
     }
 

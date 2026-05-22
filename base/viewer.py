@@ -111,7 +111,9 @@ class GeneralsViewer(object):
             cell_width: int | None = None,
             cell_height: int | None = None,
             no_log: bool = False,
-            min_sleep_time: float = 0.0
+            min_sleep_time: float = 0.0,
+            use_test_positions: bool = False,
+            use_config_test_alignment: bool = False
     ):
         self._killed = False
         self._inbound_update_queue: "Queue[typing.Tuple[ViewInfo | None, MapBase | None, bool]]" = update_queue
@@ -151,6 +153,8 @@ class GeneralsViewer(object):
         self._red_x: Surface = None
         self._min_sleep_time: float = min_sleep_time
         self._already_logged_team_stats_error: bool = False
+        self._use_test_positions: bool = use_test_positions
+        self._use_config_test_alignment: bool = use_config_test_alignment
 
         self.player_colors: typing.List[int] = PLAYER_COLORS
 
@@ -202,7 +206,7 @@ class GeneralsViewer(object):
         return s
 
     def _initViewier(self, alignTop: bool, alignLeft: bool):
-        bottomPos, leftPos, rightPos, topPos = self.get_config_positions()
+        bottomPos, leftPos, rightPos, topPos, alignTop, alignLeft = self.get_config_positions(alignTop, alignLeft)
 
         self.infoLineHeight = 16
         self.infoRowHeight = 350
@@ -306,7 +310,7 @@ class GeneralsViewer(object):
 
         self.logDirectory = BotLogging.get_file_logging_directory(self._map.usernames[self._map.player_index], self.repId)
 
-    def get_config_positions(self):
+    def get_config_positions(self, alignTop: bool, alignLeft: bool):
         cfgPath = pathlib.Path(__file__).parent / "../../run_config.txt"
         with open(cfgPath, 'r') as file:
             data = file.read()
@@ -320,6 +324,8 @@ class GeneralsViewer(object):
                 continue
 
             key, value = line.split('=')
+            key = key.strip()
+            value = value.strip()
 
             if key == "left_pos":
                 leftPos = int(value)
@@ -330,7 +336,21 @@ class GeneralsViewer(object):
             if key == "top_pos":
                 topPos = int(value)
 
-        return bottomPos, leftPos, rightPos, topPos
+            if self._use_test_positions:
+                if key == "test_left_pos":
+                    leftPos = int(value)
+                if key == "test_right_pos":
+                    rightPos = int(value)
+                if key == "test_bottom_pos":
+                    bottomPos = int(value)
+                if key == "test_top_pos":
+                    topPos = int(value)
+                if self._use_config_test_alignment and key == "test_align_bottom":
+                    alignTop = value.lower() not in ("1", "true", "yes", "on")
+                if self._use_config_test_alignment and key == "test_align_right":
+                    alignLeft = value.lower() not in ("1", "true", "yes", "on")
+
+        return bottomPos, leftPos, rightPos, topPos, alignTop, alignLeft
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -1742,11 +1762,11 @@ class GeneralsViewer(object):
 
         r, g, b = color
         arrowSurface, surfaceOffset = self._get_arrow_alpha_surface(fromVec, toVec)
-        self._draw_arrow_raw(arrowSurface, fromVec - surfaceOffset, toVec - surfaceOffset, Color(r, g, b, alpha), body_width=2, head_width=7, head_height=11)
+        self._draw_arrow_raw(arrowSurface, fromVec - surfaceOffset, toVec - surfaceOffset, Color(r, g, b, alpha), body_width=1, head_width=11, head_height=11)
         self._screen.blit(arrowSurface, surfaceOffset)
         if isBidir:
             arrowSurface, surfaceOffset = self._get_arrow_alpha_surface(toVec, fromVec)
-            self._draw_arrow_raw(arrowSurface, toVec - surfaceOffset, fromVec - surfaceOffset, Color(r, g, b, alpha), body_width=2, head_width=7, head_height=11)
+            self._draw_arrow_raw(arrowSurface, toVec - surfaceOffset, fromVec - surfaceOffset, Color(r, g, b, alpha), body_width=1, head_width=11, head_height=11)
             self._screen.blit(arrowSurface, surfaceOffset)
         if label:
             textAlpha = alpha if labelAlpha is None else labelAlpha
@@ -1807,7 +1827,7 @@ class GeneralsViewer(object):
             head_verts[i] += translation
             head_verts[i] += start
 
-        pygame.draw.polygon(surface, color, head_verts)
+        pygame.draw.polygon(surface, color, head_verts, 1)
 
         # Stop weird shapes when the arrow is shorter than arrow head
         if arrow.length() >= head_height:
@@ -1824,7 +1844,7 @@ class GeneralsViewer(object):
                 body_verts[i] += translation
                 body_verts[i] += start
 
-            pygame.draw.polygon(surface, color, body_verts)
+            pygame.draw.polygon(surface, color, body_verts, 1)
 
         if label:
             self._draw_arrow_label(start, end, color, label)

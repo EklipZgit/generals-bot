@@ -204,8 +204,9 @@ class BoardAnalyzer:
             choke_tiles=bestLayer)
         self.defensive_chokes_by_tile[defendedTile] = chokePoint
         self.defensive_furthest_choke_tiles_by_defensive_tile[defendedTile] = set(bestLayer)
+        best_layer_text = '\r\n'.join(str(tile) for tile in bestLayer)
         logbook.info(
-            f'GET_DEF_CHOKE {defendedTile} selected choke position {self._defensive_choke_point_to_string(chokePoint)} for {str(defendedTile)} baseLength={baseLength} startTiles={len(startTiles)} layerTiles=\r\n{"\r\n".join(str(tile) for tile in bestLayer)}')
+            f'GET_DEF_CHOKE {defendedTile} selected choke position {self._defensive_choke_point_to_string(chokePoint)} for {str(defendedTile)} baseLength={baseLength} startTiles={len(startTiles)} layerTiles=\r\n{best_layer_text}')
         return chokePoint
 
     def _get_defensive_choke_start_tiles(self, defendedTile: Tile, baseLength: int) -> typing.List[Tile]:

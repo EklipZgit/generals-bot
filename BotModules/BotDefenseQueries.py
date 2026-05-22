@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import SearchUtils
 import typing
 
@@ -11,7 +13,7 @@ class BotDefenseQueries:
     def determine_fog_defense_amount_available_for_tiles(
             bot: EklipZBot,
             targetTiles,
-            enPlayer, 
+            enPlayer,
             fogDefenseTurns: int = 0,
             fogReachTurns: int = 8) -> int:
         """Does NOT include the army that is on the targetTiles."""

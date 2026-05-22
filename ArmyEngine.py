@@ -64,7 +64,7 @@ class ArmyEngine(object):
         Feed lists of moves into this (where the moving player is determined by the owner of the first source tile in the move list)
         and MCTS will be forced to pre-expand these nodes against random moves from the opponent out to full as one of the first orders of business
         so that it can properly evaluate positions AROUND pre-computed threats/defenses/gathers/expansions.
-        PUT THESE IN THE ORDER OF DANGER / RESPONSE, so threats first, then expected threat response next, 
+        PUT THESE IN THE ORDER OF DANGER / RESPONSE, so threats first, then expected threat response next,
         as they will be evaluated in that order and you want to make sure the threat expansion understands it is a threat sequence, etc.
         """
 

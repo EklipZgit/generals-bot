@@ -391,735 +391,735 @@ dur 0.3134, iter   180, nodesExplored   180, rollouts   180,
     # AFTER JUST ROLLOUT NO-COPY:
     """
 nArmy, nTile, +Army, depth, biasD
-4,     4,     5,    15,     7: dur 0.3122, iter   485, nodesExplored   485, rollouts   485, 
+4,     4,     5,    15,     7: dur 0.3122, iter   485, nodesExplored   485, rollouts   485,
                       backprops  1280, rolloutExpansions  7281, biasedRolloutExpansions  2621
-4,     4,     5,    50,     7: dur 0.3021, iter   289, nodesExplored   289, rollouts   289, 
+4,     4,     5,    50,     7: dur 0.3021, iter   289, nodesExplored   289, rollouts   289,
                       backprops   709, rolloutExpansions 14475, biasedRolloutExpansions  2026
-4,     4,     5,   100,     7: dur 0.3019, iter    90, nodesExplored    90, rollouts    90, 
+4,     4,     5,   100,     7: dur 0.3019, iter    90, nodesExplored    90, rollouts    90,
                       backprops   193, rolloutExpansions  9000, biasedRolloutExpansions   630
-4,     4,     5,   100,    30: dur 0.3041, iter   156, nodesExplored   156, rollouts   156, 
+4,     4,     5,   100,    30: dur 0.3041, iter   156, nodesExplored   156, rollouts   156,
                       backprops   360, rolloutExpansions 15598, biasedRolloutExpansions  4680
-4,     4,    20,    15,     7: dur 0.3048, iter   544, nodesExplored   544, rollouts   544, 
+4,     4,    20,    15,     7: dur 0.3048, iter   544, nodesExplored   544, rollouts   544,
                       backprops  1463, rolloutExpansions  8164, biasedRolloutExpansions  2913
-4,     4,    20,    50,     7: dur 0.3008, iter   276, nodesExplored   276, rollouts   276, 
+4,     4,    20,    50,     7: dur 0.3008, iter   276, nodesExplored   276, rollouts   276,
                       backprops   687, rolloutExpansions 13845, biasedRolloutExpansions  1938
-4,     4,    20,   100,     7: dur 0.3058, iter   167, nodesExplored   167, rollouts   167, 
+4,     4,    20,   100,     7: dur 0.3058, iter   167, nodesExplored   167, rollouts   167,
                       backprops   389, rolloutExpansions 16705, biasedRolloutExpansions  1170
-4,     4,    20,   100,    30: dur 0.3038, iter   165, nodesExplored   165, rollouts   165, 
+4,     4,    20,   100,    30: dur 0.3038, iter   165, nodesExplored   165, rollouts   165,
                       backprops   389, rolloutExpansions 16465, biasedRolloutExpansions  4937
-4,    11,     5,    15,     7: dur 0.3045, iter   664, nodesExplored   664, rollouts   664, 
+4,    11,     5,    15,     7: dur 0.3045, iter   664, nodesExplored   664, rollouts   664,
                       backprops  1772, rolloutExpansions  9969, biasedRolloutExpansions  3550
-4,    11,     5,    50,     7: dur 0.3035, iter   291, nodesExplored   291, rollouts   291, 
+4,    11,     5,    50,     7: dur 0.3035, iter   291, nodesExplored   291, rollouts   291,
                       backprops   715, rolloutExpansions 14565, biasedRolloutExpansions  2039
-4,    11,     5,   100,     7: dur 0.3009, iter   158, nodesExplored   158, rollouts   158, 
+4,    11,     5,   100,     7: dur 0.3009, iter   158, nodesExplored   158, rollouts   158,
                       backprops   360, rolloutExpansions 15889, biasedRolloutExpansions  1112
-4,    11,     5,   100,    30: dur 0.3064, iter   163, nodesExplored   163, rollouts   163, 
+4,    11,     5,   100,    30: dur 0.3064, iter   163, nodesExplored   163, rollouts   163,
                       backprops   379, rolloutExpansions 16338, biasedRolloutExpansions  4893
-4,    11,    20,    15,     7: dur 0.3056, iter   430, nodesExplored   430, rollouts   430, 
+4,    11,    20,    15,     7: dur 0.3056, iter   430, nodesExplored   430, rollouts   430,
                       backprops  1123, rolloutExpansions  6460, biasedRolloutExpansions  2305
-4,    11,    20,    50,     7: dur 0.3016, iter   168, nodesExplored   168, rollouts   168, 
+4,    11,    20,    50,     7: dur 0.3016, iter   168, nodesExplored   168, rollouts   168,
                       backprops   393, rolloutExpansions  8417, biasedRolloutExpansions  1178
-4,    11,    20,   100,     7: dur 0.3085, iter    95, nodesExplored    95, rollouts    95, 
+4,    11,    20,   100,     7: dur 0.3085, iter    95, nodesExplored    95, rollouts    95,
                       backprops   209, rolloutExpansions  9537, biasedRolloutExpansions   667
-4,    11,    20,   100,    30: dur 0.3019, iter    91, nodesExplored    91, rollouts    91, 
+4,    11,    20,   100,    30: dur 0.3019, iter    91, nodesExplored    91, rollouts    91,
                       backprops   202, rolloutExpansions  9095, biasedRolloutExpansions  2733
-15,     4,     5,    15,     7: dur 0.3138, iter   334, nodesExplored   334, rollouts   334, 
+15,     4,     5,    15,     7: dur 0.3138, iter   334, nodesExplored   334, rollouts   334,
                       backprops   691, rolloutExpansions  5022, biasedRolloutExpansions  1793
-15,     4,     5,    50,     7: dur 0.3023, iter   150, nodesExplored   150, rollouts   150, 
+15,     4,     5,    50,     7: dur 0.3023, iter   150, nodesExplored   150, rollouts   150,
                       backprops   305, rolloutExpansions  7530, biasedRolloutExpansions  1054
-15,     4,     5,   100,     7: dur 0.3101, iter    98, nodesExplored    98, rollouts    98, 
+15,     4,     5,   100,     7: dur 0.3101, iter    98, nodesExplored    98, rollouts    98,
                       backprops   196, rolloutExpansions  9830, biasedRolloutExpansions   688
-15,     4,     5,   100,    30: dur 0.3033, iter    89, nodesExplored    89, rollouts    89, 
+15,     4,     5,   100,    30: dur 0.3033, iter    89, nodesExplored    89, rollouts    89,
                       backprops   180, rolloutExpansions  8980, biasedRolloutExpansions  2691
-15,     4,    20,    15,     7: dur 0.3199, iter   340, nodesExplored   340, rollouts   340, 
+15,     4,    20,    15,     7: dur 0.3199, iter   340, nodesExplored   340, rollouts   340,
                       backprops   702, rolloutExpansions  5113, biasedRolloutExpansions  1823
-15,     4,    20,    50,     7: dur 0.3016, iter   147, nodesExplored   147, rollouts   147, 
+15,     4,    20,    50,     7: dur 0.3016, iter   147, nodesExplored   147, rollouts   147,
                       backprops   298, rolloutExpansions  7395, biasedRolloutExpansions  1035
-15,     4,    20,   100,     7: dur 0.3052, iter    99, nodesExplored    99, rollouts    99, 
+15,     4,    20,   100,     7: dur 0.3052, iter    99, nodesExplored    99, rollouts    99,
                       backprops   200, rolloutExpansions  9970, biasedRolloutExpansions   697
-15,     4,    20,   100,    30: dur 0.3021, iter    94, nodesExplored    94, rollouts    94, 
+15,     4,    20,   100,    30: dur 0.3021, iter    94, nodesExplored    94, rollouts    94,
                       backprops   189, rolloutExpansions  9430, biasedRolloutExpansions  2826
-15,    11,     5,    15,     7: dur 0.3116, iter   317, nodesExplored   317, rollouts   317, 
+15,    11,     5,    15,     7: dur 0.3116, iter   317, nodesExplored   317, rollouts   317,
                       backprops   654, rolloutExpansions  4767, biasedRolloutExpansions  1711
-15,    11,     5,    50,     7: dur 0.3044, iter   147, nodesExplored   147, rollouts   147, 
+15,    11,     5,    50,     7: dur 0.3044, iter   147, nodesExplored   147, rollouts   147,
                       backprops   297, rolloutExpansions  7370, biasedRolloutExpansions  1031
-15,    11,     5,   100,     7: dur 0.3058, iter    86, nodesExplored    86, rollouts    86, 
+15,    11,     5,   100,     7: dur 0.3058, iter    86, nodesExplored    86, rollouts    86,
                       backprops   173, rolloutExpansions  8630, biasedRolloutExpansions   604
-15,    11,     5,   100,    30: dur 0.3024, iter    81, nodesExplored    81, rollouts    81, 
+15,    11,     5,   100,    30: dur 0.3024, iter    81, nodesExplored    81, rollouts    81,
                       backprops   164, rolloutExpansions  8190, biasedRolloutExpansions  2451
-15,    11,    20,    15,     7: dur 0.3113, iter   199, nodesExplored   199, rollouts   199, 
+15,    11,    20,    15,     7: dur 0.3113, iter   199, nodesExplored   199, rollouts   199,
                       backprops   404, rolloutExpansions  2985, biasedRolloutExpansions  1065
-15,    11,    20,    50,     7: dur 0.3045, iter    74, nodesExplored    74, rollouts    74, 
+15,    11,    20,    50,     7: dur 0.3045, iter    74, nodesExplored    74, rollouts    74,
                       backprops   149, rolloutExpansions  3720, biasedRolloutExpansions   520
-15,    11,    20,   100,     7: dur 0.3017, iter    82, nodesExplored    82, rollouts    82, 
+15,    11,    20,   100,     7: dur 0.3017, iter    82, nodesExplored    82, rollouts    82,
                       backprops   165, rolloutExpansions  8260, biasedRolloutExpansions   578
-15,    11,    20,   100,    30: dur 0.3028, iter    69, nodesExplored    69, rollouts    69, 
+15,    11,    20,   100,    30: dur 0.3028, iter    69, nodesExplored    69, rollouts    69,
                       backprops   138, rolloutExpansions  6906, biasedRolloutExpansions  2072
 AVG:
-dur 0.3053, iter   207, nodesExplored   207, rollouts   207, 
+dur 0.3053, iter   207, nodesExplored   207, rollouts   207,
                       backprops   485, rolloutExpansions  9559, biasedRolloutExpansions  1938
 
 nArmy, nTile, +Army, depth, biasD
-3,     0,     5,    15,     0: dur 0.3164, iter   924, nodesExplored   924, rollouts   924, 
+3,     0,     5,    15,     0: dur 0.3164, iter   924, nodesExplored   924, rollouts   924,
                       backprops  2623, rolloutExpansions 13870, biasedRolloutExpansions     0
-3,     0,     5,    15,     7: dur 0.3078, iter   770, nodesExplored   770, rollouts   770, 
+3,     0,     5,    15,     7: dur 0.3078, iter   770, nodesExplored   770, rollouts   770,
                       backprops  2193, rolloutExpansions 11557, biasedRolloutExpansions  4114
-3,     0,     5,    50,     0: dur 0.3132, iter   362, nodesExplored   362, rollouts   362, 
+3,     0,     5,    50,     0: dur 0.3132, iter   362, nodesExplored   362, rollouts   362,
                       backprops   963, rolloutExpansions 18105, biasedRolloutExpansions     0
-3,     0,     5,    50,     7: dur 0.3005, iter   351, nodesExplored   351, rollouts   351, 
+3,     0,     5,    50,     7: dur 0.3005, iter   351, nodesExplored   351, rollouts   351,
                       backprops   932, rolloutExpansions 17585, biasedRolloutExpansions  2461
-3,     0,     5,   200,     0: dur 0.3032, iter   114, nodesExplored   114, rollouts   114, 
+3,     0,     5,   200,     0: dur 0.3032, iter   114, nodesExplored   114, rollouts   114,
                       backprops   276, rolloutExpansions 22864, biasedRolloutExpansions     0
-3,     0,     5,   200,     7: dur 0.3013, iter   124, nodesExplored   124, rollouts   124, 
+3,     0,     5,   200,     7: dur 0.3013, iter   124, nodesExplored   124, rollouts   124,
                       backprops   304, rolloutExpansions 24671, biasedRolloutExpansions   870
-3,     0,     5,   200,    30: dur 0.3038, iter   130, nodesExplored   130, rollouts   130, 
+3,     0,     5,   200,    30: dur 0.3038, iter   130, nodesExplored   130, rollouts   130,
                       backprops   318, rolloutExpansions 25003, biasedRolloutExpansions  3908
-3,     0,     5,   200,   100: dur 0.3075, iter   133, nodesExplored   133, rollouts   133, 
+3,     0,     5,   200,   100: dur 0.3075, iter   133, nodesExplored   133, rollouts   133,
                       backprops   326, rolloutExpansions 23953, biasedRolloutExpansions  9491
-3,     0,    20,    15,     0: dur 0.3125, iter   879, nodesExplored   879, rollouts   879, 
+3,     0,    20,    15,     0: dur 0.3125, iter   879, nodesExplored   879, rollouts   879,
                       backprops  2491, rolloutExpansions 13194, biasedRolloutExpansions     0
-3,     0,    20,    15,     7: dur 0.3073, iter   755, nodesExplored   755, rollouts   755, 
+3,     0,    20,    15,     7: dur 0.3073, iter   755, nodesExplored   755, rollouts   755,
                       backprops  2154, rolloutExpansions 11326, biasedRolloutExpansions  4049
-3,     0,    20,    50,     0: dur 0.3031, iter   346, nodesExplored   346, rollouts   346, 
+3,     0,    20,    50,     0: dur 0.3031, iter   346, nodesExplored   346, rollouts   346,
                       backprops   926, rolloutExpansions 17305, biasedRolloutExpansions     0
-3,     0,    20,    50,     7: dur 0.3044, iter   359, nodesExplored   359, rollouts   359, 
+3,     0,    20,    50,     7: dur 0.3044, iter   359, nodesExplored   359, rollouts   359,
                       backprops   967, rolloutExpansions 17980, biasedRolloutExpansions  2517
-3,     0,    20,   200,     0: dur 0.3094, iter   112, nodesExplored   112, rollouts   112, 
+3,     0,    20,   200,     0: dur 0.3094, iter   112, nodesExplored   112, rollouts   112,
                       backprops   270, rolloutExpansions 22506, biasedRolloutExpansions     0
-3,     0,    20,   200,     7: dur 0.3013, iter   121, nodesExplored   121, rollouts   121, 
+3,     0,    20,   200,     7: dur 0.3013, iter   121, nodesExplored   121, rollouts   121,
                       backprops   293, rolloutExpansions 24126, biasedRolloutExpansions   850
-3,     0,    20,   200,    30: dur 0.3052, iter   131, nodesExplored   131, rollouts   131, 
+3,     0,    20,   200,    30: dur 0.3052, iter   131, nodesExplored   131, rollouts   131,
                       backprops   323, rolloutExpansions 25155, biasedRolloutExpansions  3934
-3,     0,    20,   200,   100: dur 0.3055, iter   130, nodesExplored   130, rollouts   130, 
+3,     0,    20,   200,   100: dur 0.3055, iter   130, nodesExplored   130, rollouts   130,
                       backprops   320, rolloutExpansions 23539, biasedRolloutExpansions  9366
-3,     4,     5,    15,     0: dur 0.3170, iter   871, nodesExplored   871, rollouts   871, 
+3,     4,     5,    15,     0: dur 0.3170, iter   871, nodesExplored   871, rollouts   871,
                       backprops  2430, rolloutExpansions 13074, biasedRolloutExpansions     0
-3,     4,     5,    15,     7: dur 0.3061, iter   752, nodesExplored   752, rollouts   752, 
+3,     4,     5,    15,     7: dur 0.3061, iter   752, nodesExplored   752, rollouts   752,
                       backprops  2094, rolloutExpansions 11284, biasedRolloutExpansions  4038
-3,     4,     5,    50,     0: dur 0.3027, iter   342, nodesExplored   342, rollouts   342, 
+3,     4,     5,    50,     0: dur 0.3027, iter   342, nodesExplored   342, rollouts   342,
                       backprops   897, rolloutExpansions 17100, biasedRolloutExpansions     0
-3,     4,     5,    50,     7: dur 0.3016, iter   330, nodesExplored   330, rollouts   330, 
+3,     4,     5,    50,     7: dur 0.3016, iter   330, nodesExplored   330, rollouts   330,
                       backprops   873, rolloutExpansions 16540, biasedRolloutExpansions  2315
-3,     4,     5,   200,     0: dur 0.3093, iter   108, nodesExplored   108, rollouts   108, 
+3,     4,     5,   200,     0: dur 0.3093, iter   108, nodesExplored   108, rollouts   108,
                       backprops   252, rolloutExpansions 21627, biasedRolloutExpansions     0
-3,     4,     5,   200,     7: dur 0.3017, iter   118, nodesExplored   118, rollouts   118, 
+3,     4,     5,   200,     7: dur 0.3017, iter   118, nodesExplored   118, rollouts   118,
                       backprops   278, rolloutExpansions 23506, biasedRolloutExpansions   826
-3,     4,     5,   200,    30: dur 0.3047, iter   118, nodesExplored   118, rollouts   118, 
+3,     4,     5,   200,    30: dur 0.3047, iter   118, nodesExplored   118, rollouts   118,
                       backprops   282, rolloutExpansions 23305, biasedRolloutExpansions  3560
-3,     4,     5,   200,   100: dur 0.3044, iter   118, nodesExplored   118, rollouts   118, 
+3,     4,     5,   200,   100: dur 0.3044, iter   118, nodesExplored   118, rollouts   118,
                       backprops   283, rolloutExpansions 22145, biasedRolloutExpansions  8815
-3,     4,    20,    15,     0: dur 0.3004, iter   880, nodesExplored   880, rollouts   880, 
+3,     4,    20,    15,     0: dur 0.3004, iter   880, nodesExplored   880, rollouts   880,
                       backprops  2629, rolloutExpansions 13203, biasedRolloutExpansions     0
-3,     4,    20,    15,     7: dur 0.3098, iter   774, nodesExplored   774, rollouts   774, 
+3,     4,    20,    15,     7: dur 0.3098, iter   774, nodesExplored   774, rollouts   774,
                       backprops  2195, rolloutExpansions 11611, biasedRolloutExpansions  4181
-3,     4,    20,    50,     0: dur 0.3114, iter   367, nodesExplored   367, rollouts   367, 
+3,     4,    20,    50,     0: dur 0.3114, iter   367, nodesExplored   367, rollouts   367,
                       backprops   993, rolloutExpansions 18380, biasedRolloutExpansions     0
-3,     4,    20,    50,     7: dur 0.3020, iter   336, nodesExplored   336, rollouts   336, 
+3,     4,    20,    50,     7: dur 0.3020, iter   336, nodesExplored   336, rollouts   336,
                       backprops   907, rolloutExpansions 16819, biasedRolloutExpansions  2355
-3,     4,    20,   200,     0: dur 0.3048, iter   111, nodesExplored   111, rollouts   111, 
+3,     4,    20,   200,     0: dur 0.3048, iter   111, nodesExplored   111, rollouts   111,
                       backprops   271, rolloutExpansions 22169, biasedRolloutExpansions     0
-3,     4,    20,   200,     7: dur 0.3015, iter   121, nodesExplored   121, rollouts   121, 
+3,     4,    20,   200,     7: dur 0.3015, iter   121, nodesExplored   121, rollouts   121,
                       backprops   296, rolloutExpansions 24085, biasedRolloutExpansions   848
-3,     4,    20,   200,    30: dur 0.3043, iter   121, nodesExplored   121, rollouts   121, 
+3,     4,    20,   200,    30: dur 0.3043, iter   121, nodesExplored   121, rollouts   121,
                       backprops   299, rolloutExpansions 23781, biasedRolloutExpansions  3637
-3,     4,    20,   200,   100: dur 0.3041, iter   111, nodesExplored   111, rollouts   111, 
+3,     4,    20,   200,   100: dur 0.3041, iter   111, nodesExplored   111, rollouts   111,
                       backprops   270, rolloutExpansions 21686, biasedRolloutExpansions  8595
-3,    11,     5,    15,     0: dur 0.3142, iter   914, nodesExplored   914, rollouts   914, 
+3,    11,     5,    15,     0: dur 0.3142, iter   914, nodesExplored   914, rollouts   914,
                       backprops  2620, rolloutExpansions 13723, biasedRolloutExpansions     0
-3,    11,     5,    15,     7: dur 0.3036, iter   752, nodesExplored   752, rollouts   752, 
+3,    11,     5,    15,     7: dur 0.3036, iter   752, nodesExplored   752, rollouts   752,
                       backprops  2110, rolloutExpansions 11283, biasedRolloutExpansions  4052
-3,    11,     5,    50,     0: dur 0.3066, iter   349, nodesExplored   349, rollouts   349, 
+3,    11,     5,    50,     0: dur 0.3066, iter   349, nodesExplored   349, rollouts   349,
                       backprops   915, rolloutExpansions 17480, biasedRolloutExpansions     0
-3,    11,     5,    50,     7: dur 0.3025, iter   340, nodesExplored   340, rollouts   340, 
+3,    11,     5,    50,     7: dur 0.3025, iter   340, nodesExplored   340, rollouts   340,
                       backprops   899, rolloutExpansions 17040, biasedRolloutExpansions  2385
-3,    11,     5,   200,     0: dur 0.3042, iter   112, nodesExplored   112, rollouts   112, 
+3,    11,     5,   200,     0: dur 0.3042, iter   112, nodesExplored   112, rollouts   112,
                       backprops   264, rolloutExpansions 22448, biasedRolloutExpansions     0
-3,    11,     5,   200,     7: dur 0.3052, iter   114, nodesExplored   114, rollouts   114, 
+3,    11,     5,   200,     7: dur 0.3052, iter   114, nodesExplored   114, rollouts   114,
                       backprops   271, rolloutExpansions 22777, biasedRolloutExpansions   798
-3,    11,     5,   200,    30: dur 0.3016, iter   116, nodesExplored   116, rollouts   116, 
+3,    11,     5,   200,    30: dur 0.3016, iter   116, nodesExplored   116, rollouts   116,
                       backprops   269, rolloutExpansions 23058, biasedRolloutExpansions  3502
-3,    11,     5,   200,   100: dur 0.3026, iter   111, nodesExplored   111, rollouts   111, 
+3,    11,     5,   200,   100: dur 0.3026, iter   111, nodesExplored   111, rollouts   111,
                       backprops   262, rolloutExpansions 21638, biasedRolloutExpansions  8582
-3,    11,    20,    15,     0: dur 0.3107, iter   851, nodesExplored   851, rollouts   851, 
+3,    11,    20,    15,     0: dur 0.3107, iter   851, nodesExplored   851, rollouts   851,
                       backprops  2579, rolloutExpansions 12769, biasedRolloutExpansions     0
-3,    11,    20,    15,     7: dur 0.3065, iter   841, nodesExplored   841, rollouts   841, 
+3,    11,    20,    15,     7: dur 0.3065, iter   841, nodesExplored   841, rollouts   841,
                       backprops  2433, rolloutExpansions 12623, biasedRolloutExpansions  4499
-3,    11,    20,    50,     0: dur 0.3007, iter   357, nodesExplored   357, rollouts   357, 
+3,    11,    20,    50,     0: dur 0.3007, iter   357, nodesExplored   357, rollouts   357,
                       backprops   968, rolloutExpansions 17888, biasedRolloutExpansions     0
-3,    11,    20,    50,     7: dur 0.3089, iter   358, nodesExplored   358, rollouts   358, 
+3,    11,    20,    50,     7: dur 0.3089, iter   358, nodesExplored   358, rollouts   358,
                       backprops   980, rolloutExpansions 17899, biasedRolloutExpansions  2509
-3,    11,    20,   200,     0: dur 0.3041, iter   108, nodesExplored   108, rollouts   108, 
+3,    11,    20,   200,     0: dur 0.3041, iter   108, nodesExplored   108, rollouts   108,
                       backprops   261, rolloutExpansions 21687, biasedRolloutExpansions     0
-3,    11,    20,   200,     7: dur 0.3076, iter   122, nodesExplored   122, rollouts   122, 
+3,    11,    20,   200,     7: dur 0.3076, iter   122, nodesExplored   122, rollouts   122,
                       backprops   297, rolloutExpansions 24118, biasedRolloutExpansions   856
-3,    11,    20,   200,    30: dur 0.3015, iter   134, nodesExplored   134, rollouts   134, 
+3,    11,    20,   200,    30: dur 0.3015, iter   134, nodesExplored   134, rollouts   134,
                       backprops   337, rolloutExpansions 24650, biasedRolloutExpansions  3929
-3,    11,    20,   200,   100: dur 0.3040, iter   112, nodesExplored   112, rollouts   112, 
+3,    11,    20,   200,   100: dur 0.3040, iter   112, nodesExplored   112, rollouts   112,
                       backprops   276, rolloutExpansions 21555, biasedRolloutExpansions  8607
-8,     0,     5,    15,     0: dur 0.3209, iter   621, nodesExplored   621, rollouts   621, 
+8,     0,     5,    15,     0: dur 0.3209, iter   621, nodesExplored   621, rollouts   621,
                       backprops  1485, rolloutExpansions  9316, biasedRolloutExpansions     0
-8,     0,     5,    15,     7: dur 0.3057, iter   494, nodesExplored   494, rollouts   494, 
+8,     0,     5,    15,     7: dur 0.3057, iter   494, nodesExplored   494, rollouts   494,
                       backprops  1144, rolloutExpansions  7410, biasedRolloutExpansions  2650
-8,     0,     5,    50,     0: dur 0.3072, iter   242, nodesExplored   242, rollouts   242, 
+8,     0,     5,    50,     0: dur 0.3072, iter   242, nodesExplored   242, rollouts   242,
                       backprops   522, rolloutExpansions 12105, biasedRolloutExpansions     0
-8,     0,     5,    50,     7: dur 0.3029, iter   241, nodesExplored   241, rollouts   241, 
+8,     0,     5,    50,     7: dur 0.3029, iter   241, nodesExplored   241, rollouts   241,
                       backprops   521, rolloutExpansions 12085, biasedRolloutExpansions  1691
-8,     0,     5,   200,     0: dur 0.3068, iter    84, nodesExplored    84, rollouts    84, 
+8,     0,     5,   200,     0: dur 0.3068, iter    84, nodesExplored    84, rollouts    84,
                       backprops   171, rolloutExpansions 16800, biasedRolloutExpansions     0
-8,     0,     5,   200,     7: dur 0.3059, iter    89, nodesExplored    89, rollouts    89, 
+8,     0,     5,   200,     7: dur 0.3059, iter    89, nodesExplored    89, rollouts    89,
                       backprops   185, rolloutExpansions 17920, biasedRolloutExpansions   627
-8,     0,     5,   200,    30: dur 0.3078, iter    83, nodesExplored    83, rollouts    83, 
+8,     0,     5,   200,    30: dur 0.3078, iter    83, nodesExplored    83, rollouts    83,
                       backprops   170, rolloutExpansions 16692, biasedRolloutExpansions  2505
-8,     0,     5,   200,   100: dur 0.3017, iter    88, nodesExplored    88, rollouts    88, 
+8,     0,     5,   200,   100: dur 0.3017, iter    88, nodesExplored    88, rollouts    88,
                       backprops   180, rolloutExpansions 17401, biasedRolloutExpansions  6906
-8,     0,    20,    15,     0: dur 0.2790, iter   493, nodesExplored   493, rollouts   493, 
+8,     0,    20,    15,     0: dur 0.2790, iter   493, nodesExplored   493, rollouts   493,
                       backprops  1152, rolloutExpansions  7401, biasedRolloutExpansions     0
-8,     0,    20,    15,     7: dur 0.3008, iter   512, nodesExplored   512, rollouts   512, 
+8,     0,    20,    15,     7: dur 0.3008, iter   512, nodesExplored   512, rollouts   512,
                       backprops  1190, rolloutExpansions  7687, biasedRolloutExpansions  2754
-8,     0,    20,    50,     0: dur 0.3023, iter   237, nodesExplored   237, rollouts   237, 
+8,     0,    20,    50,     0: dur 0.3023, iter   237, nodesExplored   237, rollouts   237,
                       backprops   514, rolloutExpansions 11880, biasedRolloutExpansions     0
-8,     0,    20,    50,     7: dur 0.3071, iter   241, nodesExplored   241, rollouts   241, 
+8,     0,    20,    50,     7: dur 0.3071, iter   241, nodesExplored   241, rollouts   241,
                       backprops   520, rolloutExpansions 12070, biasedRolloutExpansions  1689
-8,     0,    20,   200,     0: dur 0.3025, iter    82, nodesExplored    82, rollouts    82, 
+8,     0,    20,   200,     0: dur 0.3025, iter    82, nodesExplored    82, rollouts    82,
                       backprops   168, rolloutExpansions 16570, biasedRolloutExpansions     0
-8,     0,    20,   200,     7: dur 0.3025, iter    87, nodesExplored    87, rollouts    87, 
+8,     0,    20,   200,     7: dur 0.3025, iter    87, nodesExplored    87, rollouts    87,
                       backprops   180, rolloutExpansions 17520, biasedRolloutExpansions   613
-8,     0,    20,   200,    30: dur 0.3020, iter    90, nodesExplored    90, rollouts    90, 
+8,     0,    20,   200,    30: dur 0.3020, iter    90, nodesExplored    90, rollouts    90,
                       backprops   186, rolloutExpansions 18124, biasedRolloutExpansions  2721
-8,     0,    20,   200,   100: dur 0.3027, iter    88, nodesExplored    88, rollouts    88, 
+8,     0,    20,   200,   100: dur 0.3027, iter    88, nodesExplored    88, rollouts    88,
                       backprops   180, rolloutExpansions 17397, biasedRolloutExpansions  6927
-8,     4,     5,    15,     0: dur 0.3114, iter   571, nodesExplored   571, rollouts   571, 
+8,     4,     5,    15,     0: dur 0.3114, iter   571, nodesExplored   571, rollouts   571,
                       backprops  1319, rolloutExpansions  8574, biasedRolloutExpansions     0
-8,     4,     5,    15,     7: dur 0.3050, iter   459, nodesExplored   459, rollouts   459, 
+8,     4,     5,    15,     7: dur 0.3050, iter   459, nodesExplored   459, rollouts   459,
                       backprops  1034, rolloutExpansions  6885, biasedRolloutExpansions  2459
-8,     4,     5,    50,     0: dur 0.3031, iter   201, nodesExplored   201, rollouts   201, 
+8,     4,     5,    50,     0: dur 0.3031, iter   201, nodesExplored   201, rollouts   201,
                       backprops   426, rolloutExpansions 10095, biasedRolloutExpansions     0
-8,     4,     5,    50,     7: dur 0.3117, iter   197, nodesExplored   197, rollouts   197, 
+8,     4,     5,    50,     7: dur 0.3117, iter   197, nodesExplored   197, rollouts   197,
                       backprops   417, rolloutExpansions  9875, biasedRolloutExpansions  1382
-8,     4,     5,   200,     0: dur 0.3031, iter    73, nodesExplored    73, rollouts    73, 
+8,     4,     5,   200,     0: dur 0.3031, iter    73, nodesExplored    73, rollouts    73,
                       backprops   150, rolloutExpansions 14731, biasedRolloutExpansions     0
-8,     4,     5,   200,     7: dur 0.3111, iter    68, nodesExplored    68, rollouts    68, 
+8,     4,     5,   200,     7: dur 0.3111, iter    68, nodesExplored    68, rollouts    68,
                       backprops   138, rolloutExpansions 13599, biasedRolloutExpansions   476
-8,     4,     5,   200,    30: dur 0.3036, iter    80, nodesExplored    80, rollouts    80, 
+8,     4,     5,   200,    30: dur 0.3036, iter    80, nodesExplored    80, rollouts    80,
                       backprops   164, rolloutExpansions 16135, biasedRolloutExpansions  2421
-8,     4,     5,   200,   100: dur 0.3024, iter    77, nodesExplored    77, rollouts    77, 
+8,     4,     5,   200,   100: dur 0.3024, iter    77, nodesExplored    77, rollouts    77,
                       backprops   157, rolloutExpansions 15352, biasedRolloutExpansions  6084
-8,     4,    20,    15,     0: dur 0.3068, iter   563, nodesExplored   563, rollouts   563, 
+8,     4,    20,    15,     0: dur 0.3068, iter   563, nodesExplored   563, rollouts   563,
                       backprops  1317, rolloutExpansions  8446, biasedRolloutExpansions     0
-8,     4,    20,    15,     7: dur 0.2773, iter   419, nodesExplored   419, rollouts   419, 
+8,     4,    20,    15,     7: dur 0.2773, iter   419, nodesExplored   419, rollouts   419,
                       backprops   949, rolloutExpansions  6286, biasedRolloutExpansions  2249
-8,     4,    20,    50,     0: dur 0.3051, iter   211, nodesExplored   211, rollouts   211, 
+8,     4,    20,    50,     0: dur 0.3051, iter   211, nodesExplored   211, rollouts   211,
                       backprops   452, rolloutExpansions 10555, biasedRolloutExpansions     0
-8,     4,    20,    50,     7: dur 0.3035, iter   200, nodesExplored   200, rollouts   200, 
+8,     4,    20,    50,     7: dur 0.3035, iter   200, nodesExplored   200, rollouts   200,
                       backprops   423, rolloutExpansions 10005, biasedRolloutExpansions  1400
-8,     4,    20,   200,     0: dur 0.3070, iter    72, nodesExplored    72, rollouts    72, 
+8,     4,    20,   200,     0: dur 0.3070, iter    72, nodesExplored    72, rollouts    72,
                       backprops   146, rolloutExpansions 14439, biasedRolloutExpansions     0
-8,     4,    20,   200,     7: dur 0.3021, iter    74, nodesExplored    74, rollouts    74, 
+8,     4,    20,   200,     7: dur 0.3021, iter    74, nodesExplored    74, rollouts    74,
                       backprops   151, rolloutExpansions 14829, biasedRolloutExpansions   519
-8,     4,    20,   200,    30: dur 0.3019, iter    75, nodesExplored    75, rollouts    75, 
+8,     4,    20,   200,    30: dur 0.3019, iter    75, nodesExplored    75, rollouts    75,
                       backprops   154, rolloutExpansions 15054, biasedRolloutExpansions  2263
-8,     4,    20,   200,   100: dur 0.3027, iter    67, nodesExplored    67, rollouts    67, 
+8,     4,    20,   200,   100: dur 0.3027, iter    67, nodesExplored    67, rollouts    67,
                       backprops   137, rolloutExpansions 13568, biasedRolloutExpansions  5384
-8,    11,     5,    15,     0: dur 0.3151, iter   564, nodesExplored   564, rollouts   564, 
+8,    11,     5,    15,     0: dur 0.3151, iter   564, nodesExplored   564, rollouts   564,
                       backprops  1308, rolloutExpansions  8467, biasedRolloutExpansions     0
-8,    11,     5,    15,     7: dur 0.3043, iter   479, nodesExplored   479, rollouts   479, 
+8,    11,     5,    15,     7: dur 0.3043, iter   479, nodesExplored   479, rollouts   479,
                       backprops  1089, rolloutExpansions  7194, biasedRolloutExpansions  2587
-8,    11,     5,    50,     0: dur 0.3023, iter   214, nodesExplored   214, rollouts   214, 
+8,    11,     5,    50,     0: dur 0.3023, iter   214, nodesExplored   214, rollouts   214,
                       backprops   455, rolloutExpansions 10735, biasedRolloutExpansions     0
-8,    11,     5,    50,     7: dur 0.3009, iter   214, nodesExplored   214, rollouts   214, 
+8,    11,     5,    50,     7: dur 0.3009, iter   214, nodesExplored   214, rollouts   214,
                       backprops   455, rolloutExpansions 10720, biasedRolloutExpansions  1500
-8,    11,     5,   200,     0: dur 0.3029, iter    75, nodesExplored    75, rollouts    75, 
+8,    11,     5,   200,     0: dur 0.3029, iter    75, nodesExplored    75, rollouts    75,
                       backprops   152, rolloutExpansions 15036, biasedRolloutExpansions     0
-8,    11,     5,   200,     7: dur 0.3028, iter    74, nodesExplored    74, rollouts    74, 
+8,    11,     5,   200,     7: dur 0.3028, iter    74, nodesExplored    74, rollouts    74,
                       backprops   151, rolloutExpansions 14940, biasedRolloutExpansions   522
-8,    11,     5,   200,    30: dur 0.3078, iter    68, nodesExplored    68, rollouts    68, 
+8,    11,     5,   200,    30: dur 0.3078, iter    68, nodesExplored    68, rollouts    68,
                       backprops   139, rolloutExpansions 13755, biasedRolloutExpansions  2064
-8,    11,     5,   200,   100: dur 0.3171, iter    64, nodesExplored    64, rollouts    64, 
+8,    11,     5,   200,   100: dur 0.3171, iter    64, nodesExplored    64, rollouts    64,
                       backprops   129, rolloutExpansions 12786, biasedRolloutExpansions  5084
-8,    11,    20,    15,     0: dur 0.2974, iter   505, nodesExplored   505, rollouts   505, 
+8,    11,    20,    15,     0: dur 0.2974, iter   505, nodesExplored   505, rollouts   505,
                       backprops  1222, rolloutExpansions  7587, biasedRolloutExpansions     0
-8,    11,    20,    15,     7: dur 0.3058, iter   461, nodesExplored   461, rollouts   461, 
+8,    11,    20,    15,     7: dur 0.3058, iter   461, nodesExplored   461, rollouts   461,
                       backprops  1057, rolloutExpansions  6927, biasedRolloutExpansions  2485
-8,    11,    20,    50,     0: dur 0.3023, iter   206, nodesExplored   206, rollouts   206, 
+8,    11,    20,    50,     0: dur 0.3023, iter   206, nodesExplored   206, rollouts   206,
                       backprops   442, rolloutExpansions 10345, biasedRolloutExpansions     0
-8,    11,    20,    50,     7: dur 0.3035, iter   200, nodesExplored   200, rollouts   200, 
+8,    11,    20,    50,     7: dur 0.3035, iter   200, nodesExplored   200, rollouts   200,
                       backprops   424, rolloutExpansions 10015, biasedRolloutExpansions  1402
-8,    11,    20,   200,     0: dur 0.3020, iter    69, nodesExplored    69, rollouts    69, 
+8,    11,    20,   200,     0: dur 0.3020, iter    69, nodesExplored    69, rollouts    69,
                       backprops   141, rolloutExpansions 13953, biasedRolloutExpansions     0
-8,    11,    20,   200,     7: dur 0.3083, iter    76, nodesExplored    76, rollouts    76, 
+8,    11,    20,   200,     7: dur 0.3083, iter    76, nodesExplored    76, rollouts    76,
                       backprops   154, rolloutExpansions 15194, biasedRolloutExpansions   532
-8,    11,    20,   200,    30: dur 0.3026, iter    71, nodesExplored    71, rollouts    71, 
+8,    11,    20,   200,    30: dur 0.3026, iter    71, nodesExplored    71, rollouts    71,
                       backprops   144, rolloutExpansions 14223, biasedRolloutExpansions  2138
-8,    11,    20,   200,   100: dur 0.3020, iter    63, nodesExplored    63, rollouts    63, 
+8,    11,    20,   200,   100: dur 0.3020, iter    63, nodesExplored    63, rollouts    63,
                       backprops   129, rolloutExpansions 12697, biasedRolloutExpansions  5040
-25,     0,     5,    15,     0: dur 0.3343, iter   279, nodesExplored   279, rollouts   279, 
+25,     0,     5,    15,     0: dur 0.3343, iter   279, nodesExplored   279, rollouts   279,
                       backprops   563, rolloutExpansions  4189, biasedRolloutExpansions     0
-25,     0,     5,    15,     7: dur 0.3157, iter   182, nodesExplored   182, rollouts   182, 
+25,     0,     5,    15,     7: dur 0.3157, iter   182, nodesExplored   182, rollouts   182,
                       backprops   367, rolloutExpansions  2743, biasedRolloutExpansions   981
-25,     0,     5,    50,     0: dur 0.3060, iter   115, nodesExplored   115, rollouts   115, 
+25,     0,     5,    50,     0: dur 0.3060, iter   115, nodesExplored   115, rollouts   115,
                       backprops   231, rolloutExpansions  5790, biasedRolloutExpansions     0
-25,     0,     5,    50,     7: dur 0.3032, iter   110, nodesExplored   110, rollouts   110, 
+25,     0,     5,    50,     7: dur 0.3032, iter   110, nodesExplored   110, rollouts   110,
                       backprops   221, rolloutExpansions  5525, biasedRolloutExpansions   773
-25,     0,     5,   200,     0: dur 0.3064, iter    51, nodesExplored    51, rollouts    51, 
+25,     0,     5,   200,     0: dur 0.3064, iter    51, nodesExplored    51, rollouts    51,
                       backprops   102, rolloutExpansions 10259, biasedRolloutExpansions     0
-25,     0,     5,   200,     7: dur 0.3058, iter    43, nodesExplored    43, rollouts    43, 
+25,     0,     5,   200,     7: dur 0.3058, iter    43, nodesExplored    43, rollouts    43,
                       backprops    87, rolloutExpansions  8740, biasedRolloutExpansions   305
-25,     0,     5,   200,    30: dur 0.3062, iter    50, nodesExplored    50, rollouts    50, 
+25,     0,     5,   200,    30: dur 0.3062, iter    50, nodesExplored    50, rollouts    50,
                       backprops   101, rolloutExpansions 10160, biasedRolloutExpansions  1524
-25,     0,     5,   200,   100: dur 0.3042, iter    48, nodesExplored    48, rollouts    48, 
+25,     0,     5,   200,   100: dur 0.3042, iter    48, nodesExplored    48, rollouts    48,
                       backprops    97, rolloutExpansions  9758, biasedRolloutExpansions  3876
-25,     0,    20,    15,     0: dur 0.3101, iter   243, nodesExplored   243, rollouts   243, 
+25,     0,    20,    15,     0: dur 0.3101, iter   243, nodesExplored   243, rollouts   243,
                       backprops   490, rolloutExpansions  3657, biasedRolloutExpansions     0
-25,     0,    20,    15,     7: dur 0.3066, iter   209, nodesExplored   209, rollouts   209, 
+25,     0,    20,    15,     7: dur 0.3066, iter   209, nodesExplored   209, rollouts   209,
                       backprops   419, rolloutExpansions  3136, biasedRolloutExpansions  1110
-25,     0,    20,    50,     0: dur 0.2845, iter   105, nodesExplored   105, rollouts   105, 
+25,     0,    20,    50,     0: dur 0.2845, iter   105, nodesExplored   105, rollouts   105,
                       backprops   210, rolloutExpansions  5265, biasedRolloutExpansions     0
-25,     0,    20,    50,     7: dur 0.3067, iter   109, nodesExplored   109, rollouts   109, 
+25,     0,    20,    50,     7: dur 0.3067, iter   109, nodesExplored   109, rollouts   109,
                       backprops   218, rolloutExpansions  5450, biasedRolloutExpansions   763
-25,     0,    20,   200,     0: dur 0.3078, iter    50, nodesExplored    50, rollouts    50, 
+25,     0,    20,   200,     0: dur 0.3078, iter    50, nodesExplored    50, rollouts    50,
                       backprops   100, rolloutExpansions 10000, biasedRolloutExpansions     0
-25,     0,    20,   200,     7: dur 0.3032, iter    50, nodesExplored    50, rollouts    50, 
+25,     0,    20,   200,     7: dur 0.3032, iter    50, nodesExplored    50, rollouts    50,
                       backprops   100, rolloutExpansions 10040, biasedRolloutExpansions   351
-25,     0,    20,   200,    30: dur 0.3031, iter    50, nodesExplored    50, rollouts    50, 
+25,     0,    20,   200,    30: dur 0.3031, iter    50, nodesExplored    50, rollouts    50,
                       backprops   100, rolloutExpansions 10060, biasedRolloutExpansions  1509
-25,     0,    20,   200,   100: dur 0.3090, iter    48, nodesExplored    48, rollouts    48, 
+25,     0,    20,   200,   100: dur 0.3090, iter    48, nodesExplored    48, rollouts    48,
                       backprops    97, rolloutExpansions  9737, biasedRolloutExpansions  3881
-25,     4,     5,    15,     0: dur 0.3212, iter   260, nodesExplored   260, rollouts   260, 
+25,     4,     5,    15,     0: dur 0.3212, iter   260, nodesExplored   260, rollouts   260,
                       backprops   524, rolloutExpansions  3912, biasedRolloutExpansions     0
-25,     4,     5,    15,     7: dur 0.3116, iter   212, nodesExplored   212, rollouts   212, 
+25,     4,     5,    15,     7: dur 0.3116, iter   212, nodesExplored   212, rollouts   212,
                       backprops   425, rolloutExpansions  3180, biasedRolloutExpansions  1149
-25,     4,     5,    50,     0: dur 0.3034, iter   111, nodesExplored   111, rollouts   111, 
+25,     4,     5,    50,     0: dur 0.3034, iter   111, nodesExplored   111, rollouts   111,
                       backprops   223, rolloutExpansions  5565, biasedRolloutExpansions     0
-25,     4,     5,    50,     7: dur 0.3034, iter   105, nodesExplored   105, rollouts   105, 
+25,     4,     5,    50,     7: dur 0.3034, iter   105, nodesExplored   105, rollouts   105,
                       backprops   211, rolloutExpansions  5290, biasedRolloutExpansions   740
-25,     4,     5,   200,     0: dur 0.3038, iter    46, nodesExplored    46, rollouts    46, 
+25,     4,     5,   200,     0: dur 0.3038, iter    46, nodesExplored    46, rollouts    46,
                       backprops    92, rolloutExpansions  9220, biasedRolloutExpansions     0
-25,     4,     5,   200,     7: dur 0.3050, iter    45, nodesExplored    45, rollouts    45, 
+25,     4,     5,   200,     7: dur 0.3050, iter    45, nodesExplored    45, rollouts    45,
                       backprops    90, rolloutExpansions  9020, biasedRolloutExpansions   315
-25,     4,     5,   200,    30: dur 0.3061, iter    43, nodesExplored    43, rollouts    43, 
+25,     4,     5,   200,    30: dur 0.3061, iter    43, nodesExplored    43, rollouts    43,
                       backprops    86, rolloutExpansions  8640, biasedRolloutExpansions  1296
-25,     4,     5,   200,   100: dur 0.3058, iter    38, nodesExplored    38, rollouts    38, 
+25,     4,     5,   200,   100: dur 0.3058, iter    38, nodesExplored    38, rollouts    38,
                       backprops    76, rolloutExpansions  7630, biasedRolloutExpansions  3040
-25,     4,    20,    15,     0: dur 0.3119, iter   217, nodesExplored   217, rollouts   217, 
+25,     4,    20,    15,     0: dur 0.3119, iter   217, nodesExplored   217, rollouts   217,
                       backprops   438, rolloutExpansions  3267, biasedRolloutExpansions     0
-25,     4,    20,    15,     7: dur 0.3056, iter   182, nodesExplored   182, rollouts   182, 
+25,     4,    20,    15,     7: dur 0.3056, iter   182, nodesExplored   182, rollouts   182,
                       backprops   366, rolloutExpansions  2734, biasedRolloutExpansions   979
-25,     4,    20,    50,     0: dur 0.3020, iter    98, nodesExplored    98, rollouts    98, 
+25,     4,    20,    50,     0: dur 0.3020, iter    98, nodesExplored    98, rollouts    98,
                       backprops   197, rolloutExpansions  4930, biasedRolloutExpansions     0
-25,     4,    20,    50,     7: dur 0.3024, iter    93, nodesExplored    93, rollouts    93, 
+25,     4,    20,    50,     7: dur 0.3024, iter    93, nodesExplored    93, rollouts    93,
                       backprops   187, rolloutExpansions  4690, biasedRolloutExpansions   656
-25,     4,    20,   200,     0: dur 0.3037, iter    39, nodesExplored    39, rollouts    39, 
+25,     4,    20,   200,     0: dur 0.3037, iter    39, nodesExplored    39, rollouts    39,
                       backprops    78, rolloutExpansions  7860, biasedRolloutExpansions     0
-25,     4,    20,   200,     7: dur 0.3034, iter    43, nodesExplored    43, rollouts    43, 
+25,     4,    20,   200,     7: dur 0.3034, iter    43, nodesExplored    43, rollouts    43,
                       backprops    87, rolloutExpansions  8700, biasedRolloutExpansions   304
-25,     4,    20,   200,    30: dur 0.3043, iter    44, nodesExplored    44, rollouts    44, 
+25,     4,    20,   200,    30: dur 0.3043, iter    44, nodesExplored    44, rollouts    44,
                       backprops    89, rolloutExpansions  8940, biasedRolloutExpansions  1341
-25,     4,    20,   200,   100: dur 0.3080, iter    42, nodesExplored    42, rollouts    42, 
+25,     4,    20,   200,   100: dur 0.3080, iter    42, nodesExplored    42, rollouts    42,
                       backprops    84, rolloutExpansions  8400, biasedRolloutExpansions  3337
-25,    11,     5,    15,     0: dur 0.3061, iter   216, nodesExplored   216, rollouts   216, 
+25,    11,     5,    15,     0: dur 0.3061, iter   216, nodesExplored   216, rollouts   216,
                       backprops   433, rolloutExpansions  3240, biasedRolloutExpansions     0
-25,    11,     5,    15,     7: dur 0.3134, iter   194, nodesExplored   194, rollouts   194, 
+25,    11,     5,    15,     7: dur 0.3134, iter   194, nodesExplored   194, rollouts   194,
                       backprops   390, rolloutExpansions  2914, biasedRolloutExpansions  1029
-25,    11,     5,    50,     0: dur 0.3018, iter    91, nodesExplored    91, rollouts    91, 
+25,    11,     5,    50,     0: dur 0.3018, iter    91, nodesExplored    91, rollouts    91,
                       backprops   183, rolloutExpansions  4595, biasedRolloutExpansions     0
-25,    11,     5,    50,     7: dur 0.3136, iter    89, nodesExplored    89, rollouts    89, 
+25,    11,     5,    50,     7: dur 0.3136, iter    89, nodesExplored    89, rollouts    89,
                       backprops   179, rolloutExpansions  4475, biasedRolloutExpansions   626
-25,    11,     5,   200,     0: dur 0.3127, iter    39, nodesExplored    39, rollouts    39, 
+25,    11,     5,   200,     0: dur 0.3127, iter    39, nodesExplored    39, rollouts    39,
                       backprops    79, rolloutExpansions  7980, biasedRolloutExpansions     0
-25,    11,     5,   200,     7: dur 0.3127, iter    38, nodesExplored    38, rollouts    38, 
+25,    11,     5,   200,     7: dur 0.3127, iter    38, nodesExplored    38, rollouts    38,
                       backprops    76, rolloutExpansions  7660, biasedRolloutExpansions   268
-25,    11,     5,   200,    30: dur 0.3043, iter    39, nodesExplored    39, rollouts    39, 
+25,    11,     5,   200,    30: dur 0.3043, iter    39, nodesExplored    39, rollouts    39,
                       backprops    78, rolloutExpansions  7840, biasedRolloutExpansions  1176
-25,    11,     5,   200,   100: dur 0.3052, iter    36, nodesExplored    36, rollouts    36, 
+25,    11,     5,   200,   100: dur 0.3052, iter    36, nodesExplored    36, rollouts    36,
                       backprops    73, rolloutExpansions  7311, biasedRolloutExpansions  2900
-25,    11,    20,    15,     0: dur 0.3189, iter   222, nodesExplored   222, rollouts   222, 
+25,    11,    20,    15,     0: dur 0.3189, iter   222, nodesExplored   222, rollouts   222,
                       backprops   447, rolloutExpansions  3334, biasedRolloutExpansions     0
-25,    11,    20,    15,     7: dur 0.3058, iter   181, nodesExplored   181, rollouts   181, 
+25,    11,    20,    15,     7: dur 0.3058, iter   181, nodesExplored   181, rollouts   181,
                       backprops   363, rolloutExpansions  2719, biasedRolloutExpansions   971
-25,    11,    20,    50,     0: dur 0.3024, iter   100, nodesExplored   100, rollouts   100, 
+25,    11,    20,    50,     0: dur 0.3024, iter   100, nodesExplored   100, rollouts   100,
                       backprops   201, rolloutExpansions  5035, biasedRolloutExpansions     0
-25,    11,    20,    50,     7: dur 0.3019, iter    87, nodesExplored    87, rollouts    87, 
+25,    11,    20,    50,     7: dur 0.3019, iter    87, nodesExplored    87, rollouts    87,
                       backprops   175, rolloutExpansions  4390, biasedRolloutExpansions   614
-25,    11,    20,   200,     0: dur 0.3040, iter    38, nodesExplored    38, rollouts    38, 
+25,    11,    20,   200,     0: dur 0.3040, iter    38, nodesExplored    38, rollouts    38,
                       backprops    76, rolloutExpansions  7640, biasedRolloutExpansions     0
-25,    11,    20,   200,     7: dur 0.3047, iter    37, nodesExplored    37, rollouts    37, 
+25,    11,    20,   200,     7: dur 0.3047, iter    37, nodesExplored    37, rollouts    37,
                       backprops    75, rolloutExpansions  7560, biasedRolloutExpansions   264
-25,    11,    20,   200,    30: dur 0.3040, iter    34, nodesExplored    34, rollouts    34, 
+25,    11,    20,   200,    30: dur 0.3040, iter    34, nodesExplored    34, rollouts    34,
                       backprops    68, rolloutExpansions  6860, biasedRolloutExpansions  1029
-25,    11,    20,   200,   100: dur 0.3054, iter    32, nodesExplored    32, rollouts    32, 
+25,    11,    20,   200,   100: dur 0.3054, iter    32, nodesExplored    32, rollouts    32,
                       backprops    65, rolloutExpansions  6500, biasedRolloutExpansions  2593
 AVG:
-dur 0.3055, iter   225, nodesExplored   225, rollouts   225, 
+dur 0.3055, iter   225, nodesExplored   225, rollouts   225,
                       backprops   555, rolloutExpansions 12594, biasedRolloutExpansions  1647
 
     """
 
     # After tweaks to support pre-expansion of paths and killer-move-cache:
     """
-    
+
 nArmy, nTile, +Army, depth, biasD
-4,     4,     5,    15,     7: dur 0.2923, iter   340, nodesExplored   340, rollouts   340, 
+4,     4,     5,    15,     7: dur 0.2923, iter   340, nodesExplored   340, rollouts   340,
                   backprops  1044, rolloutExpansions  5106, biasedRolloutExpansions  1832
-4,     4,     5,    50,     7: dur 0.2990, iter   145, nodesExplored   145, rollouts   145, 
+4,     4,     5,    50,     7: dur 0.2990, iter   145, nodesExplored   145, rollouts   145,
                   backprops   576, rolloutExpansions  7260, biasedRolloutExpansions  1016
-4,     4,     5,   100,     7: dur 0.2989, iter    84, nodesExplored    84, rollouts    84, 
+4,     4,     5,   100,     7: dur 0.2989, iter    84, nodesExplored    84, rollouts    84,
                   backprops   181, rolloutExpansions  8418, biasedRolloutExpansions   590
-4,     4,     5,   100,    30: dur 0.2978, iter    81, nodesExplored    81, rollouts    81, 
+4,     4,     5,   100,    30: dur 0.2978, iter    81, nodesExplored    81, rollouts    81,
                   backprops   174, rolloutExpansions  8141, biasedRolloutExpansions  2442
-4,     4,    20,    15,     7: dur 0.3045, iter   350, nodesExplored   349, rollouts   348, 
+4,     4,    20,    15,     7: dur 0.3045, iter   350, nodesExplored   349, rollouts   348,
                   backprops  2371, rolloutExpansions  5218, biasedRolloutExpansions  1875
-4,     4,    20,    50,     7: dur 0.2995, iter   142, nodesExplored   141, rollouts   141, 
+4,     4,    20,    50,     7: dur 0.2995, iter   142, nodesExplored   141, rollouts   141,
                   backprops  1272, rolloutExpansions  6999, biasedRolloutExpansions   982
-4,     4,    20,   100,     7: dur 0.3037, iter    82, nodesExplored    82, rollouts    82, 
+4,     4,    20,   100,     7: dur 0.3037, iter    82, nodesExplored    82, rollouts    82,
                   backprops   884, rolloutExpansions  8124, biasedRolloutExpansions   570
-4,     4,    20,   100,    30: dur 0.2980, iter    80, nodesExplored    80, rollouts    80, 
+4,     4,    20,   100,    30: dur 0.2980, iter    80, nodesExplored    80, rollouts    80,
                   backprops   834, rolloutExpansions  7896, biasedRolloutExpansions  2373
-4,    11,     5,    15,     7: dur 0.2929, iter   341, nodesExplored   341, rollouts   341, 
+4,    11,     5,    15,     7: dur 0.2929, iter   341, nodesExplored   341, rollouts   341,
                   backprops  2271, rolloutExpansions  5122, biasedRolloutExpansions  1823
-4,    11,     5,    50,     7: dur 0.2978, iter   142, nodesExplored   142, rollouts   142, 
+4,    11,     5,    50,     7: dur 0.2978, iter   142, nodesExplored   142, rollouts   142,
                   backprops   566, rolloutExpansions  7100, biasedRolloutExpansions   994
-4,    11,     5,   100,     7: dur 0.2980, iter    86, nodesExplored    86, rollouts    86, 
+4,    11,     5,   100,     7: dur 0.2980, iter    86, nodesExplored    86, rollouts    86,
                   backprops   523, rolloutExpansions  8584, biasedRolloutExpansions   601
-4,    11,     5,   100,    30: dur 0.2984, iter    84, nodesExplored    84, rollouts    84, 
+4,    11,     5,   100,    30: dur 0.2984, iter    84, nodesExplored    84, rollouts    84,
                   backprops   613, rolloutExpansions  8376, biasedRolloutExpansions  2513
-4,    11,    20,    15,     7: dur 0.2952, iter   349, nodesExplored   348, rollouts   348, 
+4,    11,    20,    15,     7: dur 0.2952, iter   349, nodesExplored   348, rollouts   348,
                   backprops  1864, rolloutExpansions  5213, biasedRolloutExpansions  1862
-4,    11,    20,    50,     7: dur 0.2952, iter   148, nodesExplored   147, rollouts   147, 
+4,    11,    20,    50,     7: dur 0.2952, iter   148, nodesExplored   147, rollouts   147,
                   backprops   520, rolloutExpansions  7339, biasedRolloutExpansions  1029
-4,    11,    20,   100,     7: dur 0.2977, iter    93, nodesExplored    90, rollouts    89, 
+4,    11,    20,   100,     7: dur 0.2977, iter    93, nodesExplored    90, rollouts    89,
                   backprops   666, rolloutExpansions  8731, biasedRolloutExpansions   617
-4,    11,    20,   100,    30: dur 0.3017, iter    85, nodesExplored    84, rollouts    83, 
+4,    11,    20,   100,    30: dur 0.3017, iter    85, nodesExplored    84, rollouts    83,
                   backprops   556, rolloutExpansions  8262, biasedRolloutExpansions  2483
-15,     4,     5,    15,     7: dur 0.3138, iter   171, nodesExplored   171, rollouts   171, 
+15,     4,     5,    15,     7: dur 0.3138, iter   171, nodesExplored   171, rollouts   171,
                   backprops   438, rolloutExpansions  2574, biasedRolloutExpansions   916
-15,     4,     5,    50,     7: dur 0.2984, iter    72, nodesExplored    72, rollouts    72, 
+15,     4,     5,    50,     7: dur 0.2984, iter    72, nodesExplored    72, rollouts    72,
                   backprops   222, rolloutExpansions  3640, biasedRolloutExpansions   509
-15,     4,     5,   100,     7: dur 0.3050, iter    44, nodesExplored    44, rollouts    44, 
+15,     4,     5,   100,     7: dur 0.3050, iter    44, nodesExplored    44, rollouts    44,
                   backprops    88, rolloutExpansions  4400, biasedRolloutExpansions   308
-15,     4,     5,   100,    30: dur 0.3002, iter    43, nodesExplored    43, rollouts    43, 
+15,     4,     5,   100,    30: dur 0.3002, iter    43, nodesExplored    43, rollouts    43,
                   backprops    86, rolloutExpansions  4320, biasedRolloutExpansions  1293
-15,     4,    20,    15,     7: dur 0.2947, iter   142, nodesExplored   142, rollouts   142, 
+15,     4,    20,    15,     7: dur 0.2947, iter   142, nodesExplored   142, rollouts   142,
                   backprops  1392, rolloutExpansions  2130, biasedRolloutExpansions   763
-15,     4,    20,    50,     7: dur 0.3031, iter    74, nodesExplored    74, rollouts    74, 
+15,     4,    20,    50,     7: dur 0.3031, iter    74, nodesExplored    74, rollouts    74,
                   backprops   708, rolloutExpansions  3715, biasedRolloutExpansions   521
-15,     4,    20,   100,     7: dur 0.3006, iter    81, nodesExplored    81, rollouts    81, 
+15,     4,    20,   100,     7: dur 0.3006, iter    81, nodesExplored    81, rollouts    81,
                   backprops   911, rolloutExpansions  8076, biasedRolloutExpansions   566
-15,     4,    20,   100,    30: dur 0.3095, iter    80, nodesExplored    79, rollouts    79, 
+15,     4,    20,   100,    30: dur 0.3095, iter    80, nodesExplored    79, rollouts    79,
                   backprops   772, rolloutExpansions  7862, biasedRolloutExpansions  2358
-15,    11,     5,    15,     7: dur 0.3022, iter   159, nodesExplored   159, rollouts   159, 
+15,    11,     5,    15,     7: dur 0.3022, iter   159, nodesExplored   159, rollouts   159,
                   backprops   969, rolloutExpansions  2388, biasedRolloutExpansions   854
-15,    11,     5,    50,     7: dur 0.3033, iter    67, nodesExplored    67, rollouts    67, 
+15,    11,     5,    50,     7: dur 0.3033, iter    67, nodesExplored    67, rollouts    67,
                   backprops   504, rolloutExpansions  3373, biasedRolloutExpansions   473
-15,    11,     5,   100,     7: dur 0.3099, iter    41, nodesExplored    41, rollouts    41, 
+15,    11,     5,   100,     7: dur 0.3099, iter    41, nodesExplored    41, rollouts    41,
                   backprops   326, rolloutExpansions  4120, biasedRolloutExpansions   288
-15,    11,     5,   100,    30: dur 0.3158, iter    41, nodesExplored    41, rollouts    41, 
+15,    11,     5,   100,    30: dur 0.3158, iter    41, nodesExplored    41, rollouts    41,
                   backprops   454, rolloutExpansions  4133, biasedRolloutExpansions  1238
-15,    11,    20,    15,     7: dur 0.2973, iter   156, nodesExplored   156, rollouts   156, 
+15,    11,    20,    15,     7: dur 0.2973, iter   156, nodesExplored   156, rollouts   156,
                   backprops  1187, rolloutExpansions  2340, biasedRolloutExpansions   832
-15,    11,    20,    50,     7: dur 0.3004, iter    66, nodesExplored    66, rollouts    65, 
+15,    11,    20,    50,     7: dur 0.3004, iter    66, nodesExplored    66, rollouts    65,
                   backprops   628, rolloutExpansions  3269, biasedRolloutExpansions   458
-15,    11,    20,   100,     7: dur 0.3084, iter    41, nodesExplored    41, rollouts    40, 
+15,    11,    20,   100,     7: dur 0.3084, iter    41, nodesExplored    41, rollouts    40,
                   backprops   409, rolloutExpansions  3966, biasedRolloutExpansions   280
-15,    11,    20,   100,    30: dur 0.3093, iter    37, nodesExplored    37, rollouts    37, 
+15,    11,    20,   100,    30: dur 0.3093, iter    37, nodesExplored    37, rollouts    37,
                   backprops   355, rolloutExpansions  3641, biasedRolloutExpansions  1089
 AVG:
-dur 0.3013, iter   123, nodesExplored   123, rollouts   123, 
+dur 0.3013, iter   123, nodesExplored   123, rollouts   123,
                   backprops   761, rolloutExpansions  5620, biasedRolloutExpansions  1136
 
 
 
 nArmy, nTile, +Army, depth, biasD
-    3,     0,     5,    15,     0: dur 0.2980, iter   732, nodesExplored   732, rollouts   732, 
+    3,     0,     5,    15,     0: dur 0.2980, iter   732, nodesExplored   732, rollouts   732,
                       backprops  2094, rolloutExpansions 10986, biasedRolloutExpansions     0
-    3,     0,     5,    15,     7: dur 0.2945, iter   663, nodesExplored   663, rollouts   663, 
+    3,     0,     5,    15,     7: dur 0.2945, iter   663, nodesExplored   663, rollouts   663,
                       backprops  1880, rolloutExpansions  9954, biasedRolloutExpansions  3573
-    3,     0,     5,    50,     0: dur 0.2954, iter   169, nodesExplored   169, rollouts   169, 
+    3,     0,     5,    50,     0: dur 0.2954, iter   169, nodesExplored   169, rollouts   169,
                       backprops   424, rolloutExpansions  8459, biasedRolloutExpansions     0
-    3,     0,     5,    50,     7: dur 0.2937, iter   156, nodesExplored   156, rollouts   156, 
+    3,     0,     5,    50,     7: dur 0.2937, iter   156, nodesExplored   156, rollouts   156,
                       backprops   384, rolloutExpansions  7840, biasedRolloutExpansions  1097
-    3,     0,     5,   200,     0: dur 0.3019, iter    54, nodesExplored    54, rollouts    54, 
+    3,     0,     5,   200,     0: dur 0.3019, iter    54, nodesExplored    54, rollouts    54,
                       backprops   117, rolloutExpansions 10395, biasedRolloutExpansions     0
-    3,     0,     5,   200,     7: dur 0.2972, iter    59, nodesExplored    59, rollouts    59, 
+    3,     0,     5,   200,     7: dur 0.2972, iter    59, nodesExplored    59, rollouts    59,
                       backprops   131, rolloutExpansions 11149, biasedRolloutExpansions   414
-    3,     0,     5,   200,    30: dur 0.3004, iter    61, nodesExplored    61, rollouts    61, 
+    3,     0,     5,   200,    30: dur 0.3004, iter    61, nodesExplored    61, rollouts    61,
                       backprops   134, rolloutExpansions 11136, biasedRolloutExpansions  1826
-    3,     0,     5,   200,   100: dur 0.3059, iter    55, nodesExplored    55, rollouts    55, 
+    3,     0,     5,   200,   100: dur 0.3059, iter    55, nodesExplored    55, rollouts    55,
                       backprops   122, rolloutExpansions 10089, biasedRolloutExpansions  4026
-    3,     0,    20,    15,     0: dur 0.3003, iter   368, nodesExplored   368, rollouts   368, 
+    3,     0,    20,    15,     0: dur 0.3003, iter   368, nodesExplored   368, rollouts   368,
                       backprops   999, rolloutExpansions  5532, biasedRolloutExpansions     0
-    3,     0,    20,    15,     7: dur 0.3014, iter   364, nodesExplored   364, rollouts   364, 
+    3,     0,    20,    15,     7: dur 0.3014, iter   364, nodesExplored   364, rollouts   364,
                       backprops   989, rolloutExpansions  5466, biasedRolloutExpansions  1955
-    3,     0,    20,    50,     0: dur 0.2950, iter   142, nodesExplored   142, rollouts   142, 
+    3,     0,    20,    50,     0: dur 0.2950, iter   142, nodesExplored   142, rollouts   142,
                       backprops   348, rolloutExpansions  7138, biasedRolloutExpansions     0
-    3,     0,    20,    50,     7: dur 0.3059, iter   159, nodesExplored   159, rollouts   159, 
+    3,     0,    20,    50,     7: dur 0.3059, iter   159, nodesExplored   159, rollouts   159,
                       backprops   393, rolloutExpansions  7979, biasedRolloutExpansions  1117
-    3,     0,    20,   200,     0: dur 0.3010, iter    54, nodesExplored    54, rollouts    54, 
+    3,     0,    20,   200,     0: dur 0.3010, iter    54, nodesExplored    54, rollouts    54,
                       backprops   120, rolloutExpansions 10532, biasedRolloutExpansions     0
-    3,     0,    20,   200,     7: dur 0.3161, iter    56, nodesExplored    56, rollouts    56, 
+    3,     0,    20,   200,     7: dur 0.3161, iter    56, nodesExplored    56, rollouts    56,
                       backprops   123, rolloutExpansions 10793, biasedRolloutExpansions   397
-    3,     0,    20,   200,    30: dur 0.2971, iter    59, nodesExplored    59, rollouts    59, 
+    3,     0,    20,   200,    30: dur 0.2971, iter    59, nodesExplored    59, rollouts    59,
                       backprops   132, rolloutExpansions 10939, biasedRolloutExpansions  1779
-    3,     0,    20,   200,   100: dur 0.3002, iter    60, nodesExplored    60, rollouts    60, 
+    3,     0,    20,   200,   100: dur 0.3002, iter    60, nodesExplored    60, rollouts    60,
                       backprops   133, rolloutExpansions 11053, biasedRolloutExpansions  4402
-    3,     4,     5,    15,     0: dur 0.2989, iter   384, nodesExplored   384, rollouts   384, 
+    3,     4,     5,    15,     0: dur 0.2989, iter   384, nodesExplored   384, rollouts   384,
                       backprops  1703, rolloutExpansions  5766, biasedRolloutExpansions     0
-    3,     4,     5,    15,     7: dur 0.2918, iter   358, nodesExplored   358, rollouts   358, 
+    3,     4,     5,    15,     7: dur 0.2918, iter   358, nodesExplored   358, rollouts   358,
                       backprops   953, rolloutExpansions  5370, biasedRolloutExpansions  1915
-    3,     4,     5,    50,     0: dur 0.2937, iter   142, nodesExplored   142, rollouts   142, 
+    3,     4,     5,    50,     0: dur 0.2937, iter   142, nodesExplored   142, rollouts   142,
                       backprops   339, rolloutExpansions  7098, biasedRolloutExpansions     0
-    3,     4,     5,    50,     7: dur 0.2985, iter   149, nodesExplored   149, rollouts   149, 
+    3,     4,     5,    50,     7: dur 0.2985, iter   149, nodesExplored   149, rollouts   149,
                       backprops   396, rolloutExpansions  7478, biasedRolloutExpansions  1047
-    3,     4,     5,   200,     0: dur 0.3036, iter    47, nodesExplored    47, rollouts    47, 
+    3,     4,     5,   200,     0: dur 0.3036, iter    47, nodesExplored    47, rollouts    47,
                       backprops   152, rolloutExpansions  9362, biasedRolloutExpansions     0
-    3,     4,     5,   200,     7: dur 0.3011, iter    55, nodesExplored    55, rollouts    55, 
+    3,     4,     5,   200,     7: dur 0.3011, iter    55, nodesExplored    55, rollouts    55,
                       backprops   209, rolloutExpansions 10384, biasedRolloutExpansions   386
-    3,     4,     5,   200,    30: dur 0.3078, iter    53, nodesExplored    53, rollouts    53, 
+    3,     4,     5,   200,    30: dur 0.3078, iter    53, nodesExplored    53, rollouts    53,
                       backprops   237, rolloutExpansions 10099, biasedRolloutExpansions  1601
-    3,     4,     5,   200,   100: dur 0.3076, iter    54, nodesExplored    54, rollouts    54, 
+    3,     4,     5,   200,   100: dur 0.3076, iter    54, nodesExplored    54, rollouts    54,
                       backprops   116, rolloutExpansions 10276, biasedRolloutExpansions  4078
-    3,     4,    20,    15,     0: dur 0.2971, iter   388, nodesExplored   388, rollouts   388, 
+    3,     4,    20,    15,     0: dur 0.2971, iter   388, nodesExplored   388, rollouts   388,
                       backprops  2559, rolloutExpansions  5811, biasedRolloutExpansions     0
-    3,     4,    20,    15,     7: dur 0.2970, iter   378, nodesExplored   378, rollouts   378, 
+    3,     4,    20,    15,     7: dur 0.2970, iter   378, nodesExplored   378, rollouts   378,
                       backprops  2172, rolloutExpansions  5670, biasedRolloutExpansions  2026
-    3,     4,    20,    50,     0: dur 0.3042, iter   156, nodesExplored   156, rollouts   156, 
+    3,     4,    20,    50,     0: dur 0.3042, iter   156, nodesExplored   156, rollouts   156,
                       backprops   875, rolloutExpansions  7831, biasedRolloutExpansions     0
-    3,     4,    20,    50,     7: dur 0.2939, iter   164, nodesExplored   164, rollouts   164, 
+    3,     4,    20,    50,     7: dur 0.2939, iter   164, nodesExplored   164, rollouts   164,
                       backprops  1066, rolloutExpansions  8234, biasedRolloutExpansions  1153
-    3,     4,    20,   200,     0: dur 0.3047, iter    54, nodesExplored    53, rollouts    53, 
+    3,     4,    20,   200,     0: dur 0.3047, iter    54, nodesExplored    53, rollouts    53,
                       backprops   591, rolloutExpansions 10288, biasedRolloutExpansions     0
-    3,     4,    20,   200,     7: dur 0.3073, iter    52, nodesExplored    52, rollouts    52, 
+    3,     4,    20,   200,     7: dur 0.3073, iter    52, nodesExplored    52, rollouts    52,
                       backprops   479, rolloutExpansions  9969, biasedRolloutExpansions   364
-    3,     4,    20,   200,    30: dur 0.3005, iter    58, nodesExplored    57, rollouts    57, 
+    3,     4,    20,   200,    30: dur 0.3005, iter    58, nodesExplored    57, rollouts    57,
                       backprops   617, rolloutExpansions 10657, biasedRolloutExpansions  1684
-    3,     4,    20,   200,   100: dur 0.3055, iter    56, nodesExplored    56, rollouts    56, 
+    3,     4,    20,   200,   100: dur 0.3055, iter    56, nodesExplored    56, rollouts    56,
                       backprops   563, rolloutExpansions  9916, biasedRolloutExpansions  3942
-    3,    11,     5,    15,     0: dur 0.2917, iter   386, nodesExplored   386, rollouts   386, 
+    3,    11,     5,    15,     0: dur 0.2917, iter   386, nodesExplored   386, rollouts   386,
                       backprops  1795, rolloutExpansions  5802, biasedRolloutExpansions     0
-    3,    11,     5,    15,     7: dur 0.2940, iter   380, nodesExplored   380, rollouts   380, 
+    3,    11,     5,    15,     7: dur 0.2940, iter   380, nodesExplored   380, rollouts   380,
                       backprops  2847, rolloutExpansions  5705, biasedRolloutExpansions  2048
-    3,    11,     5,    50,     0: dur 0.3046, iter   147, nodesExplored   147, rollouts   147, 
+    3,    11,     5,    50,     0: dur 0.3046, iter   147, nodesExplored   147, rollouts   147,
                       backprops   995, rolloutExpansions  7379, biasedRolloutExpansions     0
-    3,    11,     5,    50,     7: dur 0.2960, iter   142, nodesExplored   142, rollouts   142, 
+    3,    11,     5,    50,     7: dur 0.2960, iter   142, nodesExplored   142, rollouts   142,
                       backprops   974, rolloutExpansions  7126, biasedRolloutExpansions   998
-    3,    11,     5,   200,     0: dur 0.3037, iter    46, nodesExplored    46, rollouts    46, 
+    3,    11,     5,   200,     0: dur 0.3037, iter    46, nodesExplored    46, rollouts    46,
                       backprops   447, rolloutExpansions  9024, biasedRolloutExpansions     0
-    3,    11,     5,   200,     7: dur 0.3012, iter    47, nodesExplored    47, rollouts    47, 
+    3,    11,     5,   200,     7: dur 0.3012, iter    47, nodesExplored    47, rollouts    47,
                       backprops   284, rolloutExpansions  9210, biasedRolloutExpansions   333
-    3,    11,     5,   200,    30: dur 0.3042, iter    47, nodesExplored    47, rollouts    47, 
+    3,    11,     5,   200,    30: dur 0.3042, iter    47, nodesExplored    47, rollouts    47,
                       backprops   335, rolloutExpansions  9152, biasedRolloutExpansions  1413
-    3,    11,     5,   200,   100: dur 0.3149, iter    54, nodesExplored    54, rollouts    54, 
+    3,    11,     5,   200,   100: dur 0.3149, iter    54, nodesExplored    54, rollouts    54,
                       backprops   491, rolloutExpansions 10444, biasedRolloutExpansions  4153
-    3,    11,    20,    15,     0: dur 0.2918, iter   406, nodesExplored   405, rollouts   405, 
+    3,    11,    20,    15,     0: dur 0.2918, iter   406, nodesExplored   405, rollouts   405,
                       backprops  1920, rolloutExpansions  6070, biasedRolloutExpansions     0
-    3,    11,    20,    15,     7: dur 0.2972, iter   378, nodesExplored   376, rollouts   376, 
+    3,    11,    20,    15,     7: dur 0.2972, iter   378, nodesExplored   376, rollouts   376,
                       backprops  2100, rolloutExpansions  5632, biasedRolloutExpansions  2016
-    3,    11,    20,    50,     0: dur 0.2954, iter   165, nodesExplored   165, rollouts   164, 
+    3,    11,    20,    50,     0: dur 0.2954, iter   165, nodesExplored   165, rollouts   164,
                       backprops  1337, rolloutExpansions  8221, biasedRolloutExpansions     0
-    3,    11,    20,    50,     7: dur 0.2941, iter   158, nodesExplored   157, rollouts   157, 
+    3,    11,    20,    50,     7: dur 0.2941, iter   158, nodesExplored   157, rollouts   157,
                       backprops   673, rolloutExpansions  7847, biasedRolloutExpansions  1101
-    3,    11,    20,   200,     0: dur 0.3046, iter    57, nodesExplored    55, rollouts    55, 
+    3,    11,    20,   200,     0: dur 0.3046, iter    57, nodesExplored    55, rollouts    55,
                       backprops   511, rolloutExpansions 10438, biasedRolloutExpansions     0
-    3,    11,    20,   200,     7: dur 0.3018, iter    64, nodesExplored    64, rollouts    64, 
+    3,    11,    20,   200,     7: dur 0.3018, iter    64, nodesExplored    64, rollouts    64,
                       backprops   550, rolloutExpansions 11586, biasedRolloutExpansions   443
-    3,    11,    20,   200,    30: dur 0.3102, iter    58, nodesExplored    57, rollouts    57, 
+    3,    11,    20,   200,    30: dur 0.3102, iter    58, nodesExplored    57, rollouts    57,
                       backprops   440, rolloutExpansions 10652, biasedRolloutExpansions  1680
-    3,    11,    20,   200,   100: dur 0.3032, iter    60, nodesExplored    60, rollouts    60, 
+    3,    11,    20,   200,   100: dur 0.3032, iter    60, nodesExplored    60, rollouts    60,
                       backprops   444, rolloutExpansions 10607, biasedRolloutExpansions  4227
-    8,     0,     5,    15,     0: dur 0.2923, iter   284, nodesExplored   284, rollouts   284, 
+    8,     0,     5,    15,     0: dur 0.2923, iter   284, nodesExplored   284, rollouts   284,
                       backprops   624, rolloutExpansions  4266, biasedRolloutExpansions     0
-    8,     0,     5,    15,     7: dur 0.2925, iter   256, nodesExplored   256, rollouts   256, 
+    8,     0,     5,    15,     7: dur 0.2925, iter   256, nodesExplored   256, rollouts   256,
                       backprops   558, rolloutExpansions  3852, biasedRolloutExpansions  1377
-    8,     0,     5,    50,     0: dur 0.3024, iter   112, nodesExplored   112, rollouts   112, 
+    8,     0,     5,    50,     0: dur 0.3024, iter   112, nodesExplored   112, rollouts   112,
                       backprops   233, rolloutExpansions  5640, biasedRolloutExpansions     0
-    8,     0,     5,    50,     7: dur 0.3006, iter   112, nodesExplored   112, rollouts   112, 
+    8,     0,     5,    50,     7: dur 0.3006, iter   112, nodesExplored   112, rollouts   112,
                       backprops   230, rolloutExpansions  5600, biasedRolloutExpansions   784
-    8,     0,     5,   200,     0: dur 0.3057, iter    38, nodesExplored    38, rollouts    38, 
+    8,     0,     5,   200,     0: dur 0.3057, iter    38, nodesExplored    38, rollouts    38,
                       backprops    77, rolloutExpansions  7671, biasedRolloutExpansions     0
-    8,     0,     5,   200,     7: dur 0.3106, iter    40, nodesExplored    40, rollouts    40, 
+    8,     0,     5,   200,     7: dur 0.3106, iter    40, nodesExplored    40, rollouts    40,
                       backprops    81, rolloutExpansions  8144, biasedRolloutExpansions   285
-    8,     0,     5,   200,    30: dur 0.3007, iter    43, nodesExplored    43, rollouts    43, 
+    8,     0,     5,   200,    30: dur 0.3007, iter    43, nodesExplored    43, rollouts    43,
                       backprops    87, rolloutExpansions  8619, biasedRolloutExpansions  1296
-    8,     0,     5,   200,   100: dur 0.3037, iter    42, nodesExplored    42, rollouts    42, 
+    8,     0,     5,   200,   100: dur 0.3037, iter    42, nodesExplored    42, rollouts    42,
                       backprops    86, rolloutExpansions  8527, biasedRolloutExpansions  3419
-    8,     0,    20,    15,     0: dur 0.2919, iter   276, nodesExplored   276, rollouts   276, 
+    8,     0,    20,    15,     0: dur 0.2919, iter   276, nodesExplored   276, rollouts   276,
                       backprops   607, rolloutExpansions  4146, biasedRolloutExpansions     0
-    8,     0,    20,    15,     7: dur 0.2919, iter   255, nodesExplored   255, rollouts   255, 
+    8,     0,    20,    15,     7: dur 0.2919, iter   255, nodesExplored   255, rollouts   255,
                       backprops   557, rolloutExpansions  3828, biasedRolloutExpansions  1385
-    8,     0,    20,    50,     0: dur 0.2938, iter   106, nodesExplored   106, rollouts   106, 
+    8,     0,    20,    50,     0: dur 0.2938, iter   106, nodesExplored   106, rollouts   106,
                       backprops   218, rolloutExpansions  5300, biasedRolloutExpansions     0
-    8,     0,    20,    50,     7: dur 0.2978, iter   112, nodesExplored   112, rollouts   112, 
+    8,     0,    20,    50,     7: dur 0.2978, iter   112, nodesExplored   112, rollouts   112,
                       backprops   231, rolloutExpansions  5600, biasedRolloutExpansions   784
-    8,     0,    20,   200,     0: dur 0.3106, iter    38, nodesExplored    38, rollouts    38, 
+    8,     0,    20,   200,     0: dur 0.3106, iter    38, nodesExplored    38, rollouts    38,
                       backprops    76, rolloutExpansions  7584, biasedRolloutExpansions     0
-    8,     0,    20,   200,     7: dur 0.3029, iter    39, nodesExplored    39, rollouts    39, 
+    8,     0,    20,   200,     7: dur 0.3029, iter    39, nodesExplored    39, rollouts    39,
                       backprops    78, rolloutExpansions  7835, biasedRolloutExpansions   274
-    8,     0,    20,   200,    30: dur 0.3037, iter    43, nodesExplored    43, rollouts    43, 
+    8,     0,    20,   200,    30: dur 0.3037, iter    43, nodesExplored    43, rollouts    43,
                       backprops    87, rolloutExpansions  8631, biasedRolloutExpansions  1296
-    8,     0,    20,   200,   100: dur 0.3077, iter    41, nodesExplored    41, rollouts    41, 
+    8,     0,    20,   200,   100: dur 0.3077, iter    41, nodesExplored    41, rollouts    41,
                       backprops    83, rolloutExpansions  8274, biasedRolloutExpansions  3263
-    8,     4,     5,    15,     0: dur 0.2979, iter   246, nodesExplored   246, rollouts   246, 
+    8,     4,     5,    15,     0: dur 0.2979, iter   246, nodesExplored   246, rollouts   246,
                       backprops   728, rolloutExpansions  3702, biasedRolloutExpansions     0
-    8,     4,     5,    15,     7: dur 0.2943, iter   231, nodesExplored   231, rollouts   231, 
+    8,     4,     5,    15,     7: dur 0.2943, iter   231, nodesExplored   231, rollouts   231,
                       backprops   494, rolloutExpansions  3474, biasedRolloutExpansions  1235
-    8,     4,     5,    50,     0: dur 0.2974, iter    97, nodesExplored    97, rollouts    97, 
+    8,     4,     5,    50,     0: dur 0.2974, iter    97, nodesExplored    97, rollouts    97,
                       backprops   201, rolloutExpansions  4880, biasedRolloutExpansions     0
-    8,     4,     5,    50,     7: dur 0.2969, iter    99, nodesExplored    99, rollouts    99, 
+    8,     4,     5,    50,     7: dur 0.2969, iter    99, nodesExplored    99, rollouts    99,
                       backprops   390, rolloutExpansions  4980, biasedRolloutExpansions   697
-    8,     4,     5,   200,     0: dur 0.3147, iter    34, nodesExplored    34, rollouts    34, 
+    8,     4,     5,   200,     0: dur 0.3147, iter    34, nodesExplored    34, rollouts    34,
                       backprops    89, rolloutExpansions  6959, biasedRolloutExpansions     0
-    8,     4,     5,   200,     7: dur 0.3007, iter    34, nodesExplored    34, rollouts    34, 
+    8,     4,     5,   200,     7: dur 0.3007, iter    34, nodesExplored    34, rollouts    34,
                       backprops    68, rolloutExpansions  6872, biasedRolloutExpansions   240
-    8,     4,     5,   200,    30: dur 0.3080, iter    37, nodesExplored    37, rollouts    37, 
+    8,     4,     5,   200,    30: dur 0.3080, iter    37, nodesExplored    37, rollouts    37,
                       backprops   145, rolloutExpansions  7470, biasedRolloutExpansions  1127
-    8,     4,     5,   200,   100: dur 0.3069, iter    36, nodesExplored    36, rollouts    36, 
+    8,     4,     5,   200,   100: dur 0.3069, iter    36, nodesExplored    36, rollouts    36,
                       backprops    73, rolloutExpansions  7353, biasedRolloutExpansions  2931
-    8,     4,    20,    15,     0: dur 0.2992, iter   235, nodesExplored   234, rollouts   234, 
+    8,     4,    20,    15,     0: dur 0.2992, iter   235, nodesExplored   234, rollouts   234,
                       backprops  1504, rolloutExpansions  3513, biasedRolloutExpansions     0
-    8,     4,    20,    15,     7: dur 0.2948, iter   225, nodesExplored   224, rollouts   224, 
+    8,     4,    20,    15,     7: dur 0.2948, iter   225, nodesExplored   224, rollouts   224,
                       backprops  1535, rolloutExpansions  3356, biasedRolloutExpansions  1195
-    8,     4,    20,    50,     0: dur 0.3054, iter   102, nodesExplored   101, rollouts   101, 
+    8,     4,    20,    50,     0: dur 0.3054, iter   102, nodesExplored   101, rollouts   101,
                       backprops  1300, rolloutExpansions  5054, biasedRolloutExpansions     0
-    8,     4,    20,    50,     7: dur 0.3059, iter    92, nodesExplored    92, rollouts    92, 
+    8,     4,    20,    50,     7: dur 0.3059, iter    92, nodesExplored    92, rollouts    92,
                       backprops   897, rolloutExpansions  4562, biasedRolloutExpansions   640
-    8,     4,    20,   200,     0: dur 0.3127, iter    32, nodesExplored    32, rollouts    32, 
+    8,     4,    20,   200,     0: dur 0.3127, iter    32, nodesExplored    32, rollouts    32,
                       backprops   333, rolloutExpansions  6430, biasedRolloutExpansions     0
-    8,     4,    20,   200,     7: dur 0.3073, iter    34, nodesExplored    34, rollouts    34, 
+    8,     4,    20,   200,     7: dur 0.3073, iter    34, nodesExplored    34, rollouts    34,
                       backprops   334, rolloutExpansions  6839, biasedRolloutExpansions   241
-    8,     4,    20,   200,    30: dur 0.3213, iter    31, nodesExplored    31, rollouts    31, 
+    8,     4,    20,   200,    30: dur 0.3213, iter    31, nodesExplored    31, rollouts    31,
                       backprops   332, rolloutExpansions  6186, biasedRolloutExpansions   932
-    8,     4,    20,   200,   100: dur 0.3203, iter    32, nodesExplored    32, rollouts    32, 
+    8,     4,    20,   200,   100: dur 0.3203, iter    32, nodesExplored    32, rollouts    32,
                       backprops   301, rolloutExpansions  6291, biasedRolloutExpansions  2523
-    8,    11,     5,    15,     0: dur 0.3049, iter   244, nodesExplored   244, rollouts   244, 
+    8,    11,     5,    15,     0: dur 0.3049, iter   244, nodesExplored   244, rollouts   244,
                       backprops  1378, rolloutExpansions  3660, biasedRolloutExpansions     0
-    8,    11,     5,    15,     7: dur 0.2998, iter   219, nodesExplored   219, rollouts   219, 
+    8,    11,     5,    15,     7: dur 0.2998, iter   219, nodesExplored   219, rollouts   219,
                       backprops  1219, rolloutExpansions  3294, biasedRolloutExpansions  1174
-    8,    11,     5,    50,     0: dur 0.3022, iter    95, nodesExplored    95, rollouts    95, 
+    8,    11,     5,    50,     0: dur 0.3022, iter    95, nodesExplored    95, rollouts    95,
                       backprops   974, rolloutExpansions  4780, biasedRolloutExpansions     0
-    8,    11,     5,    50,     7: dur 0.3059, iter    82, nodesExplored    82, rollouts    82, 
+    8,    11,     5,    50,     7: dur 0.3059, iter    82, nodesExplored    82, rollouts    82,
                       backprops   692, rolloutExpansions  4140, biasedRolloutExpansions   579
-    8,    11,     5,   200,     0: dur 0.3116, iter    33, nodesExplored    33, rollouts    33, 
+    8,    11,     5,   200,     0: dur 0.3116, iter    33, nodesExplored    33, rollouts    33,
                       backprops   300, rolloutExpansions  6691, biasedRolloutExpansions     0
-    8,    11,     5,   200,     7: dur 0.3373, iter    33, nodesExplored    33, rollouts    33, 
+    8,    11,     5,   200,     7: dur 0.3373, iter    33, nodesExplored    33, rollouts    33,
                       backprops   301, rolloutExpansions  6629, biasedRolloutExpansions   232
-    8,    11,     5,   200,    30: dur 0.3116, iter    39, nodesExplored    39, rollouts    39, 
+    8,    11,     5,   200,    30: dur 0.3116, iter    39, nodesExplored    39, rollouts    39,
                       backprops   270, rolloutExpansions  7910, biasedRolloutExpansions  1188
-    8,    11,     5,   200,   100: dur 0.3247, iter    33, nodesExplored    33, rollouts    33, 
+    8,    11,     5,   200,   100: dur 0.3247, iter    33, nodesExplored    33, rollouts    33,
                       backprops   220, rolloutExpansions  6623, biasedRolloutExpansions  2646
-    8,    11,    20,    15,     0: dur 0.2965, iter   216, nodesExplored   215, rollouts   215, 
+    8,    11,    20,    15,     0: dur 0.2965, iter   216, nodesExplored   215, rollouts   215,
                       backprops  1764, rolloutExpansions  3226, biasedRolloutExpansions     0
-    8,    11,    20,    15,     7: dur 0.2943, iter   231, nodesExplored   231, rollouts   230, 
+    8,    11,    20,    15,     7: dur 0.2943, iter   231, nodesExplored   231, rollouts   230,
                       backprops  1899, rolloutExpansions  3442, biasedRolloutExpansions  1227
-    8,    11,    20,    50,     0: dur 0.3100, iter   101, nodesExplored   100, rollouts    99, 
+    8,    11,    20,    50,     0: dur 0.3100, iter   101, nodesExplored   100, rollouts    99,
                       backprops   866, rolloutExpansions  4952, biasedRolloutExpansions     0
-    8,    11,    20,    50,     7: dur 0.3003, iter    97, nodesExplored    96, rollouts    95, 
+    8,    11,    20,    50,     7: dur 0.3003, iter    97, nodesExplored    96, rollouts    95,
                       backprops   704, rolloutExpansions  4747, biasedRolloutExpansions   665
-    8,    11,    20,   200,     0: dur 0.3107, iter    35, nodesExplored    35, rollouts    35, 
+    8,    11,    20,   200,     0: dur 0.3107, iter    35, nodesExplored    35, rollouts    35,
                       backprops   342, rolloutExpansions  6885, biasedRolloutExpansions     0
-    8,    11,    20,   200,     7: dur 0.3138, iter    32, nodesExplored    31, rollouts    31, 
+    8,    11,    20,   200,     7: dur 0.3138, iter    32, nodesExplored    31, rollouts    31,
                       backprops   319, rolloutExpansions  6118, biasedRolloutExpansions   216
-    8,    11,    20,   200,    30: dur 0.3317, iter    34, nodesExplored    34, rollouts    33, 
+    8,    11,    20,   200,    30: dur 0.3317, iter    34, nodesExplored    34, rollouts    33,
                       backprops   326, rolloutExpansions  6645, biasedRolloutExpansions  1003
-    8,    11,    20,   200,   100: dur 0.3201, iter    35, nodesExplored    34, rollouts    34, 
+    8,    11,    20,   200,   100: dur 0.3201, iter    35, nodesExplored    34, rollouts    34,
                       backprops   296, rolloutExpansions  6508, biasedRolloutExpansions  2586
-   25,     0,     5,    15,     0: dur 0.3292, iter   106, nodesExplored   106, rollouts   106, 
+   25,     0,     5,    15,     0: dur 0.3292, iter   106, nodesExplored   106, rollouts   106,
                       backprops   212, rolloutExpansions  1590, biasedRolloutExpansions     0
-   25,     0,     5,    15,     7: dur 0.3067, iter   104, nodesExplored   104, rollouts   104, 
+   25,     0,     5,    15,     7: dur 0.3067, iter   104, nodesExplored   104, rollouts   104,
                       backprops   208, rolloutExpansions  1566, biasedRolloutExpansions   564
-   25,     0,     5,    50,     0: dur 0.3151, iter    48, nodesExplored    48, rollouts    48, 
+   25,     0,     5,    50,     0: dur 0.3151, iter    48, nodesExplored    48, rollouts    48,
                       backprops    97, rolloutExpansions  2440, biasedRolloutExpansions     0
-   25,     0,     5,    50,     7: dur 0.3032, iter    53, nodesExplored    53, rollouts    53, 
+   25,     0,     5,    50,     7: dur 0.3032, iter    53, nodesExplored    53, rollouts    53,
                       backprops   107, rolloutExpansions  2680, biasedRolloutExpansions   375
-   25,     0,     5,   200,     0: dur 0.3143, iter    21, nodesExplored    21, rollouts    21, 
+   25,     0,     5,   200,     0: dur 0.3143, iter    21, nodesExplored    21, rollouts    21,
                       backprops    42, rolloutExpansions  4240, biasedRolloutExpansions     0
-   25,     0,     5,   200,     7: dur 0.3061, iter    23, nodesExplored    23, rollouts    23, 
+   25,     0,     5,   200,     7: dur 0.3061, iter    23, nodesExplored    23, rollouts    23,
                       backprops    46, rolloutExpansions  4640, biasedRolloutExpansions   162
-   25,     0,     5,   200,    30: dur 0.3158, iter    22, nodesExplored    22, rollouts    22, 
+   25,     0,     5,   200,    30: dur 0.3158, iter    22, nodesExplored    22, rollouts    22,
                       backprops    45, rolloutExpansions  4560, biasedRolloutExpansions   684
-   25,     0,     5,   200,   100: dur 0.3052, iter    22, nodesExplored    22, rollouts    22, 
+   25,     0,     5,   200,   100: dur 0.3052, iter    22, nodesExplored    22, rollouts    22,
                       backprops    44, rolloutExpansions  4396, biasedRolloutExpansions  1728
-   25,     0,    20,    15,     0: dur 0.3225, iter   114, nodesExplored   114, rollouts   114, 
+   25,     0,    20,    15,     0: dur 0.3225, iter   114, nodesExplored   114, rollouts   114,
                       backprops   229, rolloutExpansions  1716, biasedRolloutExpansions     0
-   25,     0,    20,    15,     7: dur 0.3132, iter   104, nodesExplored   104, rollouts   104, 
+   25,     0,    20,    15,     7: dur 0.3132, iter   104, nodesExplored   104, rollouts   104,
                       backprops   208, rolloutExpansions  1560, biasedRolloutExpansions   565
-   25,     0,    20,    50,     0: dur 0.3053, iter    53, nodesExplored    53, rollouts    53, 
+   25,     0,    20,    50,     0: dur 0.3053, iter    53, nodesExplored    53, rollouts    53,
                       backprops   106, rolloutExpansions  2660, biasedRolloutExpansions     0
-   25,     0,    20,    50,     7: dur 0.3084, iter    52, nodesExplored    52, rollouts    52, 
+   25,     0,    20,    50,     7: dur 0.3084, iter    52, nodesExplored    52, rollouts    52,
                       backprops   105, rolloutExpansions  2640, biasedRolloutExpansions   369
-   25,     0,    20,   200,     0: dur 0.3131, iter    22, nodesExplored    22, rollouts    22, 
+   25,     0,    20,   200,     0: dur 0.3131, iter    22, nodesExplored    22, rollouts    22,
                       backprops    45, rolloutExpansions  4560, biasedRolloutExpansions     0
-   25,     0,    20,   200,     7: dur 0.3147, iter    23, nodesExplored    23, rollouts    23, 
+   25,     0,    20,   200,     7: dur 0.3147, iter    23, nodesExplored    23, rollouts    23,
                       backprops    46, rolloutExpansions  4640, biasedRolloutExpansions   162
-   25,     0,    20,   200,    30: dur 0.3047, iter    24, nodesExplored    24, rollouts    24, 
+   25,     0,    20,   200,    30: dur 0.3047, iter    24, nodesExplored    24, rollouts    24,
                       backprops    48, rolloutExpansions  4800, biasedRolloutExpansions   720
-   25,     0,    20,   200,   100: dur 0.3099, iter    22, nodesExplored    22, rollouts    22, 
+   25,     0,    20,   200,   100: dur 0.3099, iter    22, nodesExplored    22, rollouts    22,
                       backprops    44, rolloutExpansions  4464, biasedRolloutExpansions  1781
-   25,     4,     5,    15,     0: dur 0.2969, iter   116, nodesExplored   116, rollouts   116, 
+   25,     4,     5,    15,     0: dur 0.2969, iter   116, nodesExplored   116, rollouts   116,
                       backprops   233, rolloutExpansions  1752, biasedRolloutExpansions     0
-   25,     4,     5,    15,     7: dur 0.3251, iter   115, nodesExplored   115, rollouts   115, 
+   25,     4,     5,    15,     7: dur 0.3251, iter   115, nodesExplored   115, rollouts   115,
                       backprops   337, rolloutExpansions  1728, biasedRolloutExpansions   612
-   25,     4,     5,    50,     0: dur 0.3090, iter    53, nodesExplored    53, rollouts    53, 
+   25,     4,     5,    50,     0: dur 0.3090, iter    53, nodesExplored    53, rollouts    53,
                       backprops   148, rolloutExpansions  2680, biasedRolloutExpansions     0
-   25,     4,     5,    50,     7: dur 0.3093, iter    51, nodesExplored    51, rollouts    51, 
+   25,     4,     5,    50,     7: dur 0.3093, iter    51, nodesExplored    51, rollouts    51,
                       backprops   204, rolloutExpansions  2560, biasedRolloutExpansions   358
-   25,     4,     5,   200,     0: dur 0.3184, iter    22, nodesExplored    22, rollouts    22, 
+   25,     4,     5,   200,     0: dur 0.3184, iter    22, nodesExplored    22, rollouts    22,
                       backprops    45, rolloutExpansions  4560, biasedRolloutExpansions     0
-   25,     4,     5,   200,     7: dur 0.3247, iter    20, nodesExplored    20, rollouts    20, 
+   25,     4,     5,   200,     7: dur 0.3247, iter    20, nodesExplored    20, rollouts    20,
                       backprops    65, rolloutExpansions  4160, biasedRolloutExpansions   145
-   25,     4,     5,   200,    30: dur 0.3344, iter    23, nodesExplored    23, rollouts    23, 
+   25,     4,     5,   200,    30: dur 0.3344, iter    23, nodesExplored    23, rollouts    23,
                       backprops    92, rolloutExpansions  4720, biasedRolloutExpansions   708
-   25,     4,     5,   200,   100: dur 0.3401, iter    20, nodesExplored    20, rollouts    20, 
+   25,     4,     5,   200,   100: dur 0.3401, iter    20, nodesExplored    20, rollouts    20,
                       backprops    55, rolloutExpansions  4150, biasedRolloutExpansions  1643
-   25,     4,    20,    15,     0: dur 0.3095, iter   113, nodesExplored   113, rollouts   113, 
+   25,     4,    20,    15,     0: dur 0.3095, iter   113, nodesExplored   113, rollouts   113,
                       backprops  1137, rolloutExpansions  1704, biasedRolloutExpansions     0
-   25,     4,    20,    15,     7: dur 0.3037, iter   108, nodesExplored   108, rollouts   108, 
+   25,     4,    20,    15,     7: dur 0.3037, iter   108, nodesExplored   108, rollouts   108,
                       backprops  1027, rolloutExpansions  1623, biasedRolloutExpansions   581
-   25,     4,    20,    50,     0: dur 0.3114, iter    50, nodesExplored    50, rollouts    50, 
+   25,     4,    20,    50,     0: dur 0.3114, iter    50, nodesExplored    50, rollouts    50,
                       backprops   493, rolloutExpansions  2537, biasedRolloutExpansions     0
-   25,     4,    20,    50,     7: dur 0.3015, iter    49, nodesExplored    49, rollouts    49, 
+   25,     4,    20,    50,     7: dur 0.3015, iter    49, nodesExplored    49, rollouts    49,
                       backprops   500, rolloutExpansions  2438, biasedRolloutExpansions   342
-   25,     4,    20,   200,     0: dur 0.3270, iter    22, nodesExplored    22, rollouts    22, 
+   25,     4,    20,   200,     0: dur 0.3270, iter    22, nodesExplored    22, rollouts    22,
                       backprops   234, rolloutExpansions  4442, biasedRolloutExpansions     0
-   25,     4,    20,   200,     7: dur 0.3475, iter    21, nodesExplored    21, rollouts    21, 
+   25,     4,    20,   200,     7: dur 0.3475, iter    21, nodesExplored    21, rollouts    21,
                       backprops   189, rolloutExpansions  4320, biasedRolloutExpansions   151
-   25,     4,    20,   200,    30: dur 0.3242, iter    22, nodesExplored    22, rollouts    21, 
+   25,     4,    20,   200,    30: dur 0.3242, iter    22, nodesExplored    22, rollouts    21,
                       backprops   183, rolloutExpansions  4289, biasedRolloutExpansions   645
-   25,     4,    20,   200,   100: dur 0.3400, iter    22, nodesExplored    22, rollouts    22, 
+   25,     4,    20,   200,   100: dur 0.3400, iter    22, nodesExplored    22, rollouts    22,
                       backprops   198, rolloutExpansions  4303, biasedRolloutExpansions  1733
-   25,    11,     5,    15,     0: dur 0.3055, iter   112, nodesExplored   112, rollouts   112, 
+   25,    11,     5,    15,     0: dur 0.3055, iter   112, nodesExplored   112, rollouts   112,
                       backprops   938, rolloutExpansions  1686, biasedRolloutExpansions     0
-   25,    11,     5,    15,     7: dur 0.3048, iter   102, nodesExplored   102, rollouts   102, 
+   25,    11,     5,    15,     7: dur 0.3048, iter   102, nodesExplored   102, rollouts   102,
                       backprops  1067, rolloutExpansions  1536, biasedRolloutExpansions   550
-   25,    11,     5,    50,     0: dur 0.3120, iter    48, nodesExplored    48, rollouts    48, 
+   25,    11,     5,    50,     0: dur 0.3120, iter    48, nodesExplored    48, rollouts    48,
                       backprops   488, rolloutExpansions  2400, biasedRolloutExpansions     0
-   25,    11,     5,    50,     7: dur 0.3103, iter    47, nodesExplored    47, rollouts    47, 
+   25,    11,     5,    50,     7: dur 0.3103, iter    47, nodesExplored    47, rollouts    47,
                       backprops   504, rolloutExpansions  2356, biasedRolloutExpansions   330
-   25,    11,     5,   200,     0: dur 0.3189, iter    20, nodesExplored    20, rollouts    20, 
+   25,    11,     5,   200,     0: dur 0.3189, iter    20, nodesExplored    20, rollouts    20,
                       backprops   131, rolloutExpansions  4000, biasedRolloutExpansions     0
-   25,    11,     5,   200,     7: dur 0.3254, iter    19, nodesExplored    19, rollouts    19, 
+   25,    11,     5,   200,     7: dur 0.3254, iter    19, nodesExplored    19, rollouts    19,
                       backprops    84, rolloutExpansions  3920, biasedRolloutExpansions   137
-   25,    11,     5,   200,    30: dur 0.3237, iter    20, nodesExplored    20, rollouts    20, 
+   25,    11,     5,   200,    30: dur 0.3237, iter    20, nodesExplored    20, rollouts    20,
                       backprops   146, rolloutExpansions  4063, biasedRolloutExpansions   610
-   25,    11,     5,   200,   100: dur 0.3208, iter    19, nodesExplored    19, rollouts    19, 
+   25,    11,     5,   200,   100: dur 0.3208, iter    19, nodesExplored    19, rollouts    19,
                       backprops   115, rolloutExpansions  3920, biasedRolloutExpansions  1561
-   25,    11,    20,    15,     0: dur 0.3030, iter   112, nodesExplored   111, rollouts   111, 
+   25,    11,    20,    15,     0: dur 0.3030, iter   112, nodesExplored   111, rollouts   111,
                       backprops   881, rolloutExpansions  1666, biasedRolloutExpansions     0
-   25,    11,    20,    15,     7: dur 0.3003, iter   103, nodesExplored   103, rollouts   102, 
+   25,    11,    20,    15,     7: dur 0.3003, iter   103, nodesExplored   103, rollouts   102,
                       backprops   917, rolloutExpansions  1536, biasedRolloutExpansions   558
-   25,    11,    20,    50,     0: dur 0.3134, iter    50, nodesExplored    50, rollouts    49, 
+   25,    11,    20,    50,     0: dur 0.3134, iter    50, nodesExplored    50, rollouts    49,
                       backprops   471, rolloutExpansions  2492, biasedRolloutExpansions     0
-   25,    11,    20,    50,     7: dur 0.3060, iter    48, nodesExplored    48, rollouts    48, 
+   25,    11,    20,    50,     7: dur 0.3060, iter    48, nodesExplored    48, rollouts    48,
                       backprops   507, rolloutExpansions  2370, biasedRolloutExpansions   332
 
-   25,    11,    20,   200,     0: dur 0.3204, iter    19, nodesExplored    19, rollouts    19, 
+   25,    11,    20,   200,     0: dur 0.3204, iter    19, nodesExplored    19, rollouts    19,
                       backprops   165, rolloutExpansions  3833, biasedRolloutExpansions     0
-   25,    11,    20,   200,     7: dur 0.3178, iter    20, nodesExplored    20, rollouts    19, 
+   25,    11,    20,   200,     7: dur 0.3178, iter    20, nodesExplored    20, rollouts    19,
                       backprops   180, rolloutExpansions  3849, biasedRolloutExpansions   137
-   25,    11,    20,   200,    30: dur 0.3229, iter    20, nodesExplored    20, rollouts    19, 
+   25,    11,    20,   200,    30: dur 0.3229, iter    20, nodesExplored    20, rollouts    19,
                       backprops   178, rolloutExpansions  3855, biasedRolloutExpansions   581
-   25,    11,    20,   200,   100: dur 0.3382, iter    19, nodesExplored    19, rollouts    19, 
+   25,    11,    20,   200,   100: dur 0.3382, iter    19, nodesExplored    19, rollouts    19,
                       backprops   165, rolloutExpansions  3782, biasedRolloutExpansions  1495
 AVG:
-dur 0.3073, iter   109, nodesExplored   109, rollouts   109, 
+dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                       backprops   527, rolloutExpansions  5893, biasedRolloutExpansions   798
 
 
@@ -1133,47 +1133,47 @@ dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
         AVG:
         dur 0.3134, iter   180, nodesExplored   180, rollouts   180,
                               backprops   435, rolloutExpansions  8615, biasedRolloutExpansions  1126
-                              
+
         nothing smll
         AVG:
         dur 0.3116, iter   195, nodesExplored   195, rollouts   195,
                               backprops   461, rolloutExpansions  8225, biasedRolloutExpansions  1694
-                              
-        # AFTER JUST ROLLOUT NO-COPY:           
+
+        # AFTER JUST ROLLOUT NO-COPY:
         rollout lrg
         AVG:
-        dur 0.3055, iter   225, nodesExplored   225, rollouts   225, 
+        dur 0.3055, iter   225, nodesExplored   225, rollouts   225,
                               backprops   555, rolloutExpansions 12594, biasedRolloutExpansions  1647
         rollout smll
         AVG:
-        dur 0.3053, iter   207, nodesExplored   207, rollouts   207, 
+        dur 0.3053, iter   207, nodesExplored   207, rollouts   207,
                               backprops   485, rolloutExpansions  9559, biasedRolloutExpansions  1938
-                              
+
         # After tweaks to support killer move cache and path-pre-expansion (and 2v2, and bugfixes):
         lrg
         AVG:
-        dur 0.3073, iter   109, nodesExplored   109, rollouts   109, 
+        dur 0.3073, iter   109, nodesExplored   109, rollouts   109,
                               backprops   527, rolloutExpansions  5893, biasedRolloutExpansions   798
-      
+
         smll
         AVG:
-        dur 0.3013, iter   123, nodesExplored   123, rollouts   123, 
+        dur 0.3013, iter   123, nodesExplored   123, rollouts   123,
                           backprops   761, rolloutExpansions  5620, biasedRolloutExpansions  1136
-                          
+
         # After minor tweaks for performance to killer move and pre-expansion code to stop checking array lengths and stuff like that:
-        large 
+        large
         AVG:
-        dur 0.3048, iter   113, nodesExplored   113, rollouts   113, 
+        dur 0.3048, iter   113, nodesExplored   113, rollouts   113,
                               backprops   554, rolloutExpansions  6097, biasedRolloutExpansions   824
-                              
+
         # ^ but with killer_move disabled (no writing to cache, no lookup from cache)
         # OK so the slowness issue isn't killer move, then
-        large 
+        large
         AVG:
-        dur 0.3053, iter   113, nodesExplored   113, rollouts   113, 
+        dur 0.3053, iter   113, nodesExplored   113, rollouts   113,
                               backprops   548, rolloutExpansions  6075, biasedRolloutExpansions   821
         AVG:
-        dur 0.3047, iter   116, nodesExplored   116, rollouts   116, 
+        dur 0.3047, iter   116, nodesExplored   116, rollouts   116,
                               backprops   549, rolloutExpansions  6209, biasedRolloutExpansions   839
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False

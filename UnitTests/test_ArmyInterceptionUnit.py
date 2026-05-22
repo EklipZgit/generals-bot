@@ -1644,8 +1644,8 @@ player_index=0
         # winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
         # self.assertNoFriendliesKilled(map, general)
         #
-        # self.assertOwnedXY(playerMap, 14, 17)
-        # self.assertOwnedXY(playerMap, 13, 17)
+        # self.assertOwnedXY(14, 17)
+        # self.assertOwnedXY(13, 17)
     def test_should_never_consider_intercepting_parallel_to_be_better_than_literally_hitting_the_tile(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_never_consider_intercepting_parallel_to_be_better_than_literally_hitting_the_tile___52vlrZ4Bz---1--136.txtmap'

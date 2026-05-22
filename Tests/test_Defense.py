@@ -3125,3 +3125,30 @@ class DefenseTests(TestBase):
                 winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
                 self.assertNoFriendliesKilled(map, general)
 
+
+    def test_should_mitigate_general_death_first_and_then_mitigate_city_damage_after_if_angle_abuse(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_mitigate_general_death_first_and_then_mitigate_city_damage_after_if_abuse___iyL7agrjG---1--285.txtmap'
+        for (path, turns, proof) in [
+            ('10,7->10,3->9,3->9,1', 8, '9,7->10,7  9,6->10,6  7,0->7,1  5,1->9,1'),
+            ('10,7->6,7->6,1->9,1', 16, '9,7->10,7  9,6->9,7'),
+            ('10,7->9,7->8,7z  9,7->9,6  8,7->7,7->7,1', 14, '9,7->10,7  7,0->7,1  9,2->9,6->8,6->8,7  5,2->7,2'), #  9,1->7,1
+        ]:
+            with self.subTest(enPath=path):
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 285, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=285)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                simHost.queue_player_moves_str(general.player, proof)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=turns)
+                self.assertNoFriendliesKilled(map, general)
+                self.assertOwnedXY(8, 7)
+                self.assertOwnedXY(9, 6)
+                self.assertOwnedXY(7, 1)

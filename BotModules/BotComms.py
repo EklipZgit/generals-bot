@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 import typing
 
@@ -6,7 +8,6 @@ from base.client.map import Tile
 from Models import GatherTreeNode
 from Path import Path
 from ViewInfo import TargetStyle
-import typing
 
 
 if typing.TYPE_CHECKING:

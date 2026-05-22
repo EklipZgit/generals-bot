@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 import typing
 
@@ -309,9 +311,9 @@ class BotDefense:
                             bot.info(f'DEAD: RACING BECAUSE WE ARE DEAD WITH A NON-ZERO RACE KILL CHANCE')
                             return raceEnemyKingKillPath.get_first_move(), raceEnemyKingKillPath
                     else:
-                        flags = f'DEAD CITY {flags}'
+                        flags = f'DEAD CITY {threat.path.tail.tile} {flags}'
                         pruneToValuePerTurn = True
-                        extraTurns = 10
+                        extraTurns = 6
                         survivalThreshold += extraTurns // 2
 
                     with bot.perf_timer.begin_move_event(f'+{extraTurns} Def Threat Gather {threat.path.start.tile}@{threat.path.tail.tile}'):

@@ -16,6 +16,15 @@ log_folder=D:\GeneralsLogs
 grouped_folder=D:\GeneralsLogs\GroupedLogs
 # Root folder used by game-result-analysis-utils.ps1 for per-run bot log folders.
 bot_logs_root=D:\2019_reformat_Backup\bot_logs
+# Whether this environment is running under PyPy. Set True to force OR-Tools sidecar usage.
+using_pypy=False
+# Test viewer position overrides used by integration tests / test render helpers.
+test_left_pos=0
+test_right_pos=1920
+test_top_pos=3
+test_bottom_pos=1080
+test_align_bottom=False
+test_align_right=False
 # Python executable used for the current generation bot in this repository.
 current_gen_python_path=python3.14
 # Python executable used for external or older bot repositories.

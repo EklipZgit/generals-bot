@@ -12,7 +12,7 @@ import time
 import typing
 from enum import Enum
 
-from numba import jit, float32, int32
+# from numba import jit, float32, int32
 
 import numpy
 from scipy.special import expit
@@ -693,13 +693,13 @@ class MctsDUCT(object):
         return x / (2 * ((x < 0.0) * -x + (x >= 0.0) * x) + 2) + 0.5
 
     @staticmethod
-    @jit(float32(float32), nopython=True)
+    # @jit(float32(float32), nopython=True)   # UNCOMMENT IF UNCOMMENT OUT NUMBA
     def fast_tanh_jit(x: float) -> float:
         """Returns between -1 and 1, where -3 as input is very close to -1 already and 3 is very close to 1 output already."""
         return x / (1 + abs(x))
 
     @staticmethod
-    @jit(float32(float32, float32), nopython=True)
+    # @jit(float32(float32, float32), nopython=True)   # UNCOMMENT IF UNCOMMENT OUT NUMBA
     def fast_tanh_scaled_jit(x: float, scaleFactor: float) -> float:
         """Returns between -1 and 1, where -3 as input is very close to -1 already and 3 is very close to 1 output already."""
         x = x * scaleFactor
@@ -714,18 +714,18 @@ class MctsDUCT(object):
     #     return x / scaleFactor
 
     @staticmethod
-    @jit(float32(float32), nopython=True)
+    # @jit(float32(float32), nopython=True)   # UNCOMMENT IF UNCOMMENT OUT NUMBA
     def fast_sigmoid_jit(x: float) -> float:
         """compresses stuff to stuff."""
         return x / (2 * ((x < 0.0) * -x + (x >= 0.0) * x) + 2) + 0.5
 
     @staticmethod
-    @jit(float32(float32, int32), nopython=True)
+    # @jit(float32(float32, int32), nopython=True)   # UNCOMMENT IF UNCOMMENT OUT NUMBA
     def two_parent_log_jit(exploreFactor: float, totalVisitCount: int) -> float:
         return exploreFactor * math.log(max(1, totalVisitCount))
 
     @staticmethod
-    @jit(float32(float32, int32), nopython=True)
+    # @jit(float32(float32, int32), nopython=True)   # UNCOMMENT IF UNCOMMENT OUT NUMBA
     def two_parent_log_explore(twoParentLog: float, childVisitCount: int) -> float:
         return math.sqrt(twoParentLog / max(1, childVisitCount))
 

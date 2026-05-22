@@ -2,7 +2,7 @@ websocket-client
 pygame-ce>=2.5.7
 certifi
 requests
-nashpy
+nashpy # comment out for PyPy
 numpy==2.4.6 # after numba update let this upgrade? Numba being stupid.
 # numba>=0.64.0
 # scipy
@@ -12,7 +12,7 @@ pcst_fast
 networkx
 # matplotlib
 heapq_max
-ortools
+ortools # comment out for PyPy
 # heap-class  this performed poorly
 # dill
 # if ever need fast dict for int:int or str:str or int:str -> https://github.com/touqir14/Microdict?tab=readme-ov-file
@@ -22,10 +22,10 @@ unionfind
 logbook
 certifi
 
-cython
+cython # comment out for PyPy
 pybind11>=3.0.0
-pandas
+# pandas
 tqdm
-setuptools
-PyMaxflow
-arraydeque
+setuptools # comment out for PyPy
+# PyMaxflow
+# arraydeque

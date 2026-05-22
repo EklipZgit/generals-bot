@@ -25,6 +25,8 @@ class ViewerHost(object):
             cell_height: int | None = None,
             alignTop: bool = True,
             alignLeft: bool = True,
+            useTestPositions: bool = False,
+            useConfigTestAlignment: bool = False,
             ctx: DefaultContext | None = None,
             mgr: SyncManager | None = None,
             onClick: typing.Callable[[Tile, bool], None] | None = None,
@@ -46,7 +48,7 @@ class ViewerHost(object):
         self._viewer_event_queue: "Queue[typing.Tuple[str, typing.Any]]" = self.mgr.Queue()
         self._closed_by_user: bool | None = None
         logbook.info("newing up viewer process")
-        self.process: BaseProcess = self.ctx.Process(target=_run_main_viewer_loop, args=(self._update_queue, self._viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, BotLogging.LOGGING_QUEUE, minUpdateSleep), daemon=True)
+        self.process: BaseProcess = self.ctx.Process(target=_run_main_viewer_loop, args=(self._update_queue, self._viewer_event_queue, window_title, cell_width, cell_height, noLog, alignTop, alignLeft, useTestPositions, useConfigTestAlignment, BotLogging.LOGGING_QUEUE, minUpdateSleep), daemon=True)
         self.no_log: bool = noLog
         self._started: bool = False
         self._recieved_init_ack: bool = False
@@ -290,6 +292,8 @@ def _run_main_viewer_loop(
         noLog,
         alignTop,
         alignLeft,
+        useTestPositions,
+        useConfigTestAlignment,
         loggingQueue,
         minUpdateSleep: float
 ):
@@ -301,7 +305,7 @@ def _run_main_viewer_loop(
     logbook.info("MAIN VIEWER LOOP PROC importing GeneralsViewer")
     from base.viewer import GeneralsViewer
     logbook.info("MAIN VIEWER LOOP PROC newing up GeneralsViewer")
-    viewer = GeneralsViewer(update_queue, viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog, min_sleep_time=minUpdateSleep)
+    viewer = GeneralsViewer(update_queue, viewer_event_queue, window_title, cell_width=cell_width, cell_height=cell_height, no_log=noLog, min_sleep_time=minUpdateSleep, use_test_positions=useTestPositions, use_config_test_alignment=useConfigTestAlignment)
 
     logbook.info("running run_main_viewer_loop...?")
     viewer.run_main_viewer_loop(alignTop, alignLeft)

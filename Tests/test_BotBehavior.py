@@ -3048,7 +3048,7 @@ whoever has less extra troops will always get ahead
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=31)
         self.assertNoFriendliesKilled(map, general)
-        self.assertOwnedXY(playerMap, 2, 6)
+        self.assertOwnedXY(2, 6)
 
     def test_force_far_gathers_shouldnt_trigger_a_massive_gather_resulting_in_loss(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -3401,3 +3401,25 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
         self.assertMinArmyNear(playerMap, bot.board_analysis.central_defense_point, general.player, 200, 4, 'Fucking, he\'s obviously about to slam through with a 200+ attack')
+
+    def test_should_gather_furthest_large_tiles_first_when_recognize_sketchy_kill_push_shit(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_furthest_large_tiles_first_when_recognize_sketchy_kill_push_shit___druHLt6SY---1--265.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 265, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=265)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # 65 (100) army appeared on 11,7 on turn 274 then killed us lol
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        # simHost.queue_player_moves_str(general.player, '6,19->7,19->7,18->8,18->8,17->9,17->9,15->13,15->13,14->14,14')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertMinArmyNearXY(16, 14, 50, distance=4, reason='should recognize threat and then prioritize far, high value out of play tiles.')
+        self.assertMinArmyNearXY(19, 18, 40, distance=2, reason='should not have gathered general yet')

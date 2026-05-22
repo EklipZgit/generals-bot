@@ -27,7 +27,7 @@ import Utils
 from Algorithms import MapSpanningUtils, TileIslandBuilder, WatchmanRouteUtils, TileIsland
 from Army import Army
 from ArmyAnalyzer import ArmyAnalyzer
-from ArmyEngine import ArmyEngine, ArmySimResult
+# from ArmyEngine import ArmyEngine, ArmySimResult
 from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception, ThreatBlockInfo, InterceptionOptionInfo
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
 from CityAnalyzer import CityAnalyzer, CityScoreData
@@ -37,7 +37,7 @@ from Gather import GatherCapturePlan
 from GatherAnalyzer import GatherAnalyzer
 from Interfaces import TilePlanInterface, MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet, TileSet
-from MctsLudii import MctsDUCT
+# from MctsLudii import MctsDUCT
 from Path import Path, MoveListPath
 from PerformanceTimer import PerformanceTimer
 from BoardAnalyzer import BoardAnalyzer
@@ -315,14 +315,14 @@ class EklipZBot(object):
 
         # engine stuff
         self.targetingArmy: Army | None = None
-        self.cached_scrims: typing.Dict[str, ArmySimResult] = {}
+        self.cached_scrims = {} #: typing.Dict[str, ArmySimResult]
         self.next_scrimming_army_tile: Tile | None = None
 
         # configuration
         self.disable_engine: bool = True
 
         self.engine_use_mcts: bool = True
-        self.mcts_engine: MctsDUCT = MctsDUCT()
+        # self.mcts_engine: MctsDUCT = MctsDUCT()
         self.engine_allow_force_incoming_armies_towards: bool = False
         self.engine_allow_enemy_no_op: bool = True
         self.engine_include_path_pre_expansion: bool = True
@@ -1204,11 +1204,11 @@ class EklipZBot(object):
                 logbook.info(
                     f"savePath or expansion plan tile was also kingKillPath tile, skipped kingKillPath {str(kingKillPath)}")
 
-        with self.perf_timer.begin_move_event('ARMY SCRIMS'):
-            armyScrimMove = BotCombatOps.check_for_army_movement_scrims(self)
-            if armyScrimMove is not None:
-                # already logged
-                return armyScrimMove
+        # with self.perf_timer.begin_move_event('ARMY SCRIMS'):
+        #     armyScrimMove = BotCombatOps.check_for_army_movement_scrims(self)
+        #     if armyScrimMove is not None:
+        #         # already logged
+        #         return armyScrimMove
 
         with self.perf_timer.begin_move_event('DANGER TILES'):
             dangerTileKillMove = BotDefense.check_for_danger_tile_moves(self)
@@ -1495,10 +1495,10 @@ class EklipZBot(object):
                         self.timings.launchTiming = self.timings.splitTurns
                 return flankDefMove
 
-        if self.defend_economy:
-            move = BotCombatOps.try_find_army_out_of_position_move(self, defenseCriticalTileSet)
-            if move is not None:
-                return move  # already logged
+        # if self.defend_economy:
+        #     move = BotCombatOps.try_find_army_out_of_position_move(self, defenseCriticalTileSet)
+        #     if move is not None:
+        #         return move  # already logged
 
         cyclicAllInMove = BotCombatOps.try_get_cyclic_all_in_move(self, defenseCriticalTileSet)
         if cyclicAllInMove:

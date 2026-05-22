@@ -2282,8 +2282,8 @@ class ArmyInterceptionTests(TestBase):
                 winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
                 self.assertNoFriendliesKilled(map, general)
 
-                self.assertOwnedXY(playerMap, 14, 17)
-                self.assertOwnedXY(playerMap, 13, 17)
+                self.assertOwnedXY(14, 17)
+                self.assertOwnedXY(13, 17)
 
 
 # 22-12 with everything bad

@@ -1933,7 +1933,17 @@ class OpponentTracker(object):
         return teamAnnihilatedFog
 
     def did_player_already_attack_this_round(self, player: int) -> bool:
-        stats = self.current_team_cycle_stats[self.map.team_ids_by_player_index[player]]
+        if player is None or player < 0 or player >= len(self.map.team_ids_by_player_index):
+            return False
+
+        team = self.map.team_ids_by_player_index[player]
+        if team is None or team < 0 or team >= len(self.current_team_cycle_stats):
+            return False
+
+        stats = self.current_team_cycle_stats[team]
+        if stats is None:
+            return False
+
         gathered = stats.approximate_army_gathered_this_cycle
         gathered -= stats.army_annihilated_visible + stats.army_annihilated_fog
 

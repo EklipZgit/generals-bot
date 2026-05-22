@@ -582,7 +582,7 @@ class GameSimulatorHost(object):
             botMover = lambda source, dest, moveHalf, i=i: self.sim.set_next_move(player_index=i, move=Move(source, dest, moveHalf))
             botPinger = lambda tile, i=i: self.enqueue_teammates_tile_ping(player=i, tile=tile)
             botChatter = lambda message, teamChat, i=i: self.enqueue_chat_message(player=i, message=message, teamChat=teamChat)
-            botHost = BotHostBase(char, botMover, botPinger, botChatter, 'test', noUi=not hasUi, alignBottom=True, throw=True)
+            botHost = BotHostBase(char, botMover, botPinger, botChatter, 'test', noUi=not hasUi, alignBottom=True, throw=True, useTestViewerPositions=True)
 
             self.bot_hosts[i] = botHost
 

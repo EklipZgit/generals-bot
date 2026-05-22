@@ -402,6 +402,8 @@ class ArmyTracker(object):
             return
 
         if self.should_recalc_fog_land_by_player[player.index] or len(self.map.players[playerIndex].tiles) == 0:
+            if self.map.turn < 26:
+                return
             self._build_fog_prediction_internal(player.index, playersExpectedFogTileCounts, predictedGeneralLocation)
             self.should_recalc_fog_land_by_player[player.index] = False
         else:

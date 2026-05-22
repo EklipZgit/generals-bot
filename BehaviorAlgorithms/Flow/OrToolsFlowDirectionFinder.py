@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import io
+import os
+import pathlib
+import pickle
 import random
+import struct
+import subprocess
+import sys
 import typing
 from collections import defaultdict
 
 import logbook
 import numpy as np
-from ortools.graph.python import min_cost_flow
 
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.FlowGraphModels import IslandFlowNode, IslandMaxFlowGraph, FlowGraphMethod
@@ -16,6 +22,175 @@ from MapMatrix import MapMatrix
 from PerformanceTimer import PerformanceTimer
 
 DEMAND_SATURATION_FROM_GENERAL_ONLY = False
+_ORTOOLS_SIDECAR_ENV_VAR = 'GENERALS_BOT_ORTOOLS_SIDECAR_PYTHON'
+
+
+class OrToolsSidecarError(Exception):
+    pass
+
+
+class OrToolsSidecarClient(object):
+    _instance: OrToolsSidecarClient | None = None
+
+    def __init__(self):
+        self._process: subprocess.Popen[bytes] | None = None
+        self._repo_root = pathlib.Path(__file__).resolve().parents[2]
+        self._sidecar_script = self._repo_root / 'BehaviorAlgorithms' / 'Flow' / 'OrToolsMinCostFlowSidecar.py'
+
+    @classmethod
+    def get_instance(cls) -> OrToolsSidecarClient:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def solve(self, graph_data: OrToolsGraphData) -> dict:
+        self._ensure_process_started()
+        request = {
+            'command': 'solve',
+            'start_nodes': graph_data.start_nodes.tolist(),
+            'end_nodes': graph_data.end_nodes.tolist(),
+            'capacities': graph_data.capacities.tolist(),
+            'unit_costs': graph_data.unit_costs.tolist(),
+            'node_supplies': graph_data.node_supplies.tolist(),
+        }
+        self._write_message(request)
+        response = self._read_message()
+        if response is None:
+            raise OrToolsSidecarError('OR-Tools sidecar exited before sending a response')
+        error = response.get('error')
+        if error:
+            raise OrToolsSidecarError(error)
+        return response
+
+    def _ensure_process_started(self) -> None:
+        if self._process is not None and self._process.poll() is None:
+            return
+
+        python_path = self._resolve_sidecar_python_path()
+        if not self._sidecar_script.exists():
+            raise OrToolsSidecarError(f'Unable to find OR-Tools sidecar script at {self._sidecar_script}')
+
+        stderr_target = self._get_popen_stream_or_default(sys.stderr)
+        self._process = subprocess.Popen(
+            [python_path, str(self._sidecar_script)],
+            cwd=str(self._repo_root),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=stderr_target,
+        )
+
+    @staticmethod
+    def _get_popen_stream_or_default(stream: typing.Any) -> typing.Any:
+        if stream is None:
+            return None
+        fileno = getattr(stream, 'fileno', None)
+        if fileno is None:
+            return None
+        try:
+            fileno()
+        except (io.UnsupportedOperation, OSError, ValueError):
+            return None
+        return stream
+
+    def _get_run_config_value(self, *keys: str) -> str | None:
+        config_path = self._repo_root.parent / 'run_config.txt'
+        if not config_path.exists():
+            return None
+        for raw_line in config_path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            normalized_key = key.strip()
+            if normalized_key in keys:
+                resolved = value.strip()
+                if resolved:
+                    return resolved
+        return None
+
+    def is_using_pypy(self) -> bool:
+        configured = self._get_run_config_value('using_pypy', 'USING_PYPY')
+        if configured is None:
+            return False
+        return configured.lower() in ('1', 'true', 'yes', 'on')
+
+    def _resolve_sidecar_python_path(self) -> str:
+        env_override = os.environ.get(_ORTOOLS_SIDECAR_ENV_VAR)
+        if env_override:
+            return env_override
+
+        configured_python = self._get_run_config_value('current_gen_python_path', 'cpython_path', 'legacy_python_path')
+        if configured_python is not None:
+            return configured_python
+
+        return 'python'
+
+    def _write_message(self, obj: dict) -> None:
+        if self._process is None or self._process.stdin is None:
+            raise OrToolsSidecarError('OR-Tools sidecar stdin is unavailable')
+        payload = pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
+        self._process.stdin.write(struct.pack('<I', len(payload)))
+        self._process.stdin.write(payload)
+        self._process.stdin.flush()
+
+    def _read_message(self) -> dict | None:
+        if self._process is None or self._process.stdout is None:
+            raise OrToolsSidecarError('OR-Tools sidecar stdout is unavailable')
+        header = self._process.stdout.read(4)
+        if not header:
+            return None
+        if len(header) != 4:
+            raise OrToolsSidecarError('Incomplete OR-Tools sidecar response header')
+        (size,) = struct.unpack('<I', header)
+        payload = bytearray()
+        while len(payload) < size:
+            chunk = self._process.stdout.read(size - len(payload))
+            if not chunk:
+                raise OrToolsSidecarError('Unexpected EOF while reading OR-Tools sidecar response payload')
+            payload.extend(chunk)
+        return pickle.loads(payload)
+
+
+class InProcOrToolsClient(object):
+    _instance: InProcOrToolsClient | None = None
+
+    def __init__(self):
+        self._min_cost_flow_module = None
+
+    @classmethod
+    def get_instance(cls) -> InProcOrToolsClient:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def solve(self, graph_data: OrToolsGraphData) -> dict:
+        min_cost_flow = self._get_min_cost_flow_module()
+        smcf = min_cost_flow.SimpleMinCostFlow()
+        all_arcs = smcf.add_arcs_with_capacity_and_unit_cost(
+            graph_data.start_nodes,
+            graph_data.end_nodes,
+            graph_data.capacities,
+            graph_data.unit_costs,
+        )
+        smcf.set_nodes_supplies(np.arange(len(graph_data.node_supplies), dtype=np.int64), graph_data.node_supplies)
+        status = int(smcf.solve())
+        result = {
+            'status': status,
+            'optimal_status': int(smcf.OPTIMAL),
+            'flows': [],
+            'optimal_cost': None,
+        }
+        if status == int(smcf.OPTIMAL):
+            result['flows'] = [int(value) for value in smcf.flows(all_arcs)]
+            result['optimal_cost'] = int(smcf.optimal_cost())
+        return result
+
+    def _get_min_cost_flow_module(self):
+        if self._min_cost_flow_module is None:
+            from ortools.graph.python import min_cost_flow
+
+            self._min_cost_flow_module = min_cost_flow
+        return self._min_cost_flow_module
 
 if typing.TYPE_CHECKING:
     from Algorithms import TileIslandBuilder, TileIsland
@@ -590,6 +765,11 @@ class OrToolsFlowComputer(object):
     def __init__(self, perf_timer: PerformanceTimer, log_debug: bool = False):
         self.perf_timer: PerformanceTimer = perf_timer
         self.log_debug: bool = log_debug
+        self.sidecar_client: OrToolsSidecarClient = OrToolsSidecarClient.get_instance()
+        self.inproc_client: InProcOrToolsClient = InProcOrToolsClient.get_instance()
+
+    def _should_use_inproc_ortools(self) -> bool:
+        return not self.sidecar_client.is_using_pypy()
 
     def compute_flow(
         self,
@@ -600,31 +780,29 @@ class OrToolsFlowComputer(object):
         Solve min-cost flow and return a flow dict matching the NX format.
         Returns an empty dict if the problem is infeasible.
         """
-        with self.perf_timer.begin_move_event('OrTools build smcf'):
-            smcf = min_cost_flow.SimpleMinCostFlow()
-            all_arcs = smcf.add_arcs_with_capacity_and_unit_cost(
-                graph_data.start_nodes,
-                graph_data.end_nodes,
-                graph_data.capacities,
-                graph_data.unit_costs,
-            )
-            smcf.set_nodes_supplies(np.arange(len(graph_data.node_supplies), dtype=np.int64), graph_data.node_supplies)
+        use_inproc = self._should_use_inproc_ortools()
+        solve_scope_name = 'OrTools inproc.solve()' if use_inproc else 'OrTools sidecar.solve()'
+        with self.perf_timer.begin_move_event(solve_scope_name):
+            if use_inproc:
+                response = self.inproc_client.solve(graph_data)
+            else:
+                response = self.sidecar_client.solve(graph_data)
 
         if self.log_debug:
             logbook.info(
-                f'OrTools smcf: {len(graph_data.node_ids)} nodes, {len(all_arcs)} arcs, '
+                f'OrTools {"inproc" if use_inproc else "sidecar"}: {len(graph_data.node_ids)} nodes, {len(graph_data.start_nodes)} arcs, '
                 f'cumulative_demand={graph_data.cumulative_demand}'
             )
 
-        with self.perf_timer.begin_move_event('OrTools smcf.solve()'):
-            status = smcf.solve()
+        status = int(response['status'])
+        optimal_status = int(response['optimal_status'])
 
-        if status != smcf.OPTIMAL:
+        if status != optimal_status:
             logbook.warning(f'OrTools SimpleMinCostFlow solve status={status} (not OPTIMAL) — returning empty flow dict')
             return {}
 
         if self.log_debug:
-            logbook.info(f'OrTools optimal_cost={smcf.optimal_cost()}')
+            logbook.info(f'OrTools optimal_cost={response["optimal_cost"]}')
 
         with self.perf_timer.begin_move_event('OrTools flow_dict builder post-solve'):
             flow_dict: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
@@ -632,9 +810,9 @@ class OrToolsFlowComputer(object):
             idx_to_node = graph_data.idx_to_node
             flow_diag_islands = getattr(graph_data, 'flow_diag_island_ids', set())
 
-            solution_flows = smcf.flows(all_arcs)
+            solution_flows = response['flows']
 
-            for arc_idx in range(len(all_arcs)):
+            for arc_idx in range(len(solution_flows)):
                 flow_amount = int(solution_flows[arc_idx])
                 if flow_amount <= 0:
                     continue

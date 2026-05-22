@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import EarlyExpandUtils
 import ExpandUtils
 import DebugHelper
@@ -528,7 +530,8 @@ class BotExpansionOps:
                         # intergeneral path with the predicted fog army amount and reward econ value.
                         armyOverrideMatrix = get_tile_army_mapmatrix(bot._map)
                         bonusCapturePointMatrixForFlow = bonusCapturePointMatrix
-                        if bot.target_player_gather_path is not None and not bot.opponent_tracker.did_player_already_attack_this_round(bot.targetPlayer):
+                        validTargetPlayer = bot.targetPlayer is not None and 0 <= bot.targetPlayer < len(bot._map.team_ids_by_player_index)
+                        if validTargetPlayer and bot.target_player_gather_path is not None and not bot.opponent_tracker.did_player_already_attack_this_round(bot.targetPlayer):
                             # Walk from the enemy-general end (tail) toward our general (start).
                             # Find the last non-visible tile before the first visible tile —
                             # i.e., the fog-boundary tile closest to our side.
@@ -597,7 +600,14 @@ class BotExpansionOps:
                         bot.info(f'FE turns: {cumulativeTurns}/{remainingCycleTurns}, econ {cumulative:.3f}, enCaps: {enCapped}, neutCaps: {neutCapped}, optCount: {len(optCollection.flow_plans)}, largestGath: {largestGath}')
 
                         for opt in optCollection.flow_plans:
-                            bot.info(f'FE: {opt.econValue / opt.length:.2f} ({opt.econValue:.1f}e/{opt.length}t) {opt}  {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: bot.board_analysis.intergeneral_analysis.aMap.raw[t2.tile_index]))}')
+                            sorted_tiles_text = '|'.join(
+                                f'{t.x},{t.y}'
+                                for t in sorted(
+                                    opt.tiles,
+                                    key=lambda t2: bot.board_analysis.intergeneral_analysis.aMap.raw[t2.tile_index]
+                                )
+                            )
+                            bot.info(f'FE: {opt.econValue / opt.length:.2f} ({opt.econValue:.1f}e/{opt.length}t) {opt}  {sorted_tiles_text}')
 
                         addlOptions = list(optCollection.flow_plans)
                         bot.last_flow_expander = flowExpander

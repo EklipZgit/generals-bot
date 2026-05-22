@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logbook
 
 from base.client.map import Tile

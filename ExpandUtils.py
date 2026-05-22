@@ -74,6 +74,83 @@ def _format_plan_tile_for_log(
     return f'{tile.x},{tile.y}:p{tile.player}:a{tile.army}:{ownership}'
 
 
+def _format_tile_coords_for_log(tile: Tile | None) -> str:
+    if tile is None:
+        return 'None'
+    x = getattr(tile, 'x', '?')
+    y = getattr(tile, 'y', '?')
+    player = getattr(tile, 'player', '?')
+    army = getattr(tile, 'army', '?')
+    return f'{x},{y}:p{player}:a{army}'
+
+
+def _format_tile_collection_for_log(tiles: typing.Iterable[Tile] | None) -> str:
+    if tiles is None:
+        return 'None'
+    tile_list = list(tiles)
+    if len(tile_list) == 0:
+        return '[]'
+    ordered = sorted(
+        tile_list,
+        key=lambda t: (
+            getattr(t, 'y', -1),
+            getattr(t, 'x', -1),
+            getattr(t, 'player', -1),
+            getattr(t, 'army', -1)))
+    return '[' + ', '.join(_format_tile_coords_for_log(tile) for tile in ordered) + ']'
+
+
+def _format_no_first_move_plan_details(planOption: TilePlanInterface) -> str:
+    details = [
+        f'type={type(planOption).__name__}',
+        f'len={planOption.length}',
+        f'delay={planOption.requiredDelay}',
+        f'econ={planOption.econValue}',
+        f'tileList={_format_tile_collection_for_log(planOption.tileList)}',
+        f'tileSet={_format_tile_collection_for_log(planOption.tileSet)}',
+    ]
+
+    if isinstance(planOption, InterceptionOptionInfo):
+        details.extend([
+            f'path={planOption.path}',
+            f'pathFirst={planOption.path.get_first_move()}',
+            f'pathTiles={_format_tile_collection_for_log(planOption.path.tileList)}',
+            f'damageBlocked={planOption.damage_blocked}',
+            f'interceptRemaining={planOption.intercepting_army_remaining}',
+            f'recaptureTurns={planOption.recapture_turns}',
+            f'bestCaseInterceptMoves={planOption.best_case_intercept_moves}',
+            f'worstCaseInterceptMoves={planOption.worst_case_intercept_moves}',
+            f'friendlyArmyReachingIntercept={planOption.friendly_army_reaching_intercept}',
+        ])
+        if planOption.intercept is not None:
+            details.extend([
+                f'interceptTarget={_format_tile_coords_for_log(planOption.intercept.target_tile)}',
+                f'interceptThreatCount={len(planOption.intercept.threats)}',
+            ])
+
+    if hasattr(planOption, 'gather_target'):
+        details.append(f'gatherTarget={_format_tile_coords_for_log(getattr(planOption, "gather_target", None))}')
+    if hasattr(planOption, 'approximate_capture_tiles'):
+        details.append(
+            f'approxCaptureTiles={_format_tile_collection_for_log(getattr(planOption, "approximate_capture_tiles", None))}')
+    if hasattr(planOption, 'root_nodes'):
+        rootNodes = getattr(planOption, 'root_nodes', None)
+        details.append(f'rootNodeCount={len(rootNodes) if rootNodes is not None else 0}')
+        if rootNodes:
+            details.append(
+                'rootTiles=' + _format_tile_collection_for_log(node.tile for node in rootNodes))
+    if hasattr(planOption, 'gathered_army'):
+        details.append(f'gatheredArmy={getattr(planOption, "gathered_army")}')
+    if hasattr(planOption, 'gather_turns'):
+        details.append(f'gatherTurns={getattr(planOption, "gather_turns")}')
+    if hasattr(planOption, 'gather_capture_points'):
+        details.append(f'gatherCapturePoints={getattr(planOption, "gather_capture_points")}')
+    if hasattr(planOption, 'has_more_moves'):
+        details.append(f'hasMoreMoves={getattr(planOption, "has_more_moves")}')
+
+    return ' '.join(details)
+
+
 def _plan_captures_city(plan: TilePlanInterface, friendlyPlayers: typing.List[int]) -> bool:
     for tile in plan.tileSet:
         if tile.isCity and tile.player not in friendlyPlayers:
@@ -279,7 +356,8 @@ def get_round_plan_with_expansion(
                         useIterativeNegTiles=False,
                         baseValueOverride=option.econValue,
                         turnOverride=option.length,
-                        logEntries=logEntries)
+                        logEntries=logEntries,
+                        viewInfo=viewInfo)
                 logEntries.append(f"Completed additional option inclusion.... elapsed {time.perf_counter() - startTime:.4f}")
 
             # expansionGather = greedy_backpack_gather(map, tilesLargerThanAverage, turns, None, valueFunc, baseCaseFunc, skipTiles, None, searchingPlayer, priorityFunc, skipFunc = None)
@@ -350,7 +428,8 @@ def get_round_plan_with_expansion(
                         postPathEvalFunction,
                         tryAvoidSet,
                         useIterativeNegTiles,
-                        logEntries=logEntries)
+                        logEntries=logEntries,
+                        viewInfo=viewInfo)
                 logEntries.append(f"Completed gather extension.... elapsed {time.perf_counter() - startTime:.4f}")
             if allowLeafMoves and leafMoves is not None and useLeafMovesFirst:
                 logEntries.append(f"Second pass initial leaf-moves.... elapsed {time.perf_counter() - startTime:.4f}")
@@ -2505,6 +2584,7 @@ def _try_include_alt_sourced_path(
         baseValueOverride: float | None = None,
         turnOverride: int = -1,
         logEntries: typing.List[str] | None = None,
+        viewInfo: ViewInfo | None = None,
 ):
     value = baseValueOverride
     if value is None:
@@ -2527,7 +2607,18 @@ def _try_include_alt_sourced_path(
         pathsCrossingTiles,
         addToNegativeTiles=useIterativeNegTiles)
 
-    startTile = planOption.get_first_move().source
+    firstMove = planOption.get_first_move()
+    if firstMove is None:
+        noFirstMoveMsg = (
+            f'skipping alt option with no first move: {str(planOption)} '
+            f'value={value} {_format_no_first_move_plan_details(planOption)}')
+        if logEntries is not None:
+            logEntries.append(noFirstMoveMsg)
+        if viewInfo is not None:
+            viewInfo.add_info_line(noFirstMoveMsg)
+        return
+
+    startTile = firstMove.source
     curTileDict = multiPathDict.get(startTile, {})
     if turnOverride == -1:
         turnOverride = planOption.length
@@ -2715,6 +2806,15 @@ def _get_capture_counts(
 
 
 def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: TilePlanInterface, deferCityGen: bool = False) -> float:
+    """
+    Calculates a rating for a path based on uncertainty and capture potential.
+
+    @param friendlyPlayers: List of player IDs that are considered friendly
+    @param path: The path to evaluate
+    @param deferCityGen: Whether to defer city generation
+
+    @return: A float rating representing the capture potential
+    """
     # rating = max(0, path.value) ** 0.5
     if isinstance(path, InterceptionOptionInfo) and path.requiredDelay <= 0:
         # intercepts are high priority no matter what, and always more important than other intercepts of smaller tile amounts.
@@ -2726,19 +2826,21 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
     #   enemy predicted captures last because they are most likely to turn out to be worse than expected
     #   stuff closer to us first?
 
-    rating = 0
+    rating = 2 - 2
     # # if isinstance(path, Path):
     # if path.value >= 0:
     #     rating = (path.value ** 0.5) / 5
     if path.tileList[0].isCity or path.tileList[0].isGeneral:
-        rating += 0.5
+        rating += 0.1 * path.tileList[0].army + 0.1 * path.length
         if deferCityGen:
-            rating -= 10
+            # Tiebreak city/general moves by moving the one with more captures first, letting us push down lines without splitting a line earlier
+            rating -= 30 / max(1, path.length)
 
     for t in path.tileList[1:]:
         if t.visible:
             if t.player in friendlyPlayers:
                 if t.isGeneral or t.isCity:
+                    # if not deferring general / city then move these early to have more chance of a second push from them i guess? TODO probably wrong
                     rating += 0.1
                     if deferCityGen:
                         rating -= 1.0
@@ -2747,13 +2849,15 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
             continue
 
         if t.player == -1:
-            rating += 0.3
+            rating += 0.1
             if not t.discovered:
-                rating += 0.03
+                rating += 0.1
         elif t.player not in friendlyPlayers:
             rating += 0.05
             if not t.discovered:
-                rating += 0.1
+                rating += 0.3
+            if t.isCity:
+                rating += 30
 
         # if t.player not in friendlyPlayers:
         #     rating += 0.5
@@ -2767,6 +2871,8 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
         #     rating += 0.25
         # if not t.discovered:
         #     rating += 0.1
+    if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+        logbook.info(f'uncertainty rating {rating:.3f} for {path.tileList[0]} {path}')
 
     return rating
 

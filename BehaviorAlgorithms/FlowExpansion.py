@@ -23,7 +23,7 @@ from Gather.GatherCaptureGroupKnapsacker import (
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.FlowGraphModels import FlowGraphMethod, IslandFlowNode, IslandMaxFlowGraph
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
-from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionFinder
+# from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionFinder
 from BehaviorAlgorithms.Flow.OrToolsFlowDirectionFinder import OrToolsFlowDirectionFinder
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpanderLastRun, FlowExpansionPlanOptionCollection, ITERATIVE_EXPANSION_EN_CAP_VAL
 from Interfaces import MapMatrixInterface, TilePlanInterface
@@ -292,7 +292,11 @@ class ArmyFlowExpanderV2:
                     f"plan={plan}"
                 )
         if total > turns:
-            raise AssertionError(f'Requested {turns} but received {total} turns worth of plans.\r\n  {"\r\n    ".join(f"{opt}: {'|'.join(f"{t.x},{t.y}" for t in sorted(opt.tiles, key=lambda t2: self.island_builder.intergeneral_analysis.aMap.raw[t2.tile_index]))}" for opt in plans)}')
+            plan_details = '\r\n    '.join(
+                f"{opt}: {'|'.join(f'{t.x},{t.y}' for t in sorted(opt.tiles, key=lambda t2: self.island_builder.intergeneral_analysis.aMap.raw[t2.tile_index]))}"
+                for opt in plans
+            )
+            raise AssertionError(f'Requested {turns} but received {total} turns worth of plans.\r\n  {plan_details}')
         result.flow_plans = plans
         return result
 

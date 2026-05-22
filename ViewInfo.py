@@ -176,7 +176,7 @@ class ViewInfo(object):
         self.targetedTiles.append((tile, targetStyle, radiusReduction))
 
     def add_targeted_tiles_with_legend(self, tiles: typing.Iterable[Tile], legend, targetStyle: TargetStyle = TargetStyle.RED, radiusReduction: int = 6):
-        self.add_info_line(f'{str(targetStyle).split('.')[1]}={legend}')
+        self.add_info_line(f"{str(targetStyle).split('.')[1]}={legend}")
         for tile in tiles:
             self.targetedTiles.append((tile, targetStyle, radiusReduction))
 

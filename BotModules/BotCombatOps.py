@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing
 import time
 
@@ -20,8 +22,8 @@ from BotModules.BotRendering import BotRendering
 from BotModules.BotRepetition import BotRepetition
 from BotModules.BotTimings import BotTimings
 from Army import Army
-from ArmyEngine import ArmyEngine
-from ArmyEngine import ArmySimResult
+# from ArmyEngine import ArmyEngine
+# from ArmyEngine import ArmySimResult
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import ArmyTracker
 from Gather import Gather
@@ -427,31 +429,31 @@ class BotCombatOps:
 
         return None, kingKillPath, kingKillChance
 
-    @staticmethod
-    def get_army_scrim_move(
-            bot: EklipZBot,
-            friendlyArmyTile: Tile,
-            enemyArmyTile: Tile,
-            friendlyHasKillThreat: bool | None = None,
-            forceKeepMove=False
-    ) -> Move | None:
-        friendlyPath, enemyPath, result = BotCombatOps.get_army_scrim_paths(
-            bot,
-            friendlyArmyTile,
-            enemyArmyTile,
-            friendlyHasKillThreat=friendlyHasKillThreat)
-        if friendlyPath is not None and friendlyPath.length > 0:
-            firstPathMove = BotPathingUtils.get_first_path_move(bot, friendlyPath)
-            if (
-                    firstPathMove
-                    and not result.best_result_state.captured_by_enemy
-                    and (result.net_economy_differential > bot.engine_mcts_move_estimation_net_differential_cutoff or forceKeepMove)
-            ):
-                bot.info(f'ARMY SCRIM MOVE {str(friendlyArmyTile)}@{str(enemyArmyTile)} EVAL {str(result)}: {str(firstPathMove)}')
+    # @staticmethod
+    # def get_army_scrim_move(
+    #         bot: EklipZBot,
+    #         friendlyArmyTile: Tile,
+    #         enemyArmyTile: Tile,
+    #         friendlyHasKillThreat: bool | None = None,
+    #         forceKeepMove=False
+    # ) -> Move | None:
+    #     friendlyPath, enemyPath, result = BotCombatOps.get_army_scrim_paths(
+    #         bot,
+    #         friendlyArmyTile,
+    #         enemyArmyTile,
+    #         friendlyHasKillThreat=friendlyHasKillThreat)
+    #     if friendlyPath is not None and friendlyPath.length > 0:
+    #         firstPathMove = BotPathingUtils.get_first_path_move(bot, friendlyPath)
+    #         if (
+    #                 firstPathMove
+    #                 and not result.best_result_state.captured_by_enemy
+    #                 and (result.net_economy_differential > bot.engine_mcts_move_estimation_net_differential_cutoff or forceKeepMove)
+    #         ):
+    #             bot.info(f'ARMY SCRIM MOVE {str(friendlyArmyTile)}@{str(enemyArmyTile)} EVAL {str(result)}: {str(firstPathMove)}')
 
-                return firstPathMove
+    #             return firstPathMove
 
-        return None
+    #     return None
 
     @staticmethod
     def get_kill_race_chance(bot: EklipZBot, generalHuntPath: Path, enGenProbabilityCutoff: float = 0.4, turnsToDeath: int | None = None, cutoffKillArmy: int = 0, againstPlayer: int = None) -> float:
@@ -517,41 +519,41 @@ class BotCombatOps:
 
         return killInTurnsChance
 
-    @staticmethod
-    def get_army_scrim_paths(
-            bot: EklipZBot,
-            friendlyArmyTile: Tile,
-            enemyArmyTile: Tile,
-            enemyCannotMoveAway: bool = True,
-            friendlyHasKillThreat: bool | None = None
-    ) -> typing.Tuple[Path | None, Path | None, ArmySimResult]:
-        """
-        Returns None for the path WHEN THE FIRST MOVE THE ENGINE WANTS TO MAKE INCLUDES A NO-OP.
-        NOTE, These paths should not be executed as paths, they may contain removed-no-ops.
+    # @staticmethod
+    # def get_army_scrim_paths(
+    #         bot: EklipZBot,
+    #         friendlyArmyTile: Tile,
+    #         enemyArmyTile: Tile,
+    #         enemyCannotMoveAway: bool = True,
+    #         friendlyHasKillThreat: bool | None = None
+    # ) -> typing.Tuple[Path | None, Path | None, ArmySimResult]:
+    #     """
+    #     Returns None for the path WHEN THE FIRST MOVE THE ENGINE WANTS TO MAKE INCLUDES A NO-OP.
+    #     NOTE, These paths should not be executed as paths, they may contain removed-no-ops.
 
-        @param friendlyArmyTile:
-        @param enemyArmyTile:
-        @param enemyCannotMoveAway:
-        @param friendlyHasKillThreat: whether friendly tile is a kill threat against enemy or not. If not provided, will be calculated via a_star
-        @return:
-        """
-        result = BotCombatOps.get_army_scrim_result(bot, friendlyArmyTile, enemyArmyTile, enemyCannotMoveAway=enemyCannotMoveAway, friendlyHasKillThreat=friendlyHasKillThreat)
+    #     @param friendlyArmyTile:
+    #     @param enemyArmyTile:
+    #     @param enemyCannotMoveAway:
+    #     @param friendlyHasKillThreat: whether friendly tile is a kill threat against enemy or not. If not provided, will be calculated via a_star
+    #     @return:
+    #     """
+    #     result = BotCombatOps.get_army_scrim_result(bot, friendlyArmyTile, enemyArmyTile, enemyCannotMoveAway=enemyCannotMoveAway, friendlyHasKillThreat=friendlyHasKillThreat)
 
-        if result.best_result_state.captured_by_enemy:
-            bot.viewInfo.add_info_line(f'scrim thinks enemy kills us :/ {str(result.expected_best_moves)}')
-            return None, None, result
+    #     if result.best_result_state.captured_by_enemy:
+    #         bot.viewInfo.add_info_line(f'scrim thinks enemy kills us :/ {str(result.expected_best_moves)}')
+    #         return None, None, result
 
-        if result.best_result_state.captures_enemy:
-            bot.viewInfo.add_info_line(f'scrim thinks we kill!? {str(result.expected_best_moves)} TODO implement race checks')
-            return None, None, result
+    #     if result.best_result_state.captures_enemy:
+    #         bot.viewInfo.add_info_line(f'scrim thinks we kill!? {str(result.expected_best_moves)} TODO implement race checks')
+    #         return None, None, result
 
-        if len(result.expected_best_moves) == 0:
-            bot.viewInfo.add_info_line(f'scrim returned no moves..? {str(result.expected_best_moves)}')
-            return None, None, result
+    #     if len(result.expected_best_moves) == 0:
+    #         bot.viewInfo.add_info_line(f'scrim returned no moves..? {str(result.expected_best_moves)}')
+    #         return None, None, result
 
-        friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, result)
+    #     friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, result)
 
-        return friendlyPath, enemyPath, result
+    #     return friendlyPath, enemyPath, result
 
     @staticmethod
     def get_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
@@ -636,181 +638,181 @@ class BotCombatOps:
             return move
         return None
 
-    @staticmethod
-    def get_army_scrim_result(
-            bot: EklipZBot,
-            friendlyArmyTile: Tile,
-            enemyArmyTile: Tile,
-            enemyCannotMoveAway: bool = False,
-            enemyHasKillThreat: bool | None = None,
-            friendlyHasKillThreat: bool | None = None,
-            friendlyPrecomputePaths: typing.List[Move | None] | None = None
-    ) -> ArmySimResult:
-        frArmies = [BotStateQueries.get_army_at(bot, friendlyArmyTile)]
-        enArmies = [BotStateQueries.get_army_at(bot, enemyArmyTile)]
+    # @staticmethod
+    # def get_army_scrim_result(
+    #         bot: EklipZBot,
+    #         friendlyArmyTile: Tile,
+    #         enemyArmyTile: Tile,
+    #         enemyCannotMoveAway: bool = False,
+    #         enemyHasKillThreat: bool | None = None,
+    #         friendlyHasKillThreat: bool | None = None,
+    #         friendlyPrecomputePaths: typing.List[Move | None] | None = None
+    # ) -> ArmySimResult:
+    #     frArmies = [BotStateQueries.get_army_at(bot, friendlyArmyTile)]
+    #     enArmies = [BotStateQueries.get_army_at(bot, enemyArmyTile)]
 
-        if bot.engine_use_mcts and bot.engine_force_multi_tile_mcts:
-            # frTiles = bot.find_large_tiles_near(
-            #     fromTiles=[friendlyArmyTile, enemyArmyTile],
-            #     distance=bot.engine_army_nearby_tiles_range,
-            #     forPlayer=bot.general.player,
-            #     allowGeneral=True,
-            #     limit=bot.engine_mcts_scrim_armies_per_player_limit,
-            #     minArmy=6,
-            # )
-            frTiles = []
-            # enTiles = bot.find_large_tiles_near(
-            #     fromTiles=[friendlyArmyTile, enemyArmyTile],
-            #     distance=bot.engine_army_nearby_tiles_range,
-            #     forPlayer=enemyArmyTile.player,
-            #     allowGeneral=True,
-            #     limit=bot.engine_mcts_scrim_armies_per_player_limit - 1,
-            #     minArmy=6,
-            # )
-            enTiles = []
+    #     if bot.engine_use_mcts and bot.engine_force_multi_tile_mcts:
+    #         # frTiles = bot.find_large_tiles_near(
+    #         #     fromTiles=[friendlyArmyTile, enemyArmyTile],
+    #         #     distance=bot.engine_army_nearby_tiles_range,
+    #         #     forPlayer=bot.general.player,
+    #         #     allowGeneral=True,
+    #         #     limit=bot.engine_mcts_scrim_armies_per_player_limit,
+    #         #     minArmy=6,
+    #         # )
+    #         frTiles = []
+    #         # enTiles = bot.find_large_tiles_near(
+    #         #     fromTiles=[friendlyArmyTile, enemyArmyTile],
+    #         #     distance=bot.engine_army_nearby_tiles_range,
+    #         #     forPlayer=enemyArmyTile.player,
+    #         #     allowGeneral=True,
+    #         #     limit=bot.engine_mcts_scrim_armies_per_player_limit - 1,
+    #         #     minArmy=6,
+    #         # )
+    #         enTiles = []
 
-            for frTile in frTiles:
-                if frTile != friendlyArmyTile:
-                    frArmies.append(BotStateQueries.get_army_at(bot, frTile))
-                    bot.viewInfo.add_targeted_tile(frTile, TargetStyle.TEAL)
+    #         for frTile in frTiles:
+    #             if frTile != friendlyArmyTile:
+    #                 frArmies.append(BotStateQueries.get_army_at(bot, frTile))
+    #                 bot.viewInfo.add_targeted_tile(frTile, TargetStyle.TEAL)
 
-            for enTile in enTiles:
-                if enTile != enemyArmyTile:
-                    enArmies.append(BotStateQueries.get_army_at(bot, enTile))
-                    bot.viewInfo.add_targeted_tile(enTile, TargetStyle.PURPLE)
+    #         for enTile in enTiles:
+    #             if enTile != enemyArmyTile:
+    #                 enArmies.append(BotStateQueries.get_army_at(bot, enTile))
+    #                 bot.viewInfo.add_targeted_tile(enTile, TargetStyle.PURPLE)
 
-            lastMove: Move | None = bot.armyTracker.lastMove
-            if bot.engine_always_include_last_move_tile_in_scrims and lastMove is not None:
-                if lastMove.dest.player == bot.general.player and lastMove.dest.army > 1:
-                    lastMoveArmy = BotStateQueries.get_army_at(bot, lastMove.dest)
-                    if lastMoveArmy not in frArmies:
-                        frArmies.append(lastMoveArmy)
+    #         lastMove: Move | None = bot.armyTracker.lastMove
+    #         if bot.engine_always_include_last_move_tile_in_scrims and lastMove is not None:
+    #             if lastMove.dest.player == bot.general.player and lastMove.dest.army > 1:
+    #                 lastMoveArmy = BotStateQueries.get_army_at(bot, lastMove.dest)
+    #                 if lastMoveArmy not in frArmies:
+    #                     frArmies.append(lastMoveArmy)
 
-        result = BotCombatOps.get_armies_scrim_result(
-            bot,
-            friendlyArmies=frArmies,
-            enemyArmies=enArmies,
-            enemyCannotMoveAway=enemyCannotMoveAway,
-            enemyHasKillThreat=enemyHasKillThreat,
-            friendlyHasKillThreat=friendlyHasKillThreat,
-            friendlyPrecomputePaths=friendlyPrecomputePaths,
-        )
-        return result
+    #     result = BotCombatOps.get_armies_scrim_result(
+    #         bot,
+    #         friendlyArmies=frArmies,
+    #         enemyArmies=enArmies,
+    #         enemyCannotMoveAway=enemyCannotMoveAway,
+    #         enemyHasKillThreat=enemyHasKillThreat,
+    #         friendlyHasKillThreat=friendlyHasKillThreat,
+    #         friendlyPrecomputePaths=friendlyPrecomputePaths,
+    #     )
+    #     return result
 
-    @staticmethod
-    def get_armies_scrim_result(
-            bot: EklipZBot,
-            friendlyArmies: typing.List[Army],
-            enemyArmies: typing.List[Army],
-            enemyCannotMoveAway: bool = False,
-            enemyHasKillThreat: bool | None = None,
-            friendlyHasKillThreat: bool | None = None,
-            time_limit: float = 0.05,
-            friendlyPrecomputePaths: typing.List[Move | None] | None = None
-    ) -> ArmySimResult:
-        if len(friendlyArmies) == 0 or len(enemyArmies) == 0:
-            return ArmySimResult()
+    # @staticmethod
+    # def get_armies_scrim_result(
+    #         bot: EklipZBot,
+    #         friendlyArmies: typing.List[Army],
+    #         enemyArmies: typing.List[Army],
+    #         enemyCannotMoveAway: bool = False,
+    #         enemyHasKillThreat: bool | None = None,
+    #         friendlyHasKillThreat: bool | None = None,
+    #         time_limit: float = 0.05,
+    #         friendlyPrecomputePaths: typing.List[Move | None] | None = None
+    # ) -> ArmySimResult:
+    #     if len(friendlyArmies) == 0 or len(enemyArmies) == 0:
+    #         return ArmySimResult()
 
-        result = BotCombatOps.get_scrim_cached(bot, friendlyArmies, enemyArmies)
-        if result is not None:
-            bot.info(
-                f'  ScC {"+".join([str(a.tile) for a in friendlyArmies])}@{"+".join([str(a.tile) for a in enemyArmies])}: {str(result)} {repr(result.expected_best_moves)}')
-            return result
+    #     result = BotCombatOps.get_scrim_cached(bot, friendlyArmies, enemyArmies)
+    #     if result is not None:
+    #         bot.info(
+    #             f'  ScC {"+".join([str(a.tile) for a in friendlyArmies])}@{"+".join([str(a.tile) for a in enemyArmies])}: {str(result)} {repr(result.expected_best_moves)}')
+    #         return result
 
-        if friendlyHasKillThreat is None:
-            friendlyHasKillThreat = False
-            for frArmy in friendlyArmies:
-                friendlyArmyTile = frArmy.tile
-                targets = set()
-                targets.add(bot.targetPlayerExpectedGeneralLocation)
-                path = SearchUtils.a_star_kill(
-                    bot._map,
-                    [friendlyArmyTile],
-                    targets,
-                    0.03,
-                    BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation) // 3,
-                    # self.general_safe_func_set,
-                    requireExtraArmy=5 if bot.targetPlayerExpectedGeneralLocation.isGeneral else 20,
-                    negativeTiles=set([a.tile for a in enemyArmies]))
-                if path is not None:
-                    friendlyHasKillThreat = True
+    #     if friendlyHasKillThreat is None:
+    #         friendlyHasKillThreat = False
+    #         for frArmy in friendlyArmies:
+    #             friendlyArmyTile = frArmy.tile
+    #             targets = set()
+    #             targets.add(bot.targetPlayerExpectedGeneralLocation)
+    #             path = SearchUtils.a_star_kill(
+    #                 bot._map,
+    #                 [friendlyArmyTile],
+    #                 targets,
+    #                 0.03,
+    #                 BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation) // 3,
+    #                 # self.general_safe_func_set,
+    #                 requireExtraArmy=5 if bot.targetPlayerExpectedGeneralLocation.isGeneral else 20,
+    #                 negativeTiles=set([a.tile for a in enemyArmies]))
+    #             if path is not None:
+    #                 friendlyHasKillThreat = True
 
-        if enemyHasKillThreat is None:
-            enemyHasKillThreat = False
-            for enArmy in enemyArmies:
-                for path in enArmy.expectedPaths:
-                    if path is not None and path.tail.tile.isGeneral and bot._map.is_tile_friendly(path.tail.tile):
-                        if path.calculate_value(enArmy.player, teams=bot._map.team_ids_by_player_index, negativeTiles=set([a.tile for a in friendlyArmies])) > 0:
-                            enemyHasKillThreat = True
+    #     if enemyHasKillThreat is None:
+    #         enemyHasKillThreat = False
+    #         for enArmy in enemyArmies:
+    #             for path in enArmy.expectedPaths:
+    #                 if path is not None and path.tail.tile.isGeneral and bot._map.is_tile_friendly(path.tail.tile):
+    #                     if path.calculate_value(enArmy.player, teams=bot._map.team_ids_by_player_index, negativeTiles=set([a.tile for a in friendlyArmies])) > 0:
+    #                         enemyHasKillThreat = True
 
-        if len(enemyArmies) == 0:
-            enemyArmies = [bot.get_army_at(bot._map.players[bot.targetPlayer].tiles[0])]
+    #     if len(enemyArmies) == 0:
+    #         enemyArmies = [bot.get_army_at(bot._map.players[bot.targetPlayer].tiles[0])]
 
-        engine: ArmyEngine = ArmyEngine(bot._map, friendlyArmies, enemyArmies, bot.board_analysis, timeCap=0.05, mctsRunner=bot.mcts_engine)
-        engine.eval_params = bot.mcts_engine.eval_params
-        engine.allow_enemy_no_op = bot.engine_allow_enemy_no_op
-        engine.honor_mcts_expected_score = bot.engine_honor_mcts_expected_score
-        engine.honor_mcts_expanded_expected_score = bot.engine_honor_mcts_expanded_expected_score
-        if bot.engine_include_path_pre_expansion:
-            engine.forced_pre_expansions = []
-            for enArmy in enemyArmies:
-                altPaths = ArmyTracker.get_army_expected_path(bot._map, enArmy, bot.general, bot.armyTracker.player_targets)
-                for enPath in enArmy.expectedPaths:
-                    if enPath is not None:
-                        engine.forced_pre_expansions.append(enPath.get_subsegment(bot.engine_path_pre_expansion_cutoff_length).convert_to_move_list())
-                    matchAlt = None
-                    for altPath in list(altPaths):
-                        if altPath is None or altPath.tail.tile == enPath.tail.tile:
-                            altPaths.remove(altPath)
-                for altPath in altPaths:
-                    engine.forced_pre_expansions.append(altPath.get_subsegment(bot.engine_path_pre_expansion_cutoff_length).convert_to_move_list())
-            for frArmy in friendlyArmies:
-                for frPath in frArmy.expectedPaths:
-                    if frPath is not None:
-                        engine.forced_pre_expansions.append(frPath.get_subsegment(bot.engine_path_pre_expansion_cutoff_length).convert_to_move_list())
-            if friendlyPrecomputePaths is not None:
-                engine.forced_pre_expansions.extend([p[0:bot.engine_path_pre_expansion_cutoff_length] for p in friendlyPrecomputePaths])
+    #     engine: ArmyEngine = ArmyEngine(bot._map, friendlyArmies, enemyArmies, bot.board_analysis, timeCap=0.05, mctsRunner=bot.mcts_engine)
+    #     engine.eval_params = bot.mcts_engine.eval_params
+    #     engine.allow_enemy_no_op = bot.engine_allow_enemy_no_op
+    #     engine.honor_mcts_expected_score = bot.engine_honor_mcts_expected_score
+    #     engine.honor_mcts_expanded_expected_score = bot.engine_honor_mcts_expanded_expected_score
+    #     if bot.engine_include_path_pre_expansion:
+    #         engine.forced_pre_expansions = []
+    #         for enArmy in enemyArmies:
+    #             altPaths = ArmyTracker.get_army_expected_path(bot._map, enArmy, bot.general, bot.armyTracker.player_targets)
+    #             for enPath in enArmy.expectedPaths:
+    #                 if enPath is not None:
+    #                     engine.forced_pre_expansions.append(enPath.get_subsegment(bot.engine_path_pre_expansion_cutoff_length).convert_to_move_list())
+    #                 matchAlt = None
+    #                 for altPath in list(altPaths):
+    #                     if altPath is None or altPath.tail.tile == enPath.tail.tile:
+    #                         altPaths.remove(altPath)
+    #             for altPath in altPaths:
+    #                 engine.forced_pre_expansions.append(altPath.get_subsegment(bot.engine_path_pre_expansion_cutoff_length).convert_to_move_list())
+    #         for frArmy in friendlyArmies:
+    #             for frPath in frArmy.expectedPaths:
+    #                 if frPath is not None:
+    #                     engine.forced_pre_expansions.append(frPath.get_subsegment(bot.engine_path_pre_expansion_cutoff_length).convert_to_move_list())
+    #         if friendlyPrecomputePaths is not None:
+    #             engine.forced_pre_expansions.extend([p[0:bot.engine_path_pre_expansion_cutoff_length] for p in friendlyPrecomputePaths])
 
-        depth = 4
-        enemyArmy = enemyArmies[0]
-        if enemyCannotMoveAway and bot.engine_allow_force_incoming_armies_towards:
-            depth = 6
-            if len(enemyArmy.expectedPaths) > 0:
-                engine.force_enemy_towards = SearchUtils.build_distance_map_matrix(bot._map, [enemyArmy.expectedPaths[0].tail.tile])
-                logbook.info(f'forcing enemy scrim moves towards {str(enemyArmy.expectedPaths[0].tail.tile)}')
-            else:
-                engine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(bot._map, [bot.general])
-                logbook.info(f'forcing enemy scrim moves towards our general')
+    #     depth = 4
+    #     enemyArmy = enemyArmies[0]
+    #     if enemyCannotMoveAway and bot.engine_allow_force_incoming_armies_towards:
+    #         depth = 6
+    #         if len(enemyArmy.expectedPaths) > 0:
+    #             engine.force_enemy_towards = SearchUtils.build_distance_map_matrix(bot._map, [enemyArmy.expectedPaths[0].tail.tile])
+    #             logbook.info(f'forcing enemy scrim moves towards {str(enemyArmy.expectedPaths[0].tail.tile)}')
+    #         else:
+    #             engine.force_enemy_towards_or_parallel_to = SearchUtils.build_distance_map_matrix(bot._map, [bot.general])
+    #             logbook.info(f'forcing enemy scrim moves towards our general')
 
-            engine.allow_enemy_no_op = False
+    #         engine.allow_enemy_no_op = False
 
-        if DebugHelper.IS_DEBUGGING:
-            engine.time_limit = 1000
-            engine.iteration_limit = 1000
-        else:
-            engine.time_limit = time_limit
-            depthInMove = bot.perf_timer.get_elapsed_since_update(bot._map.turn)
-            if depthInMove > 0.15:
-                engine.time_limit = 0.06
-            if depthInMove > 0.25:
-                engine.time_limit = 0.04
-            if depthInMove > 0.3:
-                engine.time_limit = 0.02
+    #     if DebugHelper.IS_DEBUGGING:
+    #         engine.time_limit = 1000
+    #         engine.iteration_limit = 1000
+    #     else:
+    #         engine.time_limit = time_limit
+    #         depthInMove = bot.perf_timer.get_elapsed_since_update(bot._map.turn)
+    #         if depthInMove > 0.15:
+    #             engine.time_limit = 0.06
+    #         if depthInMove > 0.25:
+    #             engine.time_limit = 0.04
+    #         if depthInMove > 0.3:
+    #             engine.time_limit = 0.02
 
-        engine.friendly_has_kill_threat = friendlyHasKillThreat
-        engine.enemy_has_kill_threat = enemyHasKillThreat and not BotDefense.should_abandon_king_defense(bot, )
-        if bot.disable_engine:
-            depth = 0
-            engine.time_limit = 0.00001
+    #     engine.friendly_has_kill_threat = friendlyHasKillThreat
+    #     engine.enemy_has_kill_threat = enemyHasKillThreat and not BotDefense.should_abandon_king_defense(bot, )
+    #     if bot.disable_engine:
+    #         depth = 0
+    #         engine.time_limit = 0.00001
 
-        result = engine.scan(depth, noThrow=True, mcts=bot.engine_use_mcts)
-        bot.info(f' Scr {"+".join([str(a.tile) for a in friendlyArmies])}@{"+".join([str(a.tile) for a in enemyArmies])}: {str(result)} {repr(result.expected_best_moves)}')
-        scrimCacheKey = BotCombatOps.get_scrim_cache_key(bot, friendlyArmies, enemyArmies)
-        bot.cached_scrims[scrimCacheKey] = result
-        if bot.disable_engine:
-            result.net_economy_differential = -50.0
-            result.best_result_state.tile_differential = -50
-        return result
+    #     result = engine.scan(depth, noThrow=True, mcts=bot.engine_use_mcts)
+    #     bot.info(f' Scr {"+".join([str(a.tile) for a in friendlyArmies])}@{"+".join([str(a.tile) for a in enemyArmies])}: {str(result)} {repr(result.expected_best_moves)}')
+    #     scrimCacheKey = BotCombatOps.get_scrim_cache_key(bot, friendlyArmies, enemyArmies)
+    #     bot.cached_scrims[scrimCacheKey] = result
+    #     if bot.disable_engine:
+    #         result.net_economy_differential = -50.0
+    #         result.best_result_state.tile_differential = -50
+    #     return result
 
     @staticmethod
     def extend_interspersed_path_moves(bot: EklipZBot, paths: typing.List[Path], move: Move | None):
@@ -874,126 +876,126 @@ class BotCombatOps:
 
         return friendlyPath, enemyPath
 
-    @staticmethod
-    def try_find_counter_army_scrim_path_killpath(
-            bot: EklipZBot,
-            threatPath: Path,
-            allowGeneral: bool,
-            forceEnemyTowardsGeneral: bool = False
-    ) -> Path | None:
-        path, simResult = BotCombatOps.try_find_counter_army_scrim_path_kill(bot, threatPath, allowGeneral=allowGeneral, forceEnemyTowardsGeneral=forceEnemyTowardsGeneral)
-        return path
+    # @staticmethod
+    # def try_find_counter_army_scrim_path_killpath(
+    #         bot: EklipZBot,
+    #         threatPath: Path,
+    #         allowGeneral: bool,
+    #         forceEnemyTowardsGeneral: bool = False
+    # ) -> Path | None:
+    #     path, simResult = BotCombatOps.try_find_counter_army_scrim_path_kill(bot, threatPath, allowGeneral=allowGeneral, forceEnemyTowardsGeneral=forceEnemyTowardsGeneral)
+    #     return path
 
-    @staticmethod
-    def try_find_counter_army_scrim_path_kill(
-            bot: EklipZBot,
-            threatPath: Path,
-            allowGeneral: bool,
-            forceEnemyTowardsGeneral: bool = False
-    ) -> typing.Tuple[Path | None, ArmySimResult | None]:
-        if threatPath.start.tile.army < 4:
-            logbook.info('fuck off, dont try to scrim against tiny tiles idiot')
-            return None, None
-        friendlyPath, simResult = BotCombatOps.try_find_counter_army_scrim_path(bot, threatPath, allowGeneral, forceEnemyTowardsGeneral=forceEnemyTowardsGeneral)
-        if simResult is not None and friendlyPath is not None:
-            armiesIntercept = simResult.best_result_state.kills_all_enemy_armies
-            if not armiesIntercept:
-                sourceThreatDist = bot._map.euclidDist(friendlyPath.start.tile.x, friendlyPath.start.tile.y, threatPath.start.tile.x, threatPath.start.tile.y)
-                destThreatDist = bot._map.euclidDist(friendlyPath.start.next.tile.x, friendlyPath.start.next.tile.y, threatPath.start.tile.x, threatPath.start.tile.y)
-                if destThreatDist < sourceThreatDist:
-                    armiesIntercept = True
+    # @staticmethod
+    # def try_find_counter_army_scrim_path_kill(
+    #         bot: EklipZBot,
+    #         threatPath: Path,
+    #         allowGeneral: bool,
+    #         forceEnemyTowardsGeneral: bool = False
+    # ) -> typing.Tuple[Path | None, ArmySimResult | None]:
+    #     if threatPath.start.tile.army < 4:
+    #         logbook.info('fuck off, dont try to scrim against tiny tiles idiot')
+    #         return None, None
+    #     friendlyPath, simResult = BotCombatOps.try_find_counter_army_scrim_path(bot, threatPath, allowGeneral, forceEnemyTowardsGeneral=forceEnemyTowardsGeneral)
+    #     if simResult is not None and friendlyPath is not None:
+    #         armiesIntercept = simResult.best_result_state.kills_all_enemy_armies
+    #         if not armiesIntercept:
+    #             sourceThreatDist = bot._map.euclidDist(friendlyPath.start.tile.x, friendlyPath.start.tile.y, threatPath.start.tile.x, threatPath.start.tile.y)
+    #             destThreatDist = bot._map.euclidDist(friendlyPath.start.next.tile.x, friendlyPath.start.next.tile.y, threatPath.start.tile.x, threatPath.start.tile.y)
+    #             if destThreatDist < sourceThreatDist:
+    #                 armiesIntercept = True
 
-            if friendlyPath is not None and armiesIntercept and not simResult.best_result_state.captured_by_enemy:
-                bot.info(f'CnASPaK EVAL {str(simResult)}: {str(friendlyPath)}')
-                bot.targetingArmy = bot.get_army_at(threatPath.start.tile)
-                return friendlyPath, simResult
+    #         if friendlyPath is not None and armiesIntercept and not simResult.best_result_state.captured_by_enemy:
+    #             bot.info(f'CnASPaK EVAL {str(simResult)}: {str(friendlyPath)}')
+    #             bot.targetingArmy = bot.get_army_at(threatPath.start.tile)
+    #             return friendlyPath, simResult
 
-        return None, None
+    #     return None, None
 
-    @staticmethod
-    def try_find_counter_army_scrim_path(
-            bot: EklipZBot,
-            threatPath: Path,
-            allowGeneral: bool,
-            forceEnemyTowardsGeneral: bool = False
-    ) -> typing.Tuple[Path | None, ArmySimResult | None]:
-        """
-        Sometimes the best sim output involves no-opping one of the tiles. In that case,
-        this will return a None path as the best ArmySimResult output. It should be honored, and this tile
-        tracked as a scrimming tile, even though the tile should not be moved this turn.
+    # @staticmethod
+    # def try_find_counter_army_scrim_path(
+    #         bot: EklipZBot,
+    #         threatPath: Path,
+    #         allowGeneral: bool,
+    #         forceEnemyTowardsGeneral: bool = False
+    # ) -> typing.Tuple[Path | None, ArmySimResult | None]:
+    #     """
+    #     Sometimes the best sim output involves no-opping one of the tiles. In that case,
+    #     this will return a None path as the best ArmySimResult output. It should be honored, and this tile
+    #     tracked as a scrimming tile, even though the tile should not be moved this turn.
 
-        @param threatPath:
-        @param allowGeneral:
-        @return:
-        """
-        threatTile = threatPath.start.tile
-        threatDist = BotPathingUtils.distance_from_general(bot, threatTile)
-        threatArmy = BotStateQueries.get_army_at(bot, threatTile)
-        threatArmy.include_path(threatPath)
+    #     @param threatPath:
+    #     @param allowGeneral:
+    #     @return:
+    #     """
+    #     threatTile = threatPath.start.tile
+    #     threatDist = BotPathingUtils.distance_from_general(bot, threatTile)
+    #     threatArmy = BotStateQueries.get_army_at(bot, threatTile)
+    #     threatArmy.include_path(threatPath)
 
-        # largeTilesNearTarget = SearchUtils.where(BotCombatOps.find_large_tiles_near(
-        #     bot,
-        #     fromTiles=threatPath.tileList[0:3],
-        #     distance=bot.engine_army_nearby_tiles_range,
-        #     limit=bot.engine_mcts_scrim_armies_per_player_limit,
-        #     forPlayer=bot.general.player,
-        #     allowGeneral=allowGeneral,
-        #     addlFilterFunc=lambda t, dist: BotPathingUtils.distance_from_general(bot, t) <= threatDist + 1,
-        #     minArmy=max(3, min(15, threatPath.value // 2))
-        # ), lambda t: bot.territories.is_tile_in_enemy_territory(t))
-        largeTilesNearTarget = []
+    #     # largeTilesNearTarget = SearchUtils.where(BotCombatOps.find_large_tiles_near(
+    #     #     bot,
+    #     #     fromTiles=threatPath.tileList[0:3],
+    #     #     distance=bot.engine_army_nearby_tiles_range,
+    #     #     limit=bot.engine_mcts_scrim_armies_per_player_limit,
+    #     #     forPlayer=bot.general.player,
+    #     #     allowGeneral=allowGeneral,
+    #     #     addlFilterFunc=lambda t, dist: BotPathingUtils.distance_from_general(bot, t) <= threatDist + 1,
+    #     #     minArmy=max(3, min(15, threatPath.value // 2))
+    #     # ), lambda t: bot.territories.is_tile_in_enemy_territory(t))
+    #     largeTilesNearTarget = []
 
-        bestPath: Path | None = None
-        bestSimRes: ArmySimResult | None = None
-        if not bot.engine_use_mcts:
-            for largeTile in largeTilesNearTarget:
-                if largeTile in threatPath.tileSet and largeTile.army < threatPath.value:
-                    continue
-                with bot.perf_timer.begin_move_event(f'BfScr {str(largeTile)}@{str(threatTile)}'):
-                    friendlyPath, enemyPath, simResult = BotCombatOps.get_army_scrim_paths(bot, largeTile, enemyArmyTile=threatTile, enemyCannotMoveAway=True)
-                if bestSimRes is None or bestSimRes.best_result_state.calculate_value_int() < simResult.best_result_state.calculate_value_int():
-                    bestPath = friendlyPath
-                    bestSimRes = simResult
-        elif len(largeTilesNearTarget) > 0:
-            enTiles = BotCombatOps.find_large_tiles_near(
-                bot,
-                fromTiles=threatPath.tileList,
-                distance=bot.engine_army_nearby_tiles_range,
-                forPlayer=threatArmy.player,
-                allowGeneral=True,
-                limit=bot.engine_mcts_scrim_armies_per_player_limit,
-                minArmy=3,
-            )
+    #     bestPath: Path | None = None
+    #     bestSimRes: ArmySimResult | None = None
+    #     if not bot.engine_use_mcts:
+    #         for largeTile in largeTilesNearTarget:
+    #             if largeTile in threatPath.tileSet and largeTile.army < threatPath.value:
+    #                 continue
+    #             with bot.perf_timer.begin_move_event(f'BfScr {str(largeTile)}@{str(threatTile)}'):
+    #                 friendlyPath, enemyPath, simResult = BotCombatOps.get_army_scrim_paths(bot, largeTile, enemyArmyTile=threatTile, enemyCannotMoveAway=True)
+    #             if bestSimRes is None or bestSimRes.best_result_state.calculate_value_int() < simResult.best_result_state.calculate_value_int():
+    #                 bestPath = friendlyPath
+    #                 bestSimRes = simResult
+    #     elif len(largeTilesNearTarget) > 0:
+    #         enTiles = BotCombatOps.find_large_tiles_near(
+    #             bot,
+    #             fromTiles=threatPath.tileList,
+    #             distance=bot.engine_army_nearby_tiles_range,
+    #             forPlayer=threatArmy.player,
+    #             allowGeneral=True,
+    #             limit=bot.engine_mcts_scrim_armies_per_player_limit,
+    #             minArmy=3,
+    #         )
 
-            frArmies: typing.List[Army] = []
-            enArmies: typing.List[Army] = []
-            for frTile in largeTilesNearTarget:
-                frArmies.append(bot.get_army_at(frTile))
-                bot.viewInfo.add_targeted_tile(frTile, TargetStyle.GOLD)
+    #         frArmies: typing.List[Army] = []
+    #         enArmies: typing.List[Army] = []
+    #         for frTile in largeTilesNearTarget:
+    #             frArmies.append(bot.get_army_at(frTile))
+    #             bot.viewInfo.add_targeted_tile(frTile, TargetStyle.GOLD)
 
-            for enTile in enTiles:
-                enArmies.append(bot.get_army_at(enTile))
-                bot.viewInfo.add_targeted_tile(enTile, TargetStyle.PURPLE)
+    #         for enTile in enTiles:
+    #             enArmies.append(bot.get_army_at(enTile))
+    #             bot.viewInfo.add_targeted_tile(enTile, TargetStyle.PURPLE)
 
-            with bot.perf_timer.begin_move_event(f'Scr {"+".join([str(largeTile) for largeTile in largeTilesNearTarget])}@{"+".join([str(enTile) for enTile in enTiles])}'):
-                simResult = BotCombatOps.get_armies_scrim_result(
-                    bot,
-                    frArmies,
-                    enArmies,
-                    enemyCannotMoveAway=forceEnemyTowardsGeneral,
-                    # enemyHasKillThreat=True,
-                    time_limit=0.07)
+    #         with bot.perf_timer.begin_move_event(f'Scr {"+".join([str(largeTile) for largeTile in largeTilesNearTarget])}@{"+".join([str(enTile) for enTile in enTiles])}'):
+    #             simResult = BotCombatOps.get_armies_scrim_result(
+    #                 bot,
+    #                 frArmies,
+    #                 enArmies,
+    #                 enemyCannotMoveAway=forceEnemyTowardsGeneral,
+    #                 # enemyHasKillThreat=True,
+    #                 time_limit=0.07)
 
-                friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, simResult)
+    #             friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, simResult)
 
-            if bestSimRes is None:
-                bestPath = friendlyPath
-                bestSimRes = simResult
+    #         if bestSimRes is None:
+    #             bestPath = friendlyPath
+    #             bestSimRes = simResult
 
-        if len(largeTilesNearTarget) == 0:
-            logbook.info(f'No large tiles in range of {str(threatTile)} :/')
+    #     if len(largeTilesNearTarget) == 0:
+    #         logbook.info(f'No large tiles in range of {str(threatTile)} :/')
 
-        return bestPath, bestSimRes
+    #     return bestPath, bestSimRes
 
     @staticmethod
     def find_large_tiles_near(
@@ -1432,59 +1434,59 @@ class BotCombatOps:
         value = armyNear.value
         return value
 
-    @staticmethod
-    def find_end_of_turn_sim_result(bot: EklipZBot, threat, kingKillPath: Path | None, time_limit: float | None = None) -> ArmySimResult | None:
-        frArmies = BotCombatOps.get_largest_tiles_as_armies(bot, player=bot.general.player, limit=bot.behavior_end_of_turn_scrim_army_count)
-        enArmies = BotCombatOps.get_largest_tiles_as_armies(bot, player=bot.targetPlayer, limit=bot.behavior_end_of_turn_scrim_army_count)
+    # @staticmethod
+    # def find_end_of_turn_sim_result(bot: EklipZBot, threat, kingKillPath: Path | None, time_limit: float | None = None) -> ArmySimResult | None:
+    #     frArmies = BotCombatOps.get_largest_tiles_as_armies(bot, player=bot.general.player, limit=bot.behavior_end_of_turn_scrim_army_count)
+    #     enArmies = BotCombatOps.get_largest_tiles_as_armies(bot, player=bot.targetPlayer, limit=bot.behavior_end_of_turn_scrim_army_count)
 
-        if len(enArmies) == 0:
-            bot.targetPlayerExpectedGeneralLocation.player = bot.targetPlayer
-            enArmies = [bot.get_army_at(bot.targetPlayerExpectedGeneralLocation, no_expected_path=True)]
+    #     if len(enArmies) == 0:
+    #         bot.targetPlayerExpectedGeneralLocation.player = bot.targetPlayer
+    #         enArmies = [bot.get_army_at(bot.targetPlayerExpectedGeneralLocation, no_expected_path=True)]
 
-        enemyHasKillThreat = threat is not None and threat.threatType == ThreatType.Kill
-        friendlyHasKillThreat = kingKillPath is not None
+    #     enemyHasKillThreat = threat is not None and threat.threatType == ThreatType.Kill
+    #     friendlyHasKillThreat = kingKillPath is not None
 
-        if time_limit is None:
-            time_limit = BotTimings.get_remaining_move_time(bot, )
+    #     if time_limit is None:
+    #         time_limit = BotTimings.get_remaining_move_time(bot, )
 
-        if time_limit < 0.06:
-            logbook.info(f'not enough time left ({time_limit:.3f}) for end of turn scrim. Returning none.')
-            return None
+    #     if time_limit < 0.06:
+    #         logbook.info(f'not enough time left ({time_limit:.3f}) for end of turn scrim. Returning none.')
+    #         return None
 
-        old_allow_random_no_ops = bot.mcts_engine.allow_random_no_ops
-        old_friendly_move_no_op_scale_10_fraction = bot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction
-        old_enemy_move_no_op_scale_10_fraction = bot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction
+    #     old_allow_random_no_ops = bot.mcts_engine.allow_random_no_ops
+    #     old_friendly_move_no_op_scale_10_fraction = bot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction
+    #     old_enemy_move_no_op_scale_10_fraction = bot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction
 
-        bot.mcts_engine.allow_random_no_ops = False
-        bot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 0
-        bot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = 0
+    #     bot.mcts_engine.allow_random_no_ops = False
+    #     bot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = 0
+    #     bot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = 0
 
-        simResult = BotCombatOps.get_armies_scrim_result(
-            bot,
-            frArmies,
-            enArmies,
-            enemyHasKillThreat=enemyHasKillThreat,
-            friendlyHasKillThreat=friendlyHasKillThreat,
-            time_limit=time_limit - 0.01)
+    #     simResult = BotCombatOps.get_armies_scrim_result(
+    #         bot,
+    #         frArmies,
+    #         enArmies,
+    #         enemyHasKillThreat=enemyHasKillThreat,
+    #         friendlyHasKillThreat=friendlyHasKillThreat,
+    #         time_limit=time_limit - 0.01)
 
-        bot.mcts_engine.allow_random_no_ops = old_allow_random_no_ops
-        bot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = old_friendly_move_no_op_scale_10_fraction
-        bot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = old_enemy_move_no_op_scale_10_fraction
+    #     bot.mcts_engine.allow_random_no_ops = old_allow_random_no_ops
+    #     bot.mcts_engine.eval_params.friendly_move_no_op_scale_10_fraction = old_friendly_move_no_op_scale_10_fraction
+    #     bot.mcts_engine.eval_params.enemy_move_no_op_scale_10_fraction = old_enemy_move_no_op_scale_10_fraction
 
-        bot.info(f'finScr {str(simResult)} {str(simResult.expected_best_moves)}')
+    #     bot.info(f'finScr {str(simResult)} {str(simResult.expected_best_moves)}')
 
-        return simResult
+    #     return simResult
 
-    @staticmethod
-    def find_end_of_turn_scrim_move(bot: EklipZBot, threat, kingKillPath: Path | None, time_limit: float | None = None):
-        simResult = BotCombatOps.find_end_of_turn_sim_result(bot, threat, kingKillPath, time_limit)
+    # @staticmethod
+    # def find_end_of_turn_scrim_move(bot: EklipZBot, threat, kingKillPath: Path | None, time_limit: float | None = None):
+    #     simResult = BotCombatOps.find_end_of_turn_sim_result(bot, threat, kingKillPath, time_limit)
 
-        if simResult is not None:
-            friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, simResult)
-            if friendlyPath is not None:
-                return BotPathingUtils.get_first_path_move(bot, friendlyPath)
+    #     if simResult is not None:
+    #         friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, simResult)
+    #         if friendlyPath is not None:
+    #             return BotPathingUtils.get_first_path_move(bot, friendlyPath)
 
-        return None
+    #     return None
 
     @staticmethod
     def get_largest_tiles_as_armies(bot: EklipZBot, player: int, limit: int) -> typing.List[Army]:
@@ -1878,101 +1880,101 @@ class BotCombatOps:
 
         return False
 
-    @staticmethod
-    def check_for_army_movement_scrims(bot: EklipZBot, econCutoff=2.0) -> Move | None:
-        curScrim = 0
-        cutoff = 3
+    # @staticmethod
+    # def check_for_army_movement_scrims(bot: EklipZBot, econCutoff=2.0) -> Move | None:
+    #     curScrim = 0
+    #     cutoff = 3
 
-        bestScrimPath: Path | None = None
-        bestScrim: ArmySimResult | None = None
+    #     bestScrimPath: Path | None = None
+    #     bestScrim: ArmySimResult | None = None
 
-        cutoffDist = bot.board_analysis.inter_general_distance // 2
+    #     cutoffDist = bot.board_analysis.inter_general_distance // 2
 
-        for tile in sorted(bot.armies_moved_this_turn, key=lambda t: t.army, reverse=True):
-            if tile.player == bot.targetPlayer:
-                if tile.army <= 4:
-                    continue
+    #     for tile in sorted(bot.armies_moved_this_turn, key=lambda t: t.army, reverse=True):
+    #         if tile.player == bot.targetPlayer:
+    #             if tile.army <= 4:
+    #                 continue
 
-                if bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, tile) > cutoffDist:
-                    continue
+    #             if bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, tile) > cutoffDist:
+    #                 continue
 
-                if (
-                        bot.next_scrimming_army_tile is not None
-                        and bot.next_scrimming_army_tile.army > 2
-                        and bot.next_scrimming_army_tile.player == bot.general.player
-                        and bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, bot.next_scrimming_army_tile) <= cutoffDist
-                ):
-                    with bot.perf_timer.begin_move_event(
-                            f'Scrim prev {str(bot.next_scrimming_army_tile)} @ {str(tile)}'):
-                        friendlyPath, enemyPath, simResult = BotCombatOps.get_army_scrim_paths(
-                            bot,
-                            bot.next_scrimming_army_tile,
-                            enemyArmyTile=tile,
-                            enemyCannotMoveAway=True)
-                    if simResult is not None \
-                            and (bestScrimPath is None or bestScrim.best_result_state.calculate_value_int() < simResult.best_result_state.calculate_value_int()):
-                        bot.info(f'new best scrim @ {str(tile)} {simResult.net_economy_differential:+0.1f} ({str(simResult)}) {str(friendlyPath)}')
-                        bestScrimPath = friendlyPath
-                        bestScrim = simResult
-                else:
-                    bot.next_scrimming_army_tile = None
+    #             if (
+    #                     bot.next_scrimming_army_tile is not None
+    #                     and bot.next_scrimming_army_tile.army > 2
+    #                     and bot.next_scrimming_army_tile.player == bot.general.player
+    #                     and bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, bot.next_scrimming_army_tile) <= cutoffDist
+    #             ):
+    #                 with bot.perf_timer.begin_move_event(
+    #                         f'Scrim prev {str(bot.next_scrimming_army_tile)} @ {str(tile)}'):
+    #                     friendlyPath, enemyPath, simResult = BotCombatOps.get_army_scrim_paths(
+    #                         bot,
+    #                         bot.next_scrimming_army_tile,
+    #                         enemyArmyTile=tile,
+    #                         enemyCannotMoveAway=True)
+    #                 if simResult is not None \
+    #                         and (bestScrimPath is None or bestScrim.best_result_state.calculate_value_int() < simResult.best_result_state.calculate_value_int()):
+    #                     bot.info(f'new best scrim @ {str(tile)} {simResult.net_economy_differential:+0.1f} ({str(simResult)}) {str(friendlyPath)}')
+    #                     bestScrimPath = friendlyPath
+    #                     bestScrim = simResult
+    #             else:
+    #                 bot.next_scrimming_army_tile = None
 
-                curScrim += 1
-                army = BotStateQueries.get_army_at(bot, tile)
-                with bot.perf_timer.begin_move_event(f'try scrim @{army.name} {str(tile)}'):
-                    if len(army.expectedPaths) == 0:
-                        targets = bot._map.players[bot.general.player].cities.copy()
-                        targets.append(bot.general)
-                        if bot.teammate_general is not None:
-                            targets.append(bot.teammate_general)
-                            targets.extend(bot._map.players[bot.teammate].cities)
-                        targetPath = BotPathingUtils.get_path_to_targets(
-                            bot,
-                            targets,
-                            0.1,
-                            preferNeutral=False,
-                            fromTile=tile)
-                        if targetPath:
-                            army.include_path(targetPath)
-                        bot.viewInfo.add_info_line(f'predict army {army.name} path {str(army.expectedPaths)}')
+    #             curScrim += 1
+    #             army = BotStateQueries.get_army_at(bot, tile)
+    #             with bot.perf_timer.begin_move_event(f'try scrim @{army.name} {str(tile)}'):
+    #                 if len(army.expectedPaths) == 0:
+    #                     targets = bot._map.players[bot.general.player].cities.copy()
+    #                     targets.append(bot.general)
+    #                     if bot.teammate_general is not None:
+    #                         targets.append(bot.teammate_general)
+    #                         targets.extend(bot._map.players[bot.teammate].cities)
+    #                     targetPath = BotPathingUtils.get_path_to_targets(
+    #                         bot,
+    #                         targets,
+    #                         0.1,
+    #                         preferNeutral=False,
+    #                         fromTile=tile)
+    #                     if targetPath:
+    #                         army.include_path(targetPath)
+    #                     bot.viewInfo.add_info_line(f'predict army {army.name} path {str(army.expectedPaths)}')
 
-                    path, scrimResult = BotCombatOps.try_find_counter_army_scrim_path(bot, army.expectedPaths[0], allowGeneral=True)
-                    if path is not None and scrimResult is not None:
-                        if scrimResult.best_result_state.captured_by_enemy:
-                            bot.viewInfo.add_info_line(f'scrim says cap by enemy in {str(scrimResult.best_result_state)} @{army.name} {str(tile)} lol')
-                        elif (bestScrimPath is None
-                              or bestScrim.best_result_state.calculate_value_int() < scrimResult.best_result_state.calculate_value_int()):
-                            if scrimResult.net_economy_differential < 0:
-                                bot.viewInfo.add_info_line(f'scrim @ {str(tile)} bad result, {str(scrimResult)} including anyway as new best scrim')
-                            else:
-                                bot.info(
-                                    f'new best scrim @ {str(tile)} {scrimResult.net_economy_differential:+.1f} ({str(scrimResult)}) {str(path)}')
-                            bestScrimPath = path
-                            bestScrim = scrimResult
+    #                 path, scrimResult = BotCombatOps.try_find_counter_army_scrim_path(bot, army.expectedPaths[0], allowGeneral=True)
+    #                 if path is not None and scrimResult is not None:
+    #                     if scrimResult.best_result_state.captured_by_enemy:
+    #                         bot.viewInfo.add_info_line(f'scrim says cap by enemy in {str(scrimResult.best_result_state)} @{army.name} {str(tile)} lol')
+    #                     elif (bestScrimPath is None
+    #                           or bestScrim.best_result_state.calculate_value_int() < scrimResult.best_result_state.calculate_value_int()):
+    #                         if scrimResult.net_economy_differential < 0:
+    #                             bot.viewInfo.add_info_line(f'scrim @ {str(tile)} bad result, {str(scrimResult)} including anyway as new best scrim')
+    #                         else:
+    #                             bot.info(
+    #                                 f'new best scrim @ {str(tile)} {scrimResult.net_economy_differential:+.1f} ({str(scrimResult)}) {str(path)}')
+    #                         bestScrimPath = path
+    #                         bestScrim = scrimResult
 
-                if curScrim > cutoff:
-                    break
+    #             if curScrim > cutoff:
+    #                 break
 
-        if bestScrimPath is not None and bestScrim is not None and bestScrim.net_economy_differential > econCutoff:
-            bot.info(f'Scrim cont ({str(bestScrim)}) {str(bestScrimPath)}')
+    #     if bestScrimPath is not None and bestScrim is not None and bestScrim.net_economy_differential > econCutoff:
+    #         bot.info(f'Scrim cont ({str(bestScrim)}) {str(bestScrimPath)}')
 
-            bot.next_scrimming_army_tile = bestScrimPath.start.next.tile
-            return BotPathingUtils.get_first_path_move(bot, bestScrimPath)
+    #         bot.next_scrimming_army_tile = bestScrimPath.start.next.tile
+    #         return BotPathingUtils.get_first_path_move(bot, bestScrimPath)
 
-        return None
+    #     return None
 
-    @staticmethod
-    def get_scrim_cached(bot: EklipZBot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> ArmySimResult | None:
-        key = BotCombatOps.get_scrim_cache_key(bot, friendlyArmies, enemyArmies)
-        cachedSimResult: ArmySimResult | None = bot.cached_scrims.get(key, None)
-        return cachedSimResult
+    # @staticmethod
+    # def get_scrim_cached(bot: EklipZBot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> ArmySimResult | None:
+    #     key = BotCombatOps.get_scrim_cache_key(bot, friendlyArmies, enemyArmies)
+    #     cachedSimResult: ArmySimResult | None = bot.cached_scrims.get(key, None)
+    #     return cachedSimResult
 
-    @staticmethod
-    def get_scrim_cache_key(bot: EklipZBot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> str:
-        sortedArmies = list(sorted(friendlyArmies, key=lambda a: a.tile))
-        sortedArmies.extend(list(sorted(enemyArmies, key=lambda a: a.tile)))
-        key = ''.join([str(a.tile) for a in sortedArmies])
-        return key
+    # @staticmethod
+    # def get_scrim_cache_key(bot: EklipZBot, friendlyArmies: typing.List[Army], enemyArmies: typing.List[Army]) -> str:
+    #     sortedArmies = list(sorted(friendlyArmies, key=lambda a: a.tile))
+    #     sortedArmies.extend(list(sorted(enemyArmies, key=lambda a: a.tile)))
+    #     key = ''.join([str(a.tile) for a in sortedArmies])
+    #     return key
 
     @staticmethod
     def check_for_attack_launch_move(bot: EklipZBot, outLaunchPlanNegatives: typing.Set[Tile]) -> Move | None:
@@ -2058,45 +2060,45 @@ class BotCombatOps:
 
         return None
 
-    @staticmethod
-    def try_find_army_out_of_position_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
-        thresh = bot.targetPlayerObj.standingArmy ** 0.6
-        logbook.info(f'Checking for out of position tiles with army greater than threshold {thresh:.0f}')
-        outOfPositionArmies = []
-        for tile in bot.largePlayerTiles:
-            distFr = bot.board_analysis.intergeneral_analysis.aMap[tile]
-            distEn = bot.board_analysis.intergeneral_analysis.bMap[tile]
+    # @staticmethod
+    # def try_find_army_out_of_position_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
+    #     thresh = bot.targetPlayerObj.standingArmy ** 0.6
+    #     logbook.info(f'Checking for out of position tiles with army greater than threshold {thresh:.0f}')
+    #     outOfPositionArmies = []
+    #     for tile in bot.largePlayerTiles:
+    #         distFr = bot.board_analysis.intergeneral_analysis.aMap[tile]
+    #         distEn = bot.board_analysis.intergeneral_analysis.bMap[tile]
 
-            if tile in bot.board_analysis.extended_play_area_matrix and distEn > distFr:
-                continue
+    #         if tile in bot.board_analysis.extended_play_area_matrix and distEn > distFr:
+    #             continue
 
-            if tile in bot.board_analysis.core_play_area_matrix and distEn * 2 > distFr:
-                continue
+    #         if tile in bot.board_analysis.core_play_area_matrix and distEn * 2 > distFr:
+    #             continue
 
-            if tile.army < thresh:
-                continue
+    #         if tile.army < thresh:
+    #             continue
 
-            if bot.territories.is_tile_in_friendly_territory(tile):
-                continue
+    #         if bot.territories.is_tile_in_friendly_territory(tile):
+    #             continue
 
-            outOfPositionArmies.append(bot.get_army_at(tile))
+    #         outOfPositionArmies.append(bot.get_army_at(tile))
 
-            if len(outOfPositionArmies) > 5:
-                break
+    #         if len(outOfPositionArmies) > 5:
+    #             break
 
-        if len(outOfPositionArmies) == 0:
-            return None
+    #     if len(outOfPositionArmies) == 0:
+    #         return None
 
-        result = BotCombatOps.get_armies_scrim_result(bot, friendlyArmies=outOfPositionArmies, enemyArmies=BotCombatOps.get_largest_tiles_as_armies(bot, bot.targetPlayer, 7), enemyCannotMoveAway=False)
+    #     result = BotCombatOps.get_armies_scrim_result(bot, friendlyArmies=outOfPositionArmies, enemyArmies=BotCombatOps.get_largest_tiles_as_armies(bot, bot.targetPlayer, 7), enemyCannotMoveAway=False)
 
-        if result is not None:
-            friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, result)
-            if friendlyPath is not None:
-                move = BotPathingUtils.get_first_path_move(bot, friendlyPath)
-                bot.info(f'Army out of position scrim {move}')
-                return move
+    #     if result is not None:
+    #         friendlyPath, enemyPath = BotCombatOps.extract_engine_result_paths_and_render_sim_moves(bot, result)
+    #         if friendlyPath is not None:
+    #             move = BotPathingUtils.get_first_path_move(bot, friendlyPath)
+    #             bot.info(f'Army out of position scrim {move}')
+    #             return move
 
-        return None
+    #     return None
 
     @staticmethod
     def try_find_flank_all_in(bot: EklipZBot, hitGeneralAtTurn: int) -> Move | None:

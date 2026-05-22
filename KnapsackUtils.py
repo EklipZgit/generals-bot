@@ -6,6 +6,8 @@ import sys
 import time
 import typing
 
+from KnapsackUtilsPy import solve_multiple_choice_knapsack_purepy
+
 
 # This does not prevent the pyd locking, apparently the pyd is a python module itself and is then locked by the python runtime, I guess.
 # importlib import does not prevent the pyd locking, apparently the pyd is a python module itself and is then locked by the python runtime, I guess.
@@ -15,6 +17,7 @@ _MODULE_DIR = pathlib.Path(__file__).resolve().parent
 _MODULE_ARTIFACT_GLOB = f'{_MODULE_NAME}*.pyd'
 _SOURCE_FILE_PATTERNS = ('setup.py', 'KnapsackUtilsCython.pyx', 'KnapsackUtilsCpp.cpp')
 _PYTHON_ABI_TAG = f'cp{sys.version_info.major}{sys.version_info.minor}'
+_IS_PYPY = sys.implementation.name == 'pypy'
 
 
 def _import_knapsack_utils_cpp():
@@ -68,22 +71,24 @@ def _load_knapsack_utils_cpp():
     return _import_knapsack_utils_cpp()
 
 
-try:
-    KnapsackUtilsCpp = _load_knapsack_utils_cpp()
-except ModuleNotFoundError as original_ex:
+KnapsackUtilsCpp = None
+if not _IS_PYPY:
     try:
-        _build_knapsack_utils_cpp_inplace()
-        importlib.invalidate_caches()
-        KnapsackUtilsCpp = _import_knapsack_utils_cpp()
-    except Exception as build_ex:
-        stale_artifacts = sorted(path.name for path in _MODULE_DIR.glob(_MODULE_ARTIFACT_GLOB))
-        stale_artifacts_msg = ''
-        if stale_artifacts:
-            stale_artifacts_msg = f" Found existing compiled artifacts: {', '.join(stale_artifacts)}."
-        raise ModuleNotFoundError(
-            f"Could not import compiled extension '{_MODULE_NAME}' for Python {sys.version_info.major}.{sys.version_info.minor}. "
-            f"Attempted to build it in-place with `{sys.executable} setup.py build_ext --inplace`, but that did not produce an importable module.{stale_artifacts_msg}"
-        ) from build_ex
+        KnapsackUtilsCpp = _load_knapsack_utils_cpp()
+    except ModuleNotFoundError as original_ex:
+        try:
+            _build_knapsack_utils_cpp_inplace()
+            importlib.invalidate_caches()
+            KnapsackUtilsCpp = _import_knapsack_utils_cpp()
+        except Exception as build_ex:
+            stale_artifacts = sorted(path.name for path in _MODULE_DIR.glob(_MODULE_ARTIFACT_GLOB))
+            stale_artifacts_msg = ''
+            if stale_artifacts:
+                stale_artifacts_msg = f" Found existing compiled artifacts: {', '.join(stale_artifacts)}."
+            raise ModuleNotFoundError(
+                f"Could not import compiled extension '{_MODULE_NAME}' for Python {sys.version_info.major}.{sys.version_info.minor}. "
+                f"Attempted to build it in-place with `{sys.executable} setup.py build_ext --inplace`, but that did not produce an importable module.{stale_artifacts_msg}"
+            ) from build_ex
 
 
 def solve_multiple_choice_knapsack(
@@ -114,6 +119,8 @@ def solve_multiple_choice_knapsack(
     @param groups: list of the items group id number, in same order as items. MUST start with 0, and cannot skip group numbers.
     @return: returns a tuple of the maximum value that was found to fit in the knapsack, along with the list of optimal items that reached that max value.
     """
+    if _IS_PYPY:
+        return solve_multiple_choice_knapsack_purepy(items, capacity, weights, values, groups, noLog, longRuntimeThreshold)
     return KnapsackUtilsCpp.solve_multiple_choice_knapsack(items, capacity, weights, values, groups, noLog, longRuntimeThreshold)
 
 def solve_knapsack(

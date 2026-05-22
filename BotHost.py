@@ -43,6 +43,7 @@ class BotHostBase(object):
         alignRight: bool = False,
         throw: bool = False,
         noLog: bool = False,
+        useTestViewerPositions: bool = False,
         ctx: DefaultContext | None = None,
         mgr: SyncManager | None = None,
     ):
@@ -74,6 +75,7 @@ class BotHostBase(object):
         self._viewer: ViewerHost | None = None
         self.rethrow: bool = throw
         self.noLog: bool = noLog
+        self.use_test_viewer_positions: bool = useTestViewerPositions
         self.ctx: DefaultContext | None = ctx
         self.mgr: SyncManager | None = mgr
 
@@ -240,7 +242,7 @@ class BotHostBase(object):
 
     def initialize_viewer(self, skip_file_logging: bool = False, onClick: typing.Callable[[Tile, bool], None] | None = None):
         window_title = f'{self._game_type} {self._name.split("_")[-1]}'
-        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, noLog=skip_file_logging, onClick=onClick, ctx=self.ctx, mgr=self.mgr)
+        self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, useTestPositions=self.use_test_viewer_positions, useConfigTestAlignment=self.use_test_viewer_positions, noLog=skip_file_logging, onClick=onClick, ctx=self.ctx, mgr=self.mgr)
 
     def is_viewer_closed_by_user(self) -> bool:
         if self.has_viewer and self._viewer is not None and self._viewer.check_viewer_closed_by_user():

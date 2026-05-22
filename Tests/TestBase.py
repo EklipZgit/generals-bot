@@ -991,7 +991,7 @@ class TestBase(unittest.TestCase):
         # titleString = infoString
         # if titleString is None:
         titleString = self._testMethodName.replace('test_', '')
-        viewer = ViewerHost(titleString, cell_width=45, cell_height=45, alignTop=True, alignLeft=False, noLog=True)
+        viewer = ViewerHost(titleString, cell_width=45, cell_height=45, alignTop=True, alignLeft=False, useTestPositions=True, useConfigTestAlignment=True, noLog=True)
         viewer.noLog = True
         if infoString is not None:
             viewInfo.infoText = infoString
@@ -1035,9 +1035,9 @@ class TestBase(unittest.TestCase):
             reason = f'expected player {player} to own {tile}'
         self.assertEqual(player, tile.player, reason)
 
-    def assertOwnedXY(self, map: MapBase, x: int, y: int, reason: str | None = None):
-        tile = map.GetTile(x, y)
-        player = map.player_index
+    def assertOwnedXY(self, x: int, y: int, reason: str | None = None):
+        tile = self.map.At(x, y)
+        player = self.map.player_index
         if not reason:
             reason = f'expected player {player} to own {tile}'
         self.assertEqual(player, tile.player, reason)
@@ -1196,6 +1196,9 @@ class TestBase(unittest.TestCase):
 
     def assertMinArmyNear(self, playerMap: MapBase, tile: Tile, player: int, minArmyAmount: int, distance: int = 3, reason: str = ''):
         self.assertMinArmyNearTiles(playerMap, [tile], player, minArmyAmount, distance, reason)
+
+    def assertMinArmyNearXY(self, x: int, y: int, minArmyAmount: int, distance: int = 3, reason: str = ''):
+        self.assertMinArmyNearTiles(self.map, [self.map.At(x, y)], self.map.player_index, minArmyAmount, distance, reason)
 
 
     def assertMinArmyNearTiles(self, playerMap: MapBase, tiles: typing.Iterable[Tile], player: int, minArmyAmount: int, distance: int = 3, reason: str = ''):

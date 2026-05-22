@@ -1,10 +1,11 @@
 from Sim.GameSimulator import GameSimulatorHost
 from Strategy.OpponentTracker import OpponentTracker
 from Strategy import TeamAttackData
-from StrategyModels import CycleStatsData
+from StrategyModels import CycleStatsData, UnresolvedEmergenceData
 from TestBase import TestBase
 from BotModules.BotTimings import BotTimings
 from BotModules.BotGatherOps import BotGatherOps
+from BotModules.BotSerialization import BotSerialization
 
 
 class OpponentTrackerTests(TestBase):
@@ -29,6 +30,57 @@ class OpponentTrackerTests(TestBase):
         otherPlayerStats.approximate_army_gathered_this_cycle = 50
         otherPlayerStats.neutral_city_army_spent = 20
         self.assertEqual(-3, opponentTracker.check_gather_move_differential(0, 1))
+
+    def test_should_serialize_largest_unresolved_emergence_data(self):
+        mapFile = 'GameContinuationEntries/should_load_map_data___P0YO4V4u8---0--111.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
+        opponentTracker = OpponentTracker(map)
+        smallerTile = map.GetTile(1, 1)
+        largerTile = map.GetTile(2, 1)
+        historicalTile = map.GetTile(3, 1)
+
+        opponentTracker.notify_unresolved_emerged_army(smallerTile, enemyGeneral.player, 7)
+        opponentTracker.notify_unresolved_emerged_army(largerTile, enemyGeneral.player, 11)
+        for turn in range(50, 650, 50):
+            opponentTracker.largest_unresolved_emergence_history_by_player[enemyGeneral.player][turn] = UnresolvedEmergenceData(turn // 10, smallerTile)
+        opponentTracker.largest_unresolved_emergence_history_by_player[enemyGeneral.player][100] = UnresolvedEmergenceData(13, historicalTile)
+
+        self.assertEqual((11, largerTile), opponentTracker.get_last_attacked_from_location(enemyGeneral.player))
+        self.assertEqual([(11, largerTile), (13, historicalTile), (5, smallerTile), None], opponentTracker.get_last_attacked_from_locations(enemyGeneral.player, 4))
+
+        data = {}
+        for line in opponentTracker.dump_to_string_data().split('\n'):
+            key, value = line.split('=', 1)
+            data[key] = value
+
+        loadedOpponentTracker = OpponentTracker(map)
+        loadedOpponentTracker.load_from_map_data(data)
+
+        currentEmergence = loadedOpponentTracker.current_largest_unresolved_emergence_by_player[enemyGeneral.player]
+        loadedHistory = loadedOpponentTracker.largest_unresolved_emergence_history_by_player[enemyGeneral.player]
+        historicalEmergence = loadedHistory[600]
+        self.assertIsNotNone(currentEmergence)
+        self.assertEqual(11, currentEmergence.amount)
+        self.assertEqual(largerTile, currentEmergence.tile)
+        self.assertEqual(60, historicalEmergence.amount)
+        self.assertEqual(smallerTile, historicalEmergence.tile)
+        self.assertEqual([150, 200, 250, 300, 350, 400, 450, 500, 550, 600], sorted(loadedHistory.keys()))
+        self.assertNotIn(100, loadedHistory)
+
+    def test_should_round_trip_defensive_spanning_tree_tile_sets(self):
+        mapFile = 'GameContinuationEntries/should_load_map_data___P0YO4V4u8---0--111.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
+        bot = type('SerializationTestBot', (), {})()
+        bot._map = map
+
+        defensiveSpanningTree = {map.GetTile(1, 1), map.GetTile(2, 1)}
+        friendlyCitySpanningTree = {map.GetTile(3, 1), map.GetTile(4, 1)}
+
+        serializedDefense = BotSerialization.convert_tile_set_to_string(bot, defensiveSpanningTree)
+        serializedFriendlyCity = BotSerialization.convert_tile_set_to_string(bot, friendlyCitySpanningTree)
+
+        self.assertEqual(defensiveSpanningTree, BotSerialization.convert_string_to_tile_set(bot, serializedDefense))
+        self.assertEqual(friendlyCitySpanningTree, BotSerialization.convert_string_to_tile_set(bot, serializedFriendlyCity))
 
     def test_should_convert_city_capture_into_lost_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

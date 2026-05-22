@@ -5,13 +5,14 @@ import typing
 
 import Path
 from ArmyTracker import Army
-from StrategyModels import CycleStatsData, PlayerMoveCategory
+from StrategyModels import CycleStatsData, PlayerMoveCategory, UnresolvedEmergenceData
 from ViewInfo import ViewInfo, TargetStyle
 from base.client.map import MapBase, TeamStats, Tile, Player, PLAYER_CHAR_BY_INDEX
 
 ENABLE_DEBUG_ASSERTS = False
 SAFE_PLAYERS_CAP = 20
 """Must always be at least one more than the max game size"""
+UNRESOLVED_EMERGENCE_HISTORY_ROUNDS_TO_SERIALIZE = 10
 
 
 class FogGatherQueue(object):
@@ -320,6 +321,8 @@ class OpponentTracker(object):
         self._gather_queues_new_by_player: typing.List[FogGatherQueue] = [FogGatherQueue(p.index) for p in self.map.players]
 
         self._emergences: typing.List[typing.Tuple[Tile, int, int]] = []
+        self.current_largest_unresolved_emergence_by_player: typing.List[UnresolvedEmergenceData | None] = [None for p in self.map.players]
+        self.largest_unresolved_emergence_history_by_player: typing.List[typing.Dict[int, UnresolvedEmergenceData]] = [{} for p in self.map.players]
         self._revealed: typing.Set[Tile] = set()
         self._moves_into_fog: typing.List[Army] = []
         self._vision_losses: typing.Set[Tile] = set()
@@ -517,6 +520,39 @@ class OpponentTracker(object):
         logbook.info(f'OppTrack NEM: queued {repr(em)}')
         self._emergences.append(em)
 
+    def notify_unresolved_emerged_army(self, tile: Tile, emergingPlayer: int, emergenceAmount: int):
+        existing = self.current_largest_unresolved_emergence_by_player[emergingPlayer]
+        if existing is not None and existing.amount >= emergenceAmount:
+            return
+
+        self.current_largest_unresolved_emergence_by_player[emergingPlayer] = UnresolvedEmergenceData(emergenceAmount, tile)
+
+    def get_last_attacked_from_locations(self, forPlayer: int, lastNRounds=1) -> typing.List[typing.Tuple[int, Tile] | None]:
+        ret: typing.List[typing.Tuple[int, Tile] | None] = []
+        currentEmergence = self.current_largest_unresolved_emergence_by_player[forPlayer]
+        if currentEmergence is None:
+            ret.append(None)
+        else:
+            ret.append((currentEmergence.amount, currentEmergence.tile))
+
+        history = self.largest_unresolved_emergence_history_by_player[forPlayer]
+        for cyclesToGoBack in range(lastNRounds - 1):
+            cycleTurn = self.get_last_cycle_end_turn_raw(cyclesToGoBack)
+            if cycleTurn is None:
+                ret.append(None)
+                continue
+
+            historicalEmergence = history.get(cycleTurn, None)
+            if historicalEmergence is None:
+                ret.append(None)
+            else:
+                ret.append((historicalEmergence.amount, historicalEmergence.tile))
+
+        return ret
+
+    def get_last_attacked_from_location(self, forPlayer: int) -> typing.Tuple[int, Tile] | None:
+        return self.get_last_attacked_from_locations(forPlayer, 1)[0]
+
     def notify_player_tile_revealed(self, tile: Tile):
         """
         Call this when a tile that was not previously owned by a team is revealed from fog as owned by that team.
@@ -561,6 +597,21 @@ class OpponentTracker(object):
                 continue
             playerFogSubtext = "|".join([f'{n}x{tileSize}' for tileSize, n in sorted(tileCounts.items(), reverse=True)])
             data.append(f'ot_{PLAYER_CHAR_BY_INDEX[player]}_tcs={playerFogSubtext}')
+
+        for player in self.map.players:
+            if player.index == self.map.player_index or player.index in self.map.teammates:
+                continue
+
+            currentEmergence = self.current_largest_unresolved_emergence_by_player[player.index]
+            if currentEmergence is not None:
+                data.append(f'ot_{PLAYER_CHAR_BY_INDEX[player.index]}_current_largest_unresolved_emergence={currentEmergence.serialize()}')
+
+            historicalEmergences = []
+            sortedHistoricalEmergences = sorted(self.largest_unresolved_emergence_history_by_player[player.index].items(), reverse=True)
+            for turn, emergenceData in sortedHistoricalEmergences[:UNRESOLVED_EMERGENCE_HISTORY_ROUNDS_TO_SERIALIZE]:
+                historicalEmergences.append(f'{turn}:{emergenceData.serialize()}')
+            if len(historicalEmergences) > 0:
+                data.append(f'ot_{PLAYER_CHAR_BY_INDEX[player.index]}_largest_unresolved_emergence_history={"|".join(historicalEmergences)}')
 
         for i in range(3):
             cycleTurn = self.get_last_cycle_end_turn(cyclesToGoBack=i)
@@ -689,6 +740,21 @@ class OpponentTracker(object):
             if player.index == self.map.player_index or player.index in self.map.teammates:
                 continue
 
+            playerChar = PLAYER_CHAR_BY_INDEX[player.index]
+            currentEmergenceKey = f'ot_{playerChar}_current_largest_unresolved_emergence'
+            if currentEmergenceKey in data:
+                self.current_largest_unresolved_emergence_by_player[player.index] = UnresolvedEmergenceData.parse(self.map, data[currentEmergenceKey])
+
+            emergenceHistoryKey = f'ot_{playerChar}_largest_unresolved_emergence_history'
+            if emergenceHistoryKey in data:
+                self.largest_unresolved_emergence_history_by_player[player.index] = {}
+                for historicalEmergenceRaw in data[emergenceHistoryKey].split('|'):
+                    if historicalEmergenceRaw == '':
+                        continue
+
+                    turnRaw, emergenceRaw = historicalEmergenceRaw.split(':', 1)
+                    self.largest_unresolved_emergence_history_by_player[player.index][int(turnRaw)] = UnresolvedEmergenceData.parse(self.map, emergenceRaw)
+
             if f'ot_{PLAYER_CHAR_BY_INDEX[player.index]}_tcs' in data:
                 fq = FogGatherQueue(player.index)
                 self._gather_queues_new_by_player[player.index] = fq
@@ -726,6 +792,15 @@ class OpponentTracker(object):
         if isCycleEnd:
             self.team_score_data_history[team][self.map.turn] = curTurnScores
             self.team_cycle_stats_history[team][self.map.turn] = currentCycleStats
+            for player in currentCycleStats.players:
+                emergenceData = self.current_largest_unresolved_emergence_by_player[player]
+                if emergenceData is not None:
+                    self.largest_unresolved_emergence_history_by_player[player][self.map.turn] = emergenceData
+                    self.current_largest_unresolved_emergence_by_player[player] = None
+                history = self.largest_unresolved_emergence_history_by_player[player]
+                if len(history) > UNRESOLVED_EMERGENCE_HISTORY_ROUNDS_TO_SERIALIZE:
+                    for turn in sorted(history.keys(), reverse=True)[UNRESOLVED_EMERGENCE_HISTORY_ROUNDS_TO_SERIALIZE:]:
+                        history.pop(turn)
 
             # reset certain things after recording the final cycle stuff
 

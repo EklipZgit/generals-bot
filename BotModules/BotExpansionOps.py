@@ -58,13 +58,14 @@ class BotExpansionOps:
             skipTiles = set()
         else:
             distMap, skipTiles = BotExpansionOps.get_first_25_expansion_distance_priority_map(bot, )
+        displayDistMap = distMap[0] if isinstance(distMap, list) else distMap
 
         if bot.city_expand_plan is None or len(bot.city_expand_plan.plan_paths) == 0:
             with bot.perf_timer.begin_move_event('optimize_first_25'):
                 calcedThisTurn = True
                 cutoff = time.perf_counter() + timeLimit
                 for tile in bot._map.get_all_tiles():
-                    bot.viewInfo.bottomMidLeftGridText.raw[tile.tile_index] = f'dm{distMap.raw[tile.tile_index]:.2f}'
+                    bot.viewInfo.bottomMidLeftGridText.raw[tile.tile_index] = f'dm{displayDistMap.raw[tile.tile_index]:.2f}'
                 bot.city_expand_plan = EarlyExpandUtils.optimize_first_25(bot._map, source, distMap, skipTiles=skipTiles, cutoff_time=cutoff, cramped=bot._spawn_cramped)
 
                 totalTiles = bot.city_expand_plan.tile_captures + len(bot.player.tiles)
@@ -110,7 +111,7 @@ class BotExpansionOps:
                 visited.update(skipTiles)
 
                 preRecalcCaps = bot.city_expand_plan.tile_captures
-                maxPlan = EarlyExpandUtils.recalculate_max_plan(bot.city_expand_plan, optionalNewExpandPlan, bot._map, distToGenMap, distMap, visited, no_log=False)
+                maxPlan = EarlyExpandUtils.recalculate_max_plan(bot.city_expand_plan, optionalNewExpandPlan, bot._map, distToGenMap, displayDistMap, visited, no_log=False)
                 bot.viewInfo.add_info_line(f'Recalced a new f25, val {optionalNewExpandPlan.tile_captures} (vs post {bot.city_expand_plan.tile_captures} / pre {preRecalcCaps})')
 
                 if maxPlan == optionalNewExpandPlan:
@@ -180,10 +181,10 @@ class BotExpansionOps:
             if collidedWithEnemyAndWastingArmy and move.source.player == bot.general.player:
                 collisionCapsOrPreventsEnemy = move.source.army == move.dest.army and move.source.army > 2 and move.dest.player not in bot._map.teammates
                 if not collisionCapsOrPreventsEnemy:
-                    newPath = BotExpansionOps.attempt_first_25_collision_reroute(bot, curPath, move, distMap)
+                    newPath = BotExpansionOps.attempt_first_25_collision_reroute(bot, curPath, move, displayDistMap)
                     if newPath is None:
                         bMap = bot.board_analysis.intergeneral_analysis.bMap
-                        bot.board_analysis.intergeneral_analysis.bMap = distMap
+                        bot.board_analysis.intergeneral_analysis.bMap = displayDistMap
                         expansionNegatives = set()
                         if bot.teammate_general is not None:
                             expansionNegatives.update(bot._map.players[bot.teammate_general.player].tiles)
@@ -578,6 +579,7 @@ class BotExpansionOps:
                             cutoffTime=cutoffTime,
                             additional_options=additionalOptionsToInclude,
                             army_override_matrix=armyOverrideMatrix,
+                            threatBlockingTiles=bot.blocking_tile_info,
                         )
                         cumulative = 0.0
                         cumulativeTurns = 0
@@ -1006,37 +1008,37 @@ class BotExpansionOps:
             dest = leafMove.dest
             source = leafMove.source
             if (
-                    bot.territories.territoryMap[dest] != -1
-                    and not bot._map.is_player_on_team_with(bot.territories.territoryMap[dest], bot.general.player)
-                    and dest.player == -1
-                    and bot._map.turn % 50 < 45
+                    bot.territories.territoryMap.raw[dest.tile_index] != -1
+                    and not bot._map.is_player_on_team_with(bot.territories.territoryMap.raw[dest.tile_index], bot.general.player)
+                    and not bot._map.is_player_on_team_with(bot.territories.territoryMap.raw[dest.tile_index], bot.targetPlayer)
+                    and dest.player != -1
             ):
                 continue
 
             points = 0
 
-            if bot.board_analysis.innerChokes[dest]:
+            if bot.board_analysis.innerChokes.raw[dest.tile_index]:
                 points += 0.1
-            if not bot.board_analysis.outerChokes[dest]:
+            if not bot.board_analysis.outerChokes.raw[dest.tile_index]:
                 points += 0.05
 
             if bot.board_analysis.intergeneral_analysis.is_choke(dest):
                 points += 0.15
 
-            towardsEnemy = distPriorityMap[dest] < distPriorityMap[source]
+            towardsEnemy = distPriorityMap.raw[dest.tile_index] < distPriorityMap.raw[source.tile_index]
             if towardsEnemy:
-                points += 0.4
+                points += 0.2
 
-            awayFromUs = analysis.aMap[dest] > analysis.aMap[source]
+            awayFromUs = analysis.aMap.raw[dest.tile_index] > analysis.aMap.raw[source.tile_index]
             if awayFromUs:
                 points += 0.1
 
             if dest.player == bot.targetPlayer:
                 points += 1.5
 
-            points += expansionMap[dest] * 5
+            points += expansionMap.raw[dest.tile_index] * 5
 
-            distEnemyPoints = (analysis.aMap[dest] + 1) / (distPriorityMap[dest] + 1)
+            distEnemyPoints = (analysis.aMap.raw[dest.tile_index] + 1) / (distPriorityMap.raw[dest.tile_index] + 1)
 
             points += distEnemyPoints / 3
 
@@ -1534,7 +1536,7 @@ class BotExpansionOps:
         bot.army_interceptor.ensure_threat_army_analysis(bot.threat)
 
     @staticmethod
-    def get_first_25_expansion_distance_priority_map(bot) -> typing.Tuple[MapMatrixInterface[int], typing.Set[Tile]]:
+    def get_first_25_expansion_distance_priority_map(bot) -> typing.Tuple[MapMatrixInterface[int] | typing.List[MapMatrixInterface[int]], typing.Set[Tile]]:
         """
         Returns a matrix of big-number=bad expansion priorities, and skip tiles (if teams).
         Safe to be modified.
@@ -1548,6 +1550,12 @@ class BotExpansionOps:
 
         if bot.targetPlayer != -1:
             tgs, enDistMap = BM.BotTargeting.BotTargeting._get_furthest_apart_3_enemy_general_locations(bot, bot.targetPlayer)
+            validGeneralPositions = bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer].raw
+            targetCounts: typing.Dict[Tile, int] = {}
+            for tg in tgs:
+                tgDistMap = SearchUtils.build_distance_map_matrix(bot._map, [tg])
+                targetCounts[tg] = sum(1 for tile in bot._map.tiles_by_index if validGeneralPositions[tile.tile_index] and tgDistMap.raw[tile.tile_index] <= 7)
+            tgs.sort(key=lambda target: targetCounts[target], reverse=True)
         else:
             tgs = BM.BotTargeting.BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=12)[0:numberStartTargets]
 
@@ -1559,7 +1567,9 @@ class BotExpansionOps:
 
             enDistMap = SearchUtils.build_distance_map_matrix(bot._map, tgs)
 
-        distSource = []
+        distMaps = [SearchUtils.build_distance_map_matrix(bot._map, [tg]) for tg in tgs]
+        if len(distMaps) == 0:
+            distMaps = [enDistMap]
         skipTiles = set()
 
         if bot._map.is_2v2 and bot.teammate_general is not None:
@@ -1575,21 +1585,20 @@ class BotExpansionOps:
             if bot._map.turn > 12 or not bot.teammate_communicator.is_team_lead or not bot.teammate_communicator.is_teammate_coordinated_bot:
                 skipTiles = bot._tiles_pinged_by_teammate_first_25.copy()
 
-            distMap = MapMatrix(bot._map, 0)
-
             usDist = bot._map.distance_mapper.get_tile_dist_matrix(bot.general)
 
-            for tile in bot._map.get_all_tiles():
-                distMap[tile] += enDistMap[tile]
-                distMap[tile] -= usDist[tile] // 2
-                distMap[tile] += BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.75)
+            for distMap in distMaps:
+                for tile in bot._map.get_all_tiles():
+                    distMap[tile] -= usDist[tile] // 2
+                    distMap[tile] += BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.75)
 
             teammateDistanceDropoffPoint = 9
             for teammate in bot._map.teammates:
                 teammateDistances = SearchUtils.build_distance_map_matrix(bot._map, [bot._map.generals[teammate]])
-                for otherTile in bot._map.get_all_tiles():
-                    if teammateDistances[otherTile] < usDist[otherTile]:
-                        distMap[otherTile] += 3 * teammateDistanceDropoffPoint - 3 * teammateDistances[otherTile]
+                for distMap in distMaps:
+                    for otherTile in bot._map.get_all_tiles():
+                        if teammateDistances[otherTile] < usDist[otherTile]:
+                            distMap[otherTile] += 3 * teammateDistanceDropoffPoint - 3 * teammateDistances[otherTile]
 
             if len(skipTiles) == 0:
                 if not bot._spawn_cramped:
@@ -1604,21 +1613,25 @@ class BotExpansionOps:
                     skipTiles.update(bot.teammate_general.movable)
 
         elif bot._map.remainingPlayers == 2:
-            distSource.append(bot.general)
-            distMap = SearchUtils.build_distance_map_matrix(bot._map, distSource)
+            usDist = bot._map.distance_mapper.get_tile_dist_matrix(bot.general)
+            aggregateDistMap = SearchUtils.build_distance_map_matrix(bot._map, [bot.general])
             for tile in bot._map.get_all_tiles():
-                distMap[tile] = 0 - distMap[tile]
-                distMap[tile] += enDistMap[tile]
-                distMap[tile] += BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.85)
+                aggregateDistMap[tile] = 0 - aggregateDistMap[tile]
+                aggregateDistMap[tile] += enDistMap[tile]
+                aggregateDistMap[tile] += BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.85)
+            for distMap in distMaps:
+                for tile in bot._map.get_all_tiles():
+                    distMap[tile] -= usDist[tile]
+                    distMap[tile] += BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.85)
+            distMaps.insert(0, aggregateDistMap)
         elif bot._map.remainingPlayers > 2:
-            distSource.append(bot.general)
-            distMap = SearchUtils.build_distance_map_matrix(bot._map, distSource)
-
-            for tile in bot._map.get_all_tiles():
-                distMap[tile] -= BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.15)
+            for distMap in distMaps:
+                for tile in bot._map.get_all_tiles():
+                    distMap[tile] -= BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.15)
         else:
             raise AssertionError("The fuck?")
 
+        distMap = distMaps[0]
         for tile in bot._map.get_all_tiles():
             if isinstance(distMap[tile], float):
                 bot.viewInfo.midLeftGridText[tile] = f'f{distMap[tile]:.1f}'
@@ -1627,7 +1640,7 @@ class BotExpansionOps:
             if tile in skipTiles:
                 bot.viewInfo.add_targeted_tile(tile, TargetStyle.RED, radiusReduction=6)
 
-        return distMap, skipTiles
+        return distMaps, skipTiles
 
     @staticmethod
     def get_expansion_weight_matrix(bot: EklipZBot, copy: bool = False, mult: int = 1) -> MapMatrixInterface[float]:

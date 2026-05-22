@@ -195,6 +195,7 @@ class ArmyFlowExpanderV2:
         self.army_override_matrix: MapMatrixInterface[int] | None = None
         """If set, per-tile army amounts read from this matrix instead of tile.army during lookup table generation."""
         self.negative_tiles: TileSet | None = None
+        self.threat_blocking_tiles: typing.Dict[Tile, typing.Any] | None = None
 
     def get_expansion_options(
             self,
@@ -211,7 +212,8 @@ class ArmyFlowExpanderV2:
             perfTimer: PerformanceTimer | None = None,
             cutoffTime: float | None = None,
             additional_options: typing.List[typing.Any] | None = None,
-            army_override_matrix: MapMatrixInterface[int] | None = None
+            army_override_matrix: MapMatrixInterface[int] | None = None,
+            threatBlockingTiles: typing.Dict[Tile, typing.Any] | None = None
     ) -> FlowExpansionPlanOptionCollection:
         """
         Main entry point - returns expansion options compatible with existing interface.
@@ -227,6 +229,7 @@ class ArmyFlowExpanderV2:
         self.island_builder = islands
         self.bonus_capture_point_matrix = bonusCapturePointMatrix
         self.negative_tiles = negativeTiles
+        self.threat_blocking_tiles = threatBlockingTiles
         if army_override_matrix is not None:
             self.army_override_matrix = army_override_matrix
 
@@ -396,6 +399,9 @@ class ArmyFlowExpanderV2:
                 self.live_render_invalid_flow_config,
             )
         self._ortools_finder.army_override_matrix = self.army_override_matrix
+        if self._ortools_finder.threat_blocking_tiles is not self.threat_blocking_tiles:
+            self._ortools_finder.threat_blocking_tiles = self.threat_blocking_tiles
+            self._ortools_finder.invalidate_cache()
         self._ortools_finder.configure(self.team, self.target_team, self.enemyGeneral)
         return self._ortools_finder
 
@@ -465,6 +471,11 @@ class ArmyFlowExpanderV2:
                         logbook.info(f"Skipping border pair {self._diag_island_anchor(friendly_island)}->{self._diag_island_anchor(target_island)}: no flow support")
                     continue
 
+                if self._is_blocked_by_threat_blocking_tiles(friendly_island, target_island):
+                    if self.log_debug:
+                        logbook.info(f"Skipping border pair {self._diag_island_anchor(friendly_island)}->{self._diag_island_anchor(target_island)}: threat blocking tile constraint")
+                    continue
+
                 border_pair = FlowBorderPairKey(
                     friendly_island_id=friendly_island.unique_id,
                     target_island_id=target_island.unique_id
@@ -474,6 +485,24 @@ class ArmyFlowExpanderV2:
                     logbook.info(f"Added border pair: friendly {self._diag_island_summary(friendly_island)} -> target {self._diag_island_summary(target_island)}")
 
         return border_pairs
+
+    def _is_blocked_by_threat_blocking_tiles(
+        self,
+        friendly_island: 'TileIsland',
+        target_island: 'TileIsland',
+    ) -> bool:
+        if not self.threat_blocking_tiles:
+            return False
+
+        for source_tile in friendly_island.tile_set:
+            block_info = self.threat_blocking_tiles.get(source_tile, None)
+            if block_info is None:
+                continue
+            for blocked_destination in block_info.blocked_destinations:
+                if blocked_destination in target_island.tile_set:
+                    return True
+
+        return False
 
     def _is_flow_supported(
         self,
@@ -1825,6 +1854,13 @@ class ArmyFlowExpanderV2:
                         f"turns={total_turns} econ={opt.econValue:.2f} plan={opt}")
                 continue
 
+            if self._is_plan_blocked_by_threat_blocking_tiles(opt):
+                if self.log_debug:
+                    logbook.info(
+                        f"External option skipped threat block violation: type={type(opt).__name__} "
+                        f"turns={total_turns} econ={opt.econValue:.2f} plan={opt}")
+                continue
+
             # Get tile set for conflict detection
             tile_set = frozenset(opt.tileSet)
             external_value = int(1000 * opt.econValue) - total_turns
@@ -1845,6 +1881,27 @@ class ArmyFlowExpanderV2:
             group_id += 1
 
         return external_options
+
+    def _is_plan_blocked_by_threat_blocking_tiles(self, plan: TilePlanInterface) -> bool:
+        if not self.threat_blocking_tiles:
+            return False
+
+        moves = plan.get_move_list()
+        if len(moves) == 0:
+            first_move = plan.get_first_move()
+            if first_move is not None:
+                moves = [first_move]
+
+        for move in moves:
+            if move is None:
+                continue
+            block_info = self.threat_blocking_tiles.get(move.source, None)
+            if block_info is None:
+                continue
+            if move.dest in block_info.blocked_destinations:
+                return True
+
+        return False
 
     @staticmethod
     def _solve_grouped_knapsack_input(

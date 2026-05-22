@@ -3381,3 +3381,23 @@ whoever has less extra troops will always get ahead
         c2 = playerMap.At(16, 1)
 
         self.assertTrue(c1.player == general.player or c2.player == general.player, 'should immediately equalize on cities')
+
+    def test_should_defend_in_advance_against_obvious_attack_incoming(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_defend_in_advance_against_obvious_attack_incoming___6uLJ74GkC---1--372.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 372, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=372)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.defensive_spanning_tree = None
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertMinArmyNear(playerMap, bot.board_analysis.central_defense_point, general.player, 200, 4, 'Fucking, he\'s obviously about to slam through with a 200+ attack')

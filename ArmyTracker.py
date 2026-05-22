@@ -2346,6 +2346,9 @@ class ArmyTracker(object):
 
                 return self.resolve_fog_emergence(player, sourceFogArmyPath, tile)
 
+        if self.opponent_tracker is not None and unaccountedForDelta > self.track_threshold:
+            self.opponent_tracker.notify_unresolved_emerged_army(tile, player, unaccountedForDelta)
+
         return None
 
     def get_emergence_max_depth_to_general_or_none(self, player: int, tile: Tile, unaccountedForDelta: int = -1, useOpponentKnownFogTileArmy: bool = True):

@@ -45,7 +45,7 @@ from Viewer import ViewerProcessHost
 from Viewer.ViewerProcessHost import ViewerHost
 from base import Colors
 from base.client.map import MapBase, Tile, Score, Player, TILE_FOG, TILE_OBSTACLE, MODIFIER_DEFENSELESS
-from base.client.tile import Tile
+from base.client.tile import Tile, TileDelta, TILE_EMPTY, TILE_MOUNTAIN
 from bot_ek0x45 import EklipZBot
 from BotModules.BotTimings import BotTimings
 
@@ -858,8 +858,15 @@ class TestBase(unittest.TestCase):
         """
         map.turn = turn
         for tile in map.get_all_tiles():
-            if tile.isMountain:
+            tile.visible = False
+            tile.discovered = False
+            tile.isTempFogPrediction = False
+            tile.lastSeen = -1
+            tile.lastMovedTurn = -1
+
+            if tile.isMountain or tile.isUndiscoveredObstacle:
                 tile.tile = TILE_OBSTACLE
+                tile.isObstacle = True
 
             if tile.isCity and tile.isNeutral:
                 tile.player = -1
@@ -881,6 +888,15 @@ class TestBase(unittest.TestCase):
                 tile.player = -1
                 tile.tile = TILE_FOG
 
+        for gen in map.generals:
+            if not gen or gen.player != map.player_index:
+                continue
+
+            for tile in gen.adjacents:
+                tile.discovered = True
+                tile.tile = TILE_EMPTY if not tile.isMountain else TILE_MOUNTAIN
+
+        Tile.recalc_all_derived(map.tiles_by_index)
         map.update()
 
     def get_furthest_tile_from_general(self, map: MapBase, general: Tile, manhattan: bool = False) -> Tile:

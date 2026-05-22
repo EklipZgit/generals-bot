@@ -1,2 +1,2 @@
-from .OpponentTrackerModels import CycleStatsData, PlayerMoveCategory
+from .OpponentTrackerModels import CycleStatsData, PlayerMoveCategory, UnresolvedEmergenceData
 from .ExpansionPotential import *

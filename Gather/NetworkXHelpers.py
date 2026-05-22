@@ -4,6 +4,7 @@ import typing
 import logbook
 import networkx as nx
 
+import DebugHelper
 from Gather import GatherDebug
 from Interfaces import MapMatrixInterface
 from ViewInfo import ViewInfo
@@ -421,7 +422,8 @@ def build_networkX_graph_flat_weight_mod_scale(
                     viewInfo.bottomLeftGridText.raw[tileIndex] = f'{scaledVal:.3f}'.lstrip('0')
 
     nextTime = time.perf_counter()
-    logbook.info(f'networkX weight scaled graph itself built in {nextTime - start:.5f}s | toMin {scaleToMin:.2f} toMax {scaleToMax:.2f}  (sourceMin {minW:.2f} sourceMax {maxW:.2f})')
+    if DebugHelper.IS_DEBUGGING:
+        logbook.info(f'networkX weight scaled graph itself built in {nextTime - start:.5f}s | toMin {scaleToMin:.2f} toMax {scaleToMax:.2f}  (sourceMin {minW:.2f} sourceMax {maxW:.2f})')
 
     return g
 

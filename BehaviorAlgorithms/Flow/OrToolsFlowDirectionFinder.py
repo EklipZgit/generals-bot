@@ -114,6 +114,7 @@ class DirectOrToolsGraphBuilder(object):
         use_neutral_flow: bool,
         army_override_matrix: 'MapMatrixInterface[int] | None',
         negativeTiles: 'TileSet | None',
+        threat_blocking_tiles: typing.Dict['Tile', typing.Any] | None,
         perf_timer: 'PerformanceTimer',
     ) -> OrToolsGraphData:
         """
@@ -239,6 +240,14 @@ class DirectOrToolsGraphBuilder(object):
                 role = island_roles[island.unique_id]
 
                 for movable_island in island.border_islands:
+                    if self._is_border_edge_blocked_by_threat_blocking_tiles(island, movable_island, threat_blocking_tiles):
+                        if self.log_debug:
+                            logbook.warning(
+                                f'FLOW_THREAT_BLOCKED_BORDER_EDGE '
+                                f'{island.unique_id}(team={island.team},tiles={self._format_island_tiles(island)}) '
+                                f'-> {movable_island.unique_id}(team={movable_island.team},tiles={self._format_island_tiles(movable_island)})'
+                            )
+                        continue
                     # Edge: output port → neighbour input port (weight=1, capacity=100000)
                     src = -island.unique_id
                     dst = movable_island.unique_id
@@ -450,6 +459,25 @@ class DirectOrToolsGraphBuilder(object):
                 f'friendly_general_island={fr_general_island.unique_id} diag_supplies=[{" | ".join(diag_supplies)}]'
             )
         return result
+
+    def _is_border_edge_blocked_by_threat_blocking_tiles(
+        self,
+        source_island: 'TileIsland',
+        destination_island: 'TileIsland',
+        threat_blocking_tiles: typing.Dict['Tile', typing.Any] | None,
+    ) -> bool:
+        if not threat_blocking_tiles:
+            return False
+
+        for source_tile in source_island.tile_set:
+            block_info = threat_blocking_tiles.get(source_tile, None)
+            if block_info is None:
+                continue
+            for blocked_destination in block_info.blocked_destinations:
+                if blocked_destination in destination_island.tile_set:
+                    return True
+
+        return False
 
     # Delegate classify_islands_for_flow to the ABC mixin
     classify_islands_for_flow = FlowDirectionFinderABC.classify_islands_for_flow
@@ -700,6 +728,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         self.invalid_flow_renderer = invalid_flow_renderer
         self.army_override_matrix: 'MapMatrixInterface[int] | None' = None
         self.negative_tiles: 'TileSet | None' = None
+        self.threat_blocking_tiles: typing.Dict['Tile', typing.Any] | None = None
 
         self._intergeneral_analysis: 'ArmyAnalyzer' = intergeneral_analysis
         self._nx_finder: NetworkXFlowDirectionFinder | None = None
@@ -790,6 +819,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
             use_neutral_flow,
             self.army_override_matrix,
             self.negative_tiles,
+            self.threat_blocking_tiles,
             perf_timer=self.perf_timer,
         )
 

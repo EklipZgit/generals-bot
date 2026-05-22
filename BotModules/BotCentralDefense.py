@@ -69,6 +69,12 @@ class BotCentralDefense:
         averagePointCount = len(defensePoints) + 1
         averageX = (bot.general.x + sum(defensePoint.x for defensePoint in defensePoints)) / averagePointCount
         averageY = (bot.general.y + sum(defensePoint.y for defensePoint in defensePoints)) / averagePointCount
+        emergenceAverage = BotCentralDefense._get_recent_emergence_average(bot)
+        if emergenceAverage is not None:
+            averageX = averageX * 0.6 + emergenceAverage[0] * 0.4
+            averageY = averageY * 0.6 + emergenceAverage[1] * 0.4
+            logbook.info(
+                f'CENTRAL_DEFENSE_POINT weighted recent emergence average emergenceAverage={emergenceAverage} weightedTarget={averageX:.2f},{averageY:.2f}')
         attackPathFogExitTile = BotCentralDefense._get_enemy_attack_path_fog_exit_tile(bot)
         distanceToFogExit = bot._map.distance_mapper.get_tile_dist_matrix(attackPathFogExitTile) if attackPathFogExitTile is not None else None
         lowestScore: tuple[float, int, int] | None = None
@@ -76,7 +82,7 @@ class BotCentralDefense:
         topCentralityTiles: typing.List[typing.Tuple[tuple[float, int, int], Tile]] = []
 
         centralDefenseCandidateTiles = bot.defensive_spanning_tree
-        if len(centralDefenseCandidateTiles) < 8 and bot.shortest_path_to_target_player is not None:
+        if len(centralDefenseCandidateTiles) < 3 and bot.shortest_path_to_target_player is not None:
             centralDefenseCandidateTiles = set(bot.shortest_path_to_target_player.tileList[:max(1, bot.shortest_path_to_target_player.length // 3)])
             logbook.info(
                 f'CENTRAL_DEFENSE_POINT using shortest path candidates because defensive_spanning_tree len {len(bot.defensive_spanning_tree)} < 8 candidates={[str(tile) for tile in centralDefenseCandidateTiles]}')
@@ -136,8 +142,9 @@ class BotCentralDefense:
             nearestEnemyLandDist = enemyLandDistanceMap.raw[city.tile_index] if enemyLandDistanceMap is not None else None
             shouldExclude = (
                     not enemyHasSeen
-                    and nearestEnemyLandDist is not None
-                    and nearestEnemyLandDist >= 3)
+                    and (nearestEnemyLandDist is None
+                        or nearestEnemyLandDist >= 4)
+                    and bot.board_analysis.intergeneral_analysis.bMap.raw[city.tile_index] >= 2 * bot.board_analysis.intergeneral_analysis.aMap.raw[city.tile_index])
             # logbook.info(
             #     f'CENTRAL_DEFENSE_POINT city filter city={str(city)} enemyHasSeen={enemyHasSeen} nearestEnemyLandDist={nearestEnemyLandDist} exclude={shouldExclude}')
             if not shouldExclude:
@@ -146,7 +153,7 @@ class BotCentralDefense:
         return filteredCities
 
     @staticmethod
-    def _get_central_defense_signature(bot: EklipZBot, citiesInPlay: typing.Set[Tile] | None) -> tuple[int | None, tuple[tuple[int, int], ...]]:
+    def _get_central_defense_signature(bot: EklipZBot, citiesInPlay: typing.Set[Tile] | None) -> tuple[int | None, tuple[tuple[int, int], ...], tuple[tuple[int, int, int], ...]]:
         expectedGeneralIndex = bot.targetPlayerExpectedGeneralLocation.tile_index if bot.targetPlayerExpectedGeneralLocation is not None else None
         citySignature = tuple(
             sorted(
@@ -154,7 +161,29 @@ class BotCentralDefense:
                     (city.tile_index, city.player)
                     for city in citiesInPlay
                 ])) if citiesInPlay is not None else tuple()
-        return expectedGeneralIndex, citySignature
+        emergenceSignature = BotCentralDefense._get_recent_emergence_signature(bot)
+        return expectedGeneralIndex, citySignature, emergenceSignature
+
+    @staticmethod
+    def _get_recent_emergence_signature(bot: EklipZBot) -> tuple[tuple[int, int, int], ...]:
+        recentEmergences = bot.opponent_tracker.get_last_attacked_from_locations(bot.targetPlayer, 6)
+        return tuple(
+            [
+                (emergence[0], emergence[1].x, emergence[1].y)
+                for emergence in recentEmergences
+                if emergence is not None
+            ])
+
+    @staticmethod
+    def _get_recent_emergence_average(bot: EklipZBot) -> tuple[float, float] | None:
+        emergenceSignature = BotCentralDefense._get_recent_emergence_signature(bot)
+        if len(emergenceSignature) == 0:
+            return None
+
+        return (
+            sum(x for _, x, _ in emergenceSignature) / len(emergenceSignature),
+            sum(y for _, _, y in emergenceSignature) / len(emergenceSignature),
+        )
 
     @staticmethod
     def _get_enemy_land_distance_map(bot: EklipZBot) -> MapMatrixInterface[int] | None:

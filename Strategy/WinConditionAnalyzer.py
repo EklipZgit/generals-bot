@@ -311,7 +311,7 @@ class WinConditionAnalyzer(object):
         return True
 
     def is_winning_and_defending_economic_lead_wont_lose_economy(self) -> bool:
-        return self.opponent_tracker.winning_on_economy(byRatio=1.07, offset=-15)
+        return self.opponent_tracker.winning_on_economy(byRatio=1.04, offset=-10)
 
     def is_threat_of_loss_to_city_contest(self, perfTimer: PerformanceTimer) -> bool:
         weAreSlightlyAhead = self.opponent_tracker.winning_on_economy(byRatio=1.1, offset=-10)

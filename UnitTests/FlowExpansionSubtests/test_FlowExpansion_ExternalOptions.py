@@ -12,6 +12,7 @@ import typing
 import unittest
 
 from Algorithms import TileIslandBuilder
+from Behavior.ArmyInterceptor import ThreatBlockInfo
 from BehaviorAlgorithms.FlowExpansion import (
     ArmyFlowExpanderV2,
     EnrichedFlowTurnsEntry,
@@ -21,6 +22,7 @@ from BehaviorAlgorithms.FlowExpansion import (
 from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
 from Interfaces.TilePlanInterface import TilePlanInterface
+from Models import Move
 from Tests.TestBase import TestBase
 from base.client.map import MapBase, Tile
 
@@ -41,6 +43,7 @@ class MockTilePlanOption(TilePlanInterface):
         self._required_delay = required_delay
         self._econ_value = econ_value
         self._name = name
+        self._moves: typing.List[Move] = []
 
     @property
     def length(self) -> int:
@@ -70,16 +73,23 @@ class MockTilePlanOption(TilePlanInterface):
         return iter([])
 
     def get_first_move(self):
-        return None
+        if len(self._moves) == 0:
+            return None
+        return self._moves[0]
 
     def pop_first_move(self):
         return None
 
     def clone(self):
-        return MockTilePlanOption(set(self._tiles), self._length, self._required_delay, self._econ_value, self._name)
+        clone = MockTilePlanOption(set(self._tiles), self._length, self._required_delay, self._econ_value, self._name)
+        clone._moves = list(self._moves)
+        return clone
 
     def get_move_list(self):
-        return []
+        return list(self._moves)
+
+    def set_move_list(self, moves: typing.List[Move]):
+        self._moves = moves
 
     def __str__(self) -> str:
         return f"MockOption({self._name}, v={self._econ_value:.2f}, t={self._length})"
@@ -213,6 +223,28 @@ aG1  a3   b1   bG1
 
         self.assertEqual(len(external_options), 1)
         self.assertEqual(external_options[0].econ_value, 5.0)
+
+    def test_convert_additional_options_filters_threat_blocking_tile_destination_violations(self):
+        expander, map, general, enemyGeneral = self._build_expander(self._SIMPLE_MAP)
+        source = map.At(1, 0)
+        blockedDestination = map.At(2, 0)
+        allowedDestination = map.At(0, 0)
+
+        blocked_option = MockTilePlanOption({source, blockedDestination}, length=1, required_delay=0, econ_value=10.0, name="blocked")
+        blocked_option.set_move_list([Move(source, blockedDestination)])
+        allowed_option = MockTilePlanOption({source, allowedDestination}, length=1, required_delay=0, econ_value=9.0, name="allowed")
+        allowed_option.set_move_list([Move(source, allowedDestination)])
+
+        blockInfo = ThreatBlockInfo(source, amount_needed_to_block=source.army)
+        blockInfo.add_blocked_destination(blockedDestination)
+        expander.threat_blocking_tiles = {source: blockInfo}
+
+        external_options = expander._convert_additional_options_to_external(
+            [blocked_option, allowed_option], turns=10
+        )
+
+        self.assertEqual(1, len(external_options))
+        self.assertIs(allowed_option, external_options[0].plan)
 
     def test_external_options_get_unique_group_ids(self):
         """Each external option must receive a unique group ID starting at 1000000."""

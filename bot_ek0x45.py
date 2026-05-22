@@ -101,8 +101,8 @@ class EklipZBot(object):
         self._gen_distances: MapMatrixInterface[int] = None
         self._ally_distances: MapMatrixInterface[int] = None
         self.defend_economy = False
+        self.was_defending_economy = False
         self._spawn_cramped: bool = False
-        self.defending_economy_spent_turns: int = 0
         self.general_safe_func_set = {}
         self.clear_moves_func: typing.Union[None, typing.Callable] = None
         self.surrender_func: typing.Union[None, typing.Callable] = None
@@ -553,6 +553,9 @@ class EklipZBot(object):
         if self.last_init_turn == self._map.turn:
             return
 
+        self.was_defending_economy = self.defend_economy
+        self.defend_economy = False
+
         self._alt_en_gen_position_distances: typing.List[MapMatrixInterface[int] | None] = [None for _ in self._map.players]
 
         self._afk_players = None
@@ -614,9 +617,6 @@ class EklipZBot(object):
         if not secondAttempt:
             self.explored_this_turn = False
 
-        if self.defend_economy:
-            self.defending_economy_spent_turns += 1
-
         self.threat_kill_path = None
 
         self.redGatherTreeNodes = None
@@ -658,8 +658,6 @@ class EklipZBot(object):
 
         # if self._map.turn >= 3 and self.board_analysis.should_rescan:
         # I think reachable tiles isn't built till turn 2? so chokes aren't built properly turn 1
-
-        self.approximate_greedy_turns_avail = BotTimings._get_approximate_greedy_turns_available(self)
 
         if self.board_analysis.central_defense_point and self.board_analysis.intergeneral_analysis:
             centralPoint = self.board_analysis.central_defense_point
@@ -1359,6 +1357,8 @@ class EklipZBot(object):
         # if ahead on economy, but not %30 ahead on army we should play defensively
         self.defend_economy = BotDefense.should_defend_economy(self, defenseCriticalTileSet)
 
+        self.approximate_greedy_turns_avail = BotTimings._get_approximate_greedy_turns_available(self)
+
         if WinCondition.DefendContestedFriendlyCity in self.win_condition_analyzer.viable_win_conditions:
             with self.perf_timer.begin_move_event(f'Getting city preemptive defense {str(self.win_condition_analyzer.defend_cities)}'):
                 cityDefenseMove = BotCityOps.get_city_preemptive_defense_move(self, defenseCriticalTileSet)
@@ -1443,9 +1443,10 @@ class EklipZBot(object):
             # already logged
             return allInMove
 
-        expMove = BotExpansionOps.try_find_main_timing_expansion_move_if_applicable(self, defenseCriticalTileSet)
-        if expMove is not None:
-            return expMove  # already logged
+        if not self.defend_economy:
+            expMove = BotExpansionOps.try_find_main_timing_expansion_move_if_applicable(self, defenseCriticalTileSet)
+            if expMove is not None:
+                return expMove  # already logged
 
         needToKillTiles = list()
         if not self.timings.disallowEnemyGather and not self.is_all_in_losing:

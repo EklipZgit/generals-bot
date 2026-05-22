@@ -433,6 +433,8 @@ class BotRendering:
                 lastMovedTiles[tile] = tile.lastMovedTurn
         data.append(f'TempFogTiles={BotSerialization.convert_tile_set_to_string(bot, tempSet)}')
         data.append(f'DiscoveredNeutral={BotSerialization.convert_tile_set_to_string(bot, neutDiscSet)}')
+        data.append(f'DefensiveSpanningTree={BotSerialization.convert_tile_set_to_string(bot, bot.defensive_spanning_tree)}')
+        data.append(f'FriendlyCitySpanningTree={BotSerialization.convert_tile_set_to_string(bot, bot.friendly_city_spanning_tree)}')
         # Serialize lastMovedTurn as tile_index:turn pairs
         if lastMovedTiles:
             lastMovedStr = ','.join(f'{t.tile_index}:{turn}' for t, turn in lastMovedTiles.items())

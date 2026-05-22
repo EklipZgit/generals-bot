@@ -1,7 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import typing
 from enum import Enum
+
+from base.client.map import MapBase, Tile
+
+
+@dataclass(slots=True)
+class UnresolvedEmergenceData:
+    amount: int
+    tile: Tile
+
+    def serialize(self) -> str:
+        return f'{self.amount}:{self.tile.x},{self.tile.y}'
+
+    @staticmethod
+    def parse(map: MapBase, data: str) -> UnresolvedEmergenceData:
+        amountRaw, tileRaw = data.split(':')
+        xRaw, yRaw = tileRaw.split(',')
+        return UnresolvedEmergenceData(int(amountRaw), map.GetTile(int(xRaw), int(yRaw)))
 
 
 class CycleStatsData:

@@ -691,7 +691,7 @@ def _knapsack_max_set_gather_iterative_prune(
             for path in newPaths:
                 last = path.tileList[0]
                 for tile in path.tileList[1:]:
-                    if tile.isObstacle or not tile.discovered:
+                    if DebugHelper.IS_DEBUGGING and (tile.isObstacle or not tile.discovered):
                         logbook.info(
                             f'_knapsack iter {itr.value}: non-pathable/undiscovered tile added to gather path: '
                             f'{tile} pl={tile.player} army={tile.army} isObst={tile.isObstacle} disc={tile.discovered} idx={tile.tile_index} '
@@ -848,7 +848,7 @@ def _knapsack_max_set_gather_iterative_prune(
                 break
 
             _nonPathInForest = [t for t in rootForestSubset if t.isObstacle or not t.discovered]
-            if _nonPathInForest:
+            if DebugHelper.IS_DEBUGGING and _nonPathInForest:
                 logbook.info(
                     f'_knapsack iter {itr.value}: {len(_nonPathInForest)} non-pathable/undiscovered tile(s) in rootForestSubset before prune_set_to_turns_and_reconnect: '
                     + ' | '.join(f'{t} pl={t.player} army={t.army} isObst={t.isObstacle} disc={t.discovered} idx={t.tile_index}' for t in _nonPathInForest)
@@ -1286,7 +1286,7 @@ def prune_set_to_turns_and_reconnect_with_values(
     # prune_set_naive(rootTiles, toPrune, numToPruneNaive, valueMatrix)
 
     nonPathable = [t for t in toPrune if t.isObstacle or not t.discovered]
-    if nonPathable:
+    if DebugHelper.IS_DEBUGGING and nonPathable:
         logbook.info(
             f'prune_set_to_turns_and_reconnect: {len(nonPathable)} non-pathable/undiscovered tile(s) in toPrune: '
             + ' | '.join(f'{t} pl={t.player} army={t.army} isObst={t.isObstacle} disc={t.discovered} idx={t.tile_index}' for t in nonPathable)

@@ -23,6 +23,20 @@ ALLOW_RANDOM_SKIPS = False
 EMPTY_COMBINATION = (0, 0, 0, 0)
 
 
+def _normalize_tile_minimization_maps(tile_minimization_map: MapMatrixInterface[float] | typing.Sequence[MapMatrixInterface[float]]) -> typing.List[MapMatrixInterface[float]]:
+    if isinstance(tile_minimization_map, MapMatrixInterface):
+        return [tile_minimization_map]
+
+    if len(tile_minimization_map) == 0:
+        raise AssertionError('optimize_first_25 requires at least one tile minimization map')
+
+    return list(tile_minimization_map)
+
+
+def _get_tile_minimization_map_for_segment(tile_minimization_maps: typing.Sequence[MapMatrixInterface[float]], segment_index: int) -> MapMatrixInterface[float]:
+    return tile_minimization_maps[min(segment_index, len(tile_minimization_maps) - 1)]
+
+
 # TODO alt approach
 #  Get all possible paths from general of length 5 (cant be that many, right?)
 #  Figure out which ones combine together to achieve the things we want and lead to tile islands with enough capturable material?
@@ -343,7 +357,7 @@ def recalculate_max_plan(plan1: CityExpansionPlan, plan2: CityExpansionPlan, map
 def optimize_first_25(
         map: MapBase,
         general: Tile,
-        tile_minimization_map: MapMatrixInterface[float],
+        tile_minimization_map: MapMatrixInterface[float] | typing.Sequence[MapMatrixInterface[float]],
         debug_view_info: typing.Union[None, ViewInfo] = None,
         no_recurse: bool = False,
         skipTiles: typing.Set[Tile] | None = None,
@@ -366,6 +380,8 @@ def optimize_first_25(
     """
 
     distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
+    tile_minimization_maps = _normalize_tile_minimization_maps(tile_minimization_map)
+    evaluation_tile_minimization_map = tile_minimization_maps[0]
     if debug_view_info:
         debug_view_info.bottomLeftGridText = distToGenMap
 
@@ -399,7 +415,7 @@ def optimize_first_25(
                 general,
                 general.army,
                 distToGenMap,
-                tile_minimization_map,
+                tile_minimization_maps,
                 turn=map.turn,
                 max_allow_wasted_moves=-20,  # force no wasted moves for this attempt
                 debug_view_info=debug_view_info,
@@ -409,7 +425,7 @@ def optimize_first_25(
                 cutoff_time=0.01,
                 no_log=no_log)
 
-            launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=tile_minimization_map, already_owned=alreadyOwned, no_log=no_log)
+            launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=evaluation_tile_minimization_map, already_owned=alreadyOwned, no_log=no_log)
             logbook.info(f'{genArmy} NO WASTED BASELINE launch ({launchVal}) in {time.perf_counter() - startTime:.4f}s')
             maxVal = launchVal
             maxResultPaths = launchResult
@@ -457,7 +473,7 @@ def optimize_first_25(
 
     if len(alreadyOwned) > 1:
         logbook.info(f'DUE TO NUM VISITED {len(alreadyOwned)}, USING NON-PRE-ARRANGED WASTED COUNTS')
-        return optimize_city_expand(alreadyOwned, cutoff_time, debug_view_info, distToGenMap, genArmyAtStart, general, map, mapTurnAtStart, no_log, prune_cutoff, shuffle_launches, skipTiles, tile_minimization_map)
+        return optimize_city_expand(alreadyOwned, cutoff_time, debug_view_info, distToGenMap, genArmyAtStart, general, map, mapTurnAtStart, no_log, prune_cutoff, shuffle_launches, skipTiles, tile_minimization_maps)
 
     timeLimit = 3.0
     if cutoff_time:
@@ -488,7 +504,7 @@ def optimize_first_25(
             general,
             genArmy,
             distToGenMap,
-            tile_minimization_map,
+            tile_minimization_maps,
             turn=launchTurn,
             try_bi_directional_first_launch=True,  # required to pass test_can_attempt_backwards_initial_paths_for_higher_land_count
             max_allow_wasted_moves=optimalWastedMoves + 3,
@@ -500,7 +516,7 @@ def optimize_first_25(
             no_log=no_log)
         for _ in range(mapTurnAtStart, launchTurn):
             launchResult.insert(0, None)
-        launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=tile_minimization_map, already_owned=alreadyOwned, no_log=no_log)
+        launchVal = __evaluate_plan_value(map, general, genArmyAtStart, map.turn, launchResult, dist_to_gen_map=distToGenMap, tile_weight_map=evaluation_tile_minimization_map, already_owned=alreadyOwned, no_log=no_log)
         logbook.info(f'{genArmy} ({optimalWastedMoves}) launch ({launchVal}) {">>>" if maxVal is None or maxVal < launchVal else "<"} prev launches (prev max {maxVal})')
         if maxVal is None or launchVal > maxVal:
             maxVal = launchVal
@@ -532,7 +548,7 @@ def optimize_first_25(
     return CityExpansionPlan(maxTiles, maxResultPaths, launchTurn, general)
 
 
-def optimize_city_expand(alreadyOwned, cutoff_time, debug_view_info, distToGenMap, genArmyAtStart, general, map, mapTurnAtStart, no_log, prune_cutoff, shuffle_launches, skipTiles, tile_minimization_map):
+def optimize_city_expand(alreadyOwned, cutoff_time, debug_view_info, distToGenMap, genArmyAtStart, general, map, mapTurnAtStart, no_log, prune_cutoff, shuffle_launches, skipTiles, tile_minimization_maps):
     turnInCycle = mapTurnAtStart % 50
     turnsLeft = 50 - turnInCycle
     allowWasted = 3
@@ -555,7 +571,7 @@ def optimize_city_expand(alreadyOwned, cutoff_time, debug_view_info, distToGenMa
         general,
         genArmyAtStart,
         distToGenMap,
-        tile_minimization_map,
+        tile_minimization_maps,
         turn=turnInCycle,  # TODO is this +1 right...?
         visited_set=alreadyOwned,
         prune_below=prune_cutoff,
@@ -577,7 +593,7 @@ def _sub_optimize_first_25_specific_wasted(
         general: Tile,
         gen_army: int,
         dist_to_gen_map: MapMatrixInterface[int],
-        tile_weight_map: MapMatrixInterface[int],
+        tile_weight_maps: typing.Sequence[MapMatrixInterface[int]],
         turn: int,
         force_wasted_moves: int,
         allow_wasted_moves: int,
@@ -590,6 +606,7 @@ def _sub_optimize_first_25_specific_wasted(
         dont_force_first: bool = False,
         debug_view_info: typing.Union[None, ViewInfo] = None,
         try_random_skips: bool = False,
+        segment_index: int = 0,
         no_log: bool = not DEBUG_ASSERTS
     ) -> typing.Tuple[typing.Tuple[int, int, int, int], typing.List[Path | None]]:
         """
@@ -631,6 +648,7 @@ def _sub_optimize_first_25_specific_wasted(
             if additional_one_level_skips:
                 skipToUse = skip_tiles.union(additional_one_level_skips) if skip_tiles else additional_one_level_skips
 
+            tile_weight_map = _get_tile_minimization_map_for_segment(tile_weight_maps, segment_index)
             path1 = _optimize_25_launch_segment(
                 map,
                 general,
@@ -693,7 +711,7 @@ def _sub_optimize_first_25_specific_wasted(
             general,
             curAttemptGenArmy,
             dist_to_gen_map,
-            tile_weight_map,
+            tile_weight_maps,
             curTurn,
             allow_wasted_moves,
             prune_below=prune_below,
@@ -703,9 +721,9 @@ def _sub_optimize_first_25_specific_wasted(
             shuffle_launches=shuffle_launches,
             try_random_skips=try_random_skips,
             debug_view_info=debug_view_info,
+            segment_index=segment_index + 1,
             no_log=no_log)
-        maxValue = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, maxOptimized, dist_to_gen_map=dist_to_gen_map, tile_weight_map=tile_weight_map, already_owned=visited_set, no_log=no_log)
-
+        maxValue = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, maxOptimized, dist_to_gen_map=dist_to_gen_map, tile_weight_map=_get_tile_minimization_map_for_segment(tile_weight_maps, segment_index), already_owned=visited_set, no_log=no_log)
         isSuboptimalLaunchTurn = curTurn & 1 == 1
         # try one turn wait if turns remaining long enough
         if curTurn <= 47:
@@ -723,7 +741,7 @@ def _sub_optimize_first_25_specific_wasted(
                 general,
                 curAttemptGenArmy,
                 dist_to_gen_map,
-                tile_weight_map,
+                tile_weight_maps,
                 curTurn,
                 allow_wasted_moves,
                 cutoff_time=cutoff_time,
@@ -732,8 +750,9 @@ def _sub_optimize_first_25_specific_wasted(
                 skip_tiles=skip_tiles,
                 shuffle_launches=shuffle_launches,
                 debug_view_info=debug_view_info,
+                segment_index=segment_index + 1,
                 no_log=no_log)
-            oneWaitVal = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, withOneWait, dist_to_gen_map=dist_to_gen_map, tile_weight_map=tile_weight_map, already_owned=visited_set, no_log=no_log)
+            oneWaitVal = __evaluate_plan_value(map, general, curAttemptGenArmy, curTurn, withOneWait, dist_to_gen_map=dist_to_gen_map, tile_weight_map=_get_tile_minimization_map_for_segment(tile_weight_maps, segment_index), already_owned=visited_set, no_log=no_log)
             if oneWaitVal >= maxValue:
                 if not no_log:
                     logbook.info(
@@ -760,7 +779,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         general: Tile,
         gen_army: int,
         dist_to_gen_map: MapMatrixInterface[int],
-        tile_weight_map: MapMatrixInterface[int],
+        tile_weight_maps: MapMatrixInterface[int] | typing.Sequence[MapMatrixInterface[int]],
         turn: int,
         max_allow_wasted_moves: int,
         prune_below: int,
@@ -772,6 +791,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
         debug_view_info: typing.Union[None, ViewInfo] = None,
         try_bi_directional_first_launch: bool = False,
         try_random_skips: bool = False,
+        segment_index: int = 0,
         no_log: bool = not DEBUG_ASSERTS,
     ) -> typing.List[Path | None]:
     """
@@ -793,6 +813,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
     if not no_log:
         logbook.info(f'sub-optimizing tile {general} - turn {turn} genArmy {gen_army}')
 
+    tile_weight_maps = _normalize_tile_minimization_maps(tile_weight_maps)
     maxCombinationValue = EMPTY_COMBINATION
     maxCombinationPathList = [None]
     if visited_set is None or len(visited_set) == 0:
@@ -931,7 +952,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
             general=general,
             gen_army=gen_army,
             dist_to_gen_map=dist_to_gen_map,
-            tile_weight_map=tile_weight_map,
+            tile_weight_maps=tile_weight_maps,
             turn=turn,
             force_wasted_moves=force_wasted_moves,
             allow_wasted_moves=allowWastedMoves,
@@ -943,6 +964,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
             try_random_skips=addlLevelsRandSkips,
             debug_view_info=debug_view_info,
             cutoff_time=newCutoff,
+            segment_index=segment_index,
             no_log=no_log
         )
 
@@ -975,7 +997,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                             general=general,
                             gen_army=gen_army,
                             dist_to_gen_map=dist_to_gen_map,
-                            tile_weight_map=tile_weight_map,
+                            tile_weight_maps=tile_weight_maps,
                             turn=turn,
                             force_wasted_moves=force_wasted_moves,
                             allow_wasted_moves=allowWastedMoves,
@@ -988,6 +1010,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                             try_random_skips=addlLevelsRandSkips,
                             debug_view_info=debug_view_info,
                             cutoff_time=newCutoff,
+                            segment_index=segment_index,
                             no_log=no_log
                         )
                         nextStart = time.perf_counter()
@@ -1019,7 +1042,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                         general=general,
                         gen_army=gen_army,
                         dist_to_gen_map=dist_to_gen_map,
-                        tile_weight_map=tile_weight_map,
+                        tile_weight_maps=tile_weight_maps,
                         turn=turn,
                         force_wasted_moves=force_wasted_moves,
                         allow_wasted_moves=allowWastedMoves,
@@ -1032,6 +1055,7 @@ def _sub_optimize_remaining_cycle_expand_from_cities(
                         dont_force_first=dont_force_first,
                         debug_view_info=debug_view_info,
                         cutoff_time=newCutoff,
+                        segment_index=segment_index,
                         no_log=no_log
                     )
                     nextStart = time.perf_counter()
@@ -2073,6 +2097,8 @@ def optimize_first_25__start_end_precalc(
     """
 
     distToGenMap = map.distance_mapper.get_tile_dist_matrix(general)
+    tile_minimization_maps = _normalize_tile_minimization_maps(tile_minimization_map)
+    evaluation_tile_minimization_map = tile_minimization_maps[0]
     if debug_view_info:
         debug_view_info.bottomLeftGridText = distToGenMap
 

@@ -1059,7 +1059,7 @@ def prune_mst_until(
             logEntries.append(
                 f"  Pruned MST to turns {count} with value {totalValue} in duration {time.perf_counter() - start:.4f}")
 
-        if logEnd:
+        if logEnd and DebugHelper.IS_DEBUGGING:
             logbook.info('\r\n' + '\r\n'.join(logEntries))
 
     return count, totalValue, rootNodes

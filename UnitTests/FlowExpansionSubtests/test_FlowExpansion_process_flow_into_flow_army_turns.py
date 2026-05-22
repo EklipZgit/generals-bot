@@ -1,6 +1,7 @@
 import typing
 
 from Algorithms import TileIslandBuilder
+from Behavior.ArmyInterceptor import ThreatBlockInfo
 from BehaviorAlgorithms.FlowExpansion import (
     ArmyFlowExpanderV2,
     FlowArmyTurnsLookupTable,
@@ -151,6 +152,18 @@ class FlowExpansionProcessFlowIntoFlowArmyTurnsTests(TestBase):
             border_pairs, expander.flow_graph, target_crossable, 50
         )
 
+    def _run_enumerate_border_pairs(
+        self,
+        expander: ArmyFlowExpanderV2,
+        builder: TileIslandBuilder,
+    ) -> list[FlowBorderPairKey]:
+        target_crossable = expander._detect_target_crossable_friendly_islands(
+            builder, expander.flow_graph, expander.team, expander.target_team
+        )
+        return expander._enumerate_border_pairs(
+            expander.flow_graph, builder, expander.team, expander.target_team, target_crossable
+        )
+
     # ------------------------------------------------------------------
     # Tests: return structure
     # ------------------------------------------------------------------
@@ -182,6 +195,97 @@ aG1  a3   b1   bG1
         self.assertGreaterEqual(len(lookup_tables), 1, 'Expected at least one lookup table for the single border pair')
         for lt in lookup_tables:
             self.assertIsInstance(lt, FlowArmyTurnsLookupTable)
+
+    def test_process_flow__threat_blocking_tiles_prevent_blocked_destination_border_pair(self):
+        """
+        The solver-backed flow graph would normally connect the friendly source island to the
+        adjacent enemy destination island, but threatBlockingTiles must prevent that border pair
+        from being processed into lookup tables.
+
+        Layout:
+          aG1  a3   b1   bG1
+        """
+        mapData = """
+|    |    |    |
+aG1  a3   b1   bG1
+|    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+        self.begin_capturing_logging()
+
+        expander, builder = self._build_expander_with_flow_graph(map, general, enemyGeneral)
+        unblocked_border_pairs = self._run_enumerate_border_pairs(expander, builder)
+
+        source = map.At(1, 0)
+        blockedDestination = map.At(2, 0)
+        sourceIsland = builder.tile_island_lookup.raw[source.tile_index]
+        blockedDestinationIsland = builder.tile_island_lookup.raw[blockedDestination.tile_index]
+        blockedPair = FlowBorderPairKey(sourceIsland.unique_id, blockedDestinationIsland.unique_id)
+
+        self.assertIn(blockedPair, unblocked_border_pairs)
+
+        blockInfo = ThreatBlockInfo(source, amount_needed_to_block=source.army)
+        blockInfo.add_blocked_destination(blockedDestination)
+        expander.threat_blocking_tiles = {source: blockInfo}
+        expander._ensure_flow_graph_exists(builder, turns=50)
+        graphData = expander._ortools_finder.graph_data_no_neut
+        graphArcPairs = {
+            (graphData.idx_to_node[int(start)], graphData.idx_to_node[int(end)])
+            for start, end in zip(graphData.start_nodes, graphData.end_nodes)
+        }
+
+        blocked_border_pairs = self._run_enumerate_border_pairs(expander, builder)
+        lookup_tables = self._run_process_flow(expander, builder)
+
+        self.assertNotIn((-sourceIsland.unique_id, blockedDestinationIsland.unique_id), graphArcPairs)
+        self.assertNotIn(blockedPair, blocked_border_pairs)
+        self.assertEqual(0, len([lt for lt in lookup_tables if lt.border_pair == blockedPair]))
+
+    def test_process_flow__threat_blocking_tiles_disconnect_required_choke_demand(self):
+        """
+        If a threat block removes the only border edge through a choke, the demand behind that
+        choke cannot be satisfied. The expected behavior is that the blocked graph contains no
+        forbidden choke arc and produces no flow lookup for the disconnected target side.
+
+        Layout:
+          aG1  a6   b1   b1   bG1
+        """
+        mapData = """
+|    |    |    |    |
+aG1  a6   b1   b1   bG1
+|    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+        self.begin_capturing_logging()
+
+        expander, builder = self._build_expander_with_flow_graph(map, general, enemyGeneral)
+        source = map.At(1, 0)
+        chokeTile = map.At(2, 0)
+        sourceIsland = builder.tile_island_lookup.raw[source.tile_index]
+        chokeIsland = builder.tile_island_lookup.raw[chokeTile.tile_index]
+        blockedPair = FlowBorderPairKey(sourceIsland.unique_id, chokeIsland.unique_id)
+
+        unblocked_border_pairs = self._run_enumerate_border_pairs(expander, builder)
+        self.assertIn(blockedPair, unblocked_border_pairs)
+
+        blockInfo = ThreatBlockInfo(source, amount_needed_to_block=source.army)
+        blockInfo.add_blocked_destination(chokeTile)
+        expander.threat_blocking_tiles = {source: blockInfo}
+        expander._ensure_flow_graph_exists(builder, turns=50)
+
+        graphData = expander._ortools_finder.graph_data_no_neut
+        graphArcPairs = {
+            (graphData.idx_to_node[int(start)], graphData.idx_to_node[int(end)])
+            for start, end in zip(graphData.start_nodes, graphData.end_nodes)
+        }
+        blockedFlowDict = expander._ortools_finder.compute_flow_dict(builder, graphData, expander.method)
+        blocked_border_pairs = self._run_enumerate_border_pairs(expander, builder)
+        lookup_tables = self._run_process_flow(expander, builder)
+
+        self.assertNotIn((-sourceIsland.unique_id, chokeIsland.unique_id), graphArcPairs)
+        self.assertEqual({}, blockedFlowDict)
+        self.assertNotIn(blockedPair, blocked_border_pairs)
+        self.assertEqual([], lookup_tables)
 
     def test_process_flow__lookup_table_has_all_required_fields(self):
         """

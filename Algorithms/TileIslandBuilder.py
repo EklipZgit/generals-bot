@@ -421,17 +421,26 @@ class TileIslandBuilder(object):
                 # Fast path: nothing changed per our cached values
                 existingIsland = self.tile_island_lookup.raw[tile.tile_index]
                 if existingIsland is not None:
-                    existingTeam = existingIsland.team if existingIsland.full_island is None else existingIsland.full_island.team
-                    if existingTeam != self.teams[tile.player]:
-                        ownerChanged = True
+                    if tile.isObstacle:
+                        affectedTeams.add(existingIsland.team if existingIsland.full_island is None else existingIsland.full_island.team)
                     else:
-                        continue
+                        existingTeam = existingIsland.team if existingIsland.full_island is None else existingIsland.full_island.team
+                        if existingTeam != self.teams[tile.player]:
+                            ownerChanged = True
+                        else:
+                            continue
                 else:
                     if tile in self.map.pathable_tiles and not tile.isObstacle:
                         changedTiles.append(tile)
                         noIslandChangedTiles.add(tile)
                         affectedTeams.add(self.teams[tile.player])
                     continue
+
+            existingIsland = self.tile_island_lookup.raw[tile.tile_index]
+            if existingIsland is not None and tile.isObstacle:
+                changedTiles.append(tile)
+                impactedLeafIslands.add(existingIsland)
+                continue
 
             existingIsland = self.tile_island_lookup.raw[tile.tile_index]
             if existingIsland is not None:

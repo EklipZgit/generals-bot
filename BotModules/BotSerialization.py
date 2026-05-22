@@ -112,6 +112,10 @@ class BotSerialization:
             tiles = BotSerialization.convert_string_to_tile_set(bot, resume_data[f'DiscoveredNeutral'])
             for tile in tiles:
                 tile.discoveredAsNeutral = True
+        if f'DefensiveSpanningTree' in resume_data:
+            bot.defensive_spanning_tree = BotSerialization.convert_string_to_tile_set(bot, resume_data[f'DefensiveSpanningTree'])
+        if f'FriendlyCitySpanningTree' in resume_data:
+            bot.friendly_city_spanning_tree = BotSerialization.convert_string_to_tile_set(bot, resume_data[f'FriendlyCitySpanningTree'])
 
         if 'is_custom_map' in resume_data:
             bot._map.is_custom_map = bool(resume_data['is_custom_map'])

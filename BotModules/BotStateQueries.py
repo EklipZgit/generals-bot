@@ -52,7 +52,7 @@ class BotStateQueries:
         return bot.board_analysis.intergeneral_analysis
 
     @staticmethod
-    def get_player_army_amount_on_path(bot: EklipZBot, path, player, startIdx=0, endIdx=1000):
+    def get_player_army_amount_on_path(bot: EklipZBot, path, player: int, startIdx=0, endIdx=1000):
         value = 0
         idx = 0
         pathNode = path.start
@@ -61,6 +61,14 @@ class BotStateQueries:
                 value += (pathNode.tile.army - 1)
             pathNode = pathNode.next
             idx += 1
+        return value
+
+    @staticmethod
+    def get_player_army_amount_on_tiles(bot: EklipZBot, tiles: typing.Iterable[Tile], player: int):
+        value = 0
+        for tile in tiles:
+            if bot._map.is_player_on_team_with(tile.player, player):
+                value += (tile.army - 1)
         return value
 
     @staticmethod

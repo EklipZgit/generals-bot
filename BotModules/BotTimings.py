@@ -48,11 +48,14 @@ class BotTimings:
         return bot.opponent_tracker.get_current_cycle_stats_by_player(bot.targetPlayer)
 
     @staticmethod
-    def _get_approximate_greedy_turns_available(bot) -> int:
+    def _get_approximate_greedy_turns_available(bot: EklipZBot) -> int:
         if bot.targetPlayer == -1 or bot.target_player_gather_path is None:
             return 5
 
         if BotTargeting.is_player_spawn_cramped(bot, spawnDist=bot.shortest_path_to_target_player.length):
+            return 0
+
+        if bot.defend_economy:
             return 0
 
         defensiveTiles = list(bot.target_player_gather_path.tileList)

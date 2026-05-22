@@ -3094,3 +3094,34 @@ class DefenseTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(5, 8)
+
+    def test_should_actually_defend_not_make_weird_expansion_move_wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_actually_defend_not_make_weird_expansion_move_wtf___hWxgT34q4---1--239.txtmap'
+
+        for path in [
+            '5,5->5,6->4,6->4,7->2,7->2,9',
+            '5,5->5,6->4,6->4,7->1,7->1,9->2,9',
+        ]:
+            with self.subTest(path=path):
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 239, fill_out_tiles=True)
+                general.army += 2
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=239)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                #proof
+                # simHost.queue_player_moves_str(general.player, '6,6->5,6  5,7->5,6  4,11->2,11->2,10  1,10->2,10->2,9')
+                # simHost.queue_player_moves_str(general.player, '1,10->1,9->2,9  4,11->2,11->2,10->2,9')
+                # simHost.queue_player_moves_str(general.player, '4,11->2,11->2,10')
+                # simHost.queue_player_moves_str(general.player, '4,11->2,11->2,10')
+                # simHost.queue_player_moves_str(general.player, '4,11->2,11->2,10')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
+                self.assertNoFriendliesKilled(map, general)
+

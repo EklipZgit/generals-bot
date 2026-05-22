@@ -1698,7 +1698,7 @@ class BotDefense:
 
         distLimit = 50
         if bot.sketchiest_potential_inbound_flank_path:
-            distLimit = bot.distance_from_general(bot.sketchiest_potential_inbound_flank_path.tail.tile)
+            distLimit = bot.distance_from_general(bot.sketchiest_potential_inbound_flank_path.tail.tile) - 2
         else:
             dists = [bot.distance_from_general(t) for t in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles if not t.visible]
             if len(dists) > 0:
@@ -1726,9 +1726,9 @@ class BotDefense:
                 includes.extend(bot._map.players[bot.teammate].cities)
             includes.extend(bot._map.players[bot.general.player].cities)
 
-        limit = 12
+        limit = 12 if not use_cities_in_play_only else 3
         if len(includes) > limit:
-            includes = sorted(includes, key=lambda c: bot.territories.territoryDistances[bot.targetPlayer].raw[c.tile_index] if not c.isGeneral else 0)[:limit]
+            includes = sorted(includes, key=lambda c: bot.territories.territoryDistances[bot.targetPlayer].raw[c.tile_index])[:limit]
 
         distLimit = max(distLimit, int(max(bot.distance_from_general(t) for t in includes) * 1.5))
 
@@ -1762,7 +1762,7 @@ class BotDefense:
         return len(dangerTiles) == 0
 
     @staticmethod
-    def check_fog_risk(bot):
+    def check_fog_risk(bot: EklipZBot):
         bot.high_fog_risk = False
         if bot.targetPlayer == -1:
             return
@@ -1770,8 +1770,8 @@ class BotDefense:
         cycleTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
         cycleTurnsLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
 
-        pathWorth = BotStateQueries.get_player_army_amount_on_path(bot, bot.target_player_gather_path, bot.general.player)
-        pushRiskTurns = max(1, cycleTurnsLeft - bot.target_player_gather_path.length)
+        defenseWorth = BotStateQueries.get_player_army_amount_on_tiles(bot, bot.defensive_spanning_tree, bot.general.player)
+        pushRiskTurns = max(1, cycleTurnsLeft - len(bot.defensive_spanning_tree))
         bot.fog_risk_amount = 0
 
         oppStats = bot.opponent_tracker.get_current_cycle_stats_by_player(bot.targetPlayer)
@@ -1782,17 +1782,21 @@ class BotDefense:
             bot.fog_risk_amount = fogRisk
 
         numFog = BotPathingUtils.get_undiscovered_count_on_path(bot, bot.target_player_gather_path)
-        if numFog > bot.target_player_gather_path.length // 2:
+        if numFog > len(bot.defensive_spanning_tree) // 2:
             bot.viewInfo.add_info_line(f'bypassing fog risk due to unknown path')
             return
 
         if bot.fog_risk_amount > 0:
-            if cycleTurnsLeft > bot.target_player_gather_path.length + 5 and bot.fog_risk_amount > pathWorth and bot._map.turn > 80:
-                bot.viewInfo.add_info_line(f'high fog risk, fog_risk_amount {bot.fog_risk_amount} in {pushRiskTurns} (gath {enGathAmt}) vs {pathWorth} - {cycleTurnsLeft} vs len {bot.target_player_gather_path.length}')
+            if cycleTurnsLeft > bot.target_player_gather_path.length + 5 and bot.fog_risk_amount > defenseWorth and bot._map.turn > 80:
+                bot.viewInfo.add_info_line(f'high fog risk, fog_risk_amount {bot.fog_risk_amount} in {pushRiskTurns} (gath {enGathAmt}) vs {defenseWorth} - {cycleTurnsLeft} vs len {bot.target_player_gather_path.length}')
                 bot.high_fog_risk = True
+                if bot.win_condition_analyzer.is_winning_and_defending_economic_lead_wont_lose_economy():
+                    bot.viewInfo.add_info_line(
+                        f'ECON_DEF is_winning_and_defending_economic_lead_wont_lose_economy')
+                    bot.defend_economy = True
                 return
 
-            bot.viewInfo.add_info_line(f'NOT fog risk, fog_risk_amount {bot.fog_risk_amount} in {pushRiskTurns} (gath {enGathAmt}) vs {pathWorth} - {cycleTurnsLeft} vs len {bot.target_player_gather_path.length}')
+            bot.viewInfo.add_info_line(f'NOT fog risk, fog_risk_amount {bot.fog_risk_amount} in {pushRiskTurns} (gath {enGathAmt}) vs {defenseWorth} - {cycleTurnsLeft} vs len {bot.target_player_gather_path.length}')
 
     @staticmethod
     def get_general_move_blocking_tiles(bot: EklipZBot, target: Tile, move_half=False):
@@ -1976,9 +1980,6 @@ class BotDefense:
 
         genPlayer = bot._map.players[bot.general.player]
 
-        wasDefending = bot.defend_economy
-
-        bot.defend_economy = False
         if BotDefense.check_should_defend_economy_based_on_large_tiles(bot, ):
             bot.defend_economy = True
             return True
@@ -1986,7 +1987,7 @@ class BotDefense:
         if BotDefense.check_should_defend_economy_based_on_cycle_behavior(bot, defenseCriticalTileSet=defenseTiles):
             bot.viewInfo.add_info_line(f'DEF ECON BASED ON CYCLE BEHAVIOR')
             bot.defend_economy = True
-            if not wasDefending:
+            if not bot.was_defending_economy:
                 # bot.currently_forcing_out_of_play_gathers = True
                 bot.timings = BotTimings.get_timings(bot, )
             return True
@@ -1994,13 +1995,13 @@ class BotDefense:
         if bot.timings.get_turn_in_cycle(bot._map.turn) < bot.timings.launchTiming:
             if (
                     bot.army_out_of_play
-                    and not bot.opponent_tracker.winning_on_army(byRatio=1.6)
+                    and not bot.opponent_tracker.winning_on_army(byRatio=1.5)
                     and bot.opponent_tracker.winning_on_economy(byRatio=1.2, offset=-10, cityValue=25)
                     and genPlayer.tileCount < 120
                     and not bot.flanking
             ):
                 requirementRatio = 0.8
-                if wasDefending:
+                if bot.was_defending_economy:
                     requirementRatio = 0.9
 
                 required = bot.fog_risk_amount * requirementRatio
@@ -2046,7 +2047,7 @@ class BotDefense:
             armyThresh = int(bot.targetPlayerObj.standingArmy ** 0.93)
             hasEnoughArmyNearGeneral = playerArmyNearGeneral > armyThresh
 
-            bot.defend_economy = winningEcon and (not winningArmy or not hasEnoughArmyNearGeneral)
+            bot.defend_economy = winningEcon and (not winningArmy or not hasEnoughArmyNearGeneral) or bot.defend_economy
             if bot.defend_economy:
                 if not hasEnoughArmyNearGeneral and winningArmy:
                     bot.viewInfo.add_info_line("FORCING MAX GATHER TIMINGS BECAUSE NOT ENOUGH ARMY NEAR GEN AND DEFENDING ECONOMY")
@@ -2152,13 +2153,13 @@ class BotDefense:
         turnsRemaining = bot.timings.get_turns_left_in_cycle(bot._map.turn)
         minimallyWinningOnEcon = bot.opponent_tracker.winning_on_economy(byRatio=1.02, offset=0 - bot.shortest_path_to_target_player.length // 2)
         if not minimallyWinningOnEcon and oppArmy - threatPath.length < playerArmy * 1.25 and turnsRemaining < 13:
-            return False
+            return bot.defend_economy
 
         if oppArmy >= (playerArmy + 10) * 1.1 and cycleDifferential < 5 and minimallyWinningOnEcon:
             bot.viewInfo.add_info_line(f'DEFENDING! OT army oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}')
             return True
 
-        return False
+        return bot.defend_economy
 
     @staticmethod
     def get_threat_killer_move(bot: EklipZBot, threat, searchTurns, negativeTiles):

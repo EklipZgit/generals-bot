@@ -3,8 +3,8 @@ from __future__ import annotations
 import typing
 from collections import deque
 
-from numba import int64, jit, float32, boolean, types
-from numba.experimental import jitclass
+# from numba import int64, jit, float32, boolean, types
+# from numba.experimental import jitclass
 
 from Models import Move
 from base.client.tile import Tile
@@ -102,7 +102,7 @@ class ArmySimState(object):
 
         self.city_differential: int = 0
         """
-        negative means they have that many more cities active than us, positive means we have more. 
+        negative means they have that many more cities active than us, positive means we have more.
         This is as of the CURRENT board state; bonuses owned is covered under the *city_control_turns fields.
         If players start even, and enemy city is captured, the value in this will be 2 because that player is -1 city and our player is +1 city.
         """
@@ -137,8 +137,8 @@ class ArmySimState(object):
 
         self.controlled_city_turn_differential: int = 0
         """
-        for cities in the scrim area, this is how many turns were controlled by a different player than the 
-        current owner at sim start. 
+        for cities in the scrim area, this is how many turns were controlled by a different player than the
+        current owner at sim start.
         Positive means we gained city bonus overall, negative means enemy gained city bonus overall.
         """
 
@@ -399,9 +399,9 @@ class ArmySimResult(object):
 
         # self.expected_moves_cache: ArmySimCache = None
         """
-        A cache of the current and alternate move branches (for the enemy, since we know what 
-        move we will make we dont care about our alternates), out to cacheDepth depth, 
-        to be used on future turns to save time recalculating the full board tree from 
+        A cache of the current and alternate move branches (for the enemy, since we know what
+        move we will make we dont care about our alternates), out to cacheDepth depth,
+        to be used on future turns to save time recalculating the full board tree from
         scratch every turn. If the move wasn't in cache, then we didn't think it was remotely valuable.
         IF the opp makes a move outside this dict and our board evaluation goes down, then the analysis
         here was poor and should be logged and tests written to predict the better opponent move next time.
@@ -429,7 +429,7 @@ class ArmySimCache(object):
 
 
 # https://numba.pydata.org/numba-doc/latest/reference/types.html#basic-types
-@jit(int64(int64, int64, int64, int64, boolean, boolean, boolean, boolean, int64, int64), nopython=True)
+# @jit(int64(int64, int64, int64, int64, boolean, boolean, boolean, boolean, int64, int64), nopython=True)
 def calc_value_int(
         tile_differential: int,
         city_differential: int,
@@ -465,7 +465,7 @@ def calc_value_int(
     return econDiff
 
 
-@jit(int64(int64, int64, int64), nopython=True)
+# @jit(int64(int64, int64, int64), nopython=True)
 def calc_econ_value(
         tile_differential: int,
         city_differential: int,

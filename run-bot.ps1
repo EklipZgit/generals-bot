@@ -14,6 +14,212 @@ $Script:HumanPcoreAffinityMasks = @(
 )
 
 
+function Get-RunConfigFilePath {
+    return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\run_config.txt'))
+}
+
+
+function Initialize-RunConfig {
+    if ($null -ne $Script:RunConfig) {
+        return $Script:RunConfig
+    }
+
+    $configFile = Get-RunConfigFilePath
+    if (-not (Test-Path $configFile)) {
+        throw "Unable to find a run_config.txt file one folder above this script folder at $configFile."
+    }
+
+    $config = @{}
+    $cfgContent = Get-Content -Path $configFile
+    foreach ($line in $cfgContent) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        if ($line.TrimStart().StartsWith('#')) {
+            continue
+        }
+
+        $separatorIndex = $line.IndexOf('=')
+        if ($separatorIndex -lt 0) {
+            continue
+        }
+
+        $key = $line.Substring(0, $separatorIndex).Trim()
+        $value = $line.Substring($separatorIndex + 1).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($key)) {
+            $config[$key] = $value
+        }
+    }
+
+    $Script:RunConfig = $config
+    return $Script:RunConfig
+}
+
+
+function Get-RunConfigValue {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+        $Default = $null
+    )
+
+    $config = Initialize-RunConfig
+    if ($config.ContainsKey($Key)) {
+        return $config[$Key]
+    }
+
+    return $Default
+}
+
+
+function Get-RequiredRunConfigValue {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Key
+    )
+
+    $value = Get-RunConfigValue -Key $Key
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $configFile = Get-RunConfigFilePath
+        throw "run_config.txt file at $configFile is required to have a $Key=<path> entry."
+    }
+
+    return $value
+}
+
+
+function Get-RunConfigPathValue {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+        $Default = $null
+    )
+
+    $value = Get-RunConfigValue -Key $Key -Default $Default
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return $value
+    }
+
+    return $value.TrimEnd([char[]]@('/', '\'))
+}
+
+
+function Get-ConfiguredRepoRoot {
+    $defaultRepoRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
+    return Get-RunConfigPathValue -Key 'repo_root' -Default $defaultRepoRoot
+}
+
+
+function Get-ConfiguredLogFolder {
+    return Get-RequiredRunConfigValue -Key 'log_folder'
+}
+
+
+function Get-ConfiguredGroupedFolder {
+    return Get-RequiredRunConfigValue -Key 'grouped_folder'
+}
+
+
+function Get-SoraBotPath {
+    return Get-RequiredRunConfigValue -Key 'sora_bot_path'
+}
+
+
+function Get-BlobBotPath {
+    return Get-RequiredRunConfigValue -Key 'blob_bot_path'
+}
+
+
+function Get-PathBotPath {
+    return Get-RequiredRunConfigValue -Key 'path_bot_path'
+}
+
+
+function Get-HistoricalBotsRoot {
+    return Get-RequiredRunConfigValue -Key 'historical_bots_root'
+}
+
+
+function Get-CurrentGenPythonPath {
+    return Get-RequiredRunConfigValue -Key 'current_gen_python_path'
+}
+
+
+function Get-LegacyPythonPath {
+    return Get-RequiredRunConfigValue -Key 'legacy_python_path'
+}
+
+
+function Get-CheckpointMirrorRoot {
+    return Get-RequiredRunConfigValue -Key 'checkpoint_mirror_root'
+}
+
+
+function Get-CheckpointBackupRoot {
+    return Get-RequiredRunConfigValue -Key 'checkpoint_backup_root'
+}
+
+
+function Get-HistoricalBotPath {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$VersionFolder,
+        [Parameter(Mandatory = $true)]
+        [string]$BotFile
+    )
+
+    return (Join-Path (Join-Path (Get-HistoricalBotsRoot) $VersionFolder) $BotFile)
+}
+
+
+function Start-RunBotWindowsTerminalTab {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$WindowName,
+        [string]$Command,
+        [switch]$LoadGameResultUtils
+    )
+
+    $repoRoot = Get-ConfiguredRepoRoot
+    $runBotPath = Join-Path $repoRoot 'run-bot.ps1'
+    $analysisUtilsPath = Join-Path $repoRoot 'game-result-analysis-utils.ps1'
+    $commandLines = @(
+        "Set-Location '$($repoRoot.Replace("'", "''"))'",
+        ". '$($runBotPath.Replace("'", "''"))'"
+    )
+    if ($LoadGameResultUtils) {
+        $commandLines += ". '$($analysisUtilsPath.Replace("'", "''"))'"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Command)) {
+        $escapedCommand = $Command.Replace("'", "''")
+        $commandLines += "`$command = '$escapedCommand'"
+        $commandLines += 'try {'
+        $commandLines += '    Invoke-Expression $command'
+        $commandLines += '} finally {'
+        $commandLines += '    Write-Host $command'
+        $commandLines += '    Start-Sleep -Seconds 1'
+        $commandLines += '}'
+    }
+
+    $scriptText = '& { ' + ([string]::Join('; ', $commandLines)) + ' }'
+    $encodedScriptText = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($scriptText))
+    $wtArguments = @(
+        '-w',
+        $WindowName,
+        'new-tab',
+        'pwsh',
+        '-NoExit',
+        '-EncodedCommand',
+        $encodedScriptText
+    )
+    & wt @wtArguments
+}
+
+
+$null = Initialize-RunConfig
+
+
 function Resolve-CpuAffinityMask {
     Param(
         $cpuAffinityMask
@@ -66,7 +272,7 @@ function Run-BotOnce {
         [switch]$privateGame,
         $roomID = $null,
         [switch]$noui,
-        $path = "$PSScriptRoot/BotHost.py",
+        $path = $(Join-Path (Get-ConfiguredRepoRoot) 'BotHost.py'),
         $userID = $null,
         [switch]$nolog,
         [switch]$noTextLog,
@@ -94,41 +300,8 @@ function Run-BotOnce {
         return
     }
 
-    $configFile = "$PSScriptRoot/../run_config.txt"
-    if (-not (Test-Path $configFile)) {
-        throw "Unable to find a run_config.txt file one folder above this scripts folder at $configFile. The file should contain multiple lines with:
-log_folder=D:/GeneralsLogs
-grouped_folder=D:/GeneralsLogs/GroupedLogs
-left_pos=0
-right_pos=1920
-top_pos=0
-bottom_pos=1080
-
-where window positions are pixels relative to the top left corner of your primary monitor, and correspond to where the game UI will show up when the bot is run with a UI and some combination of the -right / -bottom flags provided (default is top left if no positional flags passed).
-This allows you to have different bots running on different monitors, etc.
-";
-    }
-
-    $logFolder = ""
-    $groupedFolder = ""
-
-    $cfgContent = Get-Content -Path $configFile
-    foreach ($line in $cfgContent) {
-        if ($line -like 'log_folder=*') {
-            $logFolder = ($line -split '=')[1].TrimEnd('/', '\')
-        }
-
-        if ($line -like 'grouped_folder=*') {
-            $groupedFolder = ($line -split '=')[1].TrimEnd('/', '\')
-        }
-    }
-
-    if ([string]::IsNullOrWhiteSpace($groupedFolder)) {
-        throw "run_config.txt file at $configFile is required to have a grouped_folder=<path> entry."
-    }
-    if ([string]::IsNullOrWhiteSpace($logFolder)) {
-        throw "run_config.txt file at $configFile is required to have a log_folder=<path> entry."
-    }
+    $logFolder = Get-ConfiguredLogFolder
+    $groupedFolder = Get-ConfiguredGroupedFolder
 
     $df = Get-Date -format yyyy-MM-dd_hh-mm-ss
     $arguments = [System.Collections.ArrayList]::new()
@@ -162,9 +335,9 @@ This allows you to have different bots running on different monitors, etc.
     Write-Verbose $argString -Verbose
     $host.ui.RawUI.WindowTitle = "$game - $($name.Replace('[Bot]', '').Trim())"
     $pythonVer = "python"
-    $pythonVer = "python3.14"
+    $pythonVer = Get-CurrentGenPythonPath
     if ($path -notlike '*[/\]generals-bot[\/]*') {
-        $pythonVer = "python"
+        $pythonVer = Get-LegacyPythonPath
     }
 
     Write-Host "Python ver $pythonVer for path $path"
@@ -210,7 +383,7 @@ This allows you to have different bots running on different monitors, etc.
                 `$procArgument
             }
         }
-        `$Process = Start-Process -FilePath "$pythonVer.exe" -ArgumentList ([string]::Join(' ', `$escapedProcArguments)) -PassThru -NoNewWindow @startProcSplat
+        `$Process = Start-Process -FilePath '$pythonVer' -ArgumentList ([string]::Join(' ', `$escapedProcArguments)) -PassThru -NoNewWindow @startProcSplat
         if (`$cpuAffinityMask -ne [IntPtr]::Zero) {
             `$Process.ProcessorAffinity = `$cpuAffinityMask
         }
@@ -330,7 +503,7 @@ function Run-SoraAI {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name "Sora AI" -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
+            run-botonce -game $g -name "Sora AI" -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -374,7 +547,7 @@ function Run-SoraAlt {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -userID $userId -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
+            run-botonce -game $g -name $name -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -387,7 +560,7 @@ function Run-SoraAITeammate {
     )
     while ($true)
     {
-        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path "D:/2019_reformat_Backup/Sora_AI/run_bot.py" -nolog -public:$public -cpuAffinityMask $cpuAffinityMask
+        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path (Get-SoraBotPath) -nolog -public:$public -cpuAffinityMask $cpuAffinityMask
     }
 }
 
@@ -399,74 +572,14 @@ function Start-WindowsTerminalAltBots {
     $windowName = 'AltBots'
 
     # starts a windows terminal that runs the FFA bots and a second instance of Sora AI that joins 1v1s
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Blob -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa'
     # time for the terminal window to open
     start-sleep -seconds 3
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Path -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Path -game 1v1, ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Blob -game 1v1, ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-SoraAI -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-SoraAI -game 1v1,ffa,1v1'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game 1v1, ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game 1v1, ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game 1v1,ffa,1v1'
 }
 
 
@@ -481,17 +594,7 @@ function Start-WindowsTerminalHistoricalBots {
     <#
     original timings and bugs from 2019, with connection code fixed
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, 1v1, 1v1 -name "EklipZ_ai_14" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-24/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, 1v1, 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -504,17 +607,7 @@ function Start-WindowsTerminalHistoricalBots {
     de-prioritize fog undiscovered upon discovering nearby neutrals.
         Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, 1v1, ffa -name "EklipZ_ai_13" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-29/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, 1v1, ffa -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')"
     <#
     Hopefully defense off-by-one threat detection fixed
     Additional panic gather defense added, defense now negatives all tiles in shortest path on attack path
@@ -523,63 +616,23 @@ function Start-WindowsTerminalHistoricalBots {
     gather to enemy tiles inside territory more aggressively
     play turns 25-50 more aggressively (too aggressively?)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_12" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-31/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')"
     <#
     improved 'vision tile' kill gathers to only gather for the quickexpand turns, and are included in the main gather phase with a 2
         tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_11" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-04/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')"
     <#
     semi-optimal first 25, unit tests
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, ffa -name "EklipZ_ai_10" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-07/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')"
     <#
     tweaked gathers taking neutral / enemy tiles to include extra gather moves.
     tweaked initial expansion.
     tweaked optimal_expansion to include move-half when appropriate and draw the boundaries for when move-half is limited to closer-only moves and when it is limited to flankpath-or-closer-only moves.
     reduced neutral city aggressiveness right before launch timings.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, 1v1, ffa -name "EklipZ_ai_09" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-08/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')"
 
     <#
     more optimal first 25
@@ -595,17 +648,7 @@ function Start-WindowsTerminalHistoricalBots {
     Bugfixed tile delta issues
     iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, ffa, 1v1, ffa -name "EklipZ_ai_08" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-26/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')"
     <#
     loads of fog / engine bugfixes but still not MCTS working.
     Tweaked attack timings.
@@ -613,17 +656,7 @@ function Start-WindowsTerminalHistoricalBots {
     Brute force army engine time cutoff.
     Dropped file logging.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_07" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-09-15/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')"
     <#
     MCTS based army engine.
     2v2
@@ -633,17 +666,7 @@ function Start-WindowsTerminalHistoricalBots {
     defense gather forward instead of back
     found-no-move mcts (need to tune back for historical bots I think)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name "EklipZ_ai_06" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-10-23/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')"
 }
 
 
@@ -658,17 +681,7 @@ function Start-WindowsTerminalBigFfaBots {
     <#
     original timings and bugs from 2019, with connection code fixed
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_14" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-24/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -681,17 +694,7 @@ function Start-WindowsTerminalBigFfaBots {
     de-prioritize fog undiscovered upon discovering nearby neutrals.
         Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_13" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-29/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')"
     <#
     Hopefully defense off-by-one threat detection fixed
     Additional panic gather defense added, defense now negatives all tiles in shortest path on attack path
@@ -700,63 +703,23 @@ function Start-WindowsTerminalBigFfaBots {
     gather to enemy tiles inside territory more aggressively
     play turns 25-50 more aggressively (too aggressively?)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_12" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-31/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')"
     <#
     improved 'vision tile' kill gathers to only gather for the quickexpand turns, and are included in the main gather phase with a 2
         tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_11" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-04/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')"
     <#
     semi-optimal first 25, unit tests
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_10" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-07/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')"
     <#
     tweaked gathers taking neutral / enemy tiles to include extra gather moves.
     tweaked initial expansion.
     tweaked optimal_expansion to include move-half when appropriate and draw the boundaries for when move-half is limited to closer-only moves and when it is limited to flankpath-or-closer-only moves.
     reduced neutral city aggressiveness right before launch timings.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_09" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-08/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')"
 
     <#
     more optimal first 25
@@ -772,17 +735,7 @@ function Start-WindowsTerminalBigFfaBots {
     Bugfixed tile delta issues
     iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_08" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-26/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')"
     <#
     loads of fog / engine bugfixes but still not MCTS working.
     Tweaked attack timings.
@@ -790,17 +743,7 @@ function Start-WindowsTerminalBigFfaBots {
     Brute force army engine time cutoff.
     Dropped file logging.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_07" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-09-15/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')"
     <#
     MCTS based army engine.
     2v2
@@ -810,194 +753,48 @@ function Start-WindowsTerminalBigFfaBots {
     defense gather forward instead of back
     found-no-move mcts (need to tune back for historical bots I think)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_06" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-10-23/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')"
 
     <#
     ffa only 2
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
 
     <#
     ffa only 3
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
 
     <#
     ffa only 4
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
 
     <#
     ffa only 2
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
 
     <#
     ffa only 3
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
 
     <#
     ffa only 4
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
 
     <#
     ffa only
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai" -right -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Blob -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Blob -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Path -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Path -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-SoraAI -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-SoraAI -game ffa'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai" -right -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa'
 }
 
 
@@ -1013,17 +810,7 @@ function Start-WindowsTerminalBigTeamBots {
     <#
     original timings and bugs from 2019, with connection code fixed
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_14" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-24/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -1036,17 +823,7 @@ function Start-WindowsTerminalBigTeamBots {
     de-prioritize fog undiscovered upon discovering nearby neutrals.
         Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_13" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-29/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')"
     <#
     Hopefully defense off-by-one threat detection fixed
     Additional panic gather defense added, defense now negatives all tiles in shortest path on attack path
@@ -1055,63 +832,23 @@ function Start-WindowsTerminalBigTeamBots {
     gather to enemy tiles inside territory more aggressively
     play turns 25-50 more aggressively (too aggressively?)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_12" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-31/bot_ek0x45.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')"
     <#
     improved 'vision tile' kill gathers to only gather for the quickexpand turns, and are included in the main gather phase with a 2
         tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_11" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-04/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')"
     <#
     semi-optimal first 25, unit tests
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_10" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-07/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')"
     <#
     tweaked gathers taking neutral / enemy tiles to include extra gather moves.
     tweaked initial expansion.
     tweaked optimal_expansion to include move-half when appropriate and draw the boundaries for when move-half is limited to closer-only moves and when it is limited to flankpath-or-closer-only moves.
     reduced neutral city aggressiveness right before launch timings.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_09" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-08/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')"
 
     <#
     more optimal first 25
@@ -1127,17 +864,7 @@ function Start-WindowsTerminalBigTeamBots {
     Bugfixed tile delta issues
     iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_08" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-08-26/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')"
 
     <#
     loads of fog / engine bugfixes but still not MCTS working.
@@ -1146,17 +873,7 @@ function Start-WindowsTerminalBigTeamBots {
     Brute force army engine time cutoff.
     Dropped file logging.
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_07" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-09-15/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')"
 
     <#
     MCTS based army engine.
@@ -1167,194 +884,48 @@ function Start-WindowsTerminalBigTeamBots {
     defense gather forward instead of back
     found-no-move mcts (need to tune back for historical bots I think)
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_06" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-10-23/BotHost.py'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')"
 
     <#
     bigteam only 2
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog'
 
     <#
     bigteam only 3
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog'
 
     <#
     bigteam only 4
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog'
 
     <#
     bigteam only 2
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog'
 
     <#
     bigteam only 3
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog'
 
     <#
     bigteam only 4
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:\2019_reformat_Backup\generals-bot\";
-        . .\run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog'
 
     <#
     bigteam only
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game bigteam -name "EklipZ_ai" -right -nolog'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Blob -game bigteam'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Blob -game bigteam'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Path -game bigteam'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Path -game bigteam'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-SoraAI -game bigteam'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-SoraAI -game bigteam'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai" -right -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game bigteam'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game bigteam'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game bigteam'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game bigteam'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game bigteam'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game bigteam'
 }
 
 
@@ -1369,11 +940,7 @@ function Start-WindowsTerminalLiveBots {
     <#
     dev tab
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        . ./game-result-analysis-utils.ps1;
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -LoadGameResultUtils
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -1381,127 +948,29 @@ function Start-WindowsTerminalLiveBots {
     <#
     Human 1v1
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Human -left -game 1v1 -sleepMax 600 -cpuAffinityMask P'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game 1v1 -sleepMax 600 -cpuAffinityMask P'
 
     <#
     Human ffa
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Human -right -game ffa -sleepMax 120 -nolog -cpuAffinityMask P'
-        try {
-            # Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -right -game ffa -sleepMax 120 -nolog -cpuAffinityMask P'
 
     <#
     Human 2v2 partners
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 4'
-        try {
-            # Invoke-Expression $command
-            $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui -cpuAffinityMask 6'
-        try {
-            # Invoke-Expression $command
-            $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 90 -left -nolog -cpuAffinityMask 8'
-        try {
-            # Invoke-Expression $command
-            $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 4'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui -cpuAffinityMask 6'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 90 -left -nolog -cpuAffinityMask 8'
     # SECOND teammate for local testing:
     # run-teammate -sleepMax 1 -left -name Teammate2.exe
 
     <# Teammate in team lobby #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask 10'
-        try {
-            # Invoke-Expression $command
-            $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask 10'
 
     # weak bots
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-SoraAlt -public -sleepMax 120'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-SoraAlt -public -sleepMax 120'
 
     # <#
     # Human in custom lobby with custom maps
@@ -1580,57 +1049,15 @@ function Start-WindowsTerminalBotServer2v2Bots {
     <#
     Human 2v2 partners
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 0'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 0'
 
 
     # time for the terminal window to open
     start-sleep -seconds 3
 
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-HumanTeammate -game team -right -sleepMax 10 -nolog -noui -botServer -cpuAffinityMask 2'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 10 -left -nolog -botServer -cpuAffinityMask 4'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'Run-Teammate -sleepMax 10 -left -nolog -name Teammate2.exe -botServer -cpuAffinityMask 6'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-HumanTeammate -game team -right -sleepMax 10 -nolog -noui -botServer -cpuAffinityMask 2'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 10 -left -nolog -botServer -cpuAffinityMask 4'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 10 -left -nolog -name Teammate2.exe -botServer -cpuAffinityMask 6'
 }
 
 
@@ -1645,17 +1072,7 @@ function Start-WindowsTerminalBotServerLiveBots {
     <#
     FFA
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game ffa -name "EklipZ_ai" -right'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai" -right'
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -1663,17 +1080,7 @@ function Start-WindowsTerminalBotServerLiveBots {
     <#
     1v1 only
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game 1v1 -name "EklipZ_ai" -right'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game 1v1 -name "EklipZ_ai" -right'
 
     # <#
     # 1v1 ffa cycler
@@ -1693,41 +1100,17 @@ function Start-WindowsTerminalBotServerLiveBots {
     <#
     dev tab
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        . ./game-result-analysis-utils.ps1;
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -LoadGameResultUtils
 
     <#
     private ek 14
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game 1v1 -name "EklipZ_ai_14" -noui -nolog -path D:/2019_reformat_Backup/generals-bot-historical/generals-bot-2023-07-24/bot_ek0x45.py -privateGame testing'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py') -privateGame testing"
 
     <#
     private live
     #>
-    wt -w $windowName new-tab pwsh -NoExit -c {
-        cd "D:/2019_reformat_Backup/generals-bot/";
-        . ./run-bot.ps1;
-        $command = 'run-bot -game 1v1 -name "EklipZ_ai" -left -privateGame testing'
-        try {
-            Invoke-Expression $command
-        } finally {
-            Write-Host $command
-            Start-Sleep -Seconds 1
-        }
-    }
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game 1v1 -name "EklipZ_ai" -left -privateGame testing'
 }
 
 
@@ -1746,7 +1129,7 @@ function Run-Path {
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_path_collect.py" -nolog:$nolog -noTextLog:$noTextLog -public:$public -cpuAffinityMask $cpuAffinityMask
+            run-botonce -game $g -name $name -path (Get-PathBotPath) -nolog:$nolog -noTextLog:$noTextLog -public:$public -cpuAffinityMask $cpuAffinityMask
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1768,7 +1151,7 @@ function Run-Blob {
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path "D:/2019_reformat_Backup/generals-blob-and-path/bot_blob.py" -nolog:$nolog -noTextLog:$noTextLog -public:$public -cpuAffinityMask $cpuAffinityMask
+            run-botonce -game $g -name $name -path (Get-BlobBotPath) -nolog:$nolog -noTextLog:$noTextLog -public:$public -cpuAffinityMask $cpuAffinityMask
             SleepLeastOfTwo -sleepMax $sleepMax
         }
     }
@@ -1785,7 +1168,7 @@ function Run-Bot {
         $privateGame,
         $roomID,
         [switch]$noui,
-        $path = "D:/2019_reformat_Backup/generals-bot/BotHost.py",
+        $path = $(Join-Path (Get-ConfiguredRepoRoot) 'BotHost.py'),
         [switch]$nolog,
         [switch]$noTextLog,
         [switch]$publicLobby,
@@ -1824,7 +1207,7 @@ function Run-BotCheckpoint {
     )
     $games = $game
     $date = Get-Date -Format 'yyyy-MM-dd'
-    $checkpointLoc = "D:/2019_reformat_Backup/generals-bot-historical/generals-bot-$date"
+    $checkpointLoc = Join-Path (Get-CheckpointBackupRoot) "generals-bot-$date"
     Create-Checkpoint -backup $checkpointLoc
 
     while($true)
@@ -1846,9 +1229,9 @@ function Run-BotCheckpoint {
 
 function Create-Checkpoint {
     Param(
-        $source = 'D:/2019_reformat_Backup/generals-bot/',
-        $dest = 'D:/2019_reformat_Backup/generals-bot-checkpoint/',
-        $backup = "D:/2019_reformat_Backup/generals-bot-historical/generals-bot-$(Get-Date -Format 'yyyy-MM-dd')"
+        $source = $(Get-ConfiguredRepoRoot),
+        $dest = $(Get-CheckpointMirrorRoot),
+        $backup = $(Join-Path (Get-CheckpointBackupRoot) "generals-bot-$(Get-Date -Format 'yyyy-MM-dd')")
     )
     if ($backup)
     {
@@ -1984,3 +1367,4 @@ function Run-Teammate {
         Start-Sleep -Seconds $sleepTime
     }
 }
+

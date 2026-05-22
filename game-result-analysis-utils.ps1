@@ -1,10 +1,105 @@
 
 
 #>
+function Get-RunConfigFilePath {
+    return [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\run_config.txt'))
+}
+
+
+function Initialize-RunConfig {
+    if ($null -ne $Script:RunConfig) {
+        return $Script:RunConfig
+    }
+
+    $configFile = Get-RunConfigFilePath
+    if (-not (Test-Path $configFile)) {
+        throw "Unable to find a run_config.txt file one folder above this script folder at $configFile."
+    }
+
+    $config = @{}
+    $cfgContent = Get-Content -Path $configFile
+    foreach ($line in $cfgContent) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        if ($line.TrimStart().StartsWith('#')) {
+            continue
+        }
+
+        $separatorIndex = $line.IndexOf('=')
+        if ($separatorIndex -lt 0) {
+            continue
+        }
+
+        $key = $line.Substring(0, $separatorIndex).Trim()
+        $value = $line.Substring($separatorIndex + 1).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($key)) {
+            $config[$key] = $value
+        }
+    }
+
+    $Script:RunConfig = $config
+    return $Script:RunConfig
+}
+
+
+function Get-RunConfigValue {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+        $Default = $null
+    )
+
+    $config = Initialize-RunConfig
+    if ($config.ContainsKey($Key)) {
+        return $config[$Key]
+    }
+
+    return $Default
+}
+
+
+function Get-RunConfigPathValue {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+        $Default = $null
+    )
+
+    $value = Get-RunConfigValue -Key $Key -Default $Default
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return $value
+    }
+
+    return $value.TrimEnd([char[]]@('/', '\'))
+}
+
+
+function Get-ConfiguredRepoRoot {
+    $defaultRepoRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
+    return Get-RunConfigPathValue -Key 'repo_root' -Default $defaultRepoRoot
+}
+
+
+function Get-ConfiguredGroupedFolder {
+    return Get-RunConfigPathValue -Key 'grouped_folder'
+}
+
+
+function Get-ConfiguredBotLogsRoot {
+    $defaultBotLogsRoot = Join-Path ([System.IO.Path]::GetFullPath((Join-Path (Get-ConfiguredRepoRoot) '..'))) 'bot_logs'
+    return Get-RunConfigPathValue -Key 'bot_logs_root' -Default $defaultBotLogsRoot
+}
+
+
+$null = Initialize-RunConfig
+
+
 function Copy-Turn25StartResultsToUnitTest {
     Param(
-        $DestFolder = "D:/2019_reformat_backup/generals-bot/Tests/EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat",
-        $LogFolder = "D:/GeneralsLogs/GroupedLogs"
+        $DestFolder = $(Join-Path (Join-Path (Get-ConfiguredRepoRoot) 'Tests') 'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'),
+        $LogFolder = $(Get-ConfiguredGroupedFolder)
     )
 
     $items = Get-ChildItem -Path $LogFolder -Recurse -Filter '50.txtmap'
@@ -31,8 +126,8 @@ function Copy-Turn25StartResultsToUnitTest {
 
 function Copy-WinMapsToWonMapsDirectory {
     Param(
-        $DestFolder = "D:/2019_reformat_backup/generals-bot/Tests/WonFullMapVisionSampleMaps",
-        $LogFolder = "D:/GeneralsLogs/GroupedLogs"
+        $DestFolder = $(Join-Path (Join-Path (Get-ConfiguredRepoRoot) 'Tests') 'WonFullMapVisionSampleMaps'),
+        $LogFolder = $(Get-ConfiguredGroupedFolder)
     )
 
     if (-not (Test-Path $DestFolder))
@@ -130,8 +225,8 @@ function Create-ManyTestsByTurnFromFolders {
         $TestNamePrefix = "",
         $TestCategory = "",
         $Turn = 1,
-        $LogFolderRoot = "D:/2019_reformat_backup/bot_logs/",
-        $DestFolderRoot = "D:/2019_reformat_backup/generals-bot/Tests/"
+        $LogFolderRoot = $(Get-ConfiguredBotLogsRoot),
+        $DestFolderRoot = $(Join-Path (Get-ConfiguredRepoRoot) 'Tests')
     )
 
     $folders = foreach ($f in Get-ChildItem $LogFolderRoot -Directory)
@@ -159,7 +254,7 @@ function Create-TestContinuingGameFrom {
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 
-        $DestFolderRoot = "D:/2019_reformat_backup/generals-bot/Tests/"
+        $DestFolderRoot = $(Join-Path (Get-ConfiguredRepoRoot) 'Tests')
     )
 
     $TestName = $TestName.Replace(' ', '_')
@@ -282,7 +377,7 @@ function Create-UnitTestContinuingGameFrom {
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 
-        $DestFolderRoot = "D:/2019_reformat_backup/generals-bot/UnitTests/"
+        $DestFolderRoot = $(Join-Path (Get-ConfiguredRepoRoot) 'UnitTests')
     )
 
     Create-TestContinuingGameFrom -TestMapFile $TestMapFile -TestCategory $TestCategory -TestName $TestName -DestFolderRoot $DestFolderRoot

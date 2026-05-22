@@ -19,7 +19,6 @@ from collections import deque
 from heapq_max import heappush_max, heappop_max
 
 import DebugHelper
-# from numba import jit, float32, int64
 
 from Interfaces import MapMatrixInterface, TileSet
 from Path import Path

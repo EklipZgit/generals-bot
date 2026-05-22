@@ -1,0 +1,39 @@
+# Legacy configuration matching the original hardcoded server paths.
+#
+# Usage:
+# 1. Copy this file to a file named run_config.txt.
+# 2. Put that run_config.txt in the folder that CONTAINS the repository folder.
+#    Example on the original server:
+#      Repository:   D:\2019_reformat_Backup\generals-bot
+#      Real config:  D:\2019_reformat_Backup\run_config.txt
+# 3. These values are intended to match the original hardcoded environment.
+#
+# Repository root.
+repo_root=D:\2019_reformat_Backup\generals-bot
+# Folder for raw bot logs.
+log_folder=D:\GeneralsLogs
+# Folder for grouped / analyzed logs.
+grouped_folder=D:\GeneralsLogs\GroupedLogs
+# Root folder used by game-result-analysis-utils.ps1 for per-run bot log folders.
+bot_logs_root=D:\2019_reformat_Backup\bot_logs
+# Python executable used for the current generation bot in this repository.
+current_gen_python_path=python3.14
+# Python executable used for external or older bot repositories.
+legacy_python_path=python
+# Path to the Sora bot entrypoint.
+sora_bot_path=D:\2019_reformat_Backup\Sora_AI\run_bot.py
+# Path to the blob bot entrypoint.
+blob_bot_path=D:\2019_reformat_Backup\generals-blob-and-path\bot_blob.py
+# Path to the path bot entrypoint.
+path_bot_path=D:\2019_reformat_Backup\generals-blob-and-path\bot_path_collect.py
+# Root folder containing historical bot checkpoints / versions.
+historical_bots_root=D:\2019_reformat_Backup\generals-bot-historical
+# Mirror target used by Create-Checkpoint.
+checkpoint_mirror_root=D:\2019_reformat_Backup\generals-bot-checkpoint
+# Backup target root used by Create-Checkpoint / Run-BotCheckpoint.
+checkpoint_backup_root=D:\2019_reformat_Backup\generals-bot-backups
+# Optional viewer window positions.
+left_pos=0
+right_pos=1920
+top_pos=3
+bottom_pos=1080

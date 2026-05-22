@@ -3,14 +3,14 @@ pygame-ce>=2.5.7
 certifi
 requests
 nashpy
-numpy==2.2 # after numba update let this upgrade? Numba being stupid.
-numba>=0.64.0
-scipy
+numpy==2.4.6 # after numba update let this upgrade? Numba being stupid.
+# numba>=0.64.0
+# scipy
 Logbook
 pyzmq>=27.1.0
 pcst_fast
 networkx
-matplotlib
+# matplotlib
 heapq_max
 ortools
 # heap-class  this performed poorly

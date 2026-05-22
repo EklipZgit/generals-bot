@@ -1,0 +1,50 @@
+# Sample configuration for generals-bot.
+#
+# Usage:
+# 1. Copy this file to a file named run_config.txt.
+# 2. Put that run_config.txt in the folder that CONTAINS the repository folder.
+#    Example:
+#      Repository:   C:\Bots\generals-bot
+#      Real config:  C:\Bots\run_config.txt
+# 3. Update the paths below for your machine.
+# 4. Lines starting with # are ignored.
+#
+# Notes:
+# - Most values are filesystem paths.
+# - repo_root should point at the repository folder itself.
+# - log_folder and grouped_folder are required by active logging / analysis flows.
+# - current_gen_python_path is the Python executable used for the repo's current bot code.
+# - legacy_python_path is the Python executable used for external or older bot repos.
+# - The *_pos values are used by the viewer window-position loader.
+# - bot_logs_root is optional in practice because some scripts have a fallback,
+#   but defining it explicitly is recommended.
+#
+# Repository root.
+repo_root=C:\Bots\generals-bot
+# Folder for raw bot logs.
+log_folder=C:\GeneralsLogs
+# Folder for grouped / analyzed logs.
+grouped_folder=C:\GeneralsLogs\GroupedLogs
+# Root folder used by game-result-analysis-utils.ps1 for per-run bot log folders.
+bot_logs_root=C:\Bots\bot_logs
+# Python executable used for the current generation bot in this repository.
+current_gen_python_path=python3.14
+# Python executable used for external or older bot repositories.
+legacy_python_path=python
+# Path to the Sora bot entrypoint.
+sora_bot_path=C:\Bots\Sora_AI\run_bot.py
+# Path to the blob bot entrypoint.
+blob_bot_path=C:\Bots\generals-blob-and-path\bot_blob.py
+# Path to the path bot entrypoint.
+path_bot_path=C:\Bots\generals-blob-and-path\bot_path_collect.py
+# Root folder containing historical bot checkpoints / versions.
+historical_bots_root=C:\Bots\generals-bot-historical
+# Mirror target used by Create-Checkpoint.
+checkpoint_mirror_root=C:\Bots\generals-bot-checkpoint
+# Backup target root used by Create-Checkpoint / Run-BotCheckpoint.
+checkpoint_backup_root=C:\Bots\generals-bot-backups
+# Optional viewer window positions.
+left_pos=0
+right_pos=1920
+top_pos=3
+bottom_pos=1080

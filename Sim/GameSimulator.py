@@ -900,7 +900,10 @@ class GameSimulatorHost(object):
 
                 moveStart = time.perf_counter()
                 try:
-                    fakeTimeReceived = time.time_ns() / NS_CONVERTER - timeWaste
+                    if self.respect_turn_time_limit:
+                        fakeTimeReceived = time.time_ns() / NS_CONVERTER - timeWaste
+                    else:
+                        fakeTimeReceived = time.time_ns() / NS_CONVERTER
                     if not self.init_only:
                         botHost.make_move(player.map, updateReceivedTime=fakeTimeReceived)  # - timeWaste simulates roll-over lag from moves that took too long to calculate. THIS IMPACTS DEBUGGING, HOWEVER, SO WE SET TO 0 WITH DEBUGGER ATTACHED.
                     else:

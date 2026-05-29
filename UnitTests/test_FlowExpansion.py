@@ -8,6 +8,7 @@ import Gather
 import SearchUtils
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode, IslandNamer
+from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BehaviorAlgorithms import IterativeExpansion, FlowExpansion
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode, FlowGraphMethod
@@ -822,10 +823,10 @@ a2
         longest = self.get_longest_flow_expansion_option(opts)
         self.assertEqual(6, round(longest.econValue), 'should be 4 econ roughly to capture 2 enemy tiles.')
         self.assertEqual(6, longest.length, 'should be 5 turns to pull 2x 3s and 2x 2. (should assume pull of ally tiles in worst case order)')
-        self.assertEqual(0, longest.armyRemaining)
+        self.assertEqual(0, longest.gathered_army)
 
     def test_builds_flow_plan_from_single_segment__hit_multiple_target_islands(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
 
         testData = """
 |    |    |    |    |    |    |
@@ -850,13 +851,51 @@ a2                  b1
         self.assertEqual(len(builder.tile_islands_by_player[enemyGeneral.player]), 5)
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
-        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=5, boardAnalysis=None, territoryMap=None, negativeTiles=None)
         opts = flowResult.flow_plans
-        self.assertEqual(3, len(opts), 'should have 3 options technically although dunno why youd not cap the zero tile')
         longest = self.get_longest_flow_expansion_option(opts)
+        if debugMode:
+            self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=True, turnsLimit=5)
+        self.assertEqual(5, longest.length, 'should be 5 turns to pull everything. Turns out capturing the 0 is actually bad lol')
+        self.assertEqual(7, round(longest.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
+        self.assertEqual(1, len(opts), '1 option because we already knapsack and this is the best')
+        self.assertEqual(19, longest.gathered_army)
+
+    def test_builds_flow_plan_from_single_segment__hit_multiple_target_islands__no_20(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+
+        testData = """
+|    |    |    |    |    |    |
+aG1                      M    M
+                    a3   a2   a3
+a1                  b1   M    M
+                    b1
+                    b0
+a2                  b1
+                              bG1
+|    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.desired_tile_island_size = 0.3
+        builder.recalculate_tile_islands(enemyGeneral)
+        self.assertEqual(len(builder.tile_islands_by_player[enemyGeneral.player]), 5)
+        flowExpander = ArmyFlowExpanderV2(map)
+        flowExpander.method = method
+        flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=5, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+        opts = flowResult.flow_plans
+        longest = self.get_longest_flow_expansion_option(opts)
+        if debugMode:
+            self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=True, turnsLimit=5)
+        self.assertEqual(5, longest.length, 'should be 5 turns to pull everything. Turns out capturing the 0 is actually bad lol')
         self.assertEqual(6, round(longest.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
-        self.assertEqual(5, longest.length, 'should be 5 turns to pull everything and capture the 0 too')
-        self.assertEqual(0, longest.armyRemaining)
+        self.assertEqual(1, len(opts), '1 option because we already knapsack and this is the best')
+        self.assertEqual(5, longest.gathered_army)
 
     def test_builds_flow_plan__strange_wrap_around_scenario(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1489,7 +1528,7 @@ player_index=0
         mapData = """
 |    |    |    |    |    |    |
 aG13 b1   b1   b7   b7   M    bG1
-a12                 b7   b1   b1
+a17                 b7   b1   b1
 |    |    |    |    |    |    |
 player_index=0
 """
@@ -1511,7 +1550,7 @@ player_index=0
                 opts = optCollection.flow_plans
                 if turns == 7:
                     try:
-                        self.assertGreaterEqual(len(opts), 2)
+                        self.assertEqual(len(opts), 1)
                         # we expect it to RETURN the len 3 and len 4 best options at least
                         opt3 = next(opt for opt in opts if opt.length == 3 and opt.get_first_move().source.coords == (0, 0))
                         self.assertEqual(3 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, round(opt3.econValue, 5))
@@ -2206,6 +2245,7 @@ player_index=0
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_fail_to_find_flow_expansion_routes__what_the_fuck___fHjzkD6XM---0--484.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 484, fill_out_tiles=True)
+        # general.army += 100
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=484)
 
@@ -2216,10 +2256,11 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
-        self.skipTest("TODO add asserts for should_not_fail_to_find_flow_expansion_routes__what_the_fuck")
+        self.assertGreater(sum(1 for p in bot.last_flow_opt_collection.flow_plans if not isinstance(p, InterceptionOptionInfo) and p.length > 1), 0)
+
     def test_should_not_find_delayed_enemy_city_capture_when_city_growth_outpaces_gather(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -2349,3 +2390,21 @@ player_index=0
         self.assertEqual(simGeneral.player, simMap.At(7, 0).player)
         self.assertEqual(simGeneral.player, simMap.At(8, 0).player)
         self.assertEqual(simGeneral.player, simMap.At(9, 0).player)
+
+    def test_should_not_explode_infeasable(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_explode_infeasable___To0kSs1QW---1--203.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 203, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=203)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.flow_expander.log_debug = False
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)

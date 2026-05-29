@@ -29,6 +29,7 @@ cmd /c "... > D:\2019_reformat_Backup\cascade-debug-output\generals-bot\raw_test
 11. For Python structured data passed across functions, never use ad-hoc nested dicts when fields are known; use dataclasses with type annotations and slots instead, and only convert to/from dict at serialization or logging boundaries.
 12. We don't ever use print(..) statements, we always use logbook.info, logbook.warn, etc.
 13. Whenever adding code to fix a test, include a comment above that code referenceing the test file and test name that that code is there to combat, and explain the code. Comments are extremely important in this complex codebase.
+14. We strongly type all objects. NEVER use getattr, hasattr etc in code. EVER. use __slots__ for all data classes.
 
 --- RunUnittestBaseline.py ---
 1. Use RunUnittestBaseline.py from the repo root to create stable unittest pass/fail baselines before risky changes.

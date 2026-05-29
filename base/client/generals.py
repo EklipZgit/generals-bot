@@ -345,7 +345,7 @@ class GeneralsClient(object):
         self._send(["ping_tile", tIndex])
 
     def get_updates(self) -> typing.Generator[typing.Tuple[str, dict], typing.Any, typing.Any]:
-        idleTimeout = 300
+        idleTimeout = 900  # 15 minutes
         startTime = time.perf_counter()
         while True:
             try:

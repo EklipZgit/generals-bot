@@ -30,7 +30,7 @@ from ArmyAnalyzer import ArmyAnalyzer
 from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 # from ArmyEngine import ArmyEngine, ArmySimResult
 from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception, ThreatBlockInfo, InterceptionOptionInfo
-from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
+from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, FlowExpansionPlanOptionCollection
 from CityAnalyzer import CityAnalyzer, CityScoreData
 from Communication import TeammateCommunicator, TileCompressor
 from DistanceMapperImpl import DistanceMapperImpl
@@ -285,7 +285,7 @@ class EklipZBot(object):
         self.tileIslandBuilder: TileIslandBuilder = None
         self._should_recalc_tile_islands: bool = False
         self.last_flow_expander: ArmyFlowExpander | None = None
-        self.last_flow_opt_collection = None
+        self.last_flow_opt_collection: FlowExpansionPlanOptionCollection | None = None
         self.armyTracker: ArmyTracker = None
         self.army_interceptor: ArmyInterceptor = None
         self.win_condition_analyzer: WinConditionAnalyzer = None

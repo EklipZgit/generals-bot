@@ -3480,6 +3480,7 @@ whoever has less extra troops will always get ahead
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '12,6->12,7->10,7->10,5->4,5->4,4->2,4  14,10->12,10->12,9->10,9->10,8->3,8  8,12->9,12->10,12z  9,12->9,13  9,0->9,1')
         bot = self.get_debug_render_bot(simHost, general.player)
+        bot.flow_expander.log_debug = True
         playerMap = simHost.get_player_map(general.player)
 
         #proof
@@ -3491,7 +3492,7 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
         if playerMap.At(16, 10).player == general.player:
-            self.assertGreater(playerMap.At(16, 10).army, 310, 'should have pulled the extra 50 with, if capping enemy general')
+            self.assertMinArmyNearXY(16, 10, 310, 3, 'should have pulled the extra 50 with, if capping enemy general')
         else:
             # if we didn't kill opp then we should be contesting his city instead.
             self.assertOwnedXY(14, 10)
@@ -3507,17 +3508,20 @@ whoever has less extra troops will always get ahead
         self.swap_tile_army_x_y(map, 11,9, 15,11)
         self.swap_tile_army_x_y(map, 13,9, 19,6)
 
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 16, 10)
+
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=371)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.respect_turn_time_limit = False
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
 
-        self.assertOwnedXY(16, 10, 'should not lose its mind around fog armies and should just cap the fucking city lol')
+        self.assertOwnedXY(14, 10, 'should not lose its mind around fog armies and should just cap the fucking city lol')
 

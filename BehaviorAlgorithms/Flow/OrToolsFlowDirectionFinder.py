@@ -433,11 +433,41 @@ class DirectOrToolsGraphBuilder(object):
                     arc_starts.append(src)
                     arc_ends.append(dst)
                     arc_caps.append(100000)
-                    cost = 1
+                    cost = 3
                     if island.team == team:
-                        cost += 3
+                        if movable_island.team == target_team:
+                            # ALWAYS prefer to flow into enemy land from friendly land directly. This is our most time effective movement strategy.
+                            cost = 1
+                        elif movable_island.team == team:
+                            # TODO this is actually not ideal, we'd prefer going to neutral and merging back into friendly land when necessary (as it gives us more immediate short neut capture options to play with)
+                            #  But currently we are unable to merge multiple border pair streams back into one gather path, so the 'merged in' path where we go neutral -> friendly land will never get used and kind
+                            #  of just dead ends as a one-or-the-other group choice instead of trying to use the combined army from merging paths to capture.
+                            #  Revisit later with some approach that recognizes the option to merge streams AFTER the border pair point kind like how we do the merge / collapse grouping logic for gather-through tile options or something idk.
+                            #  THEN we can make this more expensive again so we prefer neut caps first over merging streams.
+                            cost -= 1
+                        elif movable_island.team == -1:
+                            cost += 0
                     elif island.team == -1:
-                        cost += 3
+                        if movable_island.team == team:
+                            # moving back onto our own land should be penalized
+                            cost += 20000 // max(1, movable_island.sum_army / movable_island.tile_count)
+                        elif movable_island.team == target_team:
+                            # low cost moving to enemy land, we want that
+                            cost = 1
+                        elif movable_island.team == -1:
+                            # normal cost neutral to neutral
+                            cost += 0
+                    elif island.team == target_team:
+                        if movable_island.team == team:
+                            # moving back onto our own land should be penalized
+                            cost += 20000 // max(1, movable_island.sum_army / movable_island.tile_count)
+                        elif movable_island.team == target_team:
+                            # no cost moving to enemy land, we want that
+                            cost = 1
+                        elif movable_island.team == -1:
+                            # slight penalty moving to neutral from enemy land
+                            cost += 1
+
 
                     # hack
                     # cost = 0
@@ -476,23 +506,108 @@ class DirectOrToolsGraphBuilder(object):
             # fakeNode supply = -(-cumulativeDemand) = cumulativeDemand (balances the graph)
             node_supply_map[fake_node] = cumulative_demand
             all_node_ids.add(fake_node)
+
+            # Check if general islands have non-blocked border edges (needed for fake node to distribute flow)
+            # UnitTests/test_FlowExpansion.FlowExpansionUnitTests.test_should_not_explode_infeasable
+            target_general_border_count = len(target_general_island.border_islands)
+            fr_general_border_count = len(fr_general_island.border_islands)
+            target_general_unblocked_count = sum(
+                1 for b in target_general_island.border_islands
+                if not self._is_border_edge_blocked_by_threat_blocking_tiles(target_general_island, b, threat_blocking_tiles)
+            )
+            fr_general_unblocked_count = sum(
+                1 for b in fr_general_island.border_islands
+                if not self._is_border_edge_blocked_by_threat_blocking_tiles(fr_general_island, b, threat_blocking_tiles)
+            )
+            logbook.warning(
+                f'FLOW_FAKE_NODE_GENERAL_EDGES target_general={target_general_island.unique_id} '
+                f'border_count={target_general_border_count} unblocked={target_general_unblocked_count} '
+                f'fr_general={fr_general_island.unique_id} border_count={fr_general_border_count} unblocked={fr_general_unblocked_count}'
+            )
+
+            # If friendly general has no unblocked edges, find closest friendly city with unblocked edges to use as fake sink
+            # UnitTests/test_FlowExpansion.FlowExpansionUnitTests.test_should_not_explode_infeasable
+            fr_fake_sink_island = fr_general_island
+            if fr_general_unblocked_count == 0:
+                logbook.warning(
+                    f'FLOW_FAKE_NODE_SINK_FALLBACK fr_general={fr_general_island.unique_id} has no unblocked edges, '
+                    f'searching for closest friendly city with unblocked edges...'
+                )
+                # Find all friendly cities with unblocked edges
+                friendly_cities_with_edges = []
+                for island in islands.all_tile_islands:
+                    if island.team == team and any(tile.isCity for tile in island.tile_set):
+                        unblocked_count = sum(
+                            1 for b in island.border_islands
+                            if not self._is_border_edge_blocked_by_threat_blocking_tiles(island, b, threat_blocking_tiles)
+                        )
+                        if unblocked_count > 0:
+                            # Calculate distance to friendly general
+                            dist = min(
+                                (tile.x - friendly_general.x) ** 2 + (tile.y - friendly_general.y) ** 2
+                                for tile in island.tile_set
+                            )
+                            friendly_cities_with_edges.append((dist, island, unblocked_count))
+                # Sort by distance and pick the closest
+                if friendly_cities_with_edges:
+                    friendly_cities_with_edges.sort(key=lambda x: x[0])
+                    fr_fake_sink_island = friendly_cities_with_edges[0][1]
+                    logbook.warning(
+                        f'FLOW_FAKE_NODE_SINK_FALLBACK using closest friendly city {fr_fake_sink_island.unique_id} '
+                        f'(dist={friendly_cities_with_edges[0][0]}, unblocked={friendly_cities_with_edges[0][2]}) '
+                        f'instead of fr_general={fr_general_island.unique_id}'
+                    )
+                else:
+                    # Fallback to closest-to-enemy-general tile in friendlyGeneral.movable with unblocked edges
+                    # UnitTests/test_FlowExpansion.FlowExpansionUnitTests.test_should_not_explode_infeasable
+                    logbook.warning(
+                        f'FLOW_FAKE_NODE_SINK_FALLBACK no friendly cities with unblocked edges found, '
+                        f'searching for closest-to-enemy-general tile in friendlyGeneral.movable with unblocked edges...'
+                    )
+                    movable_tiles_with_edges = []
+                    for tile in friendly_general.movable:
+                        tile_island = islands.tile_island_lookup.raw[tile.tile_index]
+                        if tile_island is not None and tile_island.team == team:
+                            unblocked_count = sum(
+                                1 for b in tile_island.border_islands
+                                if not self._is_border_edge_blocked_by_threat_blocking_tiles(tile_island, b, threat_blocking_tiles)
+                                and b.unique_id != fr_general_island.unique_id  # Exclude edges back to fr_general
+                            )
+                            if unblocked_count > 0:
+                                # Calculate distance to enemy general
+                                dist = (tile.x - enemy_general.x) ** 2 + (tile.y - enemy_general.y) ** 2
+                                movable_tiles_with_edges.append((dist, tile, tile_island, unblocked_count))
+                    # Sort by distance to enemy general and pick the closest
+                    if movable_tiles_with_edges:
+                        movable_tiles_with_edges.sort(key=lambda x: x[0])
+                        fr_fake_sink_island = movable_tiles_with_edges[0][2]
+                        logbook.warning(
+                            f'FLOW_FAKE_NODE_SINK_FALLBACK using closest-to-enemy-general tile {movable_tiles_with_edges[0][1]} '
+                            f'in island {fr_fake_sink_island.unique_id} (dist_to_enemy={movable_tiles_with_edges[0][0]}, unblocked={movable_tiles_with_edges[0][3]}) '
+                            f'instead of fr_general={fr_general_island.unique_id}'
+                        )
+                    else:
+                        logbook.warning(
+                            f'FLOW_FAKE_NODE_SINK_FALLBACK no movable tiles with unblocked edges found, '
+                            f'falling back to fr_general={fr_general_island.unique_id} (will cause INFEASIBLE)'
+                        )
             fake_node_excess_supply = max(0, cumulative_demand)
             fake_node_enemy_general_fallback_capacity: int
             friendly_pressure_capacities_by_island_id: typing.Dict[int, int]
             if DEMAND_SATURATION_FROM_GENERAL_ONLY:
                 fake_node_enemy_general_fallback_capacity = (fake_node_excess_supply + 1) // 2
                 friendly_pressure_capacities_by_island_id = {
-                    fr_general_island.unique_id: fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
+                    fr_fake_sink_island.unique_id: fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
                 }
                 logbook.warning(
                     f'FLOW_DEMAND_SATURATION mode=general_only fakeNode={fake_node} excess={fake_node_excess_supply} '
                     f'enemyGeneralIsland={target_general_island.unique_id} enemyCapacity={fake_node_enemy_general_fallback_capacity} '
-                    f'friendlyGeneralIsland={fr_general_island.unique_id} friendlyCapacity={friendly_pressure_capacities_by_island_id[fr_general_island.unique_id]}'
+                    f'friendlyFakeSinkIsland={fr_fake_sink_island.unique_id} friendlyCapacity={friendly_pressure_capacities_by_island_id[fr_fake_sink_island.unique_id]}'
                 )
             else:
                 fake_node_enemy_general_fallback_capacity = (fake_node_excess_supply * 35) // 100
                 friendly_fallback_capacity = fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
-                pressure_islands_by_id: typing.Dict[int, 'TileIsland'] = {fr_general_island.unique_id: fr_general_island}
+                pressure_islands_by_id: typing.Dict[int, 'TileIsland'] = {fr_fake_sink_island.unique_id: fr_fake_sink_island}
                 pressure_tiles = sorted(
                     (
                         tile
@@ -557,12 +672,12 @@ class DirectOrToolsGraphBuilder(object):
             arc_costs.append(backpressure_weight)
             all_node_ids.add(-target_general_island.unique_id)
 
-            # -frGeneralIsland.unique_id → fakeNode
-            arc_starts.append(-fr_general_island.unique_id)
+            # -frFakeSinkIsland.unique_id → fakeNode (use fallback city if fr_general has no unblocked edges)
+            arc_starts.append(-fr_fake_sink_island.unique_id)
             arc_ends.append(fake_node)
             arc_caps.append(1000000)
             arc_costs.append(0)
-            all_node_ids.add(-fr_general_island.unique_id)
+            all_node_ids.add(-fr_fake_sink_island.unique_id)
 
             # fakeNode → targetGeneralIsland.unique_id
             arc_starts.append(fake_node)
@@ -581,6 +696,13 @@ class DirectOrToolsGraphBuilder(object):
                 arc_caps.append(friendly_pressure_capacity)
                 arc_costs.append(0)
                 all_node_ids.add(friendly_pressure_island_id)
+
+            # Log total fake node arc capacity for debugging
+            total_fake_node_capacity = fake_node_enemy_general_fallback_capacity + sum(friendly_pressure_capacities_by_island_id.values())
+            logbook.warning(
+                f'FLOW_DEMAND_SATURATION_SUMMARY fakeNode={fake_node} cumulative_demand={cumulative_demand} '
+                f'excess_supply={fake_node_excess_supply} total_fake_node_capacity={total_fake_node_capacity} '
+            )
 
         # ----------------------------------------------------------------
         # Phase 4: build sorted node index arrays (mirrors NxToOrToolsConverter)
@@ -609,6 +731,20 @@ class DirectOrToolsGraphBuilder(object):
                 f'DirectOrToolsGraphBuilder: {num_nodes} nodes, {len(arc_starts)} arcs, '
                 f'non-zero supplies={non_zero_supply}, cumulative_demand={cumulative_demand}, '
                 f'use_neutral_flow={use_neutral_flow}'
+            )
+
+        # Always log when cumulative_demand is 0 to diagnose why real nodes get no flow
+        if cumulative_demand == 0:
+            # Log real island demands (from demands dict) and supplies (from node_supplies_arr)
+            real_island_demands = [(nid, demand) for nid, demand in demands.items() if abs(nid) < 1000000 and demand != 0]
+            friendly_supply_demands = [(nid, demand) for nid, demand in real_island_demands if demand < 0]
+            enemy_demand_demands = [(nid, demand) for nid, demand in real_island_demands if demand > 0]
+            real_island_supplies = [(node_list[i], int(node_supplies_arr[i])) for i in range(num_nodes) if abs(node_list[i]) < 1000000 and node_supplies_arr[i] != 0]
+            logbook.warning(
+                f'FLOW_DIAG_ZERO_CUMULATIVE_DEMAND_BUILD cumulative_demand=0. '
+                f'NX demands (negative=supply, positive=demand): friendly={friendly_supply_demands[:32]} enemy={enemy_demand_demands[:32]} neutral={[(nid, d) for nid, d in real_island_demands if -1 < nid < 1000000 and nid not in [f for f, _ in friendly_supply_demands] and nid not in [e for e, _ in enemy_demand_demands]][:32]}. '
+                f'OR-Tools supplies (converted from demands): {real_island_supplies[:32]}. '
+                f'Total real arcs: {len(arc_starts)} (split edges + border edges)'
             )
 
         result = OrToolsGraphData(
@@ -941,6 +1077,25 @@ class OrToolsFlowComputer(object):
                         f'totalFakeArcFlow={total_fake_arc_flow} totalRealArcFlow={total_real_arc_flow} '
                         f'rootInputSupplyByIsland={suspicious_root_supplies}'
                     )
+
+            # Add diagnostic logging for zero real flow scenarios (always fire, not gated by log_debug)
+            if graph_data.cumulative_demand == 0:
+                logbook.warning(
+                    f'FLOW_DIAG_ZERO_CUMULATIVE_DEMAND cumulative_demand=0 means fake_node has no supply to distribute. '
+                    f'This explains why real nodes get no flow - the graph is perfectly balanced without fake node injection.'
+                )
+            elif total_positive_flow > 0 and total_real_arc_flow == 0:
+                logbook.warning(
+                    f'FLOW_DIAG_ALL_FAKE_FLOW totalPositiveFlow={total_positive_flow} totalRealArcFlow=0. '
+                    f'The solver is using only fake node saturation arcs, not real island-to-island paths. '
+                    f'cumulative_demand={graph_data.cumulative_demand} fakeToRealFlow={total_fake_to_real_flow}'
+                )
+            elif total_positive_flow > 0 and total_root_output_real_flow == 0 and total_real_arc_flow > 0:
+                logbook.warning(
+                    f'FLOW_DIAG_REAL_FLOW_NO_ROOT_OUTPUT totalPositiveFlow={total_positive_flow} totalRealArcFlow={total_real_arc_flow} '
+                    f'totalRootOutputRealFlow=0. Real arcs have flow but none leave root output ports. '
+                    f'Flow may be circulating within islands or entering fake nodes from real islands.'
+                )
 
         return dict(flow_dict)
 

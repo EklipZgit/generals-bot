@@ -2854,6 +2854,8 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
                         rating -= 1.0
                 if t.army == 1:
                     rating -= 0.3
+            elif t.player not in friendlyPlayers and t.isCity:
+                rating += 50
             continue
 
         if t.player == -1:
@@ -2865,7 +2867,7 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
             if not t.discovered:
                 rating += 0.3
             if t.isCity:
-                rating += 30
+                rating += 50
 
         # if t.player not in friendlyPlayers:
         #     rating += 0.5

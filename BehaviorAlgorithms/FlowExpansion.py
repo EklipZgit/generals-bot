@@ -34,10 +34,7 @@ OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
 SHOULD_LOG_DEBUG_BY_DEFAULT = False
 DIAG_BORDER_PAIR_ANCHORS: set[str] = set()
 DIAG_BORDER_PAIR_ISLAND_IDS: set[tuple[int, int]] = set()
-DIAG_BORDER_PAIR_TILE_COORDS: set[tuple[int, int, int, int]] = {
-    (10, 6, 11, 6),
-    (8,8, 8,9),
-}
+DIAG_BORDER_PAIR_TILE_COORDS: set[tuple[int, int, int, int]] = set()
 
 if typing.TYPE_CHECKING:
     from Algorithms import TileIsland
@@ -2377,8 +2374,8 @@ class ArmyFlowExpanderV2:
                 item_tile_sets.append(frozenset(
                     tile.tile_index
                     for node in (
-                        enriched.gather_entry.included_friendly_flow_nodes +
-                        enriched.capture_entry.included_target_flow_nodes
+                        list(enriched.gather_entry.included_friendly_flow_nodes) +
+                        list(enriched.capture_entry.included_target_flow_nodes)
                     )
                     for tile in node.island.tile_set
                 ))

@@ -177,6 +177,18 @@ class FlowExpansionStreamOrderingMetadataTests(TestBase):
             results.append((border_pair, friendly_contribs, target_contribs, stream_data))
         return results
 
+    def _get_island_contribution_by_xy(
+        self,
+        contributions: typing.List[FlowStreamIslandContribution],
+        x: int,
+        y: int,
+    ) -> FlowStreamIslandContribution:
+        for contribution in contributions:
+            for tile in contribution.flow_node.island.tile_set:
+                if tile.x == x and tile.y == y:
+                    return contribution
+        raise AssertionError(f'No contribution found containing tile ({x},{y})')
+
     # ------------------------------------------------------------------
     # Tests
     # ------------------------------------------------------------------
@@ -372,6 +384,175 @@ aG1  a8   b1   b4   b2   bG1
                         f'Target contributions must be in physical path order (ascending x): '
                         f'index {i} x={xi} must be <= index {i+1} x={xi1}'
                     )
+
+    def test_stream_ordering__single_city_stream_bubbles_downstream_city_potential(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a4   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        self.begin_capturing_logging()
+
+        expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
+        stream_results = self._get_border_pair_stream_contributions(expander, builder)
+
+        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+
+        target_contribs = None
+        stream_data = None
+        for border_pair, _, cur_target_contribs, cur_stream_data in stream_results:
+            if any(tile.x == 6 and tile.y == 0 for node in cur_stream_data.target_stream for tile in node.island.tile_set):
+                target_contribs = cur_target_contribs
+                stream_data = cur_stream_data
+                break
+
+        self.assertIsNotNone(target_contribs, 'Expected a target stream containing the delayed city at (6,0)')
+        self.assertIsNotNone(stream_data, 'Expected stream_data for delayed single-city stream fixture')
+
+        border_enemy = self._get_island_contribution_by_xy(target_contribs, 6, 0)
+        city_contrib = self._get_island_contribution_by_xy(target_contribs, 6, 0)
+
+        if debugMode:
+            self.render_border_pair_debug(map, expander, stream_data.border_pair, [], target_contribs, 'single city downstream potential')
+
+        self.assertGreaterEqual(city_contrib.downstream_enemy_city_potential, 1)
+        self.assertGreater(city_contrib.downstream_econ_potential, 0.0)
+        self.assertGreater(city_contrib.downstream_enemy_tile_potential, 0)
+        self.assertGreater(city_contrib.downstream_capture_army_potential, 0)
+        self.assertGreater(city_contrib.downstream_enemy_army_potential, 0)
+        self.assertEqual(
+            city_contrib.downstream_enemy_city_potential,
+            stream_data.target_node_potentials[city_contrib.island_id].enemy_city_count,
+            'Contribution city potential should match stream_data target node potential'
+        )
+        self.assertEqual(
+            city_contrib.downstream_enemy_tile_potential,
+            stream_data.target_node_potentials[city_contrib.island_id].enemy_tile_count,
+            'Contribution enemy tile potential should match stream_data target node potential'
+        )
+        self.assertEqual(
+            city_contrib.downstream_enemy_army_potential,
+            stream_data.target_node_potentials[city_contrib.island_id].enemy_army,
+            'Contribution enemy army potential should match stream_data target node potential'
+        )
+        self.assertEqual(
+            city_contrib.downstream_capture_army_potential,
+            stream_data.target_node_potentials[city_contrib.island_id].capture_army,
+            'Contribution capture army potential should match stream_data target node potential'
+        )
+        self.assertEqual(city_contrib, border_enemy)
+
+    def test_stream_ordering__two_city_stream_bubbles_incremental_city_potential(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+aG7  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
+|    |    |    |    |    |    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        self.begin_capturing_logging()
+
+        expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
+        stream_results = self._get_border_pair_stream_contributions(expander, builder)
+
+        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+
+        target_contribs = None
+        stream_data = None
+        for border_pair, _, cur_target_contribs, cur_stream_data in stream_results:
+            contrib_xs = {tile.x for contrib in cur_target_contribs for tile in contrib.flow_node.island.tile_set}
+            if 6 in contrib_xs and 8 in contrib_xs:
+                target_contribs = cur_target_contribs
+                stream_data = cur_stream_data
+                break
+
+        self.assertIsNotNone(target_contribs, 'Expected a target stream containing both delayed cities at (6,0) and (8,0)')
+        self.assertIsNotNone(stream_data, 'Expected stream_data for delayed two-city stream fixture')
+
+        first_city = self._get_island_contribution_by_xy(target_contribs, 6, 0)
+        middle_enemy = self._get_island_contribution_by_xy(target_contribs, 7, 0)
+        second_city = self._get_island_contribution_by_xy(target_contribs, 8, 0)
+
+        if debugMode:
+            self.render_border_pair_debug(map, expander, stream_data.border_pair, [], target_contribs, 'two city downstream potential')
+
+        self.assertGreaterEqual(first_city.downstream_enemy_city_potential, 2)
+        self.assertGreaterEqual(middle_enemy.downstream_enemy_city_potential, 1)
+        self.assertGreaterEqual(second_city.downstream_enemy_city_potential, 1)
+        self.assertGreaterEqual(
+            first_city.downstream_enemy_city_potential,
+            second_city.downstream_enemy_city_potential,
+            'Earlier trunk node should not have lower downstream city potential than the later city node'
+        )
+        self.assertGreaterEqual(
+            first_city.downstream_econ_potential,
+            second_city.downstream_econ_potential,
+            'Earlier trunk node should not have lower downstream econ than the later city node'
+        )
+        self.assertGreaterEqual(
+            first_city.downstream_enemy_tile_potential,
+            second_city.downstream_enemy_tile_potential,
+            'Earlier trunk node should not have lower downstream enemy tile potential than the later city node'
+        )
+        self.assertGreater(
+            middle_enemy.downstream_enemy_city_potential,
+            0,
+            'Intermediate enemy tile should still bubble the downstream second city'
+        )
+        self.assertEqual(
+            first_city.downstream_enemy_city_potential,
+            stream_data.target_node_potentials[first_city.island_id].enemy_city_count,
+        )
+        self.assertEqual(
+            second_city.downstream_enemy_city_potential,
+            stream_data.target_node_potentials[second_city.island_id].enemy_city_count,
+        )
+
+    def test_stream_ordering__city_path_preserves_physical_order_while_scores_reflect_bubbled_value(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+aG7  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
+|    |    |    |    |    |    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        self.begin_capturing_logging()
+
+        expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
+        stream_results = self._get_border_pair_stream_contributions(expander, builder)
+
+        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+
+        target_contribs = None
+        stream_data = None
+        for border_pair, _, cur_target_contribs, cur_stream_data in stream_results:
+            contrib_xs = [min(tile.x for tile in contrib.flow_node.island.tile_set) for contrib in cur_target_contribs]
+            if 6 in contrib_xs and 8 in contrib_xs:
+                target_contribs = cur_target_contribs
+                stream_data = cur_stream_data
+                break
+
+        self.assertIsNotNone(target_contribs, 'Expected two-city target contributions')
+        self.assertIsNotNone(stream_data, 'Expected stream_data for physical-order city fixture')
+
+        if debugMode:
+            self.render_border_pair_debug(map, expander, stream_data.border_pair, [], target_contribs, 'city order with bubbled scores')
+
+        ordered_xs = [min(tile.x for tile in contrib.flow_node.island.tile_set) for contrib in target_contribs]
+        self.assertEqual(sorted(ordered_xs), ordered_xs, 'Target contributions must remain in physical left-to-right order')
+
+        first_city = self._get_island_contribution_by_xy(target_contribs, 6, 0)
+        second_city = self._get_island_contribution_by_xy(target_contribs, 8, 0)
+        self.assertGreater(
+            first_city.sort_score,
+            second_city.sort_score,
+            'Earlier trunk city node should score higher because it bubbles the later city path as well'
+        )
 
     def test_stream_ordering__friendly_sort_descending_always(self):
         """

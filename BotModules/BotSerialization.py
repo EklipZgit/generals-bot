@@ -143,6 +143,7 @@ class BotSerialization:
             Tile.recalc_all_derived(bot._map.tiles_by_index)
             bot.tileIslandBuilder.rebuild_islands_from_ids(island_id_matrix)
 
+        bot.win_condition_analyzer.load_city_contestation_history_from_map_data(resume_data)
         bot.opponent_tracker.load_from_map_data(resume_data)
         if bot.targetPlayer >= 0:
             bot._lastTargetPlayerCityCount = bot.opponent_tracker.get_current_team_scores_by_player(bot.targetPlayer).cityCount

@@ -837,16 +837,16 @@ class BotTargeting:
         minSpawnDist = bot.armyTracker.min_spawn_distance
 
         if bot.targetPlayer == -1 and BotStateQueries.is_still_ffa_and_non_dominant(bot):
-            bot.info(f'bypassed get_predicted_target_player_general_location because no target player and ffa')
+            logbook.info(f'bypassed get_predicted_target_player_general_location because no target player and ffa')
             return bot.general
 
         if bot.targetPlayer == -1 or (len(bot._map.players) == 2 and len([t for t in filter(lambda tile: tile.visible, bot._map.players[bot.targetPlayer].tiles)]) == 0):
             with bot.perf_timer.begin_move_event('get_max_explorable_undiscovered_tile'):
-                bot.info(f'DEBUG get_max_explorable_undiscovered_tile')
+                logbook.info(f'DEBUG get_max_explorable_undiscovered_tile')
                 return BotTargeting.get_max_explorable_undiscovered_tile(bot, minSpawnDist)
 
         if bot._map.generals[bot.targetPlayer] is not None:
-            bot.info(f'DEBUG enemyGeneral')
+            logbook.info(f'DEBUG enemyGeneral')
             return bot._map.generals[bot.targetPlayer]
 
         maxTile = bot.general

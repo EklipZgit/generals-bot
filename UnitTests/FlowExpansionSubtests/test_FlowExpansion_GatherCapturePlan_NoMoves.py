@@ -257,6 +257,126 @@ bot_target_player=0
         self.assertIsNotNone(first_move, "Plan should have valid first move - "
                             "total army (3) > required (2), gather tree works.")
 
+    def test_team_game_gcp_does_not_start_from_allied_land(self):
+        map_data = """
+|    |    |    |    |    |    |
+aG5  a3   c2   c2   b1   bG1  dG1
+|    |    |    |    |    |    |
+player_index=0
+bot_target_player=1
+teams=0,1,0,1
+mode=team
+"""
+        map, general, enemy_general = self.load_map_and_generals_from_string(
+            map_data, turn=51, fill_out_tiles=False
+        )
+        self.begin_capturing_logging()
+
+        gathing = {
+            map.GetTile(1, 0),
+            map.GetTile(2, 0),
+            map.GetTile(3, 0),
+        }
+        capping = {
+            map.GetTile(4, 0),
+        }
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemy_general, possibleSpawns=None)
+
+        plan = GatherUtils.convert_contiguous_capture_tiles_to_gather_capture_plan(
+            map,
+            rootTiles={map.GetTile(1, 0)},
+            tiles=gathing,
+            negativeTiles=None,
+            searchingPlayer=general.player,
+            priorityMatrix=None,
+            useTrueValueGathered=False,
+            captures=capping,
+            intergeneral_analysis=analysis.intergeneral_analysis,
+        )
+
+        first_move = plan.get_first_move()
+        self.assertIsNotNone(first_move, "Plan should gather through allied land from owned land")
+        self.assertEqual(first_move.source.player, general.player)
+        self.assertNotEqual(first_move.source.player, map.GetTile(2, 0).player)
+
+    def test_team_game_gcp_does_not_gather_through_allied_general(self):
+        map_data = """
+|    |    |    |    |    |
+aG5  a3   cG2  b1   bG1  dG1
+|    |    |    |    |    |
+player_index=0
+bot_target_player=1
+teams=0,1,0,1
+mode=team
+"""
+        map, general, enemy_general = self.load_map_and_generals_from_string(
+            map_data, turn=51, fill_out_tiles=False
+        )
+        self.begin_capturing_logging()
+
+        gathing = {
+            map.GetTile(1, 0),
+        }
+        capping = {
+            map.GetTile(3, 0),
+        }
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemy_general, possibleSpawns=None)
+
+        with self.assertRaises(Exception):
+            GatherUtils.convert_contiguous_capture_tiles_to_gather_capture_plan(
+                map,
+                rootTiles={map.GetTile(1, 0)},
+                tiles=gathing,
+                negativeTiles=None,
+                searchingPlayer=general.player,
+                priorityMatrix=None,
+                useTrueValueGathered=False,
+                captures=capping,
+                allowedReconnectTiles=gathing | capping,
+                intergeneral_analysis=analysis.intergeneral_analysis,
+            )
+
+    def test_flow_materialization_connects_disconnected_allied_gather_component(self):
+        map_data = """
+|    |    |    |    |    |    |
+aG5  a3   c2   c2   b1   bG1  dG1
+|    |    |    |    |    |    |
+player_index=0
+bot_target_player=1
+teams=0,1,0,1
+mode=team
+"""
+        map, general, enemy_general = self.load_map_and_generals_from_string(
+            map_data, turn=51, fill_out_tiles=False
+        )
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemy_general, possibleSpawns=None)
+
+        expander = ArmyFlowExpanderV2(map)
+        expander.island_builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+
+        connected = expander._connect_allied_gather_components_to_owned_tiles(
+            {
+                map.GetTile(0, 0),
+                map.GetTile(3, 0),
+            },
+            general.player
+        )
+
+        self.assertEqual(
+            {
+                map.GetTile(0, 0),
+                map.GetTile(1, 0),
+                map.GetTile(2, 0),
+                map.GetTile(3, 0),
+            },
+            connected
+        )
+
 
     def test_insufficient_army_raises_error(self):
         """

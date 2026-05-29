@@ -2,6 +2,7 @@ import logbook
 
 import DebugHelper
 import Gather
+from Behavior.ArmyInterceptor import ArmyInterception
 from BotModules.BotPathingUtils import BotPathingUtils
 from Gather import GatherDebug
 from MapMatrix import MapMatrixSet, MapMatrix
@@ -3152,3 +3153,38 @@ class DefenseTests(TestBase):
                 self.assertOwnedXY(8, 7)
                 self.assertOwnedXY(9, 6)
                 self.assertOwnedXY(7, 1)
+
+    def test_why_not_defending_general_here_immediately(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for path, proof in [
+            ('8,14->8,12->5,12->5,8->0,8', '8,4->8,9->6,9'),
+            ('8,14->8,3', '8,4->8,9  6,9->7,9'),
+            ('8,14->8,12->4,12->4,13->2,13->2,10->1,10->1,8->0,8', '8,4->8,9->6,9'),
+        ]:
+            with self.subTest(path=path):
+                mapFile = 'GameContinuationEntries/why_not_defending_general_here_immediately___leTTH2MC2---1--1077.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 1077, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=1077)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, path)
+                #proof
+                # simHost.queue_player_moves_str(general.player, proof)
+                bot = self.get_debug_render_bot(simHost, general.player)
+                bot.army_interceptor.log_debug = True
+                playerMap = simHost.get_player_map(general.player)
+                playerMap.At(8,14).lastMovedTurn = 1076
+                bot.get_army_at_x_y(8, 14).last_moved_turn = 1076
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertOwnedXY(8,4)
+                self.assertOwnedXY(8,3)
+                self.assertOwnedXY(2,10)
+
+

@@ -378,6 +378,56 @@ aG1  a2   a3   a5   b1   bG1
                     )
                     cumulative_army = gather_entry.gathered_army
 
+    def test_postprocess__enemy_city_growth_blocks_delayed_capture_when_support_arrives_too_late(self):
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a3   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        self.begin_capturing_logging()
+
+        expander, builder, lookup_tables = self._setup_expander_with_lookup_tables(map, general, enemyGeneral)
+        expander._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
+
+        self.assertEqual(1, len(lookup_tables), 'Fixture should produce exactly one lookup table.')
+        lookup_table = lookup_tables[0]
+
+        delayed_city_entries = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 1 and entry.gather_entry.turns == 4
+        ]
+        self.assertEqual(
+            0,
+            len(delayed_city_entries),
+            'Four delayed gather turns should let the bC3 grow enough that the a3 fixture no longer has a feasible enriched capture entry.'
+        )
+
+    def test_postprocess__enemy_city_growth_allows_delayed_capture_when_support_is_exactly_enough(self):
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a4   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        self.begin_capturing_logging()
+
+        expander, builder, lookup_tables = self._setup_expander_with_lookup_tables(map, general, enemyGeneral)
+        expander._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
+
+        self.assertEqual(1, len(lookup_tables), 'Fixture should produce exactly one lookup table.')
+        lookup_table = lookup_tables[0]
+
+        delayed_city_entries = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 1 and entry.gather_entry.turns == 4
+        ]
+        self.assertEqual(1, len(delayed_city_entries), 'The a4 fixture should keep exactly one delayed city-capture entry after city growth is charged.')
+
+        enriched = delayed_city_entries[0]
+        self.assertEqual(5, enriched.combined_turn_cost, 'The feasible delayed city capture should still cost four gather turns plus one capture turn.')
+        self.assertEqual(4, enriched.capture_entry.required_army, 'The raw single-tile bC3 capture still requires four arriving army.')
+
     def test_postprocess__partial_capture_plus_partial_gather__comprehensive(self):
         """
         Comprehensive test with both partial captures and partial gathers.

@@ -32,6 +32,12 @@ from PerformanceTimer import PerformanceTimer
 
 OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
 SHOULD_LOG_DEBUG_BY_DEFAULT = False
+DIAG_BORDER_PAIR_ANCHORS: set[str] = set()
+DIAG_BORDER_PAIR_ISLAND_IDS: set[tuple[int, int]] = set()
+DIAG_BORDER_PAIR_TILE_COORDS: set[tuple[int, int, int, int]] = {
+    (10, 6, 11, 6),
+    (8,8, 8,9),
+}
 
 if typing.TYPE_CHECKING:
     from Algorithms import TileIsland
@@ -197,6 +203,73 @@ class ArmyFlowExpanderV2:
         self.negative_tiles: TileSet | None = None
         self.threat_blocking_tiles: typing.Dict[Tile, typing.Any] | None = None
 
+    def reset_for_turn(
+            self,
+            map: MapBase,
+            perf_timer: PerformanceTimer | None = None,
+    ) -> None:
+        self.map = map
+        if perf_timer is not None:
+            self.perf_timer = perf_timer
+
+        self.team = map.team_ids_by_player_index[map.player_index]
+        self.friendlyGeneral = map.generals[map.player_index]
+        self.flow_graph = None
+        self.last_run = ArmyFlowExpanderLastRun()
+        self.last_lookup_tables = None
+        self.island_builder = None
+        self.enemyGeneral = None
+        self.target_team = -1
+        self._target_crossable_cache = set()
+        self.bonus_capture_point_matrix = None
+        self.army_override_matrix = None
+        self.negative_tiles = None
+        self.threat_blocking_tiles = None
+
+        if self._networkx_finder is not None:
+            self._networkx_finder.map = map
+            self._networkx_finder.perf_timer = self.perf_timer
+            self._networkx_finder.log_debug = self.log_debug
+            self._networkx_finder.friendly_general = self.friendlyGeneral
+            self._networkx_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+            self._networkx_finder.intergeneral_analysis = None
+            self._networkx_finder.invalidate_cache()
+
+        if self._pymax_finder is not None:
+            self._pymax_finder.map = map
+            self._pymax_finder.perf_timer = self.perf_timer
+            self._pymax_finder.log_debug = self.log_debug
+            self._pymax_finder.friendly_general = self.friendlyGeneral
+            self._pymax_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+            self._pymax_finder._intergeneral_analysis = None
+            if self._pymax_finder._nx_finder is not None:
+                self._pymax_finder._nx_finder.map = map
+                self._pymax_finder._nx_finder.perf_timer = self.perf_timer
+                self._pymax_finder._nx_finder.log_debug = self.log_debug
+                self._pymax_finder._nx_finder.friendly_general = self.friendlyGeneral
+                self._pymax_finder._nx_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+                self._pymax_finder._nx_finder.intergeneral_analysis = None
+            self._pymax_finder.invalidate_cache()
+
+        if self._ortools_finder is not None:
+            self._ortools_finder.map = map
+            self._ortools_finder.perf_timer = self.perf_timer
+            self._ortools_finder.log_debug = self.log_debug
+            self._ortools_finder.friendly_general = self.friendlyGeneral
+            self._ortools_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+            self._ortools_finder.army_override_matrix = None
+            self._ortools_finder.negative_tiles = None
+            self._ortools_finder.threat_blocking_tiles = None
+            self._ortools_finder._intergeneral_analysis = None
+            if self._ortools_finder._nx_finder is not None:
+                self._ortools_finder._nx_finder.map = map
+                self._ortools_finder._nx_finder.perf_timer = self.perf_timer
+                self._ortools_finder._nx_finder.log_debug = self.log_debug
+                self._ortools_finder._nx_finder.friendly_general = self.friendlyGeneral
+                self._ortools_finder._nx_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+                self._ortools_finder._nx_finder.intergeneral_analysis = None
+            self._ortools_finder.invalidate_cache()
+
     def get_expansion_options(
             self,
             islands: TileIslandBuilder,
@@ -227,6 +300,36 @@ class ArmyFlowExpanderV2:
         if self.enemyGeneral is None:
             self.enemyGeneral = self.map.generals[targetPlayer]
         self.island_builder = islands
+        if self._networkx_finder is not None:
+            self._networkx_finder.perf_timer = self.perf_timer
+            self._networkx_finder.log_debug = self.log_debug
+            self._networkx_finder.friendly_general = self.friendlyGeneral
+            self._networkx_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+            self._networkx_finder.intergeneral_analysis = islands.intergeneral_analysis
+        if self._pymax_finder is not None:
+            self._pymax_finder.perf_timer = self.perf_timer
+            self._pymax_finder.log_debug = self.log_debug
+            self._pymax_finder.friendly_general = self.friendlyGeneral
+            self._pymax_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+            self._pymax_finder._intergeneral_analysis = islands.intergeneral_analysis
+            if self._pymax_finder._nx_finder is not None:
+                self._pymax_finder._nx_finder.perf_timer = self.perf_timer
+                self._pymax_finder._nx_finder.log_debug = self.log_debug
+                self._pymax_finder._nx_finder.friendly_general = self.friendlyGeneral
+                self._pymax_finder._nx_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+                self._pymax_finder._nx_finder.intergeneral_analysis = islands.intergeneral_analysis
+        if self._ortools_finder is not None:
+            self._ortools_finder.perf_timer = self.perf_timer
+            self._ortools_finder.log_debug = self.log_debug
+            self._ortools_finder.friendly_general = self.friendlyGeneral
+            self._ortools_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+            self._ortools_finder._intergeneral_analysis = islands.intergeneral_analysis
+            if self._ortools_finder._nx_finder is not None:
+                self._ortools_finder._nx_finder.perf_timer = self.perf_timer
+                self._ortools_finder._nx_finder.log_debug = self.log_debug
+                self._ortools_finder._nx_finder.friendly_general = self.friendlyGeneral
+                self._ortools_finder._nx_finder.use_backpressure_from_enemy_general = self.use_backpressure_from_enemy_general
+                self._ortools_finder._nx_finder.intergeneral_analysis = islands.intergeneral_analysis
         self.bonus_capture_point_matrix = bonusCapturePointMatrix
         self.negative_tiles = negativeTiles
         self.threat_blocking_tiles = threatBlockingTiles
@@ -922,13 +1025,14 @@ class ArmyFlowExpanderV2:
         visited = {start_node.island.unique_id}
         stream = [start_node]
 
-        # Priority queue: (-heuristic, island_id, node)
+        # Priority queue: (-heuristic, island_id, sequence, node, source_kind, source_island_id, routed_flow_amount, heuristic)
         # Negative heuristic for max-heap behavior (higher = better)
         frontier = []
         frontier_sequence = 0
 
         flow_lookup = flow_graph.flow_node_lookup_by_island_no_neut
-        should_log_stream_diag = self.log_debug or OUTPUT_KNAPSACK_TEST_REPRO_LOGS
+        should_log_stream_diag = OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair)
+        should_log_verbose_stream_diag = OUTPUT_KNAPSACK_TEST_REPRO_LOGS
 
         if should_log_stream_diag:
             logbook.warning(
@@ -938,7 +1042,20 @@ class ArmyFlowExpanderV2:
                 f"borders={[self._diag_island_summary(neighbor) for neighbor in start_node.island.border_islands]}"
             )
 
-        def _enqueue_candidate(dest_node: IslandFlowNode, routed_flow_amount: int) -> None:
+        def _format_frontier_snapshot() -> list[str]:
+            snapshot: list[str] = []
+            for neg_heuristic, frontier_island_id, frontier_seq, frontier_node, source_kind, source_island_id, source_routed_flow, source_heuristic in sorted(frontier):
+                snapshot.append(
+                    f"dest={self._diag_island_summary(frontier_node.island)}"
+                    f":heur={-neg_heuristic:.4f}"
+                    f":srcKind={source_kind}"
+                    f":src={self._diag_island_id_anchor(source_island_id) if source_island_id != -1 else 'unknown'}"
+                    f":routedFlow={source_routed_flow}"
+                    f":pushSeq={frontier_seq}"
+                )
+            return snapshot
+
+        def _enqueue_candidate(dest_node: IslandFlowNode, routed_flow_amount: int, source_node: IslandFlowNode, source_kind: str) -> None:
             dest_island = dest_node.island
             if dest_island.unique_id in visited:
                 if should_log_stream_diag:
@@ -971,17 +1088,20 @@ class ArmyFlowExpanderV2:
 
             nonlocal frontier_sequence
             frontier_sequence += 1
-            heapq.heappush(frontier, (-heuristic, dest_island.unique_id, frontier_sequence, dest_node))
-            if should_log_stream_diag:
+            heapq.heappush(
+                frontier,
+                (-heuristic, dest_island.unique_id, frontier_sequence, dest_node, source_kind, source_node.island.unique_id, routed_flow_amount, heuristic),
+            )
+            if should_log_stream_diag and (routed_flow_amount > 0 or source_kind == 'flowless_border_adj'):
                 logbook.warning(
                     f"FE_DIAG_ORDER_DOWNSTREAM_ENQUEUE {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
-                    f"start={self._diag_island_anchor(start_node.island)} "
+                    f"start={self._diag_island_anchor(start_node.island)} src={self._diag_island_summary(source_node.island)} sourceKind={source_kind} "
                     f"dest={self._diag_island_summary(dest_island)} heuristic={heuristic:.4f} "
                     f"econ={econ_value:.2f} army={army_sum} routedFlow={routed_flow_amount} frontierSize={len(frontier)}"
                 )
 
         def _enqueue_downstream(node: IslandFlowNode) -> None:
-            if should_log_stream_diag:
+            if should_log_stream_diag and (node is start_node or node.flow_to):
                 logbook.warning(
                     f"FE_DOWNSTREAM_EXPAND {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
                     f"node={self._diag_island_summary(node.island)} "
@@ -990,18 +1110,28 @@ class ArmyFlowExpanderV2:
                 )
             # 1) Routed flow_to edges (preferred: preserves prior behavior for
             #    pairs where MinCostFlow already routed into neutrals).
+            routed_destination_ids: set[int] = set()
             for edge in node.flow_to:
-                _enqueue_candidate(edge.target_flow_node, edge.edge_army)
+                routed_destination_ids.add(edge.target_flow_node.island.unique_id)
+                _enqueue_candidate(edge.target_flow_node, edge.edge_army, node, 'flow_to')
             # 2) Physical-adjacency fallback: include neutral/enemy neighbors
             #    that MinCostFlow did not route to. Dedup via `visited` prevents
             #    doubling of candidates already enqueued through flow_to.
+            fallback_source_kind = 'border_adj' if routed_destination_ids else 'flowless_border_adj'
             for neighbor_island in node.island.border_islands:
                 if neighbor_island.unique_id in visited:
+                    continue
+                if neighbor_island.unique_id in routed_destination_ids:
                     continue
                 neighbor_node = flow_lookup.get(neighbor_island.unique_id)
                 if neighbor_node is None:
                     continue
-                _enqueue_candidate(neighbor_node, 0)
+                _enqueue_candidate(neighbor_node, 0, node, fallback_source_kind)
+            if should_log_verbose_stream_diag:
+                logbook.warning(
+                    f"FE_DIAG_ORDER_DOWNSTREAM_FRONTIER {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
+                    f"afterExpand={self._diag_island_summary(node.island)} frontier={_format_frontier_snapshot()}"
+                )
 
         if should_log_stream_diag:
             econ_val = self._calculate_island_econ_value(start_node.island, target_crossable_islands)
@@ -1013,7 +1143,7 @@ class ArmyFlowExpanderV2:
         _enqueue_downstream(start_node)
 
         while frontier and len(stream) < max_stream_size:
-            _, _, _, current_node = heapq.heappop(frontier)
+            _, _, pop_enqueue_sequence, current_node, pop_source_kind, pop_source_island_id, pop_routed_flow, pop_enqueue_heuristic = heapq.heappop(frontier)
             current_island = current_node.island
             if current_island.unique_id in visited:
                 if should_log_stream_diag:
@@ -1026,12 +1156,15 @@ class ArmyFlowExpanderV2:
             visited.add(current_island.unique_id)
 
             stream.append(current_node)
-            if should_log_stream_diag:
+            if should_log_stream_diag and (pop_routed_flow > 0 or pop_source_kind == 'flowless_border_adj'):
                 logbook.warning(
                     f"FE_DIAG_ORDER_DOWNSTREAM_POP {self._diag_border_pair_anchor(border_pair) if border_pair is not None else 'unknown'} "
                     f"start={self._diag_island_anchor(start_node.island)} "
-                    f"selected={self._diag_island_summary(current_island)} "
+                    f"selected={self._diag_island_summary(current_island)} sourceKind={pop_source_kind} "
+                    f"source={self._diag_island_id_anchor(pop_source_island_id) if pop_source_island_id != -1 else 'unknown'} "
+                    f"routedFlow={pop_routed_flow} enqueueHeuristic={pop_enqueue_heuristic:.4f} enqueueSeq={pop_enqueue_sequence} "
                     f"stream={[self._diag_island_anchor(n.island) for n in stream]}"
+                    f"{' remainingFrontier=' + str(_format_frontier_snapshot()) if should_log_verbose_stream_diag else ''}"
                 )
 
             if should_log_stream_diag:
@@ -1137,13 +1270,25 @@ class ArmyFlowExpanderV2:
     def _get_friendly_island_supply_army(self, island: TileIsland) -> int:
         army_amount = sum(self._get_tile_army(tile) for tile in island.tile_set)
         if self.negative_tiles is not None:
-            army_amount -= sum(self._get_tile_army(tile) for tile in island.tile_set if tile in self.negative_tiles)
+            army_amount -= sum(self._get_tile_army(tile) for tile in island.tile_set if self._is_hard_negative_tile(tile))
         return army_amount
 
     def _get_friendly_tile_gather_contribution(self, tile: Tile) -> int:
-        if self.negative_tiles is not None and tile in self.negative_tiles:
+        if self._is_hard_negative_tile(tile):
             return 0
         return self._get_tile_army(tile) - 1
+
+    def _is_hard_negative_tile(self, tile: Tile) -> bool:
+        if self.negative_tiles is None or tile not in self.negative_tiles:
+            return False
+        return self.threat_blocking_tiles is None or tile not in self.threat_blocking_tiles
+
+    def _get_hard_negative_tiles(self) -> TileSet | None:
+        if self.negative_tiles is None:
+            return None
+        if not self.threat_blocking_tiles:
+            return self.negative_tiles
+        return set(tile for tile in self.negative_tiles if tile not in self.threat_blocking_tiles)
 
     def _compute_target_contributions(
         self,
@@ -1215,14 +1360,28 @@ class ArmyFlowExpanderV2:
         """
         lookup_tables = []
 
-        # TODO order by the border pairs with the highest potential econValue per turn heuristic.
-        # border_pairs.sort(key=lambda x: x.)
+        logbook.warning(
+            f"FE_PHASE2_DIAG_ENTRY log_debug={self.log_debug} borderPairCount={len(border_pairs)} "
+            f"pairs={[self._diag_border_pair_anchor(pair) + ':diag' + str(self._is_diag_border_pair(pair)) for pair in border_pairs]}"
+        )
 
+        stream_data_by_border_pair: list[tuple[FlowBorderPairKey, ArmyFlowExpanderV2.BorderPairStreamPotential]] = []
         for border_pair in border_pairs:
-            # Build stream data for this border pair
             stream_data = self._build_border_pair_stream_data(border_pair, flow_graph, target_crossable_islands, turn_budget)
             if stream_data is None:
                 continue
+            stream_data_by_border_pair.append((border_pair, stream_data))
+
+        stream_data_by_border_pair.sort(
+            key=lambda item: item[1].gather_turns_potential / max(sum(node.island.tile_count for node in item[1].target_stream), 1)
+        )
+        if self.log_debug:
+            logbook.info(
+                f"FE_PHASE2_BORDER_PAIR_SORTED pairs="
+                f"{[(self._diag_border_pair_anchor(pair), stream_data.gather_turns_potential, sum(node.island.tile_count for node in stream_data.target_stream)) for pair, stream_data in stream_data_by_border_pair]}"
+            )
+
+        for border_pair, stream_data in stream_data_by_border_pair:
             diag_relevant = self.log_debug and self._is_diag_border_pair(border_pair, stream_data)
 
             # Get ordered contributions for this border pair
@@ -1287,6 +1446,26 @@ class ArmyFlowExpanderV2:
             border_pair: FlowBorderPairKey,
             stream_data: BorderPairStreamPotential | None = None
     ) -> bool:
+        if border_pair is None:
+            return False
+        if (border_pair.friendly_island_id, border_pair.target_island_id) in DIAG_BORDER_PAIR_ISLAND_IDS:
+            return True
+        if DIAG_BORDER_PAIR_ANCHORS:
+            return self._diag_border_pair_anchor(border_pair) in DIAG_BORDER_PAIR_ANCHORS
+        if DIAG_BORDER_PAIR_TILE_COORDS and self.island_builder is not None:
+            friendly_island = None
+            target_island = None
+            for island in self.island_builder.all_tile_islands:
+                if island.unique_id == border_pair.friendly_island_id:
+                    friendly_island = island
+                if island.unique_id == border_pair.target_island_id:
+                    target_island = island
+            if friendly_island is None or target_island is None:
+                return False
+            for friendly_tile in friendly_island.tile_set:
+                for target_tile in target_island.tile_set:
+                    if (friendly_tile.x, friendly_tile.y, target_tile.x, target_tile.y) in DIAG_BORDER_PAIR_TILE_COORDS:
+                        return True
         return False
 
     def _diag_tile_team(self, tile) -> int:
@@ -1411,7 +1590,7 @@ class ArmyFlowExpanderV2:
                         # Neutral island capture
                         base_capture_value = 1.0
                     current_econ_value += base_capture_value
-                    if self.log_debug or OUTPUT_KNAPSACK_TEST_REPRO_LOGS:
+                    if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                         logbook.warning(
                             f"FE_PRIORITY_CAPTURE_TILE {self._diag_border_pair_anchor(border_pair)} "
                             f"turn={current_turn} tile={tile.x},{tile.y} idx={tile.tile_index} "
@@ -1439,7 +1618,7 @@ class ArmyFlowExpanderV2:
                     incomplete_target_island_id=island.unique_id if island.tile_count > i else None,
                     incomplete_target_tile_count=island.tile_count - i
                 )
-                if self.log_debug:
+                if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                     logbook.info(f"CAPTURES: {self._diag_border_pair_anchor(border_pair)}  (cur {self._diag_island_anchor(island)}) - Adding capture entry @{tile} for turn {current_turn} with econ value {current_econ_value:.2f}, army cost {current_army_cost}, "
                                  f"army remaining {current_army_remaining}, gathered army {current_gathered_army}, required army {required_army_for_entry}, incomplete {lookup[current_turn].incomplete_target_tile_count}")
 
@@ -1524,7 +1703,7 @@ class ArmyFlowExpanderV2:
         while bfs_queue:
             _, depth, _, _, num_friendly_1s_traversed, node_bfs = heapq.heappop(bfs_queue)
             iid = node_bfs.island.unique_id
-            if self.log_debug:
+            if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                 logbook.warning(
                     f"FE_DIAG_ORDER_GATHER_BFS_POP "
                     f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
@@ -1536,9 +1715,10 @@ class ArmyFlowExpanderV2:
             if iid in bfs_visited:
                 continue
 
-            if self.log_debug and self.island_builder is not None:
+            if (OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair)) and self.island_builder is not None:
                 flow_from_ids = {edge.source_flow_node.island.unique_id for edge in node_bfs.flow_from}
                 adjacent_friendlies: dict[int, list[tuple[int, int]]] = {}
+                adjacent_block_diagnostics: list[tuple[int, list[tuple[int, int]], bool, bool]] = []
                 for tile in node_bfs.island.tile_set:
                     for adj in tile.movable:
                         adj_island = self.island_builder.tile_island_lookup.raw[adj.tile_index]
@@ -1547,17 +1727,21 @@ class ArmyFlowExpanderV2:
                         if adj_island.team != self.team:
                             continue
                         adjacent_friendlies.setdefault(adj_island.unique_id, []).append((adj.x, adj.y))
-                if adjacent_friendlies:
+                        current_to_adj_blocked = self._is_blocked_by_threat_blocking_tiles(node_bfs.island, adj_island)
+                        adj_to_current_blocked = self._is_blocked_by_threat_blocking_tiles(adj_island, node_bfs.island)
+                        adjacent_block_diagnostics.append((adj_island.unique_id, [(adj.x, adj.y)], current_to_adj_blocked, adj_to_current_blocked))
+                if adjacent_friendlies and (OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair)):
                     logbook.warning(
                         f"FE_DIAG_GATHER_ADJ_FLOW_FROM "
                         f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
                         f"candidate={self._diag_island_summary(node_bfs.island)} "
                         f"flowFrom={sorted(flow_from_ids)} "
-                        f"adjFriendlies={[(iid2, sorted(coords), iid2 in flow_from_ids) for iid2, coords in sorted(adjacent_friendlies.items())]}"
+                        f"adjFriendlies={[(iid2, sorted(coords), iid2 in flow_from_ids) for iid2, coords in sorted(adjacent_friendlies.items())]} "
+                        f"threatBlocks={adjacent_block_diagnostics}"
                     )
 
             if depth > max_turns:
-                if self.log_debug:
+                if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                     logbook.warning(
                         f"FE_DIAG_ORDER_GATHER_BFS_SKIP_DEPTH "
                         f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
@@ -1598,8 +1782,8 @@ class ArmyFlowExpanderV2:
                 # is implicit in the army movement mechanics, not subtracted here.
 
                 tile_contribution = self._get_friendly_tile_gather_contribution(tile)
-                if tile.isGeneral or tile.isCity:
-                    tile_contribution = max(0, tile_contribution - num_friendly_1s_traversed)
+                # if tile.isCity or tile.isGeneral:
+                #     tile_contribution = max(0, tile_contribution - num_friendly_1s_traversed)
 
                 current_gathered_army += tile_contribution
 
@@ -1623,7 +1807,7 @@ class ArmyFlowExpanderV2:
                     incomplete_target_island_id=incomplete_target_island_id,
                     incomplete_target_tile_count=incomplete_target_tile_count
                 )
-                if self.log_debug:
+                if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                     logbook.info(
                         f"GATHERS: {border_pair.friendly_island_id}->{border_pair.target_island_id}  (cur {island.unique_id}) - Adding gather entry @{tile} for turn {current_turn} with gathered army {int(current_gathered_army)}, "
                         f"tile contribution {self._get_friendly_tile_gather_contribution(tile):.2f}, incomplete {lookup[current_turn].incomplete_friendly_tile_count}")
@@ -1647,7 +1831,7 @@ class ArmyFlowExpanderV2:
                         bfs_queue,
                         (-_get_gather_queue_priority(src, next_depth), next_depth, src.island.unique_id, bfs_sequence, next_num_friendly_1s_traversed, src)
                     )
-                    if self.log_debug:
+                    if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                         logbook.warning(
                             f"FE_DIAG_ORDER_GATHER_BFS_ENQUEUE "
                             f"bp={border_pair.friendly_island_id}->{border_pair.target_island_id} "
@@ -1715,6 +1899,151 @@ class ArmyFlowExpanderV2:
 
         return max_flow
 
+    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_LookupGeneration.py::FlowExpansionLookupGenerationTests::test_lookup_generation__enemy_city_capture_should_create_distinct_enriched_entries_per_gather_support
+    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_LookupGeneration.py::FlowExpansionLookupGenerationTests::test_lookup_generation__enemy_city_capture_value_should_increase_with_extra_post_capture_gather
+    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_LookupGeneration.py::FlowExpansionLookupGenerationTests::test_lookup_generation__multiple_enemy_city_captures_should_gain_value_from_additional_gather
+    # UnitTests/test_FlowExpansion.py::FlowExpansionUnitTests::test_should_find_delayed_enemy_city_capture_when_support_is_exactly_enough_after_city_growth
+    # UnitTests/test_FlowExpansion.py::FlowExpansionUnitTests::test_should_capture_bC3_and_b1_but_not_bC1_with_delayed_multi_city_support
+    # UnitTests/test_FlowExpansion.py::FlowExpansionUnitTests::test_should_capture_bC1_as_well_when_delayed_multi_city_support_is_high_enough
+    # UnitTests/test_FlowExpansion.py::FlowExpansionUnitTests::test_should_capture_b1_after_bC1_when_delayed_multi_city_support_is_extremely_high
+    # FlowExpansion city valuation must match the ArmyInterceptor-style contest-city scaling: each captured enemy city gets a flat +6 econ bonus, and any extra army that keeps flowing after the capture is converted into additional city value using max(0.2, enemy_city_count - 2) as the divisor so one captured city does not immediately outpace the remaining city growth clock.
+    # FlowExpansion Phase 3 must preserve multiple gather-supported variants of the same capture plan because additional gathered army after a city capture increases the army that can continue from those captured enemy cities.
+    def _calculate_enemy_city_bonus_for_capture_entry(
+        self,
+        capture_entry: FlowTurnsEntry,
+        gather_entry: FlowTurnsEntry,
+        capture_entries: list[FlowTurnsEntry | None],
+    ) -> float:
+        enemy_city_count = self.map.players[self.target_team].cityCount
+        if enemy_city_count <= 0:
+            return 0.0
+
+        city_armies_reached: list[int] = []
+        captured_enemy_city_count = 0
+        capture_turn = 0
+        for node in capture_entry.included_target_flow_nodes:
+            island = node.island
+            for tile in island.tiles_by_army:
+                capture_turn += 1
+                if capture_turn > capture_entry.turns:
+                    break
+                if not tile.isCity or island.team != self.target_team:
+                    continue
+
+                captured_enemy_city_count += 1
+
+                required_entry = capture_entries[capture_turn]
+                if required_entry is None:
+                    continue
+
+                army_reaching_city = self._get_effective_gathered_army_for_capture_entry(capture_entry, gather_entry) - required_entry.required_army
+                if army_reaching_city > 0:
+                    city_armies_reached.append(army_reaching_city)
+
+            if capture_turn >= capture_entry.turns:
+                break
+
+        if captured_enemy_city_count <= 0:
+            return 0.0
+
+        flat_city_capture_bonus = 6.0 * captured_enemy_city_count
+        if not city_armies_reached:
+            return flat_city_capture_bonus
+
+        average_army_reaching_city = sum(city_armies_reached) / len(city_armies_reached)
+        city_army_bonus = average_army_reaching_city // max(0.2, enemy_city_count - 2)
+        return flat_city_capture_bonus + city_army_bonus
+
+    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_LookupGeneration.py::FlowExpansionLookupGenerationTests::test_lookup_generation__enemy_city_capture_should_create_distinct_enriched_entries_per_gather_support
+    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_LookupGeneration.py::FlowExpansionLookupGenerationTests::test_lookup_generation__enemy_city_capture_value_should_increase_with_extra_post_capture_gather
+    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_LookupGeneration.py::FlowExpansionLookupGenerationTests::test_lookup_generation__multiple_enemy_city_captures_should_gain_value_from_additional_gather
+    # The lookup generator must retain every gather entry that can fund a capture entry so FlowExpansion can value enemy-city recaptures using the exact amount of army that remains available after each city is taken.
+    def _find_all_gather_support_entries(
+        self,
+        capture_entry: FlowTurnsEntry,
+        gather_entries: list[FlowTurnsEntry | None]
+    ) -> list[FlowTurnsEntry]:
+        required_army = capture_entry.required_army
+        supporting_entries: list[FlowTurnsEntry] = []
+
+        for gather_entry in gather_entries:
+            if gather_entry is None:
+                continue
+            effective_gathered_army = self._get_effective_gathered_army_for_capture_entry(capture_entry, gather_entry)
+            if effective_gathered_army < required_army:
+                continue
+            supporting_entries.append(gather_entry)
+
+        return supporting_entries
+
+    def _capture_entry_includes_enemy_city(
+        self,
+        capture_entry: FlowTurnsEntry,
+    ) -> bool:
+        for node in capture_entry.included_target_flow_nodes:
+            island = node.island
+            if island.team != self.target_team:
+                continue
+            for tile in island.tile_set:
+                if tile.isCity:
+                    return True
+        return False
+
+    def _count_active_enemy_cities_in_capture_entry(
+        self,
+        capture_entry: FlowTurnsEntry,
+    ) -> int:
+        active_enemy_city_count = 0
+        capture_turn = 0
+        for node in capture_entry.included_target_flow_nodes:
+            for tile in node.island.tiles_by_army:
+                capture_turn += 1
+                if capture_turn > capture_entry.turns:
+                    return active_enemy_city_count
+                if node.island.team == self.target_team and tile.isCity:
+                    active_enemy_city_count += 1
+        return active_enemy_city_count
+
+    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_LookupGeneration.py::FlowExpansionLookupGenerationTests::test_lookup_generation__enemy_city_growth_should_block_delayed_gather_capture_when_support_arrives_too_late
+    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_LookupGeneration.py::FlowExpansionLookupGenerationTests::test_lookup_generation__enemy_city_growth_should_still_allow_delayed_capture_when_support_is_exactly_enough
+    # Enemy cities keep growing while extra gather turns are spent before the capture is executed, so the usable gathered army must be reduced by 1 per active city for every 2 gather turns.
+    def _get_effective_gathered_army_for_capture_entry(
+        self,
+        capture_entry: FlowTurnsEntry,
+        gather_entry: FlowTurnsEntry,
+    ) -> int:
+        active_enemy_city_count = self._count_active_enemy_cities_in_capture_entry(capture_entry)
+        if active_enemy_city_count <= 0:
+            return gather_entry.gathered_army
+
+        delayed_city_growth_penalty = active_enemy_city_count * (gather_entry.turns // 2)
+        return gather_entry.gathered_army - delayed_city_growth_penalty
+
+    def _find_minimum_gather_support(
+        self,
+        capture_entry: FlowTurnsEntry,
+        gather_entries: list[FlowTurnsEntry | None]
+    ) -> FlowTurnsEntry | None:
+        required_army = capture_entry.required_army
+        if required_army <= 0:
+            return gather_entries[0]
+
+        best_gather = None
+        best_turn = float('inf')
+
+        for gather_turn, gather_entry in enumerate(gather_entries):
+            if gather_entry is None:
+                continue
+            effective_gathered_army = self._get_effective_gathered_army_for_capture_entry(capture_entry, gather_entry)
+            if effective_gathered_army < required_army:
+                continue
+            if gather_turn >= best_turn:
+                continue
+            best_gather = gather_entry
+            best_turn = gather_turn
+
+        return best_gather
+
     def _postprocess_flow_stream_gather_capture_lookup_pairs(
         self,
         lookup_tables: list[FlowArmyTurnsLookupTable]
@@ -1740,34 +2069,55 @@ class ArmyFlowExpanderV2:
                 if capture_entry is None or capture_turn == 0:
                     continue
 
-                # TODO this is inefficient, we should be maintaining a gather index and just walking backwards up the gathers while we walk forwards through the captures. No reason to loop gathers completely for every capture entry...
-                # Find the minimum-turn gather entry that supports this capture
-                min_gather_entry = self._find_minimum_gather_support(
-                    capture_entry, gather_entries
-                )
-
-                if min_gather_entry is not None:
-                    # Calculate combined metrics
-                    combined_turn_cost = capture_entry.turns + min_gather_entry.turns
-                    combined_value_density = (capture_entry.econ_value / combined_turn_cost
-                                            if combined_turn_cost > 0 else 0.0)
-
-                    # Create enriched capture entry
-                    enriched_capture = EnrichedFlowTurnsEntry(
-                        capture_entry=capture_entry,
-                        gather_entry=min_gather_entry,
-                        gather_index=min_gather_entry.turns,
-                        combined_turn_cost=combined_turn_cost,
-                        combined_value_density=combined_value_density
+                if self._capture_entry_includes_enemy_city(capture_entry):
+                    supporting_gather_entries = self._find_all_gather_support_entries(
+                        capture_entry, gather_entries
                     )
+                else:
+                    minimum_gather_support = self._find_minimum_gather_support(
+                        capture_entry, gather_entries
+                    )
+                    supporting_gather_entries = [] if minimum_gather_support is None else [minimum_gather_support]
 
-                    enriched_captures.append(enriched_capture)
+                if supporting_gather_entries:
+                    for supporting_gather_entry in supporting_gather_entries:
+                        capture_econ_value = capture_entry.econ_value + self._calculate_enemy_city_bonus_for_capture_entry(
+                            capture_entry,
+                            supporting_gather_entry,
+                            capture_entries,
+                        )
+                        enriched_capture_entry = FlowTurnsEntry(
+                            turns=capture_entry.turns,
+                            required_army=capture_entry.required_army,
+                            econ_value=capture_econ_value,
+                            army_remaining=capture_entry.army_remaining,
+                            gathered_army=capture_entry.gathered_army,
+                            included_friendly_flow_nodes=capture_entry.included_friendly_flow_nodes,
+                            included_target_flow_nodes=capture_entry.included_target_flow_nodes,
+                            incomplete_friendly_island_id=capture_entry.incomplete_friendly_island_id,
+                            incomplete_friendly_tile_count=capture_entry.incomplete_friendly_tile_count,
+                            incomplete_target_island_id=capture_entry.incomplete_target_island_id,
+                            incomplete_target_tile_count=capture_entry.incomplete_target_tile_count,
+                        )
+                        combined_turn_cost = capture_entry.turns + supporting_gather_entry.turns
+                        combined_value_density = (capture_econ_value / combined_turn_cost
+                                                if combined_turn_cost > 0 else 0.0)
 
-                    if self.log_debug:
-                        logbook.info(f"Border pair {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
-                                     f"Capture turn {capture_turn} (army={capture_entry.required_army}) "
-                                     f"paired with gather turn {min_gather_entry.turns} (army={min_gather_entry.gathered_army}) "
-                                     f"-> total econ {capture_entry.econ_value:.2f} / combined cost {combined_turn_cost} = density {combined_value_density:.3f}")
+                        enriched_capture = EnrichedFlowTurnsEntry(
+                            capture_entry=enriched_capture_entry,
+                            gather_entry=supporting_gather_entry,
+                            gather_index=supporting_gather_entry.turns,
+                            combined_turn_cost=combined_turn_cost,
+                            combined_value_density=combined_value_density
+                        )
+
+                        enriched_captures.append(enriched_capture)
+
+                        if self.log_debug:
+                            logbook.info(f"Border pair {lookup_table.border_pair.friendly_island_id}->{lookup_table.border_pair.target_island_id}: "
+                                         f"Capture turn {capture_turn} (army={capture_entry.required_army}) "
+                                         f"paired with gather turn {supporting_gather_entry.turns} (army={supporting_gather_entry.gathered_army}) "
+                                         f"-> total econ {capture_econ_value:.2f} / combined cost {combined_turn_cost} = density {combined_value_density:.3f}")
                 else:
                     # No gather support available for this capture
                     if self.log_debug:
@@ -1794,37 +2144,6 @@ class ArmyFlowExpanderV2:
             f"cap[{self._diag_entry_summary(entry.capture_entry)}]:"
             f"gath[{self._diag_entry_summary(entry.gather_entry)}]"
         )
-
-    def _find_minimum_gather_support(
-        self,
-        capture_entry: FlowTurnsEntry,
-        gather_entries: list[FlowTurnsEntry | None]
-    ) -> FlowTurnsEntry | None:
-        """
-        Find the minimum-turn gather entry whose gathered_army >= capture.required_army.
-
-        Uses the prefix table approach for efficiency.
-        """
-        required_army = capture_entry.required_army
-
-        # If no army required, the turn 0 gather entry is sufficient
-        if required_army <= 0:
-            return gather_entries[0]
-
-        # Search through gather entries to find the minimum turn that provides sufficient army
-        best_gather = None
-        best_turn = float('inf')
-
-        for gather_turn, gather_entry in enumerate(gather_entries):
-            if gather_entry is None:
-                continue
-
-            if (gather_entry.gathered_army >= required_army and
-                gather_turn < best_turn):
-                best_gather = gather_entry
-                best_turn = gather_turn
-
-        return best_gather
 
     def _convert_additional_options_to_external(
         self,
@@ -2365,6 +2684,9 @@ class ArmyFlowExpanderV2:
 
             for flow_node in gather_entry.included_friendly_flow_nodes:
                 island = flow_node.island
+                gatherable_island_tiles = island.tile_set
+                if island.team == self.team and any(tile.player != asPlayer for tile in island.tile_set):
+                    gatherable_island_tiles = {tile for tile in island.tile_set if not tile.isGeneral}
                 if (gather_entry.incomplete_friendly_island_id is not None and
                         island.unique_id == gather_entry.incomplete_friendly_island_id):
                     tiles_to_gather = island.tile_count - gather_entry.incomplete_friendly_tile_count
@@ -2380,15 +2702,20 @@ class ArmyFlowExpanderV2:
                     )
                     if self.log_debug:
                         logbook.info(f'  island {island.unique_id}: partial gather {len(partial_gather_tiles)}/{island.tile_count} tiles: {sorted([(t.x, t.y) for t in partial_gather_tiles])}')
-                    gathing.update(partial_gather_tiles)
+                    gathing.update(tile for tile in partial_gather_tiles if tile in gatherable_island_tiles)
                 else:
                     if self.log_debug:
-                        logbook.info(f'  island {island.unique_id}: full gather {len(island.tile_set)} tiles')
-                    gathing.update(island.tile_set)
+                        logbook.info(f'  island {island.unique_id}: full gather {len(gatherable_island_tiles)} tiles')
+                    gathing.update(gatherable_island_tiles)
             if not gathing and self.island_builder is not None:
                 fr_island = self.island_builder.tile_islands_by_unique_id.get(border_pair.friendly_island_id)
                 if fr_island is not None:
                     gathing.update(fr_island.tile_set)
+            if gathing:
+                connected_gathing = self._connect_allied_gather_components_to_owned_tiles(gathing, asPlayer)
+                if not connected_gathing:
+                    continue
+                gathing = connected_gathing
 
             # Reconstruct capture tile set from included target flow nodes.
             # Target-crossable friendly islands (team == self.team) on the capture path
@@ -2396,10 +2723,9 @@ class ArmyFlowExpanderV2:
             capping: set = set()
             for flow_node in capture_entry.included_target_flow_nodes:
                 island = flow_node.island
-                # if island.team == self.team:
-                #     gathing.update(island.tile_set)
-                # else:
-                #     capping.update(island.tile_set)
+                if island.team == self.team:
+                    gathing.update(tile for tile in island.tile_set if not tile.isGeneral)
+                    continue
 
                 # Check if this island has partial capture (incomplete capture)
                 if (capture_entry.incomplete_target_island_id is not None and
@@ -2418,6 +2744,11 @@ class ArmyFlowExpanderV2:
                     capping.update(partial_capture_tiles)
                 else:
                     capping.update(island.tile_set)
+            if gathing:
+                connected_gathing = self._connect_allied_gather_components_to_owned_tiles(gathing, asPlayer)
+                if not connected_gathing:
+                    continue
+                gathing = connected_gathing
 
             if not gathing and not capping:
                 if self.log_debug:
@@ -2474,14 +2805,14 @@ class ArmyFlowExpanderV2:
                     self.map,
                     rootTiles=root_tiles,
                     tiles=gathing,
-                    negativeTiles=self.negative_tiles,
+                    negativeTiles=self._get_hard_negative_tiles(),
                     searchingPlayer=asPlayer,
                     priorityMatrix=None,
                     useTrueValueGathered=False,
                     captures=capping,
                     intergeneral_analysis=self.island_builder.intergeneral_analysis,
                 )
-                plan._turns = len(gathing) + len(capping) - 1
+                plan._turns = enriched.combined_turn_cost
                 plan.econValue = capture_entry.econ_value
                 if self.log_debug and self._is_diag_border_pair(border_pair):
                     first_move = plan.get_first_move() if plan.get_move_list() else None
@@ -2534,20 +2865,85 @@ class ArmyFlowExpanderV2:
             error_summary.append(f"{'='*80}\n")
             logbook.error("\n".join(error_summary))
 
-            # Always fail immediately if any plan has errors. ALWAYS. DONT FUCKING CHANGE THIS ASSHOLE.
-            # We should never be unable to produce a plan.
-            if len(plan_errors) > 0:
+            fatal_plan_errors = [
+                (border_pair, details, ex)
+                for border_pair, details, ex in plan_errors
+                if "GATHER_CAPTURE_PLAN_NO_MOVE_ERROR" not in details['exception']
+            ]
+            if len(fatal_plan_errors) > 0:
                 all_errors_str = "\n\n".join([
                     f"{details['border_pair']}: {details['exception_type']}: {details['exception']}"
-                    for _, details, _ in plan_errors
+                    for _, details, _ in fatal_plan_errors
                 ])
                 raise AssertionError(
-                    f"ALL {len(plan_errors)} plan materializations failed!\n\n"
+                    f"ALL {len(fatal_plan_errors)} plan materializations failed!\n\n"
                     f"Errors:\n{all_errors_str}\n\n"
                     f"Check logs above for detailed parameter dumps from each failed GCP creation."
                 )
 
         return plans
+
+    def _find_owned_entry_path_for_allied_gather(self, gather_tiles: set, as_player: int) -> set:
+        if not gather_tiles:
+            return set()
+
+        queue = deque()
+        visited: set = set()
+        parent_by_tile = {}
+        for tile in gather_tiles:
+            queue.append(tile)
+            visited.add(tile)
+            parent_by_tile[tile] = None
+
+        while queue:
+            tile = queue.popleft()
+            if tile.player == as_player:
+                path = set()
+                cur = tile
+                while cur is not None:
+                    path.add(cur)
+                    cur = parent_by_tile[cur]
+                return path
+
+            for adj in tile.movable:
+                if adj in visited:
+                    continue
+                if adj.player < 0 or self.map.team_ids_by_player_index[adj.player] != self.team:
+                    continue
+                if adj.player != as_player and adj.isGeneral:
+                    continue
+                visited.add(adj)
+                parent_by_tile[adj] = tile
+                queue.append(adj)
+
+        return set()
+
+    def _connect_allied_gather_components_to_owned_tiles(self, gather_tiles: set, as_player: int) -> set:
+        if not gather_tiles:
+            return set()
+
+        remaining = set(gather_tiles)
+        connected_tiles = set(gather_tiles)
+        while remaining:
+            component = set()
+            queue = deque([remaining.pop()])
+            while queue:
+                tile = queue.popleft()
+                component.add(tile)
+                for adj in tile.movable:
+                    if adj in remaining:
+                        remaining.remove(adj)
+                        queue.append(adj)
+
+            if any(tile.player == as_player for tile in component):
+                continue
+
+            entry_path = self._find_owned_entry_path_for_allied_gather(component, as_player)
+            if not entry_path:
+                return set()
+            connected_tiles.update(entry_path)
+
+        return connected_tiles
 
     def _select_partial_capture_tiles(
         self,

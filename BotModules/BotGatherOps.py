@@ -6,6 +6,7 @@ import typing
 import BotModules as BM
 import logbook
 
+import DebugHelper
 import Gather
 import SearchUtils
 from BotModules.BotStateQueries import BotStateQueries
@@ -299,10 +300,20 @@ class BotGatherOps:
             includeGatherTreeNodesThatGatherNegative = bot.defend_economy
             distancePriorities = bot.board_analysis.intergeneral_analysis.bMap
             if bot.defend_economy:
-                tgTurns = bot.timings.splitTurns + 5 - bot.timings.get_turn_in_cycle(bot._map.turn) + bot.distance_from_general(bot.board_analysis.central_defense_point)
+                turnInCycle = bot.timings.get_turn_in_cycle(bot._map.turn)
+                remainingCycleTurns = bot._map.remainingCycleTurns
+                centralDefensePoint = bot.board_analysis.central_defense_point
+                centralDefenseDistance = bot.distance_from_general(centralDefensePoint)
+                splitTurns = bot.timings.splitTurns
+                launchTiming = bot.timings.launchTiming
+                tgTurns = remainingCycleTurns - 5
                 useTrueValueGathered = True
 
-                gatherTargets = {bot.board_analysis.central_defense_point}
+                gatherTargets = {centralDefensePoint}
+                bot.info(
+                    f'DEF_ECON_GATHER_TURNS turn={bot._map.turn} turnInCycle={turnInCycle} remainingCycleTurns={remainingCycleTurns} '
+                    f'splitTurns={splitTurns} launchTiming={launchTiming} centralDefensePoint={centralDefensePoint} '
+                    f'centralDefenseDistance={centralDefenseDistance} enemyAttackPath={str(bot.enemy_attack_path is not None)[0]} tgTurns={tgTurns}')
                 # gatherTargets = gatherTargets.copy()
                 if bot.enemy_attack_path is not None:
                     # gatherTargets = bot.enemy_attack_path.tileSet
@@ -430,7 +441,8 @@ class BotGatherOps:
         turnOffset = bot._map.turn + bot.timings.offsetTurns
         turnCycleOffset = turnOffset % bot.timings.cycleTurns
 
-        gatherNodeMoveSelectorFunc = BotGatherOps.get_tree_move_default_value_func(bot) if not bot.defend_economy and not bot.likely_kill_push else BotGatherOps.get_tree_move_most_army_value_func(bot)
+        # BotGatherOps.get_tree_move_default_value_func(bot) if not bot.defend_economy and not bot.likely_kill_push else BotGatherOps.get_tree_move_most_army_value_distance_factored_func(bot)
+        gatherNodeMoveSelectorFunc = BotGatherOps.get_tree_move_most_army_value_distance_factored_func(bot)
         # if bot.likely_kill_push:
         #     potThreat = bot.dangerAnalyzer.fastestPotentialThreat
         #     if potThreat is None and bot.enemy_attack_path is not None:
@@ -884,11 +896,44 @@ class BotGatherOps:
             negDistFromPlayArea = 0 - bot.board_analysis.intergeneral_analysis.aMap.raw[currentTile.tile_index]
 
             if currentTile.player in frPlayers:
-                logbook.info(f'army at {currentTile} = {army} (+ curTile = {army + currentTile.army}')
+                if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                    logbook.info(f'army at {currentTile} = {army} (+ curTile = {army + currentTile.army}')
                 army += currentTile.army
             else:
                 army -= currentTile.army
             return army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity
+
+        return default_value_func
+
+    @staticmethod
+    def get_tree_move_most_army_value_distance_factored_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+        frPlayers = bot._map.get_teammates(bot.player.index)
+        def default_value_func(currentTile, currentPriorityObject):
+            negCityCount = army = 0
+            isNotEnemyCity = True
+            if currentPriorityObject is not None:
+                (prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity) = currentPriorityObject
+                army -= 1
+            nextIsNotEnemyCity = isNotEnemyCity
+            isNotEnemyCity = True
+            if currentTile.player in frPlayers:
+                if currentTile.isGeneral or currentTile.isCity:
+                    negCityCount -= 1
+            else:
+                if currentTile.isGeneral or currentTile.isCity and army + 2 <= currentTile.army:
+                    isNotEnemyCity = False
+
+            negDistFromPlayArea = 0 - bot.board_analysis.shortest_path_distances.raw[currentTile.tile_index]
+
+            prioVal = 0
+            if currentTile.player in frPlayers:
+                army += currentTile.army
+            else:
+                army -= currentTile.army
+            prioVal = army - 5 * negDistFromPlayArea
+            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                logbook.info(f'prio at {currentTile} = {prioVal} (dist={-negDistFromPlayArea}, army={army})')
+            return prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity
 
         return default_value_func
 

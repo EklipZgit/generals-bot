@@ -488,6 +488,7 @@ class BotDefense:
 
             threatsWeCareAbout = []
             threatsWeCareAboutByTile = {}
+            bot.threats_we_care_about_by_tile = threatsWeCareAboutByTile
 
             limit = 4
             timeCut = 0.035
@@ -591,7 +592,13 @@ class BotDefense:
                         army = bot.armyTracker.get_or_create_army_at(tile)
                         bot.viewInfo.add_info_line(f'skip int dngr from{str(tile)} last_seen {army.last_seen_turn}, last_moved {army.last_moved_turn}')
                         continue
-                    plan = bot.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=bot.timings.get_turns_left_in_cycle(bot._map.turn), otherThreatsBlockingTiles=blocks)
+                    plan = bot.army_interceptor.get_interception_plan(
+                        threats,
+                        turnsLeftInCycle=bot.timings.get_turns_left_in_cycle(bot._map.turn),
+                        otherThreatsBlockingTiles=blocks,
+                        opponentTracker=bot.opponent_tracker,
+                        contestableEnemyCities=bot.win_condition_analyzer.contestable_cities,
+                    )
                     if plan is not None:
                         interceptions[tile] = plan
 
@@ -1785,8 +1792,9 @@ class BotDefense:
 
         numFog = BotPathingUtils.get_undiscovered_count_on_path(bot, bot.target_player_gather_path)
         if numFog > len(bot.defensive_spanning_tree) // 2:
-            bot.viewInfo.add_info_line(f'bypassing fog risk due to unknown path')
-            return
+            # TODO why was this even fucking added? I am trying to understand why we'd choose not to defend just because we didn't explore where the enemy general is? the fuck?
+            bot.viewInfo.add_info_line(f'WOULD HAVE bypassed fog risk due to unknown path {numFog} vs {len(bot.defensive_spanning_tree) // 2}')
+            # return
 
         if bot.fog_risk_amount > 0:
             if cycleTurnsLeft > bot.target_player_gather_path.length + 5 and bot.fog_risk_amount > defenseWorth and bot._map.turn > 80:
@@ -2033,14 +2041,14 @@ class BotDefense:
             else:
                 bot.currently_forcing_out_of_play_gathers = False
 
-        winningText = "first 100 still"
+        winningText = "first 100 still, no winning calc"
         if bot._map.turn >= 100:
-            econRatio = 1.16
-            armyRatio = 1.42
-            enemyCatchUpOffset = -25
+            econRatio = 1.1
+            skipDefAfterArmyRatio = 1.42
+            enemyCatchUpOffset = -(min(20, abs(10 - bot._map.remainingCycleTurns) // 2))
 
-            winningEcon = bot.opponent_tracker.winning_on_economy(econRatio, cityValue=20, againstPlayer=bot.targetPlayer, offset=enemyCatchUpOffset)
-            winningArmy = bot.opponent_tracker.winning_on_army(armyRatio)
+            winningEcon = bot.opponent_tracker.winning_on_economy(econRatio, cityValue=25, againstPlayer=bot.targetPlayer, offset=enemyCatchUpOffset)
+            winningArmy = bot.opponent_tracker.winning_on_army(skipDefAfterArmyRatio)
             pathLen = bot.board_analysis.inter_general_distance
             if bot.shortest_path_to_target_player is not None:
                 pathLen = bot.shortest_path_to_target_player.length
@@ -2055,13 +2063,14 @@ class BotDefense:
                     bot.viewInfo.add_info_line("FORCING MAX GATHER TIMINGS BECAUSE NOT ENOUGH ARMY NEAR GEN AND DEFENDING ECONOMY")
                     bot.timings.split = bot.timings.cycleTurns
                 logbook.info(
-                    f"\n\nDEF ECONOMY! winning_on_econ({econRatio}) {str(winningEcon)[0]}, on_army({armyRatio}) {str(winningArmy)[0]}, enough_near_gen({playerArmyNearGeneral}/{armyThresh}) {str(hasEnoughArmyNearGeneral)[0]}")
-                winningText = f"! woe{econRatio} {str(winningEcon)[0]}, woa{armyRatio} {str(winningArmy)[0]}, sa{playerArmyNearGeneral}/{armyThresh} {str(hasEnoughArmyNearGeneral)[0]}"
+                    f"\n\nDEF ECONOMY! winning_on_econ({econRatio}) {str(winningEcon)[0]}, on_army({skipDefAfterArmyRatio}) {str(winningArmy)[0]}, enough_near_gen({playerArmyNearGeneral}/{armyThresh}) {str(hasEnoughArmyNearGeneral)[0]}")
+                winningText = f"! woe{econRatio} {str(winningEcon)[0]}, woa{skipDefAfterArmyRatio} {str(winningArmy)[0]}, sa{playerArmyNearGeneral}/{armyThresh} {str(hasEnoughArmyNearGeneral)[0]}"
             else:
                 logbook.info(
-                    f"\n\nNOT DEFENDING ECONOMY? winning_on_econ({econRatio}) {str(winningEcon)[0]}, on_army({armyRatio}) {str(winningArmy)[0]}, enough_near_gen({playerArmyNearGeneral}/{armyThresh}) {str(hasEnoughArmyNearGeneral)[0]}")
-                winningText = f"  woe{econRatio} {str(winningEcon)[0]}, woa{armyRatio} {str(winningArmy)[0]}, sa{playerArmyNearGeneral}/{armyThresh} {str(hasEnoughArmyNearGeneral)[0]}"
+                    f"\n\nNOT DEFENDING ECONOMY? w_econ(rat {econRatio} eCat {enemyCatchUpOffset}) {str(winningEcon)[0]}, on_army({skipDefAfterArmyRatio}) {str(winningArmy)[0]}, enough_near_gen({playerArmyNearGeneral}/{armyThresh}) {str(hasEnoughArmyNearGeneral)[0]}")
+                winningText = f"  woe{econRatio} (eCat {enemyCatchUpOffset}) {str(winningEcon)[0]}, woa{skipDefAfterArmyRatio} {str(winningArmy)[0]}, sa{playerArmyNearGeneral}/{armyThresh} {str(hasEnoughArmyNearGeneral)[0]}"
 
+        bot.viewInfo.add_stats_line(winningText)
         bot.viewInfo.addlTimingsLineText = winningText
 
         return bot.defend_economy

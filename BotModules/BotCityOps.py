@@ -41,6 +41,61 @@ class BotCityOps:
         return ' | '.join(sorted([f'{t.x},{t.y}:p{t.player}:a{t.army}:vis{t.visible}:disc{t.discovered}' for t in tiles]))
 
     @staticmethod
+    def _get_city_defense_tile_contribution(
+            bot: EklipZBot,
+            tile: Tile,
+            targetCity: Tile,
+            defTile: Tile,
+            defTurns: int,
+    ) -> int:
+        spareArmy = max(0, tile.army - 1)
+        if spareArmy <= 0:
+            return 0
+
+        cityDist = bot._map.distance_mapper.get_distance_between(targetCity, tile)
+        defDist = bot._map.distance_mapper.get_distance_between(defTile, tile)
+        generalDist = bot.distance_from_general(tile)
+        cityToDefDist = bot._map.distance_mapper.get_distance_between(targetCity, defTile)
+        reclaimWindow = defTurns - max(cityDist, defDist)
+        reclaimPenalty = max(cityDist, defDist) + max(0, generalDist - cityToDefDist)
+        contribution = max(0, spareArmy - reclaimPenalty)
+
+        if reclaimWindow <= 0:
+            contribution = 0
+        elif reclaimWindow < 4:
+            contribution = min(contribution, max(0, spareArmy // 3))
+        elif reclaimWindow < 7:
+            contribution = min(contribution, max(0, spareArmy // 2))
+
+        return contribution
+
+    @staticmethod
+    def _log_city_defense_tile_contribution(
+            bot: EklipZBot,
+            tile: Tile,
+            targetCity: Tile,
+            defTile: Tile,
+            defTurns: int,
+            contribution: int,
+    ) -> None:
+        if not DebugHelper.is_debug_or_unit_test_mode():
+            return
+
+        spareArmy = max(0, tile.army - 1)
+        cityDist = bot._map.distance_mapper.get_distance_between(targetCity, tile)
+        defDist = bot._map.distance_mapper.get_distance_between(defTile, tile)
+        generalDist = bot.distance_from_general(tile)
+        cityToDefDist = bot._map.distance_mapper.get_distance_between(targetCity, defTile)
+        reclaimWindow = defTurns - max(cityDist, defDist)
+        logbook.info(
+            f'CITY_SAFETY_TILE_CONTRIBUTION turn={bot._map.turn} '
+            f'tile={tile.x},{tile.y}:p{tile.player}:a{tile.army}:vis{tile.visible}:disc{tile.discovered} '
+            f'targetCity={targetCity.x},{targetCity.y} defTile={defTile.x},{defTile.y} '
+            f'spareArmy={spareArmy} cityDist={cityDist} defDist={defDist} generalDist={generalDist} '
+            f'cityToDefDist={cityToDefDist} reclaimWindow={reclaimWindow} contribution={contribution}'
+        )
+
+    @staticmethod
     def capture_cities(
             bot: EklipZBot,
             negativeTiles: typing.Set[Tile],
@@ -1298,16 +1353,24 @@ class BotCityOps:
                     if len(tgCities) > 0:
                         cityDefVal -= tgCities[0].army
                         playerTilesNearCity = SearchUtils.get_player_tiles_near_up_to_army_amount(map=bot._map, fromTiles=tgCities, armyAmount=tgCities[0].army, asPlayer=bot.general.player, tileAmountCutoff=1)
-                        for t in playerTilesNearCity:
-                            cityDefVal += t.army - 1
                         searchNegs.update(playerTilesNearCity)
+                        defTile = bot.general
+                        if targetCity and bot.board_analysis.intergeneral_analysis.bMap.raw[defTile.tile_index] > bot.board_analysis.intergeneral_analysis.bMap.raw[targetCity.tile_index]:
+                            defTile = targetCity
+                        cityDefContributions = []
+                        for t in playerTilesNearCity:
+                            contribution = BotCityOps._get_city_defense_tile_contribution(bot, t, tgCities[0], defTile, defTurns)
+                            cityDefVal += contribution
+                            cityDefContributions.append(f'{t.x},{t.y}:+{contribution}/{max(0, t.army - 1)}')
+                            BotCityOps._log_city_defense_tile_contribution(bot, t, tgCities[0], defTile, defTurns, contribution)
                         bot.viewInfo.add_stats_line(f'new city capture plan tiles? cityDefVal {cityDefVal}')
-                        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                        if DebugHelper.is_debug_or_unit_test_mode():
                             logbook.info(
                                 f'CITY_SAFETY_NEGS new-plan turn={bot._map.turn} targetCandidates={BotCityOps._format_city_safety_tiles(tgCities)} '
                                 f'nearCityCount={len(playerTilesNearCity)} searchNegCount={len(searchNegs)} '
                                 f'nearCityTiles={BotCityOps._format_city_safety_tiles(playerTilesNearCity)} '
-                                f'searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)}'
+                                f'searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)} '
+                                f'cityDefContributions={" | ".join(cityDefContributions)}'
                             )
                     else:
                         bot.viewInfo.add_stats_line(f'bypassing neut cities, 0 neut cities available :( cityDefVal {cityDefVal}')
@@ -1523,10 +1586,10 @@ class BotCityOps:
         negs.update(targets)
         negs.update(bot.cityAnalyzer.owned_contested_cities)
 
-        tilesFarFromUs = [t for t in bot.player.tiles if t not in bot.tiles_gathered_to_this_cycle and bot.territories.territoryTeamDistances[bot.targetPlayerObj.team].raw[t.tile_index] < 2 and t.army < 5]
-        for t in tilesFarFromUs:
-            bot.viewInfo.evaluatedGrid[t.x][t.y] = 100
-            negs.add(t)
+        # tilesFarFromUs = [t for t in bot.player.tiles if t not in bot.tiles_gathered_to_this_cycle and bot.territories.territoryTeamDistances[bot.targetPlayerObj.team].raw[t.tile_index] < 2 and t.army < 5]
+        # for t in tilesFarFromUs:
+        #     bot.viewInfo.evaluatedGrid[t.x][t.y] = 100
+        #     negs.add(t)
 
         newTargets = set()
         # for t in targets:
@@ -1543,16 +1606,16 @@ class BotCityOps:
 
         newTargets.update(bot.defensive_spanning_tree)
 
-        for tg in newTargets:
-            bot.viewInfo.add_targeted_tile(tg, TargetStyle.BLUE, radiusReduction=-3)
-        for tg in negs:
-            bot.viewInfo.evaluatedGrid[tg.x][tg.y] += 100
+        bot.viewInfo.add_targeted_tiles_with_legend(newTargets, 'city pre-def gath targets', TargetStyle.BLUE, radiusReduction=-3)
+
+        bonusTurns = 5 if bot.defend_economy else 0
+        gathTurns = min(turnsLeft, bot.win_condition_analyzer.recommended_city_defense_plan_turns + bonusTurns) if bot.win_condition_analyzer.recommended_city_defense_plan_turns > 0 else turnsLeft
 
         move, valGathered, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
             bot,
             [t for t in newTargets],
             maxTime=0.05,
-            gatherTurns=min(turnsLeft, bot.win_condition_analyzer.recommended_city_defense_plan_turns) if bot.win_condition_analyzer.recommended_city_defense_plan_turns > 0 else turnsLeft,
+            gatherTurns=gathTurns,
             useTrueValueGathered=True,
             priorityMatrix=BotGatherOps.get_gather_tiebreak_matrix(bot, ),
             negativeSet=negs)
@@ -1562,7 +1625,7 @@ class BotCityOps:
         if valGathered / max(1, gatherTurns - numCaptures) < bot.player.standingArmy / bot.player.tileCount:
             cycleTurns = min(turnsLeft, 10)
             # cycleTurns = max(bot.win_condition_analyzer.recommended_city_defense_plan_turns + 1, cycleTurns)
-            bot.info(f'trying longer city preemptive defense turns {cycleTurns}')
+            bot.info(f'searching longer city preemptive def {cycleTurns}t, {gathTurns}t had {valGathered:.0f} in {gatherTurns}t')
             move, valGathered, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
                 bot,
                 [t for t in newTargets],

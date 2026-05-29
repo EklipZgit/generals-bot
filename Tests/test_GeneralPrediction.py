@@ -27,6 +27,7 @@ class GeneralPredictionTests(TestBase):
         bot.info_render_general_undiscovered_prediction_values = True
         bot.info_render_army_emergence_values = True
         bot.info_render_flow_expand = False
+        bot.armyTracker.log_debug = True
         # bot.info_render_
         # bot.info_render_general_undiscovered_prediction_values = True
 
@@ -1541,4 +1542,29 @@ class GeneralPredictionTests(TestBase):
         self.assertValidGeneralPositionXY(bot, 4, 14) # real general spawn in the game
         self.assertValidGeneralPositionXY(bot, 0, 9)
         self.assertInvalidGeneralPositionXY(bot, 3, 14) #
+
+    def test_should_not_predict_general_1_closer_than_real_position(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_predict_general_1_closer_than_real_position___78zP1_zFe---1--326.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 326, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=326)
+        rawMap.At(11, 15).army = 2
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '11,15->11,14')
+        simHost.queue_player_moves_str(general.player, '5,9->5,8')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player].raw[playerMap.At(12, 17).tile_index] = True
+        bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player].raw[playerMap.At(13, 17).tile_index] = True
+        bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player].raw[playerMap.At(16, 16).tile_index] = True
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertValidGeneralPositionXY(bot, 13, 17, enemyGeneral.player)
+        self.assertValidGeneralPositionXY(bot, 12, 17, enemyGeneral.player)
+        self.assertInvalidGeneralPositionXY(bot, 16, 16, enemyGeneral.player)
 

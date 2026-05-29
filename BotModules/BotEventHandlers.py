@@ -27,6 +27,7 @@ class BotEventHandlers:
             f"EH: Tile captured! Tile {repr(tile)}, oldOwner {tile.delta.oldOwner} newOwner {tile.delta.newOwner}")
         bot.territories.needToUpdateAroundTiles.add(tile)
         if tile.isCity:
+            bot.win_condition_analyzer.record_city_capture(tile, tile.player, army=tile.army)
             bot.armyTracker.add_need_to_track_city(tile)
 
             if tile.delta.oldOwner == -1 or tile.delta.newOwner == -1:

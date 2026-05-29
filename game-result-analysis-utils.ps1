@@ -259,7 +259,11 @@ function Create-TestContinuingGameFrom {
 
     $TestName = $TestName.Replace(' ', '_')
 
-    $destFolder = "$($DestFolderRoot.Replace("/UnitTests/", "/Tests/"))/GameContinuationEntries"
+    $destFolderRootPath = [System.IO.Path]::GetFullPath($DestFolderRoot)
+    if ([System.IO.Path]::GetFileName($destFolderRootPath) -ieq 'UnitTests') {
+        $destFolderRootPath = Join-Path ([System.IO.Path]::GetDirectoryName($destFolderRootPath)) 'Tests'
+    }
+    $destFolder = Join-Path $destFolderRootPath 'GameContinuationEntries'
     if (-not (Test-Path $destFolder))
     {
         mkdir $destFolder -Force

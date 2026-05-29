@@ -29,7 +29,7 @@ class FlowExpansionUnitTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
         GatherDebug.USE_DEBUG_ASSERTS = True
-        FlowExpansion.OUTPUT_KNAPSACK_TEST_REPRO_LOGS = True
+        # FlowExpansion.OUTPUT_KNAPSACK_TEST_REPRO_LOGS = True
         FlowExpansion.SHOULD_LOG_DEBUG_BY_DEFAULT = True
         IslandNamer.reset()
         super().__init__(methodName)
@@ -43,6 +43,7 @@ class FlowExpansionUnitTests(TestBase):
         bot.info_render_flow_expand = True
         bot.info_render_expansion_matrix_values = True
         bot.info_render_tile_islands = False
+        bot.flow_expander.log_debug = True
 
         return bot
 
@@ -2139,3 +2140,212 @@ player_index=0
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_be_able_to_use_general_for_better_cap_than_neuts_when_gen_has_3_army")
+
+    def test_should_prioritize_expanding_towards_enemy_not_neutrals(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prioritize_expanding_towards_enemy_not_neutrals___l5wrLeFK7---0--69.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 69, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=69)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, respectTurnTimeLimitToDropMoves=False)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        # simHost.f
+        #proof
+        simHost.queue_player_moves_str(general.player, '1,14->4,14->4,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwnedXY(4,9)
+        self.assertOwnedXY(4,8)
+        self.assertOwnedXY(4,7)
+
+    def test_should_prioritize_expanding_towards_enemy_not_neutrals__earlier(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prioritize_expanding_towards_enemy_not_neutrals__earlier___l5wrLeFK7---0--56.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 56, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=56)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_prioritize_expanding_towards_enemy_not_neutrals__earlier")
+
+    def test_should_flow_general_army_when_appropriate_when_board_all_1s_except_large_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flow_general_army_when_appropriate_when_board_all_1s_except_large_tile____VYjwj6mQ---0--85.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 85, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=85)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertLess(playerMap.At(7, 4).army, 5)
+
+    def test_should_not_fail_to_find_flow_expansion_routes__what_the_fuck(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_fail_to_find_flow_expansion_routes__what_the_fuck___fHjzkD6XM---0--484.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 484, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=484)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_fail_to_find_flow_expansion_routes__what_the_fuck")
+    def test_should_not_find_delayed_enemy_city_capture_when_city_growth_outpaces_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a3   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=5, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+        self.assertEqual(0, len(opts), 'The a3 delayed-support fixture should not produce a city capture plan because the bC3 grows too much before the gather arrives.')
+
+    def test_should_find_delayed_enemy_city_capture_when_support_is_exactly_enough_after_city_growth(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a4   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=5, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+        self.assertEqual(1, len(opts), 'The a4 delayed-support fixture should produce exactly one feasible city capture plan.')
+        opt = opts[0]
+        self.assertEqual(5, opt.length, 'The feasible delayed city capture should take five total moves.')
+        self.assertEqual(8.05, round(opt.econValue, 5), 'The delayed city capture should include the base enemy capture value, the +6 city bonus, and the scaled post-capture city-army bonus.')
+    def test_should_capture_bC3_and_b1_but_not_bC1_with_delayed_multi_city_support(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+aG5  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
+|    |    |    |    |    |    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=7, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+        self.assertEqual(1, len(opts), 'The aG5 delayed multi-city fixture should produce exactly one feasible plan.')
+        opt = opts[0]
+        self.assertEqual(7, opt.length, 'The feasible aG5 delayed plan should stop after capturing bC3 and the following b1.')
+        self.assertEqual(14.1, round(opt.econValue, 5), 'The aG5 delayed plan should include the base capture value, the +6 city bonus, and the scaled post-capture city-army bonus.')
+
+        simMap, simGeneral, simEnemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        simHost = GameSimulatorHost(simMap, player_with_viewer=simGeneral.player, playerMapVision=simMap, allAfkExceptMapPlayer=True, respectTurnTimeLimitToDropMoves=False)
+        simHost.queue_player_moves_str(simGeneral.player, '0,0->1,0->2,0->3,0->4,0->5,0->6,0->7,0')
+        simHost.queue_player_moves_str(simEnemyGeneral.player, 'None')
+        simHost.run_sim(run_real_time=False, turn_time=0.01, turns=8)
+
+        self.assertEqual(simGeneral.player, simMap.At(6, 0).player)
+        self.assertEqual(simGeneral.player, simMap.At(7, 0).player)
+        self.assertNotEqual(simGeneral.player, simMap.At(8, 0).player)
+
+    def test_should_capture_bC1_as_well_when_delayed_multi_city_support_is_high_enough(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+aG7  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
+|    |    |    |    |    |    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=8, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+        self.assertEqual(1, len(opts), 'The aG7 delayed multi-city fixture should produce exactly one feasible plan.')
+        opt = opts[0]
+        self.assertEqual(8, opt.length, 'The feasible aG7 delayed plan should reach the second enemy city.')
+        self.assertEqual(22.15, round(opt.econValue, 5), 'The aG7 delayed plan should include both +6 city bonuses and the scaled post-capture city-army bonus.')
+
+        simMap, simGeneral, simEnemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        simHost = GameSimulatorHost(simMap, player_with_viewer=simGeneral.player, playerMapVision=simMap, allAfkExceptMapPlayer=True, respectTurnTimeLimitToDropMoves=False)
+        simHost.queue_player_moves_str(simGeneral.player, '0,0->1,0->2,0->3,0->4,0->5,0->6,0->7,0->8,0')
+        simHost.queue_player_moves_str(simEnemyGeneral.player, 'None')
+        simHost.run_sim(run_real_time=False, turn_time=0.01, turns=9)
+
+        self.assertEqual(simGeneral.player, simMap.At(6, 0).player)
+        self.assertEqual(simGeneral.player, simMap.At(7, 0).player)
+        self.assertEqual(simGeneral.player, simMap.At(8, 0).player)
+
+
+
+
+    def test_should_capture_b1_after_bC1_when_delayed_multi_city_support_is_extremely_high(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+aG9  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
+|    |    |    |    |    |    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=9, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=False, method=method)
+
+        self.assertEqual(1, len(opts), 'The aG9 delayed multi-city fixture should produce exactly one feasible plan.')
+        opt = opts[0]
+        self.assertEqual(9, opt.length, 'The feasible aG9 delayed plan should reach the b1 after the second enemy city.')
+        self.assertEqual(24.2, round(opt.econValue, 5), 'The aG9 delayed plan should include both +6 city bonuses and the scaled post-capture city-army bonus through the tile after bC1.')
+
+        simMap, simGeneral, simEnemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        simHost = GameSimulatorHost(simMap, player_with_viewer=simGeneral.player, playerMapVision=simMap, allAfkExceptMapPlayer=True, respectTurnTimeLimitToDropMoves=False)
+        simHost.queue_player_moves_str(simGeneral.player, '0,0->1,0->2,0->3,0->4,0->5,0->6,0->7,0->8,0->9,0')
+        simHost.queue_player_moves_str(simEnemyGeneral.player, 'None')
+        simHost.run_sim(run_real_time=False, turn_time=0.01, turns=10)
+
+        self.assertEqual(simGeneral.player, simMap.At(6, 0).player)
+        self.assertEqual(simGeneral.player, simMap.At(7, 0).player)
+        self.assertEqual(simGeneral.player, simMap.At(8, 0).player)
+        self.assertEqual(simGeneral.player, simMap.At(9, 0).player)

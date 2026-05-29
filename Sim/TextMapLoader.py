@@ -16,7 +16,7 @@ Bot state data is below the second |  |  |  |  |  | and is ignored when loading 
 import pathlib
 import typing
 
-from Army import Army
+from Army import Army, FogTileRevert
 from Path import Path
 from SearchUtils import count
 from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase, PLAYER_CHAR_INDEX_PAIRS
@@ -315,8 +315,14 @@ class TextMapLoader(object):
             tileStr = "|".join([f'{t.x},{t.y}' for t in entangled])
 
             pathsStr = "|".join([str(p) for p in army.expectedPaths])
+            revertsStr = ";".join(
+                [
+                    f'{revert.tile.x},{revert.tile.y},{revert.army},{revert.player},{1 if revert.isTempFogPrediction else 0}'
+                    for revert in army.fogTileReverts.values()
+                ]
+            )
 
-            armyStr = f'{army.name}+{army.value}!{army.entangledValue}^{army.last_seen_turn}*{army.last_moved_turn}&{pathsStr}%{tileStr}'
+            armyStr = f'{army.name}+{army.value}!{army.entangledValue}^{army.last_seen_turn}*{army.last_moved_turn}&{pathsStr}%{tileStr}@{revertsStr}'
 
             armyStrs.append(armyStr)
 
@@ -377,6 +383,9 @@ class TextMapLoader(object):
             lastMovedTurn, everythingElse = everythingElse.split('&')
             expectedPathsCombined, everythingElse = everythingElse.split('%')
             expectedPaths = [TextMapLoader.parse_path(map, pStr) for pStr in expectedPathsCombined.split('|')]
+            revertsRaw = ''
+            if '@' in everythingElse:
+                everythingElse, revertsRaw = everythingElse.split('@', 1)
             tilesRaw = everythingElse.split('|')
 
             xRaw, yRaw = tilesRaw[0].split(',')
@@ -394,6 +403,8 @@ class TextMapLoader(object):
             army.expectedPaths = expectedPaths
             army.last_seen_turn = int(lastSeenTurn)
             army.last_moved_turn = int(lastMovedTurn)
+            army.tile.lastMovedTurn = army.last_moved_turn
+            army.fogTileReverts = TextMapLoader.load_fog_tile_reverts(map, revertsRaw)
             if len(tilesRaw) > 1:
                 for tileRaw in tilesRaw[1:]:
                     xRaw, yRaw = tileRaw.split(',')
@@ -405,6 +416,25 @@ class TextMapLoader(object):
                     army.entangledArmies.append(entangled)
 
         return armies
+
+    @staticmethod
+    def load_fog_tile_reverts(map: MapBase, revertsRaw: str) -> typing.Dict[Tile, FogTileRevert]:
+        reverts: typing.Dict[Tile, FogTileRevert] = {}
+        if revertsRaw == '':
+            return reverts
+
+        for revertRaw in revertsRaw.split(';'):
+            if revertRaw == '':
+                continue
+            xRaw, yRaw, armyRaw, playerRaw, isTempFogPredictionRaw = revertRaw.split(',')
+            tile = map.GetTile(int(xRaw), int(yRaw))
+            reverts[tile] = FogTileRevert(
+                tile=tile,
+                army=int(armyRaw),
+                player=int(playerRaw),
+                isTempFogPrediction=isTempFogPredictionRaw == '1',
+            )
+        return reverts
 
     @staticmethod
     def load_map_data_into_map(map: MapBase, data: typing.Dict[str, str]):

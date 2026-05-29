@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 import typing
 
 import logbook
@@ -6,6 +7,14 @@ import logbook
 import SearchUtils
 from Path import Path
 from base.client.tile import Tile
+
+
+@dataclass(slots=True)
+class FogTileRevert:
+    tile: Tile
+    army: int
+    player: int
+    isTempFogPrediction: bool
 
 
 class Army(object):
@@ -42,6 +51,7 @@ class Army(object):
         self.scrapped = False
         self.last_moved_turn: int = 0
         self.last_seen_turn: int = 0
+        self.fogTileReverts: typing.Dict[Tile, FogTileRevert] = {}
 
     # # for debugging
     # @property
@@ -95,6 +105,7 @@ class Army(object):
         newDude.value = self.value
         newDude.last_moved_turn = self.last_moved_turn
         newDude.last_seen_turn = self.last_seen_turn
+        newDude.fogTileReverts = dict(self.fogTileReverts)
         for path in self.expectedPaths:
             clone = path.clone()
             if clone is None:
@@ -103,6 +114,15 @@ class Army(object):
         newDude.entangledArmies = list(self.entangledArmies)
         newDude.scrapped = self.scrapped
         return newDude
+
+    def record_fog_tile_revert(self, tile: Tile):
+        if tile not in self.fogTileReverts:
+            self.fogTileReverts[tile] = FogTileRevert(tile, tile.army, tile.player, tile.isTempFogPrediction)
+
+    def absorb_fog_tile_reverts(self, other: Army):
+        for tile, revert in other.fogTileReverts.items():
+            if tile not in self.fogTileReverts:
+                self.fogTileReverts[tile] = revert
 
     def toString(self):
         return f"[{self.name} {self.tile} p{self.player} v{self.value}{' scr' if self.scrapped else ''}]"

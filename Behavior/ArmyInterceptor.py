@@ -170,6 +170,8 @@ class InterceptionOptionInfo(TilePlanInterface):
         self.friendly_army_reaching_intercept: int = friendlyArmyReachingIntercept
 
         self.intercept: ArmyInterception | None = None
+        self._tileSet: set[Tile] | None = None
+        self._tileList: list[Tile] | None = None
 
     @property
     def post_intercept_implied_moves(self) -> int:
@@ -211,11 +213,16 @@ class InterceptionOptionInfo(TilePlanInterface):
 
     @property
     def tileSet(self) -> typing.Set[Tile]:
-        return self.path.tileSet
+        if self._tileSet is None:
+            self._tileSet = set(self.tileList)
+        return self._tileSet
 
     @property
     def tileList(self) -> typing.List[Tile]:
-        return self.path.tileList
+        if self._tileList is None:
+            self._tileList = self.path.tileList.copy()
+            self._tileList.append(self.intercept.target_tile)
+        return self._tileList
 
     @property
     def requiredDelay(self) -> int:
@@ -255,6 +262,9 @@ class InterceptionOptionInfo(TilePlanInterface):
             self.recapture_turns,
             self._requiredDelay,
             self.friendly_army_reaching_intercept)
+        clone.intercept = self.intercept
+        clone._tileList = self._tileList
+        clone._tileSet = self._tileSet
         return clone
 
 
@@ -270,6 +280,7 @@ class ArmyInterception(object):
         'target_tile',
         'kill_enemy_threat',
         'best_enemy_threat',
+        'distance_from_threat_to_contestable_en_city',
         'intercept_options',
     )
 
@@ -334,6 +345,8 @@ class ArmyInterception(object):
         if self.kill_enemy_threat is None:
             self.kill_enemy_threat = self.best_enemy_threat
 
+        self.distance_from_threat_to_contestable_en_city: int = -1
+
         self.intercept_options: typing.Dict[int, InterceptionOptionInfo] = {}
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
 
@@ -387,7 +400,9 @@ class ArmyInterceptor(object):
         self,
         threats: typing.List[ThreatObj],
         turnsLeftInCycle: int,
-        otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None
+        otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None,
+        opponentTracker: typing.Any | None = None,
+        contestableEnemyCities: typing.Iterable[Tile] | None = None,
     ) -> ArmyInterception | None:
         threatValues, ignoredThreats = self._prune_threats_to_valuable_threat_info(threats, turnsLeftInCycle)
 
@@ -395,6 +410,14 @@ class ArmyInterceptor(object):
             return None
 
         interception = ArmyInterception(threatValues, ignoredThreats)
+        interception.distance_from_threat_to_contestable_en_city = self._get_distance_from_threat_to_contestable_enemy_city(
+            interception,
+            contestableEnemyCities,
+        )
+        if self.log_debug:
+            logbook.info(
+                f'contestable city intercept distance for threat {interception.best_enemy_threat.threat.path.start.tile}->{interception.best_enemy_threat.threat.path.tail.tile}: '
+                f'{interception.distance_from_threat_to_contestable_en_city}')
 
         interception.common_intercept_chokes = self.get_shared_chokes(interception.threat_values, interception)
         threatMovable = [t for t in interception.target_tile.movableNoObstacles]
@@ -410,7 +433,7 @@ class ArmyInterceptor(object):
 
         interception.base_threat_army = self._get_threats_army_amount(threats)
         # potentialRecaptureArmyInterceptTable = self._get_potential_intercept_table(turnsLeftInCycle, interception.base_threat_army)
-        interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles)
+        interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles, opponentTracker)
         if len(interception.intercept_options) == 0:
             logbook.warning(f'No intercept options found, retrying shared chokes but being more lenient filtering out threats')
             # try again, more friendly
@@ -424,7 +447,7 @@ class ArmyInterceptor(object):
 
                 interception.base_threat_army = self._get_threats_army_amount(interception.threats)
 
-                interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles)
+                interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles, opponentTracker)
 
         if len(interception.intercept_options) == 0:
             logbook.warning(f'No intercept options found, retrying non-middlest positive-depth intercept points')
@@ -432,6 +455,7 @@ class ArmyInterceptor(object):
                 interception,
                 turnsLeftInCycle,
                 otherThreatsBlockingTiles,
+                opponentTracker,
                 includeNonMiddlestPositiveDepthFallback=True)
 
         return interception
@@ -529,22 +553,13 @@ class ArmyInterceptor(object):
             sharedThreshold -= 1
             countMaxShared = 0
 
+        middlestInterceptTiles = self._get_middlest_intercept_tiles_for_threat_values(threats)
         potentialSharedChokes = set()
-        for tile, num in commonChokesCounts.items():
-            if num < sharedThreshold:
+        for tile in middlestInterceptTiles:
+            if tile not in commonMinDelayTurns or tile not in commonMaxExtraMoves:
                 continue
 
             potentialSharedChokes.add(tile)
-            # maxWidth = -1
-            # for threat in threats:
-            #     interceptMoves = threat.armyAnalysis.interceptChokes.get(tile, -1)
-            #     if interceptMoves == -1:
-            #         continue
-            #
-            #     if interceptMoves > maxWidth:
-            #         maxWidth = interceptMoves
-            # if maxWidth >= 0:
-            #     potentialSharedChokes[tile] = maxWidth
 
         if self.log_debug:
             # for tile, chokeVal in sorted(commonChokesCombinedTurnOffsets.items()):
@@ -552,7 +567,7 @@ class ArmyInterceptor(object):
 
             for tile in potentialSharedChokes:
                 dist = commonMinDelayTurns[tile]
-                logbook.info(f'potential shared: {str(tile)} = dist {dist}')
+                logbook.info(f'potential middlest intercept: {str(tile)} = dist {dist}')
 
         sharedChokes = self._build_shared_chokes(
             potentialSharedChokes,
@@ -659,9 +674,9 @@ class ArmyInterceptor(object):
 
         return sharedChokes
 
-    def _get_middlest_intercept_tiles_by_distance(
+    def _get_middlest_intercept_tiles_for_threat_values(
         self,
-        interception: ArmyInterception
+        threat_values: typing.List[ThreatValueInfo]
     ) -> typing.Set[Tile]:
         """
         Returns the set of 'middlest' tiles at each distance from the threat.
@@ -681,7 +696,7 @@ class ArmyInterceptor(object):
         middlest_tiles: typing.Set[Tile] = set()
 
         tile_distances_lookup: typing.Dict[int, typing.Set[Tile]] = {}
-        for threatValueInfo in interception.threat_values:
+        for threatValueInfo in threat_values:
             threat = threatValueInfo.threat
             if threat.armyAnalysis is None:
                 continue
@@ -716,6 +731,12 @@ class ArmyInterceptor(object):
                 middlest_tiles.add(best_tile)
 
         return middlest_tiles
+
+    def _get_middlest_intercept_tiles_by_distance(
+        self,
+        interception: ArmyInterception
+    ) -> typing.Set[Tile]:
+        return self._get_middlest_intercept_tiles_for_threat_values(interception.threat_values)
 
     def _get_threats_army_amount(self, threats: typing.List[ThreatObj]) -> int:
         maxAmount = 0
@@ -859,7 +880,7 @@ class ArmyInterceptor(object):
             return False
 
         for threat in interception.threats:
-            if threat.path.tail.tile == startTile:
+            if threat.path.tail.tile == startTile and threat.threatValue > threat.turns // 2:
                 return True
 
         return False
@@ -1001,11 +1022,57 @@ class ArmyInterceptor(object):
 
         return val, curTurn - self.map.turn, recaps, rawVal
 
+    def _get_distance_from_threat_to_contestable_enemy_city(
+            self,
+            interception: ArmyInterception,
+            contestableEnemyCities: typing.Iterable[Tile] | None,
+    ) -> int:
+        if contestableEnemyCities is None:
+            return -1
+
+        closestDist = 100000
+        threatTile = interception.best_enemy_threat.threat.path.start.tile
+        for city in contestableEnemyCities:
+            if city is None:
+                continue
+            if not city.isCity:
+                continue
+            if not self.map.is_tile_on_team_with(city, interception.best_enemy_threat.threat.threatPlayer):
+                continue
+
+            dist = self.map.distance_mapper.get_distance_between(threatTile, city)
+            if dist is None or dist < 0:
+                continue
+            if dist < closestDist:
+                closestDist = dist
+
+        if closestDist == 100000:
+            return -1
+        return closestDist
+
+    def _get_enemy_team_city_count(self, targetPlayer: int, opponentTracker: typing.Any | None) -> int:
+        if opponentTracker is not None:
+            scores = opponentTracker.get_current_team_scores_by_player(targetPlayer)
+            if scores is not None and scores.cityCount > 0:
+                return scores.cityCount
+
+        targetTeam = self.map.team_ids_by_player_index[targetPlayer]
+        cityCount = 0
+        for player in self.map.players:
+            if self.map.team_ids_by_player_index[player.index] != targetTeam:
+                continue
+            if player.dead:
+                continue
+            cityCount += 1
+            cityCount += len(player.cities)
+        return cityCount
+
     def _get_intercept_plan_options(
             self,
             interception: ArmyInterception,
             turnsLeftInCycle: int,
             otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None,
+            opponentTracker: typing.Any | None = None,
             includeNonMiddlestPositiveDepthFallback: bool = False
     ) -> typing.Dict[int, InterceptionOptionInfo]:
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
@@ -1245,6 +1312,24 @@ class ArmyInterceptor(object):
                     recapTurns = curDist - baseLen
                     # thisValue = max(rawValue, newValue - recaptureTurns * RECAPTURE_VALUE)
                     thisValue = newValue + recapTurns * RECAPTURE_VALUE
+                    cityContestBonus = 0
+
+                    if interception.distance_from_threat_to_contestable_en_city >= 0 and recapTurns >= interception.distance_from_threat_to_contestable_en_city:
+                        armyReachingContestableCity = max(
+                            0,
+                            (enemyArmyCollidedWithAtIntercept - enemyArmyLeftAfterIntercept) - 2 * interception.distance_from_threat_to_contestable_en_city,
+                        )
+                        if armyReachingContestableCity > 0:
+                            enemyTeamCityCount = self._get_enemy_team_city_count(interception.threats[0].threatPlayer, opponentTracker)
+                            cityContestBonus = armyReachingContestableCity // max(0.2, enemyTeamCityCount - 2)
+                            thisValue += cityContestBonus
+
+                    if self.log_debug and cityContestBonus > 0:
+                        logbook.info(
+                            f'city contest recap begins path {path} at curDist {curDist}, recapTurns {recapTurns}, '
+                            f'threatToCityDist {interception.distance_from_threat_to_contestable_en_city}, '
+                            f'armyAtIntercept {enemyArmyCollidedWithAtIntercept - enemyArmyLeftAfterIntercept}, '
+                            f'cityContestBonus {cityContestBonus}, valueAfterBonus {thisValue:.2f}')
 
                     # forces knapsack to prefer the shorter intercepts even when a longer intercept blocks the same amount of damage. Prevents running parallel to a threat for no real reason.
                     thisValue -= 0.1 * baseLen

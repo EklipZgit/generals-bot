@@ -4,6 +4,7 @@ import typing
 
 import logbook
 
+import DebugHelper
 import SearchUtils
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix
@@ -64,6 +65,7 @@ class BotCentralDefense:
     def calculate_central_defense_point(bot: EklipZBot):
         defensePoints = list(bot.board_analysis.defensive_chokes_by_tile.values())
         if len(defensePoints) == 0:
+            bot.info('WHAT THE FUCK, NOT EVEN THE GENERAL HAS A CHOKE?')
             bot.board_analysis.central_defense_point = bot.general
             return
 
@@ -83,7 +85,9 @@ class BotCentralDefense:
         lowestAvgTile: Tile = bot.general
         topCentralityTiles: typing.List[typing.Tuple[tuple[float, int, int], Tile]] = []
 
-        centralDefenseCandidateTiles = bot.defensive_spanning_tree
+        centralDefenseCandidateTiles = bot.defensive_spanning_tree.copy()
+        for tileWithChokes, chokeInfo in bot.board_analysis.defensive_chokes_by_tile.items():
+            centralDefenseCandidateTiles.update(chokeInfo.choke_tiles)
         if len(centralDefenseCandidateTiles) < 3 and bot.shortest_path_to_target_player is not None:
             centralDefenseCandidateTiles = set(bot.shortest_path_to_target_player.tileList[:max(1, bot.shortest_path_to_target_player.length // 3)])
             logbook.info(
@@ -114,15 +118,16 @@ class BotCentralDefense:
             if len(topCentralityTiles) > 10:
                 topCentralityTiles.pop()
 
-        # logbook.info(
-        #     'CENTRAL_DEFENSE_POINT top candidates: '
-        #     + ' | '.join(
-        #         [
-        #             f'{str(tile)} score={score} enemyDist={bot.board_analysis.intergeneral_analysis.bMap.raw[tile.tile_index] if bot.board_analysis.intergeneral_analysis is not None else None}'
-        #             for score, tile in topCentralityTiles
-        #         ]))
-        # logbook.info(
-        #     f'calculated central defense point to be {str(lowestAvgTile)} due to chokeAverage {averageX:.2f},{averageY:.2f} score {lowestScore} attackPathFogExit={attackPathFogExitTile}')
+        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+            logbook.info(
+                'CENTRAL_DEFENSE_POINT top candidates: '
+                + ' | '.join(
+                    [
+                        f'{str(tile)} score={score} enemyDist={bot.board_analysis.intergeneral_analysis.bMap.raw[tile.tile_index] if bot.board_analysis.intergeneral_analysis is not None else None}'
+                        for score, tile in topCentralityTiles
+                    ]))
+        logbook.info(
+            f'calculated central defense point to be {str(lowestAvgTile)} due to chokeAverage {averageX:.2f},{averageY:.2f} score {lowestScore} attackPathFogExit={attackPathFogExitTile}')
         bot.board_analysis.central_defense_point = lowestAvgTile
 
     @staticmethod

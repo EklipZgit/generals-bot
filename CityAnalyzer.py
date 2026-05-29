@@ -114,6 +114,7 @@ class CityAnalyzer(object):
         self.reachable_from_matrix: MapMatrixInterface[Tile | None] = None
 
         self.last_targeted_neut_city: Tile | None = None
+        self.win_condition_analyzer = None
 
         self.ensure_reachability_matrix_built()
 
@@ -483,6 +484,9 @@ class CityAnalyzer(object):
         return enemyTileScores
 
     def is_contested(self, city: Tile, captureCutoffAgoTurns: int = 20, enemyTerritorySearchDepth: int = 4) -> bool:
+        if self.win_condition_analyzer is not None and self.win_condition_analyzer.was_city_recently_contested(city, capture_cutoff_ago_turns=captureCutoffAgoTurns):
+            return True
+
         if city.turn_captured > self.map.turn - captureCutoffAgoTurns:
             return True
 

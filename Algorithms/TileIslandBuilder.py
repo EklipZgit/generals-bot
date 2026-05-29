@@ -1919,7 +1919,7 @@ class TileIslandBuilder(object):
                         viewInfo.midRightGridText.raw[tIndex] = island.name
                     else:
                         viewInfo.bottomRightGridText.raw[tIndex] = island.name
-                    viewInfo.topRightGridText.raw[tIndex] = str(island.unique_id)
+                    viewInfo.bottomMidRightGridText.raw[tIndex] = str(island.unique_id)
 
 
             if printIslandInfoLines:

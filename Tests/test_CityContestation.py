@@ -1,4 +1,5 @@
 from BoardAnalyzer import BoardAnalyzer
+from BotModules.BotRendering import BotRendering
 from CityAnalyzer import CityAnalyzer
 from Sim.GameSimulator import GameSimulatorHost
 from Strategy.WinConditionAnalyzer import WinCondition
@@ -16,6 +17,47 @@ class CityContestationTests(TestBase):
         # bot.info_render_general_undiscovered_prediction_values = True
 
         return bot
+
+    def test_should_serialize_and_deserialize_city_contestation_history(self):
+        mapFile = 'GameContinuationEntries/should_not_play_city_defense_when_city_right_by_general_wtf___tlcZQJVRh---1--161.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 161, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=161)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = self.get_debug_render_bot(simHost, general.player)
+
+        city = bot._map.GetTile(2, 13)
+        bot.win_condition_analyzer.record_city_capture(city, enemyGeneral.player, turn=149, army=7)
+        bot.win_condition_analyzer.record_city_capture(city, general.player, turn=156, army=3)
+        bot.win_condition_analyzer.record_city_capture(city, enemyGeneral.player, turn=160, army=2)
+
+        dumped = BotRendering.dump_turn_data_to_string(bot)
+        resumeData = {}
+        for line in dumped.split('\n'):
+            if '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            resumeData[key] = value
+
+        self.assertEqual(
+            f'{enemyGeneral.player}:149:7|{general.player}:156:3|{enemyGeneral.player}:160:2',
+            resumeData['ot_city_2_13'])
+
+        rawMap.resume_data.update(resumeData)
+        reloadHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        reloadBot = self.get_debug_render_bot(reloadHost, general.player)
+        reloadCity = reloadBot._map.GetTile(2, 13)
+
+        history = reloadBot.win_condition_analyzer.city_contestation_history[reloadCity]
+        self.assertEqual(3, len(history))
+        self.assertEqual(enemyGeneral.player, history[-1].player)
+        self.assertEqual(160, history[-1].turn)
+        self.assertEqual(2, history[-1].army)
+        self.assertTrue(reloadBot.cityAnalyzer.is_contested(reloadCity, captureCutoffAgoTurns=20))
+        self.assertEqual(3, reloadBot.win_condition_analyzer.get_city_contestation_count(reloadCity))
+        self.assertEqual(2, reloadBot.win_condition_analyzer.get_city_contestation_count(reloadCity, within_last_turns=10))
 
     def test_should_gather_at_enemy_city_in_sane_way(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1176,3 +1218,22 @@ class CityContestationTests(TestBase):
 
         self.assertOwned(12, 14)
         self.assertOwned(13, 15)
+
+    def test_should_value_city_contesting_same_as_city_defense_and_prio_double_cities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_value_city_contesting_same_as_city_defense_and_prio_double_cities___UUX-527mu---0--736.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 736, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=736)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_value_city_contesting_same_as_city_defense_and_prio_double_cities")

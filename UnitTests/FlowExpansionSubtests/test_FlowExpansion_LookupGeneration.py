@@ -95,6 +95,43 @@ class FlowExpansionLookupGenerationTests(TestBase):
 
         return bot
 
+    def _build_flow_lookup_tables(self, mapData: str, turns: int = 50, log_debug: bool = False, fill_out_tiles: bool = True):
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=fill_out_tiles)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.log_debug = log_debug
+        flowExpanderV2.target_team = enemyGeneral.player
+
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=turns)
+        target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
+            builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
+        )
+        border_pairs = flowExpanderV2._enumerate_border_pairs(
+            flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
+        )
+        lookup_tables = flowExpanderV2._process_flow_into_flow_army_turns(
+            border_pairs, flowExpanderV2.flow_graph, target_crossable, turns
+        )
+        flowExpanderV2._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
+        return map, general, enemyGeneral, flowExpanderV2, lookup_tables
+
+    def _get_single_lookup_table(self, mapData: str, turns: int = 50, log_debug: bool = False, fill_out_tiles: bool = True):
+        map, general, enemyGeneral, flowExpanderV2, lookup_tables = self._build_flow_lookup_tables(
+            mapData,
+            turns=turns,
+            log_debug=log_debug,
+            fill_out_tiles=fill_out_tiles,
+        )
+        self.assertEqual(1, len(lookup_tables), 'Expected exactly one lookup table for the fixture map')
+        return map, general, enemyGeneral, flowExpanderV2, lookup_tables[0]
+
     def test_lookup_generation__basic_two_island_map(self):
         """Test lookup table generation on a simple two-island map"""
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -1058,6 +1095,272 @@ aG1  a3   b1   bG1
         # Debug rendering
         if debugMode:
             self._render_capture_lookup_debug(capture_lookup, border_pair, target_contribs)
+
+    def test_lookup_generation__enemy_city_capture_should_create_distinct_enriched_entries_per_gather_support(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |
+aG2  a2   a5   bC1  b1   bG1
+|    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral, flowExpanderV2, lookup_table = self._get_single_lookup_table(
+            mapData,
+            log_debug=debugMode,
+            fill_out_tiles=False,
+        )
+
+        capture_turn_one_entries = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 1
+        ]
+
+        self.assertGreaterEqual(
+            len(capture_turn_one_entries),
+            2,
+            'Enemy city capture should keep distinct enriched entries for the same capture turn when extra gather support changes post-capture city army.'
+        )
+
+        distinct_gather_turns = {entry.gather_entry.turns for entry in capture_turn_one_entries}
+        self.assertGreaterEqual(
+            len(distinct_gather_turns),
+            2,
+            'Enemy city capture enrichment should retain at least two different gather supports for the same city capture.'
+        )
+
+    def test_lookup_generation__enemy_city_capture_value_should_increase_with_extra_post_capture_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |
+aG2  a2   a5   bC1  b1   bG1
+|    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral, flowExpanderV2, lookup_table = self._get_single_lookup_table(
+            mapData,
+            log_debug=debugMode,
+            fill_out_tiles=False,
+        )
+
+        capture_turn_one_entries = sorted(
+            [
+                entry for entry in lookup_table.enriched_capture_entries
+                if entry.capture_entry.turns == 1
+            ],
+            key=lambda entry: entry.gather_entry.turns,
+        )
+
+        self.assertGreaterEqual(
+            len(capture_turn_one_entries),
+            2,
+            'Fixture should expose at least two gather supports for the same enemy city capture.'
+        )
+
+        lower_support = capture_turn_one_entries[0]
+        higher_support = capture_turn_one_entries[1]
+
+        self.assertLess(
+            lower_support.gather_entry.turns,
+            higher_support.gather_entry.turns,
+            'Higher-support city valuation check requires distinct gather timings.'
+        )
+        self.assertGreater(
+            higher_support.capture_entry.econ_value,
+            lower_support.capture_entry.econ_value,
+            'Enemy city capture value should rise when more army is gathered after the city is captured.'
+        )
+        self.assertAlmostEqual(
+            1.0,
+            higher_support.capture_entry.econ_value - lower_support.capture_entry.econ_value,
+            places=3,
+            msg='In the single-city fixture, one extra post-capture gather army should add exactly one point of city value.'
+        )
+
+    def test_lookup_generation__multiple_enemy_city_captures_should_gain_value_from_additional_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |
+aG2  a2   a7   bC1  bC1  b1   bG1
+|    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral, flowExpanderV2, lookup_table = self._get_single_lookup_table(
+            mapData,
+            log_debug=debugMode,
+            fill_out_tiles=False,
+        )
+
+        capture_turn_two_entries = sorted(
+            [
+                entry for entry in lookup_table.enriched_capture_entries
+                if entry.capture_entry.turns == 2 and len(entry.capture_entry.included_target_flow_nodes) >= 2
+            ],
+            key=lambda entry: entry.gather_entry.turns,
+        )
+
+        self.assertGreaterEqual(
+            len(capture_turn_two_entries),
+            2,
+            'Two-city capture plans should retain multiple enriched options when extra gather increases the post-capture city army state.'
+        )
+
+        lower_support = capture_turn_two_entries[0]
+        higher_support = capture_turn_two_entries[-1]
+
+        self.assertGreater(
+            higher_support.capture_entry.econ_value,
+            lower_support.capture_entry.econ_value,
+            'Two-city capture valuation should increase when additional gather army is available after both cities are captured.'
+        )
+        self.assertGreater(
+            higher_support.capture_entry.econ_value,
+            IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2,
+            'Two enemy city captures with sufficient gather support should be worth more than the base enemy-tile capture value alone.'
+        )
+
+    def test_lookup_generation__enemy_city_growth_should_block_delayed_gather_capture_when_support_arrives_too_late(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a3   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral, flowExpanderV2, lookup_table = self._get_single_lookup_table(
+            mapData,
+            log_debug=debugMode,
+            fill_out_tiles=False,
+        )
+
+        city_capture_entries = [
+            entry for entry in lookup_table.capture_entries_by_turn
+            if entry is not None and entry.turns == 1 and any(tile.isCity for node in entry.included_target_flow_nodes for tile in node.island.tile_set)
+        ]
+        self.assertEqual(1, len(city_capture_entries), 'Fixture should produce the single-tile enemy city capture entry.')
+
+        gather_turn_four = lookup_table.gather_entries_by_turn[4]
+        self.assertIsNotNone(gather_turn_four, 'Fixture should expose the delayed gather entry from the far a3 tile.')
+        self.assertEqual(5, gather_turn_four.gathered_army, 'Raw gathered army should be 5 before delayed city growth is charged.')
+
+        city_turn_one_enriched = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 1
+        ]
+        self.assertEqual(
+            0,
+            len(city_turn_one_enriched),
+            'Delayed gather should not produce an enriched city-capture plan when four extra gather moves let the bC3 grow too much.'
+        )
+
+    def test_lookup_generation__enemy_city_growth_should_still_allow_delayed_capture_when_support_is_exactly_enough(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a4   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral, flowExpanderV2, lookup_table = self._get_single_lookup_table(
+            mapData,
+            log_debug=debugMode,
+            fill_out_tiles=False,
+        )
+
+        gather_turn_four = lookup_table.gather_entries_by_turn[4]
+        self.assertIsNotNone(gather_turn_four, 'Fixture should expose the four-turn delayed gather entry from the far a4 tile.')
+        self.assertEqual(6, gather_turn_four.gathered_army, 'Raw gathered army should be 6 before delayed city growth is charged.')
+
+        city_turn_one_enriched = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 1 and entry.gather_entry.turns == 4
+        ]
+        self.assertEqual(1, len(city_turn_one_enriched), 'Delayed gather with one extra army should still produce exactly one feasible city capture plan.')
+
+        enriched = city_turn_one_enriched[0]
+        self.assertEqual(5, enriched.combined_turn_cost, 'The feasible delayed city capture should take four gather turns plus one capture turn.')
+        self.assertEqual(4, enriched.capture_entry.required_army, 'The one-tile bC3 capture should still require four arriving army before delayed city growth adjustments.')
+        self.assertAlmostEqual(8.05, enriched.capture_entry.econ_value, places=3, msg='The delayed single-city enriched entry should include the base enemy capture value, the +6 city bonus, and the scaled post-capture city-army bonus.')
+
+    def test_lookup_generation__multi_city_growth_should_stop_before_second_city_when_delayed_support_is_insufficient(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+aG5  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
+|    |    |    |    |    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral, flowExpanderV2, lookup_table = self._get_single_lookup_table(
+            mapData,
+            log_debug=debugMode,
+            fill_out_tiles=False,
+        )
+
+        capture_turn_two_entries = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 2 and entry.gather_entry.turns == 5
+        ]
+        self.assertEqual(1, len(capture_turn_two_entries), 'The aG5 fixture should produce exactly one delayed plan that captures bC3 and the following b1.')
+
+        capture_turn_three_entries = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 3
+        ]
+        self.assertEqual(0, len(capture_turn_three_entries), 'The aG5 fixture should not have enough delayed support to reach the second enemy city.')
+
+        enriched = capture_turn_two_entries[0]
+        self.assertEqual(7, enriched.combined_turn_cost, 'The feasible aG5 delayed plan should take five gather turns plus two capture turns.')
+        self.assertEqual(6, enriched.capture_entry.required_army, 'Capturing bC3 and the following b1 should require six arriving army in the raw capture table.')
+        self.assertAlmostEqual(14.1, enriched.capture_entry.econ_value, places=3, msg='The aG5 delayed multi-city enriched entry should include the base capture value, the +6 city bonus, and the scaled post-capture city-army bonus.')
+
+    def test_lookup_generation__multi_city_growth_should_allow_second_city_when_delayed_support_is_sufficient(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+aG7  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
+|    |    |    |    |    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral, flowExpanderV2, lookup_table = self._get_single_lookup_table(
+            mapData,
+            log_debug=debugMode,
+            fill_out_tiles=False,
+        )
+
+        capture_turn_three_entries = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 3 and entry.gather_entry.turns == 5
+        ]
+        self.assertEqual(1, len(capture_turn_three_entries), 'The aG7 fixture should produce exactly one delayed plan that reaches the second enemy city.')
+
+        enriched = capture_turn_three_entries[0]
+        self.assertEqual(8, enriched.combined_turn_cost, 'The feasible aG7 delayed plan should take five gather turns plus three capture turns.')
+        self.assertEqual(8, enriched.capture_entry.required_army, 'Capturing bC3, b1, and bC1 should require eight arriving army in the raw capture table.')
+        self.assertAlmostEqual(22.15, enriched.capture_entry.econ_value, places=3, msg='The aG7 delayed multi-city enriched entry should include both +6 city bonuses and the scaled post-capture city-army bonus.')
+
+    def test_lookup_generation__multi_city_growth_should_allow_tile_after_second_city_when_delayed_support_is_very_high(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        mapData = """
+|    |    |    |    |    |    |    |    |    |    |
+aG9  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
+|    |    |    |    |    |    |    |    |    |    |
+        """
+
+        map, general, enemyGeneral, flowExpanderV2, lookup_table = self._get_single_lookup_table(
+            mapData,
+            log_debug=debugMode,
+            fill_out_tiles=False,
+        )
+
+        capture_turn_four_entries = [
+            entry for entry in lookup_table.enriched_capture_entries
+            if entry.capture_entry.turns == 4 and entry.gather_entry.turns == 5
+        ]
+        self.assertEqual(1, len(capture_turn_four_entries), 'The aG9 fixture should produce exactly one delayed plan that reaches the b1 after the second enemy city.')
+
+        enriched = capture_turn_four_entries[0]
+        self.assertEqual(9, enriched.combined_turn_cost, 'The feasible aG9 delayed plan should take five gather turns plus four capture turns.')
+        self.assertEqual(10, enriched.capture_entry.required_army, 'Capturing bC3, b1, bC1, and the following b1 should require ten arriving army in the raw capture table.')
+        self.assertAlmostEqual(24.2, enriched.capture_entry.econ_value, places=3, msg='The aG9 delayed multi-city enriched entry should include both +6 city bonuses and the scaled post-capture city-army bonus through the tile after bC1.')
 
     def test_capture_lookup_generation__neutral_capture(self):
         """Test capture lookup generation with neutral islands"""

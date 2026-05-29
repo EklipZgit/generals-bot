@@ -328,18 +328,8 @@ def solve_grouped_knapsack_input(
             candidate_value = chosen_value - replaced_value + values[maybe_idx]
 
             if candidate_weight > turn_budget:
-                if not noLog:
-                    logbook.info(
-                        f'Grouped knapsack maybe rejected overweight: maybe={_describe_grouped_knapsack_option(input_data, maybe_idx)} '
-                        f'would_merge_groups={maybe.would_merge_groups} replaced={replaced_indices} '
-                        f'candidate_weight={candidate_weight} turn_budget={turn_budget}')
                 continue
             if candidate_value <= chosen_value:
-                if not noLog:
-                    logbook.info(
-                        f'Grouped knapsack maybe rejected no improvement: maybe={_describe_grouped_knapsack_option(input_data, maybe_idx)} '
-                        f'would_merge_groups={maybe.would_merge_groups} replaced={replaced_indices} '
-                        f'candidate_value={candidate_value} chosen_value={chosen_value}')
                 continue
 
             for replaced_idx in replaced_indices:

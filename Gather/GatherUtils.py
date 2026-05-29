@@ -775,21 +775,23 @@ def build_capture_mst_from_root_and_contiguous_tiles(
     # Start BFS from ONE tile to check connectivity of the entire set
     # If the tiles are connected, this one tile should be able to reach all others
 
-    genDistsRaw = intergeneral_analysis.aMap.raw
+    if intergeneral_analysis is not None:
+        genDistsRaw = intergeneral_analysis.aMap.raw
+    else:
+        genDistsRaw = [0] * len(map.tiles_by_index)
     # derive furthest capping tiles:
     all_furthest_tiles = set()
     for t in tiles:
-        if t.player == searchingPlayer:
+        if t.player >= 0 and teams[t.player] == searchingTeam:
             continue
         isFurthest = True
         for adj in t.movable:
-            if adj.player != searchingPlayer and genDistsRaw[t.tile_index] < genDistsRaw[adj.tile_index] and adj in tiles:
+            if (adj.player < 0 or teams[adj.player] != searchingTeam) and genDistsRaw[t.tile_index] < genDistsRaw[adj.tile_index] and adj in tiles:
                 isFurthest = False
                 break
         if isFurthest:
             all_furthest_tiles.add(t)
 
-    # root_tiles = all_furthest_tiles if all_furthest_tiles else gathing
     start_tile = next(iter(sorted(all_furthest_tiles, key=lambda t: genDistsRaw[t.tile_index], reverse=True)))
     # logbook.info(f'Calced build_capture_mst_from_root_and_contiguous_tiles start_tile to be {start_tile}')
     qq.appendleft((start_tile, 0))

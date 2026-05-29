@@ -6,8 +6,9 @@ import DebugHelper
 import KnapsackUtils
 import SearchUtils
 from Algorithms import TileIslandBuilder, TileIsland
-from Behavior.ArmyInterceptor import NEUTRAL_CAP_VALUE, TARGET_CAP_VALUE, InterceptionOptionInfo, ThreatBlockInfo
+from Behavior.ArmyInterceptor import NEUTRAL_CAP_VALUE, TARGET_CAP_VALUE, InterceptionOptionInfo, ThreatBlockInfo, ArmyInterception
 from BoardAnalyzer import BoardAnalyzer
+from Gather import GatherCapturePlan
 from MapMatrix import MapMatrix
 from Models import Move
 from Interfaces import TilePlanInterface, MapMatrixInterface
@@ -340,7 +341,14 @@ def get_round_plan_with_expansion(
                     # for tile in path.tileList:
                     #     count = counts.get(tile, 0)
                     #     counts[tile] = count + 1
-                    logEntries.append(f'including addl opt: {option}')
+                    optType = 'unk'
+                    if isinstance(option, ArmyInterception):
+                        optType = 'int'
+                    elif isinstance(option, Path):
+                        optType = 'path'
+                    elif isinstance(option, GatherCapturePlan):
+                        optType = 'gcp'
+                    logEntries.append(f'including {optType} opt: {option}')
 
                     _try_include_alt_sourced_path(
                         map,

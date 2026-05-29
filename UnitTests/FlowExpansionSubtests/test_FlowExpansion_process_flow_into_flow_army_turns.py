@@ -241,6 +241,52 @@ aG1  a3   b1   bG1
         self.assertNotIn(blockedPair, blocked_border_pairs)
         self.assertEqual(0, len([lt for lt in lookup_tables if lt.border_pair == blockedPair]))
 
+    def test_process_flow__enemy_city_growth_fixture_a3_still_generates_raw_delayed_gather_and_city_capture_entries(self):
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a3   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        self.begin_capturing_logging()
+
+        expander, builder = self._build_expander_with_flow_graph(map, general, enemyGeneral)
+        lookup_tables = self._run_process_flow(expander, builder)
+
+        self.assertEqual(1, len(lookup_tables), 'Fixture should produce exactly one lookup table.')
+        lookup_table = lookup_tables[0]
+
+        city_capture_turn_one = lookup_table.capture_entries_by_turn[1]
+        self.assertIsNotNone(city_capture_turn_one, 'Phase 2 should still emit the raw turn-1 city capture entry.')
+        self.assertEqual(4, city_capture_turn_one.required_army, 'Raw bC3 capture entry should require four arriving army.')
+
+        gather_turn_four = lookup_table.gather_entries_by_turn[4]
+        self.assertIsNotNone(gather_turn_four, 'Phase 2 should still emit the delayed four-turn gather entry.')
+        self.assertEqual(5, gather_turn_four.gathered_army, 'Raw delayed gather should total five army before city-growth deduction is applied in Phase 3.')
+
+    def test_process_flow__enemy_city_growth_fixture_a4_still_generates_raw_delayed_gather_and_city_capture_entries(self):
+        mapData = """
+|    |    |    |    |    |    |    |
+aG1  a4   a1   a1   a1   a4   bC3  bG1
+|    |    |    |    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        self.begin_capturing_logging()
+
+        expander, builder = self._build_expander_with_flow_graph(map, general, enemyGeneral)
+        lookup_tables = self._run_process_flow(expander, builder)
+
+        self.assertEqual(1, len(lookup_tables), 'Fixture should produce exactly one lookup table.')
+        lookup_table = lookup_tables[0]
+
+        city_capture_turn_one = lookup_table.capture_entries_by_turn[1]
+        self.assertIsNotNone(city_capture_turn_one, 'Phase 2 should still emit the raw turn-1 city capture entry.')
+        self.assertEqual(4, city_capture_turn_one.required_army, 'Raw bC3 capture entry should require four arriving army.')
+
+        gather_turn_four = lookup_table.gather_entries_by_turn[4]
+        self.assertIsNotNone(gather_turn_four, 'Phase 2 should still emit the delayed four-turn gather entry.')
+        self.assertEqual(6, gather_turn_four.gathered_army, 'Raw delayed gather should total six army before city-growth deduction is applied in Phase 3.')
+
     def test_process_flow__threat_blocking_tiles_disconnect_required_choke_demand(self):
         """
         If a threat block removes the only border edge through a choke, the demand behind that

@@ -27,6 +27,7 @@ import Utils
 from Algorithms import MapSpanningUtils, TileIslandBuilder, WatchmanRouteUtils, TileIsland
 from Army import Army
 from ArmyAnalyzer import ArmyAnalyzer
+from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2
 # from ArmyEngine import ArmyEngine, ArmySimResult
 from Behavior.ArmyInterceptor import ArmyInterceptor, ArmyInterception, ThreatBlockInfo, InterceptionOptionInfo
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
@@ -173,6 +174,8 @@ class EklipZBot(object):
 
         self.enemy_expansion_plan: ExpansionPotential | None = None
 
+        self._flow_expander: ArmyFlowExpanderV2 | None = None
+
         self.enemy_expansion_plan_tile_path_cap_values: typing.Dict[Tile, int] = {}
 
         self.intercept_plans: typing.Dict[Tile, ArmyInterception] = {}
@@ -269,6 +272,7 @@ class EklipZBot(object):
 
         self._minAllowableArmy = -1
         self.threat: ThreatObj | None = None
+        self.threats_we_care_about_by_tile: dict[Tile, list[ThreatObj]] | None = None
         self.best_defense_leaves: typing.List[GatherTreeNode] = []
         self.has_defenseless_modifier: bool = False
         self.has_watchtower_modifier: bool = False
@@ -443,6 +447,18 @@ class EklipZBot(object):
     # STEP2: Stay in EklipZBotV2.py. Tiny object-display helper with no domain logic; keep on the outer bot shell unchanged.
     def __str__(self):
         return f'[eklipz_bot {str(self._map)}]'
+
+    @property
+    def flow_expander(self) -> ArmyFlowExpanderV2:
+        if self._flow_expander is None:
+            if self._map is None:
+                raise AssertionError('flow_expander unavailable before bot map initialization')
+            self._flow_expander = ArmyFlowExpanderV2(self._map, self.perf_timer)
+        return self._flow_expander
+
+    @flow_expander.setter
+    def flow_expander(self, value: ArmyFlowExpanderV2 | None) -> None:
+        self._flow_expander = value
 
     # STEP2: Stay in EklipZBotV2.py. Lifecycle stub with no body today; preserve on the shell for compatibility with existing callers.
     def spawnWorkerThreads(self):
@@ -900,6 +916,7 @@ class EklipZBot(object):
                 if self.curPath is not None:
                     curPathNext = self.curPath.get_first_move()
                 if lastMove is not None:
+                    gatheredTilesBeforeMove = self.tiles_gathered_to_this_cycle.copy()
                     if self._map.is_player_on_team_with(lastMove.dest.delta.oldOwner, self.general.player):
                         self.tiles_gathered_to_this_cycle.add(lastMove.dest)
                         if lastMove.dest.isCity:
@@ -917,6 +934,19 @@ class EklipZBot(object):
                         self.tiles_evacuated_this_cycle.add(lastMove.source)
                         if lastMove.source.isCity:
                             self.cities_gathered_this_cycle.add(lastMove.source)
+                    if lastMove.dest.isCity and lastMove.dest.delta.oldOwner == -1:
+                        amountSpentToCapCity = min(lastMove.army_moved, lastMove.dest.delta.oldArmy)
+                        self.opponent_tracker.record_neutral_city_capture_army_spent(self.general.player, amountSpentToCapCity)
+
+                        ourCycleStats = self.opponent_tracker.get_current_cycle_stats_by_player(self.general.player)
+                        if ourCycleStats is not None:
+                            gatherMoveCount = ourCycleStats.moves_spent_gathering_fog_tiles + ourCycleStats.moves_spent_gathering_visible_tiles
+                            gatheredArmyAmount = sum(tile.army for tile in gatheredTilesBeforeMove) - len(gatheredTilesBeforeMove)
+                            self.opponent_tracker.record_neutral_city_capture_gather_time(
+                                self.general.player,
+                                amountSpentToCapCity,
+                                gatherMoveCount,
+                                gatheredArmyAmount)
                     if self.curPath and curPathNext and curPathNext.source == lastMove.source:
                         self.curPath.pop_first_move()
                 elif self.curPath is not None and curPathNext is None:
@@ -1384,7 +1414,6 @@ class EklipZBot(object):
                 self.info(f'Pass thru EXP city option! {move} targeting {targetCity}')
                 if targetCity.isNeutral:
                     self.cityAnalyzer.last_targeted_neut_city = targetCity
-                    self.opponent_tracker.record_neutral_city_capture_gather_turn(self.general.player)
                 return move
 
         # with self.perf_timer.begin_move_event(f'capture_cities'):
@@ -1839,8 +1868,11 @@ class EklipZBot(object):
 
     # STEP2: Stay in EklipZBotV2.py or move very late to BotStateQueries as a tiny tracker accessor. Convenience coordinate wrapper over get_army_at.
     def get_army_at_x_y(self, x: int, y: int):
-        tile = self._map.GetTile(x, y)
+        tile = self._map.At(x, y)
         return self.get_army_at(tile)
+
+    def get_army_at_x_y_or_none(self, x: int, y: int) -> Army | None:
+        return self.armyTracker.armies.get(self._map.At(x, y), None)
 
     # STEP2: Stay in EklipZBotV2.py. Core one-time lifecycle/bootstrap wiring for all analyzers, trackers, callbacks, and bot state; keep on outer shell.
     def initialize_from_map_for_first_time(self, map: MapBase):
@@ -1903,6 +1935,7 @@ class EklipZBot(object):
         self.launchPoints.append(self.general)
         self.army_interceptor = ArmyInterceptor(self._map, self.board_analysis, viewInfo=self.viewInfo)
         self.win_condition_analyzer = WinConditionAnalyzer(self._map, self.opponent_tracker, self.cityAnalyzer, self.territories, self.board_analysis)
+        self.cityAnalyzer.win_condition_analyzer = self.win_condition_analyzer
         self.capture_line_tracker = CaptureLineTracker(self._map)
         BotTimings.timing_cycle_ended(self)
         self.opponent_tracker.outbound_emergence_notifications.append(self.armyTracker.notify_concrete_emergence)

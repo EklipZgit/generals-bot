@@ -1,6 +1,7 @@
 import base.viewer
 from ArmyAnalyzer import ArmyAnalyzer
 from BoardAnalyzer import BoardAnalyzer
+from BotModules.BotEventHandlers import BotEventHandlers
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Strategy.WinConditionAnalyzer import WinCondition
@@ -26,7 +27,32 @@ class WinConditionAnalyzerTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertIsNone(winner)
 
-        self.assertIn(playerMap.GetTile(6, 14), bot.win_condition_analyzer.defend_cities)
+        self.assertNotIn(playerMap.GetTile(6, 14), bot.win_condition_analyzer.defend_cities)
+
+    def test_should_record_city_flip_via_capture_hook(self):
+        mapFile = 'GameContinuationEntries/should_not_play_city_defense_when_city_right_by_general_wtf___tlcZQJVRh---1--161.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 161, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=161)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        city = bot._map.GetTile(2, 13)
+
+        city.delta.oldOwner = city.player
+        city.delta.newOwner = enemyGeneral.player
+        city.delta.gainedSight = False
+        city.player = enemyGeneral.player
+        city.army = 4
+
+        BotEventHandlers.handle_tile_captures(bot, city)
+
+        history = bot.win_condition_analyzer.city_contestation_history[city]
+        self.assertEqual(1, len(history))
+        self.assertEqual(enemyGeneral.player, history[0].player)
+        self.assertEqual(bot._map.turn, history[0].turn)
+        self.assertEqual(4, history[0].army)
 
     def test_should_consider_econ_win_condition(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

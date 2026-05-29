@@ -55,7 +55,7 @@ _overrideBypass = os.environ.get('bypass_ui', 'False') == 'True'
 
 class TestBase(unittest.TestCase):
     GLOBAL_BYPASS_REAL_TIME_TEST = False
-    GLOBAL_BYPASS_RENDERING = False or _overrideBypass
+    GLOBAL_BYPASS_RENDERING = False or _overrideBypass or GLOBAL_BYPASS_REAL_TIME_TEST
     """Change to True to have NO TEST bring up a viewer at all"""
 
     # __test__ = False
@@ -249,7 +249,7 @@ class TestBase(unittest.TestCase):
             for row in rawVisibilityBoard:
                 for rawTile in row:
                     if not rawTile.discovered:
-                        protectedFileVisibleTiles.add(map.GetTile(rawTile.x, rawTile.y))
+                        protectedFileVisibleTiles.add(map.At(rawTile.x, rawTile.y))
 
         enemyGen = None
         botTargetPlayer = None
@@ -307,7 +307,7 @@ class TestBase(unittest.TestCase):
                 for tileTurnPair in lastMovedData.split(','):
                     if ':' in tileTurnPair:
                         tileIdx, turn = tileTurnPair.split(':')
-                        tile = map.GetTile(int(tileIdx) % map.cols, int(tileIdx) // map.cols)
+                        tile = map.At(int(tileIdx) % map.cols, int(tileIdx) // map.cols)
                         tile.lastMovedTurn = int(turn)
 
             armies = TextMapLoader.load_armies(map, gameData)
@@ -342,26 +342,26 @@ class TestBase(unittest.TestCase):
 
                 self.ensure_player_tiles_and_scores(map, general, playerTiles, playerScore, gen, enemyTiles, enemyScore, enemyCities, respect_player_vision, armies, protectedFileVisibleTiles)
 
-        if fill_out_tiles:
-            for player in map.players:
-                if player.dead or player.index == general.player or player.index in map.teammates:
-                    continue
-                enemyChar, _ = chars[player.index]
-                if f'{enemyChar}Score' not in gameData:
-                    continue
-                targetScore = int(gameData[f'{enemyChar}Score'])
-                actualScore = sum(tile.army for tile in map.pathable_tiles if tile.player == player.index)
-                if actualScore <= targetScore:
-                    continue
-                finalDropCandidates = SearchUtils.where(
-                    map.pathable_tiles,
-                    lambda t: t not in protectedFileVisibleTiles and t.player == player.index and t.army == 1 and not t.isGeneral and not t.isCity)
-                finalDropCandidates.sort(key=lambda t: 0 - abs(t.x - general.x) - abs(t.y - general.y))
-                for tile in finalDropCandidates:
-                    if actualScore <= targetScore:
-                        break
-                    map.reset_wrong_undiscovered_fog_guess(tile)
-                    actualScore -= 1
+        # if fill_out_tiles:
+        #     for player in map.players:
+        #         if player.dead or player.index == general.player or player.index in map.teammates:
+        #             continue
+        #         enemyChar, _ = chars[player.index]
+        #         if f'{enemyChar}Score' not in gameData:
+        #             continue
+        #         targetScore = int(gameData[f'{enemyChar}Score'])
+        #         actualScore = sum(tile.army for tile in map.pathable_tiles if tile.player == player.index)
+        #         if actualScore <= targetScore:
+        #             continue
+        #         finalDropCandidates = SearchUtils.where(
+        #             map.pathable_tiles,
+        #             lambda t: t not in protectedFileVisibleTiles and t.player == player.index and t.army == 1 and not t.isGeneral and not t.isCity)
+        #         finalDropCandidates.sort(key=lambda t: 0 - abs(t.x - general.x) - abs(t.y - general.y))
+        #         for tile in finalDropCandidates:
+        #             if actualScore <= targetScore:
+        #                 break
+        #             map.reset_wrong_undiscovered_fog_guess(tile)
+        #             actualScore -= 1
 
         for player in map.players:
             player.score = 0
@@ -490,7 +490,7 @@ class TestBase(unittest.TestCase):
 
     def get_tile_by_tile_index(self, map: MapBase, tileIndex: int) -> Tile:
         x, y = self.convert_tile_server_index_to_friendly_x_y(map, tileIndex)
-        return map.GetTile(x, y)
+        return map.At(x, y)
 
     def convert_tile_server_index_to_friendly_x_y(self, map: MapBase, tileIndex: int) -> typing.Tuple[int, int]:
         y = tileIndex // map.cols
@@ -510,7 +510,7 @@ class TestBase(unittest.TestCase):
     ):
         bot = simHost.get_bot(botPlayer)
 
-        botTile = bot._map.GetTile(x, y)
+        botTile = bot._map.At(x, y)
 
         def emergenceMarker(t: Tile, dist: int) -> bool:
             bot.armyTracker.emergenceLocationMap[emergencePlayer][t] = (emergenceAmt * 5) // (dist + 5)
@@ -518,7 +518,7 @@ class TestBase(unittest.TestCase):
 
         SearchUtils.breadth_first_foreach_dist(bot._map, [botTile], distance, emergenceMarker)
 
-        bot.armyTracker.emergenceLocationMap[emergencePlayer][bot._map.GetTile(x, y)] += emergenceAmt
+        bot.armyTracker.emergenceLocationMap[emergencePlayer][bot._map.At(x, y)] += emergenceAmt
         BotTimings.timing_cycle_ended(bot)
         bot.target_player_gather_path = None
 
@@ -572,8 +572,7 @@ class TestBase(unittest.TestCase):
     def get_from_general_weight_map(self, map: MapBase, general: Tile, negate: bool = False) -> MapMatrixInterface[int]:
         distMap = map.distance_mapper.get_tile_dist_matrix(general)
         if negate:
-            for tile in map.get_all_tiles():
-                distMap[tile] = 0 - distMap[tile]
+            distMap = MapMatrix.negate_in_place(distMap)
         return distMap
 
     def get_opposite_general_distance_map(self, map: MapBase, general: Tile, negate: bool = False) -> MapMatrixInterface[int]:
@@ -843,7 +842,7 @@ class TestBase(unittest.TestCase):
         ArmyInterceptor.DEBUG_BYPASS_BAD_INTERCEPTIONS = True
 
     def reset_general(self, rawMap, enemyGeneral):
-        mapTile = rawMap.GetTile(enemyGeneral.x, enemyGeneral.y)
+        mapTile = rawMap.At(enemyGeneral.x, enemyGeneral.y)
         rawMap.reset_wrong_undiscovered_fog_guess(mapTile)
         rawMap.generals[enemyGeneral.player] = None
 
@@ -1020,11 +1019,11 @@ class TestBase(unittest.TestCase):
         self.assertIn(tile, container)
 
     def assertTileXYIn(self, map: MapBase, x: int, y: int, container: MapMatrix | MapMatrixSet | typing.Container[Tile] | typing.Iterable[Tile]):
-        self.assertIn(map.GetTile(x, y), container)
+        self.assertIn(map.At(x, y), container)
 
     def assertCoordsIn(self, map: MapBase, coords: typing.Tuple[int, int], container: MapMatrix | MapMatrixSet | typing.Container[Tile] | typing.Iterable[Tile]):
         x, y = coords
-        self.assertIn(map.GetTile(x, y), container)
+        self.assertIn(map.At(x, y), container)
 
     def assertOwned(self, player: int, tile: Tile | int, reason: str | None = None):
         if isinstance(tile, int):
@@ -1093,7 +1092,7 @@ class TestBase(unittest.TestCase):
 
     def assertPlayerTileVisibleAndCorrect(self, x: int, y: int, sim: GameSimulator, player_index: int):
         playerTile = self.get_player_tile(x, y, sim, player_index)
-        mapTile = sim.sim_map.GetTile(x, y)
+        mapTile = sim.sim_map.At(x, y)
         self.assertTrue(playerTile.visible, f'tile {x},{y} should have been visible for p{player_index}')
         self.assertTrue(playerTile.discovered, f'tile {x},{y} should have been discovered for p{player_index}')
         self.assertEqual(mapTile.tile, playerTile.tile, f'tile {x},{y} tile mismatched despite perfect vision for p{player_index}')
@@ -1110,7 +1109,7 @@ class TestBase(unittest.TestCase):
         @return:
         """
         playerTile = self.get_player_tile(x, y, sim, player_index)
-        mapTile = sim.sim_map.GetTile(x, y)
+        mapTile = sim.sim_map.At(x, y)
         # Can't assert 'tile' value itself, as the player map may refuse to update the map tile or have fog where sim map has empty, etc.
         #  Often these can and should diverge between player map and sim map with perfect information.
         # self.assertEqual(mapTile.tile, playerTile.tile, f'tile {x},{y} should have been discovered for p{player_index}')
@@ -1139,7 +1138,7 @@ class TestBase(unittest.TestCase):
     def assertPlayerTileLostVision(self, x: int, y: int, sim: GameSimulator, player_index: int):
         playerTile = self.assertPlayerTileNotVisible(x, y, sim, player_index)
         self.assertTrue(playerTile.discovered, f'tile {x},{y} should have been discovered for p{player_index}')
-        mapTile = sim.sim_map.GetTile(x, y)
+        mapTile = sim.sim_map.At(x, y)
         # player map should still understand the real owner
         self.assertEqual(mapTile.player, playerTile.player, f'tile {x},{y} player mismatched for p{player_index}')
         self.assertEqual(mapTile.army, playerTile.army, f'tile {x},{y} army mismatched for p{player_index}')
@@ -1158,7 +1157,7 @@ class TestBase(unittest.TestCase):
         sumArmy = SearchUtils.Counter(0)
         countTiles = SearchUtils.Counter(0)
         map = simHost.sim.players[player].map
-        sourceTile = map.GetTile(x, y)
+        sourceTile = map.At(x, y)
 
         def countFunc(tile: Tile):
             if tile.player == player:
@@ -1184,7 +1183,7 @@ class TestBase(unittest.TestCase):
             requireCountCapturedInWindow: int = 10):
         countCaptured = SearchUtils.Counter(0)
         map = simHost.sim.sim_map
-        sourceTile = map.GetTile(x, y)
+        sourceTile = map.At(x, y)
 
         def countFunc(tile: Tile):
             if tile.player == player and tile.turn_captured > map.turn - capturedWithinLastTurns:
@@ -1228,7 +1227,7 @@ class TestBase(unittest.TestCase):
         if emergencePlayer == -1:
             self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the emergencePlayer for this call.')
 
-        tile = bot._map.GetTile(x, y)
+        tile = bot._map.At(x, y)
         emg = bot.armyTracker.get_tile_emergence_for_player(tile, emergencePlayer)
         self.assertLess(emg, thanValue, f'expected {emergencePlayer} emergence on {tile} to be less than {thanValue}; found {emg}')
 
@@ -1238,7 +1237,7 @@ class TestBase(unittest.TestCase):
         if emergencePlayer == -1:
             self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the emergencePlayer for this call.')
 
-        tile = bot._map.GetTile(x, y)
+        tile = bot._map.At(x, y)
         emg = bot.armyTracker.get_tile_emergence_for_player(tile, emergencePlayer)
         self.assertGreater(emg, thanValue, f'expected {emergencePlayer} emergence on {tile} to be greater than {thanValue}; found {emg}')
 
@@ -1267,10 +1266,10 @@ class TestBase(unittest.TestCase):
         self.assertFalse(bot.armyTracker.valid_general_positions_by_player[enemyPlayer][tile], f'expected {tile} to be an invalid general location for player {enemyPlayer}, however it was valid.')
 
     def assertValidGeneralPositionXY(self, bot: EklipZBot, x: int, y: int, enemyPlayer: int = -1):
-        self.assertValidGeneralPosition(bot, bot._map.GetTile(x, y), enemyPlayer)
+        self.assertValidGeneralPosition(bot, bot._map.At(x, y), enemyPlayer)
 
     def assertInvalidGeneralPositionXY(self, bot: EklipZBot, x: int, y: int, enemyPlayer: int = -1):
-        self.assertInvalidGeneralPosition(bot, bot._map.GetTile(x, y), enemyPlayer)
+        self.assertInvalidGeneralPosition(bot, bot._map.At(x, y), enemyPlayer)
 
     def assertMovesValid(self, moveList: typing.List[Move]):
         failures = []
@@ -1287,12 +1286,12 @@ class TestBase(unittest.TestCase):
         if emergencePlayer == -1:
             self.fail(f'bot target player was {bot.targetPlayer}; you\'ll need to explicitly specify the emergencePlayer for this call.')
 
-        tile = bot._map.GetTile(x, y)
+        tile = bot._map.At(x, y)
         return bot.armyTracker.get_tile_emergence_for_player(tile, emergencePlayer)
 
     def get_player_tile(self, x: int, y: int, sim: GameSimulator, player_index: int) -> Tile:
         player = sim.players[player_index]
-        tile = player.map.GetTile(x, y)
+        tile = player.map.At(x, y)
         return tile
 
     def get_player_largest_tile(self, sim: GameSimulator, player_index: int) -> Tile:
@@ -1568,22 +1567,33 @@ class TestBase(unittest.TestCase):
 
         newAndTemp = set(newTiles)
         for tile in map.players[enemyGeneral.player].tiles:
-            if tile.player == enemyGeneral.player and (tile.isTempFogPrediction or (tile not in protectedFileVisibleTiles and not tile.isCity)) and tile not in newAndTemp:
+            if tile.player == enemyGeneral.player and tile.isTempFogPrediction:
                 newAndTemp.add(tile)
-                # countScoreEnemy.value += tile.army
+        if len(newAndTemp) == 0:
+            for tile in map.players[enemyGeneral.player].tiles:
+                if tile.player == enemyGeneral.player and tile not in protectedFileVisibleTiles and not tile.isCity:
+                    newAndTemp.add(tile)
 
-        newAndTempOrdered = sorted(newAndTemp, key=lambda t: (t == enemyGeneral, get_player_land_dist(t), 0 - enemyMap[t]), reverse=True)
+        newAndTempOrdered = sorted(newAndTemp, key=lambda t: (t == enemyGeneral, 0 - enemyMap[t], get_player_land_dist(t)), reverse=True)
         if enemyGeneralTargetScore is not None:
             for tile in newAndTempOrdered:
-                while tile not in protectedFileVisibleTiles and tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
+                if countScoreEnemy.value >= enemyGeneralTargetScore:
+                    break
+                if tile in protectedFileVisibleTiles or tile.player != enemyGeneral.player:
+                    continue
+                logbook.info(f'attempting to increment en {tile}')
+                while countScoreEnemy.value < enemyGeneralTargetScore:
                     countScoreEnemy.add(1)
                     tile.army += 1
             if countScoreEnemy.value < enemyGeneralTargetScore:
                 fallbackEnemyTiles = SearchUtils.where(
                     map.pathable_tiles,
                     lambda t: t.player == enemyGeneral.player and not t.isCity)
-                fallbackEnemyTiles.sort(key=lambda t: (t == enemyGeneral, get_player_land_dist(t), 0 - enemyMap[t]), reverse=True)
+                fallbackEnemyTiles.sort(key=lambda t: (t == enemyGeneral, 0 - enemyMap[t], get_player_land_dist(t)), reverse=True)
                 for tile in fallbackEnemyTiles:
+                    if countScoreEnemy.value >= enemyGeneralTargetScore:
+                        break
+                    logbook.info(f'attempting to increment en fallback {tile}')
                     while tile.player == enemyGeneral.player and countScoreEnemy.value < enemyGeneralTargetScore:
                         countScoreEnemy.add(1)
                         tile.army += 1
@@ -1618,6 +1628,7 @@ class TestBase(unittest.TestCase):
                 for tile in finalDropCandidates:
                     if scoreOverflow <= 0:
                         break
+                    logbook.info(f'attempting to reset extra en tile {tile}')
                     oldArmy = tile.army
                     map.reset_wrong_undiscovered_fog_guess(tile)
                     countTilesEnemy.add(-1)
@@ -1715,7 +1726,7 @@ class TestBase(unittest.TestCase):
             newY: int
     ) -> Tile:
         oldArm = oldGeneral.army
-        enemyGeneral = map.GetTile(newX, newY)
+        enemyGeneral = map.At(newX, newY)
         enemyGeneral.army = oldArm
         enemyGeneral.player = oldGeneral.player
         enemyGeneral.isGeneral = True
@@ -1724,6 +1735,20 @@ class TestBase(unittest.TestCase):
         oldGeneral.isGeneral = False
         oldGeneral.army = 1
         return enemyGeneral
+
+    def swap_tile_army_x_y(
+            self,
+            map: MapBase,
+            oldX: int,
+            oldY: int,
+            newX: int,
+            newY: int,
+    ) -> Tile:
+        oldTile = map.At(oldX, oldY)
+        newTile = map.At(newX, newY)
+        oldTile.player, newTile.player = newTile.player, oldTile.player
+        oldTile.army, newTile.army = newTile.army, oldTile.army
+        return newTile
 
     def update_tile_army_in_place(self, map: MapBase, tile: Tile, newArmy: int):
         """
@@ -2128,10 +2153,10 @@ class TestBase(unittest.TestCase):
                 enemyGen = map.generals[player]
             elif isTargetPlayer and 'targetPlayerExpectedGeneralLocation' in gameData:
                 x, y = gameData['targetPlayerExpectedGeneralLocation'].split(',')
-                enemyGen = map.GetTile(int(x), int(y))
+                enemyGen = map.At(int(x), int(y))
             elif f'{chars[player]}_bot_general_approx' in gameData:
                 x, y = gameData[f'{chars[player]}_bot_general_approx'].split(',')
-                enemyGen = map.GetTile(int(x), int(y))
+                enemyGen = map.At(int(x), int(y))
 
         if enemyGen is None:
             enemyGens = list(filter(lambda gen: gen is not None and (gen.player == player or (player is None and gen.player != map.player_index)), map.generals))
@@ -2708,13 +2733,13 @@ class TestBase(unittest.TestCase):
         self.render_view_info(map, viewInfo, f'intercept {maxOpt}')
 
     def assertInterceptChokeTileMoves(self, plan: ArmyInterception, map: MapBase, x: int, y: int, w: int):
-        tile = map.GetTile(x, y)
+        tile = map.At(x, y)
         self.assertIn(tile, plan.common_intercept_chokes, f'Expected {str(tile)} to be in chokes, but wasnt.')
         val = plan.common_intercept_chokes[tile]
         self.assertEqual(w, val, f'Expected choke {str(tile)} to be {w} but was {val}')
 
     def assertNotInterceptChoke(self, plan: ArmyInterception, map: MapBase, x: int, y: int):
-        tile = map.GetTile(x, y)
+        tile = map.At(x, y)
         val = plan.common_intercept_chokes.get(tile, -10)
         if val != -10:
             self.fail(f'Expected {str(tile)} NOT to be in chokes, instead found val {val}.')

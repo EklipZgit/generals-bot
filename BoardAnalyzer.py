@@ -8,6 +8,7 @@ import time
 import typing
 from collections import deque
 from dataclasses import dataclass
+import math
 
 import logbook
 
@@ -59,6 +60,10 @@ class BoardAnalyzer:
         self.extended_play_area_matrix: MapMatrixSet = None
 
         self.shortest_path_distances: MapMatrixInterface[int] = None
+
+        self.largest_player_tiles: typing.List[Tile] = []
+
+        self.furthest_large_ungathered_player_tiles: typing.List[Tile] = []
 
         self.flankable_fog_area_matrix: MapMatrixSet = None
         """
@@ -160,6 +165,48 @@ class BoardAnalyzer:
                 if oldOuter.raw[tile.tile_index] != self.outerChokes.raw[tile.tile_index]:
                     logbook.info(
                         f"  outer choke change: tile {str(tile)}, old {oldOuter.raw[tile.tile_index]}, new {self.outerChokes.raw[tile.tile_index]}")
+
+        self._update_player_bulk_tile_tracking()
+
+    def _update_player_bulk_tile_tracking(self):
+        player = self.map.players[self.map.player_index]
+        playerTiles = list(player.tiles)
+        playerTiles.sort(key=lambda tile: tile.army, reverse=True)
+
+        excludeTargetCount = 4 + len(player.cities)
+        excluded: typing.List[Tile] = []
+        if excludeTargetCount > 0 and len(playerTiles) > 0:
+            if len(playerTiles) <= excludeTargetCount:
+                excluded = playerTiles
+            else:
+                boundaryArmy = playerTiles[excludeTargetCount - 1].army
+                nextArmy = playerTiles[excludeTargetCount].army
+                if nextArmy == boundaryArmy:
+                    excluded = [tile for tile in playerTiles if tile.army > boundaryArmy]
+                else:
+                    excluded = [tile for tile in playerTiles if tile.army >= boundaryArmy]
+
+        excludedTileIndexes = {tile.tile_index for tile in excluded}
+        remaining = [tile for tile in playerTiles if tile.tile_index not in excludedTileIndexes]
+
+        self.largest_player_tiles = excluded
+
+        if len(remaining) == 0 or self.extended_play_area_matrix is None:
+            self.furthest_large_ungathered_player_tiles = []
+            return
+
+        extendedPlayAreaTiles = [tile for tile in self.map.pathable_tiles if self.extended_play_area_matrix.raw[tile.tile_index]]
+        if len(extendedPlayAreaTiles) == 0:
+            self.furthest_large_ungathered_player_tiles = []
+            return
+
+        largestRemainingCount = min(len(remaining), max(10, math.ceil(len(remaining) * 0.2)))
+        largestRemaining = remaining[:largestRemainingCount]
+        playAreaDistances = SearchUtils.build_distance_map_matrix(self.map, extendedPlayAreaTiles)
+        self.furthest_large_ungathered_player_tiles = sorted(
+            largestRemaining,
+            key=lambda tile: (playAreaDistances.raw[tile.tile_index], tile.army, tile.tile_index),
+            reverse=True)
 
     def _get_defensive_choke_point(self, defendedTile: Tile) -> DefensiveChokePoint:
         if self.intergeneral_analysis is None:

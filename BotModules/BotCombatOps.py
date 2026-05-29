@@ -75,6 +75,9 @@ class BotCombatOps:
             if enemyGeneral is None or enemyGeneral.player == bot.general.player or enemyGeneral.player in bot._map.teammates:
                 continue
 
+            if enemyGeneral.player == -1 and BotStateQueries.is_still_ffa_and_non_dominant(bot):
+                continue
+
             enPlayer = enemyGeneral.player
             if enPlayer == -1:
                 enPlayer = bot.targetPlayer
@@ -470,6 +473,10 @@ class BotCombatOps:
             BotRendering.mark_tile(bot, t, alpha=50)
 
         isOnlyOneSpot = toReveal[0].isGeneral
+
+        if turnsToDeath is not None and bot.opponent_tracker.winning_on_economy():
+            # we don't want a general trade.
+            turnsToDeath -= 1
 
         if isOnlyOneSpot:
             if turnsToDeath is None:
@@ -1707,9 +1714,10 @@ class BotCombatOps:
                 time.sleep(1)
                 if bot.surrender_func:
                     bot.surrender_func()
-                time.sleep(1)
-                bot._map.result = False
-                bot._map.complete = True
+                    # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_duplicate_army_out_of_fog runs under GameSimulatorHost without a real surrender_func; only complete the map when we can actually submit a surrender to the game client.
+                    time.sleep(1)
+                    bot._map.result = False
+                    bot._map.complete = True
             else:
                 bot.giving_up_counter = 0
 

@@ -3423,3 +3423,101 @@ whoever has less extra troops will always get ahead
 
         self.assertMinArmyNearXY(16, 14, 50, distance=4, reason='should recognize threat and then prioritize far, high value out of play tiles.')
         self.assertMinArmyNearXY(19, 18, 40, distance=2, reason='should not have gathered general yet')
+
+    def test_should_fucking_defend_when_just_took_a_city_and_knew_it_was_barely_safe(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_fucking_defend_when_just_took_a_city_and_knew_it_was_barely_safe___GaDNDXVxx---1--176.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 176, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=176)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+
+        # proof
+        # simHost.queue_player_moves_str(general.player, '4,8->4,5  3,5->5,5  3,1->7,1  8,0->8,1  9,1->7,1->7,3->8,3->8,4')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.opponent_tracker.current_team_cycle_stats[bot._map.friendly_team].moves_spent_gathering_neutral_city_capture = 25
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        # 11,6 sees 49 army on turn 191
+        self.assertMinArmyNearXY(7, 4, minArmyAmount=32, distance=3)
+
+    def test_should_gather_to_hold_enemy_contested_city__primarily_the_5_cluster_and_cornered_cities(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_to_hold_enemy_contested_city__primarily_the_5_cluster_and_cornered_cities___fHjzkD6XM---0--390.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 390, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=390)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_gather_to_hold_enemy_contested_city__primarily_the_5_cluster_and_cornered_cities")
+
+    def test_should_do_something_with_400_army_this_round_holy_shit(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_do_something_with_400_army_this_round_holy_shit___fHjzkD6XM---0--521.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 521, fill_out_tiles=True)
+        enemyGeneral.army, map.At(19, 8).army = map.At(19, 8).army, enemyGeneral.army
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=521)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,6->12,7->10,7->10,5->4,5->4,4->2,4  14,10->12,10->12,9->10,9->10,8->3,8  8,12->9,12->10,12z  9,12->9,13  9,0->9,1')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '0,7->2,7->2,6->3,6->3,5->5,5->10,5->10,8->13,8->13,10->14,10')
+        # simHost.queue_player_moves_str(general.player, '0,7->2,7->2,6->3,6->3,5->5,5->10,5->10,8->17,8->17,10->16,10')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=29)
+        self.assertNoFriendliesKilled(map, general)
+
+        if playerMap.At(16, 10).player == general.player:
+            self.assertGreater(playerMap.At(16, 10).army, 310, 'should have pulled the extra 50 with, if capping enemy general')
+        else:
+            # if we didn't kill opp then we should be contesting his city instead.
+            self.assertOwnedXY(14, 10)
+            self.assertTileDifferentialGreaterThan(-22, simHost, 'shouldnt face tank too much damage')
+            self.assertGreater(playerMap.At(14, 10).army, 310, 'should have pulled the extra 50 with, wasteful not to when contesting city')
+
+    def test_should_just_cap_city_and_hold_it_instead_of_weird_shit(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_shuffle__lose__or_duplicate_fog_armies_when_pushing_them_back_into_the_fog___fHjzkD6XM---0--371.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 371, fill_out_tiles=True)
+        self.swap_tile_army_x_y(map, 11,8, 19,10)
+        self.swap_tile_army_x_y(map, 12,8, 15,9)
+        self.swap_tile_army_x_y(map, 11,9, 15,11)
+        self.swap_tile_army_x_y(map, 13,9, 19,6)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=371)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(16, 10, 'should not lose its mind around fog armies and should just cap the fucking city lol')
+

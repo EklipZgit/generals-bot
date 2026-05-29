@@ -1,5 +1,5 @@
 1. If you make a change and it does not change or fix the issue after testing, revert that change before trying to make other changes.
-2. Prefer adding logging to be certain what an issue is rather than guessing. This is a very complex system and random changes can have a lot of cascading effects.
+2. Prefer adding logging via logbook.info/warn/error/etc to be certain what an issue is rather than guessing. This is a very complex system and random changes can have a lot of cascading effects.
 3. You use the `python3.14` command, not `python` for anything you run in this project.
 4. You are using a PowerShell terminal, not bash.
 5. Tests are run with unittest, not pytest. Run them from the repo root `D:\2019_reformat_Backup\generals-bot`, not from `D:\2019_reformat_Backup`.
@@ -27,6 +27,8 @@ cmd /c "... > D:\2019_reformat_Backup\cascade-debug-output\generals-bot\raw_test
 9. Tests are run with unittest, not pytest.
 10. Do not EVER unstage or stash staged git changes. Don't ever stage git changes. The user will do all git staging and unstaging, you are allowed read-only git commands only.
 11. For Python structured data passed across functions, never use ad-hoc nested dicts when fields are known; use dataclasses with type annotations and slots instead, and only convert to/from dict at serialization or logging boundaries.
+12. We don't ever use print(..) statements, we always use logbook.info, logbook.warn, etc.
+13. Whenever adding code to fix a test, include a comment above that code referenceing the test file and test name that that code is there to combat, and explain the code. Comments are extremely important in this complex codebase.
 
 --- RunUnittestBaseline.py ---
 1. Use RunUnittestBaseline.py from the repo root to create stable unittest pass/fail baselines before risky changes.

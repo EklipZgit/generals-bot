@@ -44,6 +44,47 @@ if typing.TYPE_CHECKING:
 
 class BotExpansionOps:
     @staticmethod
+    def _get_intercept_option_path_key(option: InterceptionOptionInfo) -> tuple:
+        return option.path.start.tile.coords, option.path.tail.tile.coords
+
+    @staticmethod
+    def _get_condensed_intercept_options_for_info(options: typing.Iterable[InterceptionOptionInfo]) -> typing.List[InterceptionOptionInfo]:
+        optionByPathKey: dict[tuple, tuple[InterceptionOptionInfo, InterceptionOptionInfo]] = {}
+        for option in options:
+            pathKey = BotExpansionOps._get_intercept_option_path_key(option)
+            shortestOption, longestOption = optionByPathKey.get(pathKey, (option, option))
+            if option.length < shortestOption.length:
+                shortestOption = option
+            if option.length > longestOption.length:
+                longestOption = option
+            optionByPathKey[pathKey] = shortestOption, longestOption
+
+        condensedOptions: typing.List[InterceptionOptionInfo] = []
+        seenOptions: typing.Set[InterceptionOptionInfo] = set()
+        for shortestOption, longestOption in optionByPathKey.values():
+            if shortestOption not in seenOptions:
+                condensedOptions.append(shortestOption)
+                seenOptions.add(shortestOption)
+            if longestOption not in seenOptions:
+                condensedOptions.append(longestOption)
+                seenOptions.add(longestOption)
+
+        if len(condensedOptions) > 10:
+            condensedOptions = [
+                option for option in condensedOptions
+                if option.econValue / max(option.length, 1) >= 0.8
+            ]
+
+        return condensedOptions
+
+    @staticmethod
+    def _log_intercept_option_info(bot: EklipZBot, option: InterceptionOptionInfo, useBotInfo: bool) -> None:
+        optionInfo = f'intOpt {option.econValue / max(option.length, 1):.2f} ({option.econValue:.1f}e/{option.length}t) {str(option)}'
+        logbook.info(optionInfo)
+        if useBotInfo:
+            bot.info(optionInfo)
+
+    @staticmethod
     def get_optimal_city_or_general_plan_move(bot: EklipZBot, timeLimit: float = 4.0) -> Move | None:
         calcedThisTurn = False
         if bot._map.turn < 50 and bot._map.is_2v2:
@@ -495,12 +536,16 @@ class BotExpansionOps:
 
             interceptOptionsSet: typing.Set[TilePlanInterface] = set()
             addlOptions: typing.List[TilePlanInterface] = []
+            interceptOptionsToLog: typing.List[InterceptionOptionInfo] = []
             for threatTile, interceptPlan in bot.intercept_plans.items():
                 for turns, option in interceptPlan.intercept_options.items():
                     addlOptions.append(option)
                     interceptOptionsSet.add(option)
+                    interceptOptionsToLog.append(option)
 
-                    bot.info(f'intOpt {option.econValue / option.length:.2f} ({option.econValue:.1f}e/{option.length}t) {str(option)}')
+            botInfoInterceptOptions = set(BotExpansionOps._get_condensed_intercept_options_for_info(interceptOptionsToLog))
+            for option in interceptOptionsToLog:
+                BotExpansionOps._log_intercept_option_info(bot, option, option in botInfoInterceptOptions)
             if bot.city_capture_plan_option is not None:
                 addlOptions.append(bot.city_capture_plan_option)
                 bot.info(f'cityOpt {bot.city_capture_plan_option.econValue / max(bot.city_capture_plan_option.length, 1):.2f} ({bot.city_capture_plan_option.econValue:.1f}e/{bot.city_capture_plan_option.length}t) {str(bot.city_capture_plan_option)}')
@@ -511,7 +556,11 @@ class BotExpansionOps:
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
                     ogStart = time.perf_counter()
-                    flowExpander = ArmyFlowExpanderV2(bot._map, bot.perf_timer)
+                    if bot.flow_expander is None:
+                        bot.flow_expander = ArmyFlowExpanderV2(bot._map, bot.perf_timer)
+                    else:
+                        bot.flow_expander.reset_for_turn(bot._map, bot.perf_timer)
+                    flowExpander = bot.flow_expander
 
                     cutoffTime = time.perf_counter()
                     if bot.expansion_use_legacy:
@@ -522,7 +571,6 @@ class BotExpansionOps:
                     flowExpander.friendlyGeneral = bot.general
                     flowExpander.enemyGeneral = bot.targetPlayerExpectedGeneralLocation
                     flowExpander.debug_render_capture_count_threshold = 10000
-                    flowExpander.log_debug = False
                     flowExpander.use_debug_asserts = False
 
                     try:
@@ -544,7 +592,9 @@ class BotExpansionOps:
                                 distToEnFog += 1
 
                             if enemyFogAttackFromTile is not None:
-                                predictedArmy = bot.opponent_tracker.get_approximate_fog_army_risk(bot.targetPlayer, None, inTurns=min(20, max(1, bot.opponent_tracker.get_predicted_attack_turn_by_dist_to_fog(bot.targetPlayer, distToEnFog))))
+                                maxTurns = max(1, bot.opponent_tracker.get_predicted_attack_turn_by_dist_to_fog(bot.targetPlayer, distToEnFog))
+                                inTurns = min(20, maxTurns)
+                                predictedArmy = bot.opponent_tracker.get_approximate_fog_army_risk(bot.targetPlayer, None, inTurns=inTurns)
                                 armyOverrideMatrix.raw[enemyFogAttackFromTile.tile_index] = predictedArmy
                                 # Clone the bonus matrix so we don't mutate the shared one
                                 bonusCapturePointMatrixForFlow = bonusCapturePointMatrix.copy()
@@ -742,7 +792,11 @@ class BotExpansionOps:
                         interceptOption = planOpt.get_intercept_option_by_path(otherPath)
                         if interceptOption is not None:
                             isOneMoveLargeIntercept = interceptOption.length < 2 or otherPath.length == 1
-                            if isOneMoveLargeIntercept or interceptOption.econValue / interceptOption.length > interceptVtCutoff:
+                            isGeneralDefenseIntercept = SearchUtils.any_where(
+                                planOpt.threats,
+                                lambda threatObj: threatObj.path.tail.tile.isGeneral,
+                            )
+                            if isOneMoveLargeIntercept or isGeneralDefenseIntercept or interceptOption.econValue / interceptOption.length > interceptVtCutoff:
                                 bot.viewInfo.add_info_line(f'EXP USED INT {interceptOption} ({interceptOption.path})')
                                 if interceptOption.requiredDelay > 0:
                                     logbook.info(f'    HAD DELAY {interceptOption}')
@@ -771,7 +825,11 @@ class BotExpansionOps:
                             econValue = option.econValue
                             p = option.path
                             isOneMoveLargeIntercept = p.length == 1 or turns < 2
-                            if p.start.tile == otherPath.get_first_move().source and (isOneMoveLargeIntercept or econValue / turns > interceptVtCutoff):
+                            isGeneralDefenseIntercept = SearchUtils.any_where(
+                                planOpt.threats,
+                                lambda threatObj: threatObj.path.tail.tile.isGeneral,
+                            )
+                            if p.start.tile == otherPath.get_first_move().source and (isOneMoveLargeIntercept or isGeneralDefenseIntercept or econValue / turns > interceptVtCutoff):
                                 bot.viewInfo.add_info_line(f'EXP INDIR INT ON {str(t)} W {str(otherPath)}')
 
                                 if option.requiredDelay > 0:
@@ -1967,8 +2025,12 @@ class BotExpansionOps:
                         if not adj.discovered:
                             matrix.raw[adj.tile_index] += max(0.0, 0.05 * (scoreData.general_distances_ratio - 0.1))
 
+        numOpts = len(bot.threats_we_care_about_by_tile) if bot.threats_we_care_about_by_tile is not None else 0
         if bot.enemy_expansion_plan is not None:
+            numOpts += len(bot.enemy_expansion_plan.all_paths)
             for enPath in bot.enemy_expansion_plan.all_paths:
+                matrix.raw[enPath.start.tile.tile_index] += enPath.econValue / numOpts
+                # I don't think this shit does anything since we don't use the capture matrix for the gather moves, do we...?
                 for tile in enPath.tileList[1:]:
                     if bot._map.is_tile_friendly(tile):
                         matrix.raw[tile.tile_index] -= bot.expansion_enemy_expansion_plan_inbound_penalty * endOfCyclePenaltyRatio

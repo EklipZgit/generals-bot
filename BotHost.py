@@ -271,7 +271,7 @@ class BotHostBase(object):
         BotComms.notify_chat_message(self.eklipz_bot, chatUpdate)
 
     def handle_tile_ping(self, pingedTile: Tile):
-        self.eklipz_bot.notify_tile_ping(pingedTile)
+        BotComms.notify_tile_ping(self.eklipz_bot, pingedTile)
 
 
 class BotHostLiveServer(BotHostBase):

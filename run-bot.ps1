@@ -205,6 +205,7 @@ function Start-RunBotWindowsTerminalTab {
 
     $scriptText = '& { ' + ([string]::Join('; ', $commandLines)) + ' }'
     $encodedScriptText = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($scriptText))
+    Write-Output $encodedScriptText
     $wtArguments = @(
         '-w',
         $WindowName,
@@ -346,6 +347,11 @@ function Run-BotOnce {
 
     Write-Host "Python ver $pythonVer for path $path"
 
+    $randNums = 1..10 | Get-Random -Count 10
+    $randName = $randNums -join ''
+    $ps1File = "$PSScriptRoot/../temp/$randName.ps1"
+    $playedGameFile = "$PSScriptRoot/../temp/$randName.played"
+
     # this exeString is a hack due to the powershell memory leak, need to keep opening new PS processes
     # or we fill up memory to 1GB per powershell window overnight :(
     # Maybe fixed in PS 5.2? Wouldn't know because can't install on win8 lul
@@ -367,6 +373,7 @@ function Run-BotOnce {
     `$stdoutLogPath = "`$logPath.stdout"
     `$stderrLogPath = "`$logPath.stderr"
     `$processExitCode = `$null
+    `$playedGameFile = '$playedGameFile'
 
     `$startProcSplat = @{}
     if (-not `$$($nolog.ToString()))
@@ -456,6 +463,7 @@ function Run-BotOnce {
                         if (`$repId -eq `$null -and `$line -match 'replay_id:\[([^\]]+)\]')
                         {
                             `$repId = `$Matches[1]
+                            Set-Content -Path `$playedGameFile -Value `$repId -Force
                         }
                     }
                     elseif (`$prevLine -eq [string]::Empty)
@@ -503,21 +511,20 @@ function Run-BotOnce {
 
     `$rand = Get-Random -Maximum 100
     if (`$rand -eq 0) {
+        `$groupedFolderFullPath = [System.IO.Path]::GetFullPath("$groupedFolder").TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
         Get-ChildItem "$logFolder" |
             ? { `$_.FullName -notlike '*_chat*' } |
-            ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
+            ? { [System.IO.Path]::GetFullPath(`$_.FullName).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) -ne `$groupedFolderFullPath } |
+            ? { `$_.LastWriteTime -lt (get-date).AddHours(-4) } |
             Remove-Item -Force -Recurse -ErrorAction Ignore
 
         Get-ChildItem "$groupedFolder" -Directory |
             ? { `$_.FullName -notlike '*_chat*' } |
-            ? { `$_.LastWriteTime -lt (get-date).AddMinutes(-120) } |
+            ? { `$_.LastWriteTime -lt (get-date).AddHours(-4) } |
             Remove-Item -Force -Recurse -ErrorAction Ignore
     }
 "@
 
-    $randNums = 1..10 | Get-Random -Count 10
-    $randName = $randNums -join ''
-    $ps1File = "$PSScriptRoot/../temp/$randName.ps1"
     $exeString | Out-File $ps1File
     Write-Verbose $ps1File -Verbose
     if ($IsWindows) {
@@ -531,6 +538,12 @@ function Run-BotOnce {
     catch {
         # no op I guess
     }
+
+    $playedGame = Test-Path $playedGameFile
+    if ($playedGame) {
+        Remove-Item $playedGameFile -Force
+    }
+    return $playedGame
 }
 
 
@@ -554,8 +567,10 @@ function Run-SoraAI {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name "Sora AI" -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
-            SleepLeastOfTwo -sleepMax $sleepMax
+            $playedGame = run-botonce -game $g -name "Sora AI" -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
+            if ($playedGame) {
+                SleepLeastOfTwo -sleepMax $sleepMax
+            }
         }
     }
 }
@@ -598,8 +613,10 @@ function Run-SoraAlt {
 
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
-            SleepLeastOfTwo -sleepMax $sleepMax
+            $playedGame = run-botonce -game $g -name $name -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
+            if ($playedGame) {
+                SleepLeastOfTwo -sleepMax $sleepMax
+            }
         }
     }
 }
@@ -1004,7 +1021,7 @@ function Start-WindowsTerminalLiveBots {
     <#
     Human ffa
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -right -game ffa -sleepMax 120 -nolog -cpuAffinityMask P'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -right -game ffa -sleepMax 120 -cpuAffinityMask P'
 
     <#
     Human 2v2 partners
@@ -1019,8 +1036,8 @@ function Start-WindowsTerminalLiveBots {
     Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask 10'
 
     # weak bots
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public -noui'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public -noui'
     Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-SoraAlt -public -sleepMax 120'
 
     # <#
@@ -1173,6 +1190,7 @@ function Run-Path {
         [switch]$public,
         [switch]$nolog,
         [switch]$noTextLog,
+        [switch]$noui,
         [int]$sleepMax = 3,
         $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )
@@ -1180,8 +1198,10 @@ function Run-Path {
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path (Get-PathBotPath) -nolog:$nolog -noTextLog:$noTextLog -public:$public -cpuAffinityMask $cpuAffinityMask
-            SleepLeastOfTwo -sleepMax $sleepMax
+            $playedGame = run-botonce -game $g -name $name -path (Get-PathBotPath) -nolog:$nolog -noTextLog:$noTextLog -noui:$noui -public:$public -cpuAffinityMask $cpuAffinityMask
+            if ($playedGame) {
+                SleepLeastOfTwo -sleepMax $sleepMax
+            }
         }
     }
 }
@@ -1195,6 +1215,7 @@ function Run-Blob {
         [switch]$public,
         [switch]$nolog,
         [switch]$noTextLog,
+        [switch]$noui,
         [int]$sleepMax = 3,
         $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )
@@ -1202,8 +1223,10 @@ function Run-Blob {
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -path (Get-BlobBotPath) -nolog:$nolog -noTextLog:$noTextLog -public:$public -cpuAffinityMask $cpuAffinityMask
-            SleepLeastOfTwo -sleepMax $sleepMax
+            $playedGame = run-botonce -game $g -name $name -path (Get-BlobBotPath) -nolog:$nolog -noTextLog:$noTextLog -noui:$noui -public:$public -cpuAffinityMask $cpuAffinityMask
+            if ($playedGame) {
+                SleepLeastOfTwo -sleepMax $sleepMax
+            }
         }
     }
 }
@@ -1233,9 +1256,10 @@ function Run-Bot {
         {
             write-verbose $g -verbose
             $psboundparameters['game'] = $g
-            Run-BotOnce @psboundparameters
-
-            SleepLeastOfTwo -sleepMax $sleepMax
+            $playedGame = Run-BotOnce @psboundparameters
+            if ($playedGame) {
+                SleepLeastOfTwo -sleepMax $sleepMax
+            }
         }
     }
 }
@@ -1318,8 +1342,10 @@ function Run-Human {
     {
         foreach ($g in $game)
         {
-            run-botonce -game $g -name $name -roomID $roomID @splat -privateGame:$private
-            SleepLeastOfTwo -sleepMax $sleepMax
+            $playedGame = run-botonce -game $g -name $name -roomID $roomID @splat -privateGame:$private
+            if ($playedGame) {
+                SleepLeastOfTwo -sleepMax $sleepMax
+            }
         }
     }
 }
@@ -1403,7 +1429,10 @@ function Run-Teammate {
 
     while ($true)
     {
-        Run-BotOnce -game "team" -name $name @splat
+        $playedGame = Run-BotOnce -game "team" -name $name @splat
+        if (-not $playedGame) {
+            continue
+        }
 
         $sleepTimeA = (Get-Random -Min 0 -Max $sleepMax)
         $sleepTime = $sleepTimeA

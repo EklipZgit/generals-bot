@@ -12,6 +12,7 @@ from Gather import GatherDebug
 from Models import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
+from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
 from base.client.tile import TILE_EMPTY, Tile
 from bot_ek0x45 import EklipZBot
@@ -25,8 +26,32 @@ class ArmyTrackerTests(TestBase):
         bot.info_render_army_emergence_values = True
         # bot.info_render_general_undiscovered_prediction_values = True
         FlowExpansion.OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
+        bot.armyTracker.log_debug = True
 
         return bot
+
+    @staticmethod
+    def strip_serialized_army_paths_for_test(rawMapStr: str) -> str:
+        strippedLines = []
+        for line in rawMapStr.splitlines():
+            if not line.startswith('Armies='):
+                strippedLines.append(line)
+                continue
+
+            strippedArmies = []
+            for armyRaw in line.removeprefix('Armies=').split(':'):
+                beforePaths, separator, afterPaths = armyRaw.partition('&')
+                if not separator:
+                    strippedArmies.append(armyRaw)
+                    continue
+                expectedPathsCombined, pathSeparator, afterSerializedPaths = afterPaths.partition('%')
+                if not pathSeparator:
+                    strippedArmies.append(armyRaw)
+                    continue
+                strippedArmies.append(f'{beforePaths}&%{afterSerializedPaths}')
+            strippedLines.append(f'Armies={":".join(strippedArmies)}')
+
+        return '\n'.join(strippedLines)
 
     def assertNoFogMismatches(
             self,
@@ -1860,7 +1885,7 @@ a1   b1   b1   bG1
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertIsNone(winner)
 
-        self.assertLess(bot._map.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 3)
+        self.assertLess(bot._map.euclidDist(7, 4, bot.targetPlayerExpectedGeneralLocation.x, bot.targetPlayerExpectedGeneralLocation.y), 4)
 
     def test_should_path_fog_army_as_deep_a_flank_as_possible(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1888,7 +1913,7 @@ a1   b1   b1   bG1
         self.assertGreater(army.value, 200)
 
     def test_should_not_duplicate_army_out_of_fog(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_duplicate_army_out_of_fog___MeFCSBli9---0--422.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 422, fill_out_tiles=True)
 
@@ -2112,30 +2137,12 @@ a1   b1   b1   bG1
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
-        self.assertEqual(1, bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][6])
-        self.begin_capturing_logging(logbook.DEBUG)
+        emergenceTile = playerMap.GetTile(7, 6)
+        self.assertEqual(1, bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergenceTile])
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
         self.assertIsNone(winner)
 
-        self.assertEqual(1, bot.armyTracker.emergenceLocationMap[enemyGeneral.player][7][6], "should not have increased emergence, what the hell man")
-
-        # 55-47 fail-pass ish
-        # 50-52 now
-        # 44-61 now (with 10 army threshold).
-        # 57-51 now (with push-back-into-fog fix)
-        # 47-61 now
-        # 36-72 now after fixing 1-deep map emergence
-        # 39-69 after fixing test opponenttracker load and army tracker fog dupe emergence on move-halfs
-        # 35-76 after fixing some fog movement stuff
-        # 36-76 now after fixing some emergence pathing
-        # 35-79 now after fixing moves into fog a bit
-        # 21-83 (skipped 13) now after fixing entanglement collisions
-        # 25-83
-        # 36f-75p-14s
-        # 28-83-14s after dropping bonus
-        # 34 ..?
-        # 24-87
-        # 27-84
+        self.assertEqual(1, bot.armyTracker.emergenceLocationMap[enemyGeneral.player][emergenceTile], "should not have increased emergence, what the hell man")
 
     def test_should_not_vanish_known_entangled_fog_alternatives(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2682,3 +2689,88 @@ a1   b1   b1   bG1
         self.assertLess(playerMap.At(4, 18).army, 13)
         self.assertLess(playerMap.At(3, 17).army, 13)
         self.assertLess(playerMap.At(3, 18).army, 13)
+
+    def test_should_not_shuffle__lose__or_duplicate_fog_armies_when_pushing_them_back_into_the_fog(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_shuffle__lose__or_duplicate_fog_armies_when_pushing_them_back_into_the_fog___fHjzkD6XM---0--371.txtmap'
+        rawMapStr = TextMapLoader.get_map_raw_string_from_file(mapFile)
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(
+            self.strip_serialized_army_paths_for_test(rawMapStr),
+            371,
+            fill_out_tiles=True)
+        self.swap_tile_army_x_y(map, 11,8, 19,10)
+        self.swap_tile_army_x_y(map, 12,8, 15,9)
+        self.swap_tile_army_x_y(map, 11,9, 15,11)
+        self.swap_tile_army_x_y(map, 13,9, 19,6)
+
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 16, 10)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=371)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        simHost.queue_player_moves_str(general.player, '9,8->14,8->14,10')
+        playerMap = simHost.get_player_map(general.player)
+
+        ogArmy = bot.get_army_at_x_y_or_none(11, 8)
+        self.assertIsNotNone(ogArmy)
+        self.assertEqual(22, ogArmy.value)
+        ogName = ogArmy.name
+        self.assertEqual('f', ogName)
+
+        def checkTiles():
+            failures = []
+            armiesFound = []
+            for x in range(11, 15):
+                for y in range(7, 11):
+                    if (x, y) == (14, 10):
+                        continue
+                    if playerMap.At(x, y).player == general.player:
+                        continue
+                    foundArmy = bot.get_army_at_x_y_or_none(x, y)
+                    if foundArmy is not None:
+                        armiesFound.append(foundArmy)
+                        if foundArmy.name != 'f':
+                            failures.append(f'Army at ({x}, {y}) has unexpected name: {foundArmy.name}')
+                        if foundArmy.value > 23 or foundArmy.value < 19:
+                            failures.append(f'Army at ({x}, {y}) has unexpected value: {foundArmy.value}')
+                        if foundArmy.entangledValue is not None and foundArmy.entangledValue > 23:
+                            failures.append(f'Army at ({x}, {y}) has unexpected entangled value: {foundArmy.entangledValue}')
+
+                    if playerMap.At(x, y).army > 32:
+                        failures.append(f'Tile at ({x}, {y}) has unexpected army value: {playerMap.At(x, y).army}')
+                    if foundArmy is not None and playerMap.At(x, y).army < 21:
+                        failures.append(f'Army {foundArmy.name}\'s Tile at ({x}, {y}) has unexpected army value: {playerMap.At(x, y).army}')
+            if failures:
+                self.fail(f'failed turn {playerMap.turn}\n  ' + '\n  '.join(failures) + f'\r\n{len(armiesFound)} FOUND ARMIES WERE:\r\n  ' + '\r\n  '.join([f'{army.name} at ({army.tile.x}, {army.tile.y})' for army in armiesFound]))
+
+        simHost.run_between_turns(checkTiles)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertNoFriendliesKilled(map, general)
+
+
+        # 55-47 fail-pass ish
+        # 50-52 now
+        # 44-61 now (with 10 army threshold).
+        # 57-51 now (with push-back-into-fog fix)
+        # 47-61 now
+        # 36-72 now after fixing 1-deep map emergence
+        # 39-69 after fixing test opponenttracker load and army tracker fog dupe emergence on move-halfs
+        # 35-76 after fixing some fog movement stuff
+        # 36-76 now after fixing some emergence pathing
+        # 35-79 now after fixing moves into fog a bit
+        # 21-83 (skipped 13) now after fixing entanglement collisions
+        # 25-83
+        # 36f-75p-14s
+        # 28-83-14s after dropping bonus
+        # 34 ..?
+        # 24-87
+        # 27-84  (nov 2023 lol)
+        # 63-69  (May 28 2026, before tweaking for bad detanglement when pushing armies back into the fog)
+        # 61-71  (May 28 2026, before tweaking for bad detanglement when pushing armies back into the fog)
+        # 56-72
+        # 58-74

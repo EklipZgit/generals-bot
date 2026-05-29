@@ -11,6 +11,7 @@ class FogLandBuilderTests(TestBase):
 
         bot.info_render_tile_deltas = True
         bot.info_render_army_emergence_values = True
+        bot.armyTracker.log_debug = True
         # bot.info_render_
         # bot.info_render_general_undiscovered_prediction_values = True
 

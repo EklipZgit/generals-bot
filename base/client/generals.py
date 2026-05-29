@@ -228,7 +228,7 @@ class GeneralsClient(object):
             self._send(["join_party", self._gameid, userid])
 
             time.sleep(0.5)
-            self._send(["join_team", None, userid, self.bot_key, supporterColorSelection])
+            # self._send(["join_team", None, userid, self.bot_key, supporterColorSelection])
         elif mode == "ffa":
             self._send(["play", userid, self.bot_key, supporterColorSelection])
         elif mode == "bigteam":

@@ -189,6 +189,10 @@ class FlowDirectionFinderABC(ABC):
         backfill_neut_edges: typing.List[IslandFlowEdge] = []
         our_set = {i.unique_id for i in our_islands}
         target_set = {i.unique_id for i in target_islands}
+        root_output_flow_dict: dict[int, int] = {}
+        root_usable_flow_dict: dict[int, int] = {}
+        root_fake_or_dropped_flow_dict: dict[int, int] = {}
+        enemy_incoming_flow_dict: dict[int, int] = {}
 
         for node_id, targets in flow_dict.items():
             is_throughput = False
@@ -225,11 +229,16 @@ class FlowDirectionFinderABC(ABC):
                     source_node.army_flow_received += target_flow_amount
                     continue
 
+                if source_node is not None and source_node.island.unique_id in our_set:
+                    root_output_flow_dict[source_node.island.unique_id] = root_output_flow_dict.get(source_node.island.unique_id, 0) + target_flow_amount
+
                 if node_id not in graph_data.fake_nodes:
                     our_set.discard(target_node_id)
                     target_set.discard(target_node_id)
                 target_node = graph_lookup.get(target_node_id, None)
                 if target_node is None:
+                    if source_node is not None and source_node.island.unique_id in root_output_flow_dict:
+                        root_fake_or_dropped_flow_dict[source_node.island.unique_id] = root_fake_or_dropped_flow_dict.get(source_node.island.unique_id, 0) + target_flow_amount
                     if log_debug and source_node is not None and source_node.island is target_general_island:
                         logbook.info(
                             f'Flow from EN GEN of {target_flow_amount} to fake node {target_node_id} -- we overflow the enemy land? sourceNode.army_flow_received was {source_node.army_flow_received}')
@@ -262,6 +271,10 @@ class FlowDirectionFinderABC(ABC):
                     continue
 
                 source_node.set_flow_to(target_node, target_flow_amount)
+                if source_node.island.unique_id in root_output_flow_dict:
+                    root_usable_flow_dict[source_node.island.unique_id] = root_usable_flow_dict.get(source_node.island.unique_id, 0) + target_flow_amount
+                if target_node.island.unique_id in target_set:
+                    enemy_incoming_flow_dict[target_node.island.unique_id] = enemy_incoming_flow_dict.get(target_node.island.unique_id, 0) + target_flow_amount
                 if log_debug and (
                     source_node.island.unique_id in flow_diag_islands
                     or target_node.island.unique_id in flow_diag_islands
@@ -281,4 +294,40 @@ class FlowDirectionFinderABC(ABC):
 
         final_root_flow_nodes = [graph_lookup[id] for id in our_set]
         enemy_backfill_flow_nodes = [graph_lookup[id] for id in target_set]
+        if log_debug:
+            root_nodes_with_edges = [
+                (
+                    node.island.unique_id,
+                    len(node.flow_to),
+                    sum(edge.edge_army for edge in node.flow_to),
+                    node.island.sum_army,
+                    node.desired_army,
+                )
+                for node in final_root_flow_nodes
+                if len(node.flow_to) > 0
+            ]
+            root_nodes_without_edges = [
+                (
+                    node.island.unique_id,
+                    node.island.sum_army,
+                    node.desired_army,
+                    root_output_flow_dict.get(node.island.unique_id, 0),
+                    root_usable_flow_dict.get(node.island.unique_id, 0),
+                    root_fake_or_dropped_flow_dict.get(node.island.unique_id, 0),
+                )
+                for node in final_root_flow_nodes
+                if len(node.flow_to) == 0
+            ]
+            logbook.warning(
+                f'FLOW_DIAG_BUILD_LOOKUP_SUMMARY roots={len(final_root_flow_nodes)} rootNodesWithEdges={root_nodes_with_edges[:32]} '
+                f'rootNodesWithoutEdges={root_nodes_without_edges[:32]} enemyIncomingFlow={sorted(enemy_incoming_flow_dict.items())[:32]} '
+                f'backfillNeutEdges={[(e.source_flow_node.island.unique_id if e.source_flow_node is not None else None, e.target_flow_node.island.unique_id, e.edge_army) for e in backfill_neut_edges[:32]]}'
+            )
+            if len(final_root_flow_nodes) > 0 and not root_nodes_with_edges:
+                logbook.warning(
+                    f'FLOW_DIAG_BAD_BUILD_LOOKUP roots={len(final_root_flow_nodes)} '
+                    f'rootOutputFlowDict={sorted(root_output_flow_dict.items())[:64]} '
+                    f'rootUsableFlowDict={sorted(root_usable_flow_dict.items())[:64]} '
+                    f'rootFakeOrDroppedFlowDict={sorted(root_fake_or_dropped_flow_dict.items())[:64]}'
+                )
         return backfill_neut_edges, enemy_backfill_flow_nodes, final_root_flow_nodes

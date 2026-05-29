@@ -3149,6 +3149,10 @@ class Map(MapBase):
         self._map_private = []
         self._cities_private = []
         self._deserts_private = []
+        self._player_index_by_color = {
+            color: player_index
+            for player_index, color in enumerate(start_data.get('playerColors', []))
+        }
 
         # First Game Data, sets up all the private server-array-style-tile-caches
         self._apply_server_patch(data)
@@ -3218,6 +3222,8 @@ class Map(MapBase):
             x, y = tile.coords
 
             tile_type = self._tile_grid[y][x]
+            # if tile_type >= 0:
+            #     tile_type = self._player_index_by_color.get(tile_type, tile_type)
             army_count = self._army_grid[y][x]
             isCity = idx in self._visible_cities
             isGeneral = idx in self._visible_generals

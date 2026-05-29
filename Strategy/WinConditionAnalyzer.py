@@ -1,6 +1,7 @@
 import logbook
 import time
 import typing
+from dataclasses import dataclass
 from enum import Enum
 
 import DebugHelper
@@ -24,6 +25,21 @@ class WinCondition(Enum):
     DefendEconomicLead = 2
     DefendContestedFriendlyCity = 3
     ContestEnemyCity = 4
+
+
+@dataclass(slots=True)
+class CityOwnershipTransfer:
+    player: int
+    turn: int
+    army: int
+
+    def serialize(self) -> str:
+        return f'{self.player}:{self.turn}:{self.army}'
+
+    @staticmethod
+    def deserialize(data: str) -> CityOwnershipTransfer:
+        player_raw, turn_raw, army_raw = data.split(':')
+        return CityOwnershipTransfer(int(player_raw), int(turn_raw), int(army_raw))
 
 
 class WinConditionAnalyzer(object):
@@ -51,6 +67,7 @@ class WinConditionAnalyzer(object):
         self._verbose_logging_enabled: bool = DebugHelper.is_debug_or_unit_test_mode()
 
         self.contestable_city_offense_plans: typing.Dict[Tile, GatherCapturePlan | None] = {}
+        self.city_contestation_history: typing.Dict[Tile, typing.List[CityOwnershipTransfer]] = {}
 
         self.most_forward_defense_city: Tile | None = None
         self.contestable_cities: typing.Set[Tile] = set()
@@ -77,6 +94,62 @@ class WinConditionAnalyzer(object):
         """Amount of army we're able to gather on the forward defensive spanning tree."""
         self.basic_defense_forward_tiles: typing.Set[Tile] = set()
         """Tiles necessary for that defensive gather on forward spanning tree."""
+
+    def record_city_capture(self, city: Tile, player: int, turn: int | None = None, army: int | None = None):
+        if not city.isCity:
+            return
+
+        if turn is None:
+            turn = self.map.turn
+        if army is None:
+            army = city.army
+
+        history = self.city_contestation_history.setdefault(city, [])
+        if len(history) > 0:
+            previous = history[-1]
+            if previous.player == player and previous.turn == turn and previous.army == army:
+                return
+
+        history.append(CityOwnershipTransfer(player=player, turn=turn, army=army))
+
+    def get_city_contestation_count(self, city: Tile, within_last_turns: int | None = None) -> int:
+        history = self.city_contestation_history.get(city, [])
+        if within_last_turns is None:
+            return len(history)
+
+        cutoff = self.map.turn - within_last_turns
+        return len([entry for entry in history if entry.turn > cutoff])
+
+    def was_city_recently_contested(self, city: Tile, capture_cutoff_ago_turns: int = 20) -> bool:
+        history = self.city_contestation_history.get(city, [])
+        if len(history) == 0:
+            return False
+
+        return history[-1].turn > self.map.turn - capture_cutoff_ago_turns
+
+    def dump_city_contestation_history(self) -> typing.List[str]:
+        data: typing.List[str] = []
+        for city, history in sorted(self.city_contestation_history.items(), key=lambda kvp: (kvp[0].x, kvp[0].y)):
+            if len(history) == 0:
+                continue
+            serialized = '|'.join(entry.serialize() for entry in history)
+            data.append(f'ot_city_{city.x}_{city.y}={serialized}')
+        return data
+
+    def load_city_contestation_history_from_map_data(self, data: typing.Dict[str, str]):
+        self.city_contestation_history = {}
+        prefix = 'ot_city_'
+        for key, value in data.items():
+            if not key.startswith(prefix):
+                continue
+
+            coords_raw = key[len(prefix):]
+            x_raw, y_raw = coords_raw.split('_')
+            city = self.map.GetTile(int(x_raw), int(y_raw))
+            entries: typing.List[CityOwnershipTransfer] = []
+            if value:
+                entries = [CityOwnershipTransfer.deserialize(entry) for entry in value.split('|') if entry]
+            self.city_contestation_history[city] = entries
 
     def _refresh_verbose_logging_enabled(self):
         self._verbose_logging_enabled = DebugHelper.is_debug_or_unit_test_mode()
@@ -332,9 +405,6 @@ class WinConditionAnalyzer(object):
                     mostForwardCity = city
                     mostForwardDist = cityDist
 
-                if self.is_city_forward_relative_to_central_point(city, offset=5):
-                    self.defend_cities.add(city)
-
         self.most_forward_defense_city = mostForwardCity
 
         if not weAreSlightlyAhead:
@@ -357,9 +427,11 @@ class WinConditionAnalyzer(object):
         with perfTimer.begin_move_event(f'WCA city contest threat loop playerCities={len(playerCities)} maxAnalyzed=4'):
             for city in sorted(playerCities, key=lambda t: self.board_analysis.intergeneral_analysis.bMap.raw[t.tile_index]):
                 isEnemySide = self.board_analysis.intergeneral_analysis.bMap.raw[city.tile_index] * 1.2 < self.board_analysis.intergeneral_analysis.aMap.raw[city.tile_index]
-                isContested = city in self.city_analyzer.owned_contested_cities
+                isContested = self.was_city_recently_contested(city)
 
                 if not isEnemySide and not isContested:
+                    continue
+                if not isContested:
                     continue
                 analyzedCount += 1
 

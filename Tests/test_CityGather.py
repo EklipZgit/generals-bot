@@ -1935,3 +1935,23 @@ class CityGatherTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(17, 3)
+        self.assertGreater(bot.opponent_tracker.current_team_cycle_stats[bot._map.friendly_team].moves_spent_gathering_neutral_city_capture, 15, 'should acknowledge we spent everything we gathered this round to take the city')
+
+    def test_should_not_decide_it_is_safe_to_take_a_city_here_overvaluing_cityDefVal(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_decide_it_is_safe_to_take_a_city_here_overvaluing_cityDefVal___h0Y9AGnQF---1--213.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 213, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=213)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwned(-1, playerMap.At(17, 6))

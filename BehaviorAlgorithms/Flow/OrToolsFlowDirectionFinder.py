@@ -355,7 +355,7 @@ class DirectOrToolsGraphBuilder(object):
                     # if island.tiles_by_army[0].army == 1:
                     #     # Don't ask me why but 300 works well while like 3 does not.  See test_should_not_waste_a_bunch_of_moves_moving_from_general, which makes suboptimal moves at += 3 but plays great at += 300
                     #     cost += 30
-                    cost = max(1, 30 - island.sum_army // island.tile_count)
+                    cost = max(2, 30 - island.sum_army // island.tile_count)
                 elif island.team == target_team:
                     has_nx_demand_attr = True
                     demand = island_army_sum + island.tile_count
@@ -367,6 +367,10 @@ class DirectOrToolsGraphBuilder(object):
                         has_nx_demand_attr = True
                         cumulative_demand += demand
                         cost = max(1, cost) * 2
+
+                # hack
+                cost = 0
+
 
                 demands[island.unique_id] = demand
 
@@ -429,11 +433,15 @@ class DirectOrToolsGraphBuilder(object):
                     arc_starts.append(src)
                     arc_ends.append(dst)
                     arc_caps.append(100000)
-                    cost = 2
+                    cost = 1
                     if island.team == team:
-                        cost += 2
+                        cost += 3
                     elif island.team == -1:
-                        cost += 1
+                        cost += 3
+
+                    # hack
+                    # cost = 0
+
                     arc_costs.append(cost)
                     # if island.team == team:
                     #     arc_costs.append(1000 - island.sum_army + island.tile_count)
@@ -482,7 +490,7 @@ class DirectOrToolsGraphBuilder(object):
                     f'friendlyGeneralIsland={fr_general_island.unique_id} friendlyCapacity={friendly_pressure_capacities_by_island_id[fr_general_island.unique_id]}'
                 )
             else:
-                fake_node_enemy_general_fallback_capacity = (fake_node_excess_supply * 35 + 50) // 100
+                fake_node_enemy_general_fallback_capacity = (fake_node_excess_supply * 35) // 100
                 friendly_fallback_capacity = fake_node_excess_supply - fake_node_enemy_general_fallback_capacity
                 pressure_islands_by_id: typing.Dict[int, 'TileIsland'] = {fr_general_island.unique_id: fr_general_island}
                 pressure_tiles = sorted(
@@ -528,7 +536,7 @@ class DirectOrToolsGraphBuilder(object):
                 )
 
             # Edges to/from neutral sinks
-            neut_sink_weight = 10 if use_neutral_flow else 0
+            neut_sink_cost = 10 if use_neutral_flow else 0
             if use_neutral_flow:
                 for neut_sink_id in neut_sinks:
                     isl = islands.tile_islands_by_unique_id[neut_sink_id]
@@ -536,7 +544,7 @@ class DirectOrToolsGraphBuilder(object):
                     arc_starts.append(fake_node)
                     arc_ends.append(neut_sink_id)
                     arc_caps.append(capacity)
-                    arc_costs.append(neut_sink_weight)
+                    arc_costs.append(neut_sink_cost)
                     all_node_ids.add(neut_sink_id)
 
             # Backpressure weight mirrors NX builder
@@ -545,7 +553,7 @@ class DirectOrToolsGraphBuilder(object):
             # -targetGeneralIsland.unique_id → fakeNode
             arc_starts.append(-target_general_island.unique_id)
             arc_ends.append(fake_node)
-            arc_caps.append(1000)
+            arc_caps.append(10000)
             arc_costs.append(backpressure_weight)
             all_node_ids.add(-target_general_island.unique_id)
 
@@ -553,7 +561,7 @@ class DirectOrToolsGraphBuilder(object):
             arc_starts.append(-fr_general_island.unique_id)
             arc_ends.append(fake_node)
             arc_caps.append(1000000)
-            arc_costs.append(10000)
+            arc_costs.append(0)
             all_node_ids.add(-fr_general_island.unique_id)
 
             # fakeNode → targetGeneralIsland.unique_id
@@ -571,7 +579,7 @@ class DirectOrToolsGraphBuilder(object):
                 arc_starts.append(fake_node)
                 arc_ends.append(friendly_pressure_island_id)
                 arc_caps.append(friendly_pressure_capacity)
-                arc_costs.append(10000)
+                arc_costs.append(0)
                 all_node_ids.add(friendly_pressure_island_id)
 
         # ----------------------------------------------------------------
@@ -809,6 +817,23 @@ class OrToolsFlowComputer(object):
             fake_nodes = graph_data.fake_nodes
             idx_to_node = graph_data.idx_to_node
             flow_diag_islands = getattr(graph_data, 'flow_diag_island_ids', set())
+            total_positive_flow = 0
+            total_real_arc_flow = 0
+            total_fake_arc_flow = 0
+            total_fake_to_real_flow = 0
+            total_real_to_fake_flow = 0
+            total_root_output_real_flow = 0
+            total_root_output_fake_flow = 0
+            real_arc_count = 0
+            fake_arc_count = 0
+            root_output_real_arc_count = 0
+            root_output_fake_arc_count = 0
+            root_output_flow_by_island: dict[int, int] = defaultdict(int)
+            root_output_fake_flow_by_island: dict[int, int] = defaultdict(int)
+            root_input_supply_by_island: dict[int, int] = {}
+            for island_id, demand in graph_data.demand_lookup.items():
+                if demand < 0:
+                    root_input_supply_by_island[island_id] = -demand
 
             solution_flows = response['flows']
 
@@ -816,6 +841,8 @@ class OrToolsFlowComputer(object):
                 flow_amount = int(solution_flows[arc_idx])
                 if flow_amount <= 0:
                     continue
+
+                total_positive_flow += flow_amount
 
                 from_orig = idx_to_node.get(int(graph_data.start_nodes[arc_idx]))
                 to_orig = idx_to_node.get(int(graph_data.end_nodes[arc_idx]))
@@ -826,6 +853,28 @@ class OrToolsFlowComputer(object):
                 from_is_fake = abs(from_orig) in fake_nodes
                 to_is_fake = abs(to_orig) in fake_nodes
                 is_fake_saturation_arc = from_is_fake or to_is_fake
+
+                if is_fake_saturation_arc:
+                    fake_arc_count += 1
+                    total_fake_arc_flow += flow_amount
+                    if from_is_fake and not to_is_fake:
+                        total_fake_to_real_flow += flow_amount
+                    elif not from_is_fake and to_is_fake:
+                        total_real_to_fake_flow += flow_amount
+                else:
+                    real_arc_count += 1
+                    total_real_arc_flow += flow_amount
+
+                if from_orig < 0 and not from_is_fake:
+                    root_output_island_id = -from_orig
+                    if to_is_fake:
+                        root_output_fake_arc_count += 1
+                        total_root_output_fake_flow += flow_amount
+                        root_output_fake_flow_by_island[root_output_island_id] += flow_amount
+                    else:
+                        root_output_real_arc_count += 1
+                        total_root_output_real_flow += flow_amount
+                        root_output_flow_by_island[root_output_island_id] += flow_amount
 
                 if self.log_debug:
                     logbook.info(
@@ -875,6 +924,23 @@ class OrToolsFlowComputer(object):
                     if diag_targets:
                         diag_flow_dict[src] = diag_targets
                 logbook.warning(f'FLOW_DIAG_FLOW_DICT touching_diag_islands={diag_flow_dict}')
+                logbook.warning(
+                    f'FLOW_DIAG_SOLVE_SUMMARY totalPositiveFlow={total_positive_flow} '
+                    f'realArcCount={real_arc_count} realArcFlow={total_real_arc_flow} '
+                    f'fakeArcCount={fake_arc_count} fakeArcFlow={total_fake_arc_flow} '
+                    f'fakeToRealFlow={total_fake_to_real_flow} realToFakeFlow={total_real_to_fake_flow} '
+                    f'rootOutputRealArcCount={root_output_real_arc_count} rootOutputRealFlow={total_root_output_real_flow} '
+                    f'rootOutputFakeArcCount={root_output_fake_arc_count} rootOutputFakeFlow={total_root_output_fake_flow} '
+                    f'rootOutputRealByIsland={sorted(root_output_flow_by_island.items())[:32]} '
+                    f'rootOutputFakeByIsland={sorted(root_output_fake_flow_by_island.items())[:32]}'
+                )
+                if total_positive_flow > 0 and total_root_output_real_flow == 0:
+                    suspicious_root_supplies = sorted(root_input_supply_by_island.items(), key=lambda item: item[1], reverse=True)[:32]
+                    logbook.warning(
+                        f'FLOW_DIAG_BAD_ZERO_ROOT_REAL_FLOW totalPositiveFlow={total_positive_flow} '
+                        f'totalFakeArcFlow={total_fake_arc_flow} totalRealArcFlow={total_real_arc_flow} '
+                        f'rootInputSupplyByIsland={suspicious_root_supplies}'
+                    )
 
         return dict(flow_dict)
 
@@ -1086,6 +1152,34 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
                         inc_neut_flow_node_lookup.raw[t.tile_index] = flow_node
 
         with self.perf_timer.begin_move_event('OrTools IslandMaxFlowGraph ctor'):
+            if self.log_debug:
+                no_neut_root_edge_count = sum(len(node.flow_to) for node in final_root_no_neut_flow_nodes)
+                no_neut_root_flow_received = sum(node.army_flow_received for node in final_root_no_neut_flow_nodes)
+                no_neut_zero_edge_roots = [
+                    (
+                        node.island.unique_id,
+                        node.island.sum_army,
+                        node.desired_army,
+                        node.army_flow_received,
+                        len(node.flow_to),
+                        [(tile.x, tile.y, tile.army) for tile in node.island.tiles_by_army[:4]],
+                    )
+                    for node in final_root_no_neut_flow_nodes
+                    if len(node.flow_to) == 0
+                ]
+                logbook.warning(
+                    f'FLOW_DIAG_ROOT_GRAPH_SUMMARY mode=no_neut roots={len(final_root_no_neut_flow_nodes)} '
+                    f'rootEdges={no_neut_root_edge_count} rootArmyFlowReceived={no_neut_root_flow_received} '
+                    f'zeroEdgeRoots={no_neut_zero_edge_roots[:32]}'
+                )
+                if len(final_root_no_neut_flow_nodes) > 0 and no_neut_root_edge_count == 0:
+                    logbook.warning(
+                        f'FLOW_DIAG_BAD_ROOT_GRAPH mode=no_neut roots={len(final_root_no_neut_flow_nodes)} '
+                        f'friendlySupply={getattr(graph_data_no_neut, "friendly_army_supply", None)} '
+                        f'enemyDemand={getattr(graph_data_no_neut, "enemy_army_demand", None)} '
+                        f'enemyGeneralDemand={getattr(graph_data_no_neut, "enemy_general_demand", None)} '
+                        f'cumulativeDemand={graph_data_no_neut.cumulative_demand}'
+                    )
             result = IslandMaxFlowGraph(
                 final_root_no_neut_flow_nodes,
                 final_root_flow_nodes,

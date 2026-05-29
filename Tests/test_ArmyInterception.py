@@ -2721,3 +2721,26 @@ setting bestInterceptTable[dist 1]:
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTrue(playerMap.At(13, 10).army == 1 or playerMap.At(13, 10).army == 21, 'either should move the whole army or should be grabbing a 4 to help intercept better. Not split off gen')
+
+    def test_should_recognize_army_intercept_with_extra_100_massively_helps_city_contestation_on_the_recapture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_do_something_with_400_army_this_round_holy_shit___fHjzkD6XM---0--521.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 521, fill_out_tiles=True)
+        enemyGeneral.army, map.At(19, 8).army = map.At(19, 8).army, enemyGeneral.army
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=521)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,6->12,7->10,7->10,5->4,5->4,4->2,4  14,10->12,10->12,9->10,9->10,8->3,8  8,12->9,12->10,12z  9,12->9,13  9,0->9,1')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '0,7->2,7->2,6->3,6->3,5->5,5->10,5->10,8->13,8->13,10->14,10')
+        # simHost.queue_player_moves_str(general.player, '0,7->2,7->2,6->3,6->3,5->5,5->10,5->10,8->17,8->17,10->16,10')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertGreater(playerMap.At(2, 6).army, 399, 'should have pulled the extra 97 with')

@@ -40,10 +40,10 @@ _ENDPOINT_LAN = "://192.168.1.17:8080/socket.io/?EIO=4"
 #BOTWSPREFIX = "ws"
 #BOTHTTPPREFIX = "http"
 
-# force bot server bots to lan:
-_ENDPOINT_BOT = _ENDPOINT_LAN
-BOTWSPREFIX = "ws"
-BOTHTTPPREFIX = "http"
+# # force bot server bots to lan:
+# _ENDPOINT_BOT = _ENDPOINT_LAN
+# BOTWSPREFIX = "ws"
+# BOTHTTPPREFIX = "http"
 
 # # force public bots to lan:
 # _ENDPOINT_PUBLIC = _ENDPOINT_LAN

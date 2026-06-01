@@ -6,6 +6,7 @@ import logbook
 
 import Gather
 import SearchUtils
+from ArmyTracker import ArmyTracker
 from Algorithms import MapSpanningUtils
 from BehaviorAlgorithms import FlowExpansion
 from Gather import GatherDebug
@@ -130,6 +131,34 @@ class ArmyTrackerTests(TestBase):
         army = bot.armyTracker.armies.get(tile, None)
         if army is not None and army.value > 0 and not army.scrapped:
             self.fail(f'Expected no army on {repr(tile)}, instead found {repr(army)}')
+
+    def test_check_over_elimination_does_not_set_enemy_general_to_owned_tile(self):
+        testData = """
+|    |    |    |    |
+aG1  a1
+
+
+               bG1
+|    |    |    |    |
+player_index=0
+aTiles=2
+aScore=2
+bTiles=1
+bScore=1
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 287, fill_out_tiles=False, player_index=0)
+        tracker = ArmyTracker(map)
+        ownedTile = map.GetTile(1, 0)
+        validPositions = tracker.valid_general_positions_by_player[1]
+        for tile in map.get_all_tiles():
+            validPositions.raw[tile.tile_index] = False
+        validPositions.raw[ownedTile.tile_index] = True
+
+        tracker._check_over_elimination(1)
+
+        self.assertFalse(validPositions.raw[ownedTile.tile_index])
+        self.assertEqual(0, ownedTile.player)
+        self.assertFalse(ownedTile.isGeneral)
 
     def run_generated_adj_test(self, aArmy, aMove, bArmy, bMove, data, debugMode):
         map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 97, fill_out_tiles=False, player_index=0)

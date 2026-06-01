@@ -4044,6 +4044,9 @@ class ArmyTracker(object):
             genPos = self.map.valid_spawns
 
         for tile in genPos:
+            if tile.player >= 0 and tile.discovered and not tile.isGeneral:
+                validGenPos.raw[tile.tile_index] = False
+                continue
             if validGenPos.raw[tile.tile_index]:
                 numValid += 1
                 lastValid = tile
@@ -4074,7 +4077,7 @@ class ArmyTracker(object):
             if self.map.valid_spawns:
                 validTiles = self.map.valid_spawns
             for tile in validTiles:
-                if not tile.discovered and not tile.isCity and not tile.visible:
+                if not tile.discovered and not tile.isCity and not tile.visible and not tile.isGeneral and tile.player in (-1, player):
                     validGenPos.raw[tile.tile_index] = True
             playerEvents = self.uneliminated_emergence_events[player]
             for tile, distance in list(playerEvents.items()):

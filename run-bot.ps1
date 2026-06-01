@@ -1249,6 +1249,14 @@ function Run-Bot {
         $sleepMax = 30,
         $cpuAffinityMask = [IntPtr]::Zero
     )
+    if ($privateGame -is [string]) {
+        if (-not $roomID) {
+            $roomID = $privateGame
+            $PSBoundParameters['roomID'] = $roomID
+        }
+        $privateGame = $true
+        $PSBoundParameters['privateGame'] = $true
+    }
     $games = $game
     while($true)
     {
@@ -1280,6 +1288,14 @@ function Run-BotCheckpoint {
         [switch]$noTextLog,
         [switch]$publicLobby
     )
+    if ($privateGame -is [string]) {
+        if (-not $roomID) {
+            $roomID = $privateGame
+            $PSBoundParameters['roomID'] = $roomID
+        }
+        $privateGame = $true
+        $PSBoundParameters['privateGame'] = $true
+    }
     $games = $game
     $date = Get-Date -Format 'yyyy-MM-dd'
     $checkpointLoc = Join-Path (Get-CheckpointBackupRoot) "generals-bot-$date"

@@ -23,6 +23,7 @@ from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
 from Interfaces.TilePlanInterface import TilePlanInterface
 from Models import Move
+from Path import Path
 from Tests.TestBase import TestBase
 from base.client.map import MapBase, Tile
 
@@ -245,6 +246,49 @@ aG1  a3   b1   bG1
 
         self.assertEqual(1, len(external_options))
         self.assertIs(allowed_option, external_options[0].plan)
+
+    def test_constrained_flow_paths_limit_only_outgoing_edges_from_path_islands(self):
+        mapData = """
+|    |    |
+aG20 b1
+|    |    |
+b1   bG1
+|    |    |
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=True)
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        constrained_path = Path.from_move(Move(map.At(0, 0), map.At(1, 0)))
+        expander = ArmyFlowExpanderV2(map)
+        expander.friendlyGeneral = general
+        expander.enemyGeneral = enemyGeneral
+        expander.target_team = map.team_ids_by_player_index[enemyGeneral.player]
+        expander.island_builder = builder
+        expander.constrained_flow_paths = [constrained_path]
+        expander.log_debug = False
+
+        expander._ensure_flow_graph_exists(builder, turns=50)
+        graph_data = expander._ortools_finder.ortools_graph_data_no_neut
+
+        source_island = builder.tile_island_lookup.raw[map.At(0, 0).tile_index]
+        allowed_island = builder.tile_island_lookup.raw[map.At(1, 0).tile_index]
+        blocked_island = builder.tile_island_lookup.raw[map.At(0, 1).tile_index]
+
+        original_arcs = {
+            (
+                graph_data.idx_to_node[int(graph_data.start_nodes[arc_idx])],
+                graph_data.idx_to_node[int(graph_data.end_nodes[arc_idx])],
+            )
+            for arc_idx in range(len(graph_data.start_nodes))
+        }
+
+        self.assertIn((-source_island.unique_id, allowed_island.unique_id), original_arcs)
+        self.assertNotIn((-source_island.unique_id, blocked_island.unique_id), original_arcs)
+        self.assertIn((-blocked_island.unique_id, source_island.unique_id), original_arcs)
 
     def test_external_options_get_unique_group_ids(self):
         """Each external option must receive a unique group ID starting at 1000000."""

@@ -195,13 +195,17 @@ class FlowExpansionStreamOrderingMetadataTests(TestBase):
 
     def test_stream_ordering__friendly_ranking_prefers_better_army_per_tile(self):
         """
-        Friendly stream: an island with higher army/tile ratio should rank before
-        one with a lower ratio.
-        Map layout: two friendly islands side by side with different army densities,
-        then one enemy island on the right.
-          aG1  a6(1t)  a2(3t)  b1  bG1
-        The single-tile a6 island has ratio 6, the 3-tile a2 island has ratio ~0.67.
-        Friendly contributions should list the a6 island first.
+        Friendly stream: an island with higher army/tile ratio ranks before one with a lower ratio.
+        Map layout (all single-tile islands): aG1  a6  a2  b1  bG1
+
+        There is exactly one border pair (a2 borders b1; a6 is one hop upstream of a2).
+        Friendly sort_score = (army/tiles) * 1000 + flow_magnitude * 0.1:
+          a6: 6/1*1000 + 5*0.1 = 6000.5
+          a2: 2/1*1000 + 4*0.1 = 2000.4
+        Target sort_score = cost_score + type_bonus(2.05) + flow*0.1 + dEcon + dCity*50 + dTile*0.25,
+        with downstream potentials bubbled along the flow chain b1 -> bG1:
+          b1:  downstream {b1, bG1} -> econ 4.10, tiles 2, cities 1 (the general), enemy army 2
+          bG1: downstream {bG1}     -> econ 2.05, tiles 1, cities 1, enemy army 1
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -215,51 +219,57 @@ aG1  a6   a2   b1   bG1
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
 
-        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
-
-        # Collect all friendly contributions across all border pairs
-        all_friendly: list[FlowStreamIslandContribution] = []
-        all_target: list[FlowStreamIslandContribution] = []
-        for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-            all_friendly.extend(friendly_contribs)
-            all_target.extend(target_contribs)
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
+        _, friendly_contribs, target_contribs, _ = stream_results[0]
 
         if debugMode:
-            for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-                self.render_border_pair_debug(map, expander, border_pair, friendly_contribs, target_contribs, 'friendly ranking by army/tile')
+            self.render_border_pair_debug(map, expander, stream_results[0][0], friendly_contribs, target_contribs, 'friendly ranking by army/tile')
 
-        # Sort scores must be descending (already sorted by _preprocess_flow_stream_tilecounts)
-        for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-            for i in range(len(friendly_contribs) - 1):
-                self.assertGreaterEqual(
-                    friendly_contribs[i].sort_score, friendly_contribs[i + 1].sort_score,
-                    f'Friendly contributions not sorted descending at index {i}: '
-                    f'{friendly_contribs[i].sort_score:.3f} vs {friendly_contribs[i+1].sort_score:.3f}'
-                )
+        # Friendly contributions: exactly [a6, a2] in descending sort_score order.
+        self.assertEqual(2, len(friendly_contribs))
+        a6, a2 = friendly_contribs
+        self.assertEqual((1, 0), min((t.x, t.y) for t in a6.flow_node.island.tile_set))
+        self.assertEqual(1, a6.tile_count)
+        self.assertEqual(6, a6.army_amount)
+        self.assertAlmostEqual(6000.5, a6.sort_score, places=4)
+        self.assertEqual((2, 0), min((t.x, t.y) for t in a2.flow_node.island.tile_set))
+        self.assertEqual(1, a2.tile_count)
+        self.assertEqual(2, a2.army_amount)
+        self.assertAlmostEqual(2000.4, a2.sort_score, places=4)
 
-        # The island with army=6, tile_count=1 should have higher score than army=2, tile_count=1 (gen tile)
-        # Find the two non-general friendly islands by army
-        non_gen_friendlies = [c for c in all_friendly if c.army_amount >= 2]
-        if len(non_gen_friendlies) >= 2:
-            sorted_by_score = sorted(non_gen_friendlies, key=lambda c: c.sort_score, reverse=True)
-            self.assertGreaterEqual(
-                sorted_by_score[0].army_amount,
-                sorted_by_score[1].army_amount,
-                'Higher-army island should have >= sort score vs lower-army island of same tile count'
-            )
+        # Target contributions: exactly [b1, bG1] in physical path order.
+        self.assertEqual(2, len(target_contribs))
+        b1 = self._get_island_contribution_by_xy(target_contribs, 3, 0)
+        bg = self._get_island_contribution_by_xy(target_contribs, 4, 0)
+        self.assertEqual(b1, target_contribs[0])
+        self.assertEqual(bg, target_contribs[1])
+        self.assertAlmostEqual(4.10, b1.downstream_econ_potential, places=4)
+        self.assertEqual(2, b1.downstream_enemy_tile_potential)
+        self.assertEqual(1, b1.downstream_enemy_city_potential)
+        self.assertEqual(2, b1.downstream_enemy_army_potential)
+        self.assertEqual(4, b1.downstream_capture_army_potential)
+        self.assertAlmostEqual(57.35, b1.sort_score, places=4)
+        self.assertAlmostEqual(2.05, bg.downstream_econ_potential, places=4)
+        self.assertEqual(1, bg.downstream_enemy_tile_potential)
+        self.assertEqual(1, bg.downstream_enemy_city_potential)
+        self.assertEqual(1, bg.downstream_enemy_army_potential)
+        self.assertEqual(2, bg.downstream_capture_army_potential)
+        self.assertAlmostEqual(54.85, bg.sort_score, places=4)
 
     def test_stream_ordering__target_ranking_prefers_enemy_over_neutral_at_equal_cost(self):
         """
-        When an enemy island and a neutral island have comparable army-per-tile costs
-        but the enemy island has direct econ value, it should rank at least as high
-        as the neutral island.
+        Layout (1 row): aG1  a5  neut  b1  bG1  neut(overflow sink)
 
-        Layout (1 row, neutral between friendly and enemy):
-          aG1  a5   neut0   b1   bG1
-
-        The neutral tile at col 2 sits between friendly and the b1 enemy tile.
-        Both neutral and enemy have army_per_tile=1. Enemy (type_bonus=ITERATIVE_EXPANSION_EN_CAP_VAL=2.2) should
-        score higher than neutral (type_bonus=1.0) at equal cost.
+        The min-cost flow chain is neut(2) -> b1(3) -> bG1(4) -> neut(5), so the four target
+        contributions appear in that exact physical path order. Downstream potentials bubble up the
+        chain (neutral tiles 1.0 econ, enemy tiles 2.05 econ, the general counts as one enemy city):
+          neut(2): downstream {neut2,b1,bG1,neut5} econ 6.10 tiles 2 cities 1 enArmy 2 capArmy 6
+          b1(3):   downstream {b1,bG1,neut5}        econ 5.10 tiles 2 cities 1 enArmy 2 capArmy 5
+          bG1(4):  downstream {bG1,neut5}           econ 3.05 tiles 1 cities 1 enArmy 1 capArmy 3
+          neut(5): downstream {neut5}               econ 1.00 tiles 0 cities 0 enArmy 0 capArmy 1
+        sort_score = cost_score + type_bonus + flow*0.1 + dEcon + dCity*50 + dTile*0.25.
+        The enemy b1 type_bonus (2.05) exceeds the neutral type_bonus (1.0) at equal army/tile cost;
+        its total score is lower only because the gateway neutral bubbles one extra downstream tile.
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -273,47 +283,75 @@ aG1  a5        b1   bG1
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
 
-        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
+        _, friendly_contribs, target_contribs, _ = stream_results[0]
 
         if debugMode:
-            for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-                self.render_border_pair_debug(map, expander, border_pair, friendly_contribs, target_contribs, 'enemy vs neutral ranking')
+            self.render_border_pair_debug(map, expander, stream_results[0][0], friendly_contribs, target_contribs, 'enemy vs neutral ranking')
 
-        # Target contributions must be in physical path order: the neutral tile at col 2
-        # sits between the friendly border and b1, so it must appear first in the stream.
-        for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-            if len(target_contribs) >= 2:
-                first = target_contribs[0]
-                second = target_contribs[1]
-                # The neutral (team=-1) must be encountered before the enemy tile
-                self.assertEqual(
-                    first.flow_node.island.team, -1,
-                    f'First target contribution must be the neutral tile (mandatory traversal), got team={first.flow_node.island.team}'
-                )
-                self.assertEqual(
-                    second.flow_node.island.team, expander.target_team,
-                    f'Second target contribution must be the enemy tile, got team={second.flow_node.island.team}'
-                )
+        # Exactly four target contributions in physical path order: neut, b1, bG1, neut(sink).
+        self.assertEqual(4, len(target_contribs))
+        neut_gate = self._get_island_contribution_by_xy(target_contribs, 2, 0)
+        b1 = self._get_island_contribution_by_xy(target_contribs, 3, 0)
+        bg = self._get_island_contribution_by_xy(target_contribs, 4, 0)
+        neut_sink = self._get_island_contribution_by_xy(target_contribs, 5, 0)
+        self.assertEqual([neut_gate, b1, bg, neut_sink], target_contribs)
 
-        # Score property: enemy sort_score must exceed neutral sort_score at equal army_per_tile
-        # (type_bonus 2.2 vs 1.0 guarantees this regardless of path order)
-        for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-            enemy_scores = [c.sort_score for c in target_contribs if not c.is_crossing and
-                            c.flow_node.island.team == expander.target_team]
-            neutral_scores = [c.sort_score for c in target_contribs if not c.is_crossing and
-                              c.flow_node.island.team == -1]
-            if enemy_scores and neutral_scores:
-                self.assertGreaterEqual(
-                    max(enemy_scores), max(neutral_scores),
-                    'Enemy islands at equal cost should score at least as high as neutral islands'
-                )
+        self.assertEqual(-1, neut_gate.flow_node.island.team)
+        self.assertEqual(expander.target_team, b1.flow_node.island.team)
+
+        self.assertAlmostEqual(6.10, neut_gate.downstream_econ_potential, places=4)
+        self.assertEqual(2, neut_gate.downstream_enemy_tile_potential)
+        self.assertEqual(1, neut_gate.downstream_enemy_city_potential)
+        self.assertEqual(2, neut_gate.downstream_enemy_army_potential)
+        self.assertEqual(6, neut_gate.downstream_capture_army_potential)
+        self.assertAlmostEqual(59.10, neut_gate.sort_score, places=4)
+
+        self.assertAlmostEqual(5.10, b1.downstream_econ_potential, places=4)
+        self.assertEqual(2, b1.downstream_enemy_tile_potential)
+        self.assertEqual(1, b1.downstream_enemy_city_potential)
+        self.assertEqual(2, b1.downstream_enemy_army_potential)
+        self.assertEqual(5, b1.downstream_capture_army_potential)
+        self.assertAlmostEqual(58.45, b1.sort_score, places=4)
+
+        self.assertAlmostEqual(3.05, bg.downstream_econ_potential, places=4)
+        self.assertEqual(1, bg.downstream_enemy_tile_potential)
+        self.assertEqual(1, bg.downstream_enemy_city_potential)
+        self.assertEqual(1, bg.downstream_enemy_army_potential)
+        self.assertEqual(3, bg.downstream_capture_army_potential)
+        self.assertAlmostEqual(55.95, bg.sort_score, places=4)
+
+        self.assertAlmostEqual(1.00, neut_sink.downstream_econ_potential, places=4)
+        self.assertEqual(0, neut_sink.downstream_enemy_tile_potential)
+        self.assertEqual(0, neut_sink.downstream_enemy_city_potential)
+        self.assertEqual(0, neut_sink.downstream_enemy_army_potential)
+        self.assertEqual(1, neut_sink.downstream_capture_army_potential)
+        self.assertAlmostEqual(3.00, neut_sink.sort_score, places=4)
+
+        # Type bonus alone (sort_score minus the bubbled downstream terms) still favors enemy over neutral.
+        def base_type_score(contribution: FlowStreamIslandContribution) -> float:
+            return (
+                contribution.sort_score
+                - contribution.downstream_econ_potential
+                - contribution.downstream_enemy_city_potential * 50
+                - contribution.downstream_enemy_tile_potential * 0.25
+            )
+
+        self.assertAlmostEqual(2.85, base_type_score(b1), places=4)
+        self.assertAlmostEqual(2.50, base_type_score(neut_gate), places=4)
+        self.assertGreater(base_type_score(b1), base_type_score(neut_gate))
 
     def test_stream_ordering__target_ranking_prefers_lower_army_tiles_first(self):
         """
-        Within the same team (all enemy), a lower-army island should rank above a higher-army one
-        because army_per_tile is lower.
-          aG1  a10  b1  b5  bG1
-        b1 has army_per_tile=1, b5 has army_per_tile=5. b1 should rank first.
+        Layout: aG1  a10  b1  b5  bG1  (with a neutral overflow sink at col 5).
+
+        Target contributions are in physical path order along the flow chain b1 -> b5 -> bG1 -> neut:
+          b1(2):  cost 0.5 (army/tile 1), downstream {b1,b5,bG1,neut} econ 7.15 tiles 3 cities 1 enArmy 7 capArmy 11
+          b5(3):  cost 1/6 (army/tile 5), downstream {b5,bG1,neut}     econ 5.10 tiles 2 cities 1 enArmy 6 capArmy 9
+          bG1(4): cost 0.5,               downstream {bG1,neut}        econ 3.05 tiles 1 cities 1 enArmy 1 capArmy 3
+          neut(5):                        downstream {neut}            econ 1.00 tiles 0 cities 0 enArmy 0 capArmy 1
+        b1 (the lower-army enemy) is physically first; its higher downstream bubbling AND lower
+        army-per-tile cost both make it outscore b5.
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -327,32 +365,51 @@ aG1  a10  b1   b5   bG1
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
 
-        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
+        _, friendly_contribs, target_contribs, _ = stream_results[0]
 
         if debugMode:
-            for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-                self.render_border_pair_debug(map, expander, border_pair, friendly_contribs, target_contribs, 'lower army first in target')
+            self.render_border_pair_debug(map, expander, stream_results[0][0], friendly_contribs, target_contribs, 'lower army first in target')
 
-        for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-            enemy_contribs = [c for c in target_contribs if c.flow_node.island.team == expander.target_team]
-            if len(enemy_contribs) >= 2:
-                # Target contributions are in physical path order (BFS from friendly border).
-                # b1 is directly adjacent to the friendly border so it appears first;
-                # b5 is one hop further downstream, so it appears second.
-                first_xy = min((t.x, t.y) for t in enemy_contribs[0].flow_node.island.tile_set)
-                second_xy = min((t.x, t.y) for t in enemy_contribs[1].flow_node.island.tile_set)
-                self.assertLessEqual(
-                    first_xy[0], second_xy[0],
-                    f'First enemy target ({first_xy}) must be physically closer to the friendly border than the second ({second_xy})'
-                )
+        # Exactly four target contributions in physical path order: b1, b5, bG1, neut(sink).
+        self.assertEqual(4, len(target_contribs))
+        b1 = self._get_island_contribution_by_xy(target_contribs, 2, 0)
+        b5 = self._get_island_contribution_by_xy(target_contribs, 3, 0)
+        bg = self._get_island_contribution_by_xy(target_contribs, 4, 0)
+        neut_sink = self._get_island_contribution_by_xy(target_contribs, 5, 0)
+        self.assertEqual([b1, b5, bg, neut_sink], target_contribs)
+
+        self.assertEqual(1, b1.army_amount)
+        self.assertAlmostEqual(7.15, b1.downstream_econ_potential, places=4)
+        self.assertEqual(3, b1.downstream_enemy_tile_potential)
+        self.assertEqual(1, b1.downstream_enemy_city_potential)
+        self.assertEqual(7, b1.downstream_enemy_army_potential)
+        self.assertEqual(11, b1.downstream_capture_army_potential)
+        self.assertAlmostEqual(61.35, b1.sort_score, places=4)
+
+        self.assertEqual(5, b5.army_amount)
+        self.assertAlmostEqual(5.10, b5.downstream_econ_potential, places=4)
+        self.assertEqual(2, b5.downstream_enemy_tile_potential)
+        self.assertEqual(1, b5.downstream_enemy_city_potential)
+        self.assertEqual(6, b5.downstream_enemy_army_potential)
+        self.assertEqual(9, b5.downstream_capture_army_potential)
+        self.assertAlmostEqual(58.116666666666667, b5.sort_score, places=4)
+
+        # The lower-army enemy (b1) outscores the higher-army one (b5).
+        self.assertGreater(b1.sort_score, b5.sort_score)
 
     def test_stream_ordering__target_ranking_sorts_descending(self):
         """
-        _preprocess_flow_stream_tilecounts must return target contributions in physical
-        path order (BFS from the friendly border node outward), NOT sorted by score.
-        Uses a 3-segment enemy side with mixed army values.
-          aG1  a8   b1  b4  b2  bG1
-        Expected target order: b1 (col 2), b4 (col 3), b2 (col 4) — by ascending x.
+        Target contributions stay in physical path order (BFS from the friendly border outward),
+        NOT sorted by score. Layout: aG1  a8  b1  b4  b2  bG1 (plus a neutral overflow sink at col 6).
+
+        b4(col3) and b2(col4) are contiguous same-team enemy tiles, so they merge into ONE island
+        (2 tiles, army 6). The flow chain is b1 -> [b4b2] -> bG1 -> neut, giving target contributions
+        in ascending-x physical order:
+          b1(2):    downstream {b1,b4b2,bG1,neut} econ 9.20 tiles 4 cities 1 enArmy 8 capArmy 13 score 63.65
+          b4b2(3):  downstream {b4b2,bG1,neut}    econ 7.15 tiles 3 cities 1 enArmy 7 capArmy 11 score 60.30
+          bG1(5):   downstream {bG1,neut}         econ 3.05 tiles 1 cities 1 enArmy 1 capArmy 3  score 55.95
+          neut(6):  downstream {neut}             econ 1.00 tiles 0 cities 0 enArmy 0 capArmy 1  score 3.00
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -366,24 +423,41 @@ aG1  a8   b1   b4   b2   bG1
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
 
-        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
+        _, friendly_contribs, target_contribs, _ = stream_results[0]
 
         if debugMode:
-            for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-                self.render_border_pair_debug(map, expander, border_pair, friendly_contribs, target_contribs, 'target sort descending 3-segment')
+            self.render_border_pair_debug(map, expander, stream_results[0][0], friendly_contribs, target_contribs, 'target sort descending 3-segment')
 
-        for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-            # Target contributions are in physical path order (BFS from friendly border).
-            # b1 is adjacent to a8 so it comes first, then b4, then b2 (closest to bG1).
-            if len(target_contribs) >= 2:
-                for i in range(len(target_contribs) - 1):
-                    xi = min(t.x for t in target_contribs[i].flow_node.island.tile_set)
-                    xi1 = min(t.x for t in target_contribs[i + 1].flow_node.island.tile_set)
-                    self.assertLessEqual(
-                        xi, xi1,
-                        f'Target contributions must be in physical path order (ascending x): '
-                        f'index {i} x={xi} must be <= index {i+1} x={xi1}'
-                    )
+        # Exactly four target contributions (b4 and b2 merge) in ascending-x physical path order.
+        self.assertEqual(4, len(target_contribs))
+        b1 = self._get_island_contribution_by_xy(target_contribs, 2, 0)
+        b4b2 = self._get_island_contribution_by_xy(target_contribs, 3, 0)
+        bg = self._get_island_contribution_by_xy(target_contribs, 5, 0)
+        neut_sink = self._get_island_contribution_by_xy(target_contribs, 6, 0)
+        self.assertEqual([b1, b4b2, bg, neut_sink], target_contribs)
+
+        self.assertEqual(1, b1.tile_count)
+        self.assertAlmostEqual(9.20, b1.downstream_econ_potential, places=4)
+        self.assertEqual(4, b1.downstream_enemy_tile_potential)
+        self.assertEqual(1, b1.downstream_enemy_city_potential)
+        self.assertEqual(8, b1.downstream_enemy_army_potential)
+        self.assertEqual(13, b1.downstream_capture_army_potential)
+        self.assertAlmostEqual(63.65, b1.sort_score, places=4)
+
+        # b4 and b2 merged into a single 2-tile, 6-army island.
+        self.assertEqual(2, b4b2.tile_count)
+        self.assertEqual(6, b4b2.army_amount)
+        self.assertAlmostEqual(7.15, b4b2.downstream_econ_potential, places=4)
+        self.assertEqual(3, b4b2.downstream_enemy_tile_potential)
+        self.assertEqual(1, b4b2.downstream_enemy_city_potential)
+        self.assertEqual(7, b4b2.downstream_enemy_army_potential)
+        self.assertEqual(11, b4b2.downstream_capture_army_potential)
+        self.assertAlmostEqual(60.30, b4b2.sort_score, places=4)
+
+        # Physical path order must hold regardless of score values.
+        contrib_xs = [min(t.x for t in c.flow_node.island.tile_set) for c in target_contribs]
+        self.assertEqual(sorted(contrib_xs), contrib_xs)
 
     def test_stream_ordering__single_city_stream_bubbles_downstream_city_potential(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -399,51 +473,46 @@ player_index=0
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
 
-        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
+        _, _, target_contribs, stream_data = stream_results[0]
 
-        target_contribs = None
-        stream_data = None
-        for border_pair, _, cur_target_contribs, cur_stream_data in stream_results:
-            if any(tile.x == 6 and tile.y == 0 for node in cur_stream_data.target_stream for tile in node.island.tile_set):
-                target_contribs = cur_target_contribs
-                stream_data = cur_stream_data
-                break
-
-        self.assertIsNotNone(target_contribs, 'Expected a target stream containing the delayed city at (6,0)')
-        self.assertIsNotNone(stream_data, 'Expected stream_data for delayed single-city stream fixture')
-
-        border_enemy = self._get_island_contribution_by_xy(target_contribs, 6, 0)
+        # Layout: aG1 a4 a1 a1 a1 a4 bC3 bG1. The enemy side is a single city bC3(6) feeding the
+        # enemy general bG1(7). Flow chain bC3 -> bG1, so exactly two target contributions:
+        #   bC3(6): downstream {bC3(city), bG1(general)} -> econ 4.10 tiles 2 cities 2 enArmy 4 capArmy 6
+        #   bG1(7): downstream {bG1(general)}            -> econ 2.05 tiles 1 cities 1 enArmy 1 capArmy 2
+        self.assertEqual(2, len(target_contribs))
         city_contrib = self._get_island_contribution_by_xy(target_contribs, 6, 0)
+        bg = self._get_island_contribution_by_xy(target_contribs, 7, 0)
+        self.assertEqual([city_contrib, bg], target_contribs)
 
         if debugMode:
             self.render_border_pair_debug(map, expander, stream_data.border_pair, [], target_contribs, 'single city downstream potential')
 
-        self.assertGreaterEqual(city_contrib.downstream_enemy_city_potential, 1)
-        self.assertGreater(city_contrib.downstream_econ_potential, 0.0)
-        self.assertGreater(city_contrib.downstream_enemy_tile_potential, 0)
-        self.assertGreater(city_contrib.downstream_capture_army_potential, 0)
-        self.assertGreater(city_contrib.downstream_enemy_army_potential, 0)
-        self.assertEqual(
-            city_contrib.downstream_enemy_city_potential,
-            stream_data.target_node_potentials[city_contrib.island_id].enemy_city_count,
-            'Contribution city potential should match stream_data target node potential'
-        )
-        self.assertEqual(
-            city_contrib.downstream_enemy_tile_potential,
-            stream_data.target_node_potentials[city_contrib.island_id].enemy_tile_count,
-            'Contribution enemy tile potential should match stream_data target node potential'
-        )
-        self.assertEqual(
-            city_contrib.downstream_enemy_army_potential,
-            stream_data.target_node_potentials[city_contrib.island_id].enemy_army,
-            'Contribution enemy army potential should match stream_data target node potential'
-        )
+        # bC3 bubbles both its own city and the downstream enemy general (counted as a city).
+        self.assertEqual(2, city_contrib.downstream_enemy_city_potential)
+        self.assertAlmostEqual(4.10, city_contrib.downstream_econ_potential, places=4)
+        self.assertEqual(2, city_contrib.downstream_enemy_tile_potential)
+        self.assertEqual(6, city_contrib.downstream_capture_army_potential)
+        self.assertEqual(4, city_contrib.downstream_enemy_army_potential)
+
+        self.assertEqual(1, bg.downstream_enemy_city_potential)
+        self.assertAlmostEqual(2.05, bg.downstream_econ_potential, places=4)
+        self.assertEqual(1, bg.downstream_enemy_tile_potential)
+        self.assertEqual(2, bg.downstream_capture_army_potential)
+        self.assertEqual(1, bg.downstream_enemy_army_potential)
+
+        # Contribution fields must exactly mirror the underlying precomputed node potential.
+        city_potential = stream_data.target_node_potentials[city_contrib.island_id]
+        self.assertEqual(city_contrib.downstream_enemy_city_potential, city_potential.captured_downstream_target_city_count)
+        self.assertEqual(city_contrib.downstream_enemy_tile_potential, city_potential.captured_downstream_target_tile_count)
+        self.assertEqual(city_contrib.downstream_enemy_army_potential, city_potential.captured_downstream_target_army)
         self.assertEqual(
             city_contrib.downstream_capture_army_potential,
-            stream_data.target_node_potentials[city_contrib.island_id].capture_army,
-            'Contribution capture army potential should match stream_data target node potential'
+            city_potential.captured_downstream_target_army
+            + city_potential.captured_downstream_target_tile_count
+            + city_potential.captured_downstream_neut_army
+            + city_potential.captured_downstream_neut_tile_count,
         )
-        self.assertEqual(city_contrib, border_enemy)
 
     def test_stream_ordering__two_city_stream_bubbles_incremental_city_potential(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -459,57 +528,56 @@ player_index=0
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
 
-        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
+        _, _, target_contribs, stream_data = stream_results[0]
 
-        target_contribs = None
-        stream_data = None
-        for border_pair, _, cur_target_contribs, cur_stream_data in stream_results:
-            contrib_xs = {tile.x for contrib in cur_target_contribs for tile in contrib.flow_node.island.tile_set}
-            if 6 in contrib_xs and 8 in contrib_xs:
-                target_contribs = cur_target_contribs
-                stream_data = cur_stream_data
-                break
-
-        self.assertIsNotNone(target_contribs, 'Expected a target stream containing both delayed cities at (6,0) and (8,0)')
-        self.assertIsNotNone(stream_data, 'Expected stream_data for delayed two-city stream fixture')
-
+        # Layout enemy side: bC3(6) b1(7) bC1(8) b1(9) bG1(10). Flow chain bC3->b1->bC1->b1->bG1.
+        # Downstream potentials accumulate self + everything further down the chain (5 enemy tiles
+        # total, 3 of them cities: bC3, bC1, and the bG1 general):
+        #   bC3(6):  {6,7,8,9,10} econ 10.25 tiles 5 cities 3 enArmy 7 capArmy 12 score 164.60
+        #   b1(7):   {7,8,9,10}   econ  8.20 tiles 4 cities 2 enArmy 4 capArmy  8 score 112.35
+        #   bC1(8):  {8,9,10}     econ  6.15 tiles 3 cities 2 enArmy 3 capArmy  6 score 109.85
+        #   b1(9):   {9,10}       econ  4.10 tiles 2 cities 1 enArmy 2 capArmy  4 score  57.35
+        #   bG1(10): {10}         econ  2.05 tiles 1 cities 1 enArmy 1 capArmy  2 score  54.85
+        self.assertEqual(5, len(target_contribs))
         first_city = self._get_island_contribution_by_xy(target_contribs, 6, 0)
         middle_enemy = self._get_island_contribution_by_xy(target_contribs, 7, 0)
         second_city = self._get_island_contribution_by_xy(target_contribs, 8, 0)
+        third_enemy = self._get_island_contribution_by_xy(target_contribs, 9, 0)
+        bg = self._get_island_contribution_by_xy(target_contribs, 10, 0)
+        self.assertEqual([first_city, middle_enemy, second_city, third_enemy, bg], target_contribs)
 
         if debugMode:
             self.render_border_pair_debug(map, expander, stream_data.border_pair, [], target_contribs, 'two city downstream potential')
 
-        self.assertGreaterEqual(first_city.downstream_enemy_city_potential, 2)
-        self.assertGreaterEqual(middle_enemy.downstream_enemy_city_potential, 1)
-        self.assertGreaterEqual(second_city.downstream_enemy_city_potential, 1)
-        self.assertGreaterEqual(
-            first_city.downstream_enemy_city_potential,
-            second_city.downstream_enemy_city_potential,
-            'Earlier trunk node should not have lower downstream city potential than the later city node'
-        )
-        self.assertGreaterEqual(
-            first_city.downstream_econ_potential,
-            second_city.downstream_econ_potential,
-            'Earlier trunk node should not have lower downstream econ than the later city node'
-        )
-        self.assertGreaterEqual(
-            first_city.downstream_enemy_tile_potential,
-            second_city.downstream_enemy_tile_potential,
-            'Earlier trunk node should not have lower downstream enemy tile potential than the later city node'
-        )
-        self.assertGreater(
-            middle_enemy.downstream_enemy_city_potential,
-            0,
-            'Intermediate enemy tile should still bubble the downstream second city'
-        )
+        self.assertEqual(3, first_city.downstream_enemy_city_potential)
+        self.assertAlmostEqual(10.25, first_city.downstream_econ_potential, places=4)
+        self.assertEqual(5, first_city.downstream_enemy_tile_potential)
+        self.assertEqual(7, first_city.downstream_enemy_army_potential)
+        self.assertEqual(12, first_city.downstream_capture_army_potential)
+
+        self.assertEqual(2, middle_enemy.downstream_enemy_city_potential)
+        self.assertAlmostEqual(8.20, middle_enemy.downstream_econ_potential, places=4)
+        self.assertEqual(4, middle_enemy.downstream_enemy_tile_potential)
+        self.assertEqual(4, middle_enemy.downstream_enemy_army_potential)
+        self.assertEqual(8, middle_enemy.downstream_capture_army_potential)
+
+        self.assertEqual(2, second_city.downstream_enemy_city_potential)
+        self.assertAlmostEqual(6.15, second_city.downstream_econ_potential, places=4)
+        self.assertEqual(3, second_city.downstream_enemy_tile_potential)
+        self.assertEqual(3, second_city.downstream_enemy_army_potential)
+        self.assertEqual(6, second_city.downstream_capture_army_potential)
+
+        self.assertEqual(1, third_enemy.downstream_enemy_city_potential)
+        self.assertEqual(1, bg.downstream_enemy_city_potential)
+
         self.assertEqual(
             first_city.downstream_enemy_city_potential,
-            stream_data.target_node_potentials[first_city.island_id].enemy_city_count,
+            stream_data.target_node_potentials[first_city.island_id].captured_downstream_target_city_count,
         )
         self.assertEqual(
             second_city.downstream_enemy_city_potential,
-            stream_data.target_node_potentials[second_city.island_id].enemy_city_count,
+            stream_data.target_node_potentials[second_city.island_id].captured_downstream_target_city_count,
         )
 
     def test_stream_ordering__city_path_preserves_physical_order_while_scores_reflect_bubbled_value(self):
@@ -526,33 +594,23 @@ player_index=0
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
 
-        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
-
-        target_contribs = None
-        stream_data = None
-        for border_pair, _, cur_target_contribs, cur_stream_data in stream_results:
-            contrib_xs = [min(tile.x for tile in contrib.flow_node.island.tile_set) for contrib in cur_target_contribs]
-            if 6 in contrib_xs and 8 in contrib_xs:
-                target_contribs = cur_target_contribs
-                stream_data = cur_stream_data
-                break
-
-        self.assertIsNotNone(target_contribs, 'Expected two-city target contributions')
-        self.assertIsNotNone(stream_data, 'Expected stream_data for physical-order city fixture')
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
+        _, _, target_contribs, stream_data = stream_results[0]
 
         if debugMode:
-            self.render_border_pair_debug(map, expander, stream_data.border_pair, [], target_contribs, 'city order with bubbled scores')
+            self.render_border_pair_debug(map, expander, stream_results[0][0], [], target_contribs, 'city order with bubbled scores')
 
+        # Contributions remain in physical left-to-right order (x = 6,7,8,9,10), NOT sorted by score.
         ordered_xs = [min(tile.x for tile in contrib.flow_node.island.tile_set) for contrib in target_contribs]
-        self.assertEqual(sorted(ordered_xs), ordered_xs, 'Target contributions must remain in physical left-to-right order')
+        self.assertEqual([6, 7, 8, 9, 10], ordered_xs)
 
+        # Even though bC3(6) sits earlier in the (unsorted) path, its score is the highest because it
+        # bubbles the entire downstream city chain; the second city bC1(8) bubbles strictly less.
         first_city = self._get_island_contribution_by_xy(target_contribs, 6, 0)
         second_city = self._get_island_contribution_by_xy(target_contribs, 8, 0)
-        self.assertGreater(
-            first_city.sort_score,
-            second_city.sort_score,
-            'Earlier trunk city node should score higher because it bubbles the later city path as well'
-        )
+        self.assertAlmostEqual(164.60, first_city.sort_score, places=4)
+        self.assertAlmostEqual(109.85, second_city.sort_score, places=4)
+        self.assertGreater(first_city.sort_score, second_city.sort_score)
 
     def test_stream_ordering__friendly_sort_descending_always(self):
         """
@@ -574,28 +632,26 @@ aG1  a2   a8   a3   b1   bG1
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
 
-        self.assertGreater(len(stream_results), 0, 'Expected at least one border pair')
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
+        _, friendly_contribs, target_contribs, _ = stream_results[0]
 
         if debugMode:
-            for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-                self.render_border_pair_debug(map, expander, border_pair, friendly_contribs, target_contribs, 'friendly sort descending multi-island')
+            self.render_border_pair_debug(map, expander, stream_results[0][0], friendly_contribs, target_contribs, 'friendly sort descending multi-island')
 
-        for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-            for i in range(len(friendly_contribs) - 1):
-                self.assertGreaterEqual(
-                    friendly_contribs[i].sort_score, friendly_contribs[i + 1].sort_score,
-                    f'Friendly contributions not sorted descending at index {i}: '
-                    f'{friendly_contribs[i].sort_score:.3f} vs {friendly_contribs[i+1].sort_score:.3f}'
-                )
-
-        # The a8 island should rank first among non-general friendly contributions
-        all_friendly_contribs = []
-        for border_pair, friendly_contribs, target_contribs, _ in stream_results:
-            all_friendly_contribs.extend(friendly_contribs)
-        non_gen = [c for c in all_friendly_contribs if c.army_amount >= 2]
-        if non_gen:
-            top = max(non_gen, key=lambda c: c.sort_score)
-            self.assertEqual(8, top.army_amount, 'Highest army island should rank first among non-gen friendlies')
+        # The gather flow routes a8 -> a3 -> b1, so the friendly stream contains exactly a8 and a3
+        # (a2/aG1 contribute no routed gather here). Friendly sort_score = army/tiles*1000 + flow*0.1:
+        #   a8(2): 8/1*1000 + 7*0.1 = 8000.7
+        #   a3(3): 3/1*1000 + 5*0.1 = 3000.5
+        self.assertEqual(2, len(friendly_contribs))
+        a8, a3 = friendly_contribs
+        self.assertEqual((2, 0), min((t.x, t.y) for t in a8.flow_node.island.tile_set))
+        self.assertEqual(8, a8.army_amount)
+        self.assertAlmostEqual(8000.7, a8.sort_score, places=4)
+        self.assertEqual((3, 0), min((t.x, t.y) for t in a3.flow_node.island.tile_set))
+        self.assertEqual(3, a3.army_amount)
+        self.assertAlmostEqual(3000.5, a3.sort_score, places=4)
+        # Descending order, with the highest army/tile island (a8) ranked first.
+        self.assertGreater(a8.sort_score, a3.sort_score)
 
     def test_stream_ordering__contributions_cover_all_stream_nodes(self):
         """
@@ -618,7 +674,7 @@ aG1  a3   a2   b1   bG1
         border_pairs = expander._enumerate_border_pairs(
             expander.flow_graph, builder, expander.team, expander.target_team, target_crossable
         )
-        self.assertGreater(len(border_pairs), 0, 'Expected at least one border pair')
+        self.assertEqual(1, len(border_pairs), 'Expected exactly one border pair')
 
         border_pair = border_pairs[0]
         stream_data = expander._build_border_pair_stream_data(border_pair, expander.flow_graph, target_crossable, 50)
@@ -713,7 +769,7 @@ aG1  a3   b1   bG1
 
         expander, builder = self._setup_expander_with_flow_graph(map, general, enemyGeneral)
         stream_results = self._get_border_pair_stream_contributions(expander, builder)
-        self.assertGreater(len(stream_results), 0)
+        self.assertEqual(1, len(stream_results), 'Expected exactly one border pair')
 
         if debugMode:
             for border_pair, friendly_contribs, target_contribs, _ in stream_results:
@@ -765,14 +821,20 @@ aG1  a4        b1   bG1
             for border_pair, friendly_contribs, target_contribs, _ in stream_results:
                 self.render_border_pair_debug(map, expander, border_pair, friendly_contribs, target_contribs, 'neutral-gap border pair')
 
-        self.assertGreater(len(stream_results), 0,
-                           'Should find at least one border pair even with neutral island separating friendly and enemy')
+        # Exactly one border pair is found even though a neutral separates friendly a4 from enemy b1.
+        self.assertEqual(1, len(stream_results),
+                         'Should find exactly one border pair even with neutral island separating friendly and enemy')
+        _, _, target_contribs, _ = stream_results[0]
 
-        # Neutral island should appear in at least one target contributions list
-        all_target_contribs = [c for _, _, target_contribs, _ in stream_results for c in target_contribs]
-        neutral_contribs = [c for c in all_target_contribs if c.flow_node.island.team == -1]
-        self.assertGreater(len(neutral_contribs), 0,
-                           'Neutral island between friendly and enemy should appear in target contributions')
+        # Target contributions are the full flow chain in physical order: neut(2), b1(3), bG1(4), neut(5).
+        target_teams_by_x = [(min(t.x for t in c.flow_node.island.tile_set), c.flow_node.island.team) for c in target_contribs]
+        self.assertEqual([(2, -1), (3, expander.target_team), (4, expander.target_team), (5, -1)], target_teams_by_x)
+
+        # The gateway neutral between friendly and enemy is encountered first.
+        neutral_contribs = [c for c in target_contribs if c.flow_node.island.team == -1]
+        self.assertEqual(2, len(neutral_contribs))
+        self.assertEqual(-1, target_contribs[0].flow_node.island.team)
+        self.assertEqual((2, 0), min((t.x, t.y) for t in target_contribs[0].flow_node.island.tile_set))
 
     def test_stream_ordering__two_border_pairs_produce_independent_contributions(self):
         """
@@ -800,15 +862,21 @@ a5   b1
             for border_pair, friendly_contribs, target_contribs, _ in stream_results:
                 self.render_border_pair_debug(map, expander, border_pair, friendly_contribs, target_contribs, 'two border pairs')
 
-        # Each pair should have its own independent friendly contributions
-        all_friendly_id_sets = [frozenset(c.island_id for c in friendly_contribs) for _, friendly_contribs, _, _ in stream_results]
-        for i, ids_i in enumerate(all_friendly_id_sets):
-            for j, ids_j in enumerate(all_friendly_id_sets):
-                if i != j and ids_i and ids_j:
-                    # Distinct border pairs should not have fully identical island sets
-                    # (at minimum the border-crossing friendly island differs)
-                    pass  # Overlap is allowed if same islands feed both pairs; just verify no crash
-        # Basic sanity: all contributions should have valid island_id and sort_score
+        # Exactly two independent border pairs: one seeded from aG1(0,0), one from a5(0,1).
+        self.assertEqual(2, len(stream_results))
+
+        # The two pairs are seeded from distinct friendly islands: aG1 at (0,0) and a5 at (0,1).
+        friendly_border_xys = set()
+        for _, friendly_contribs, _, _ in stream_results:
+            for c in friendly_contribs:
+                friendly_border_xys.update(xy for xy in [min((t.x, t.y) for t in c.flow_node.island.tile_set)] if xy[0] == 0)
+        self.assertEqual({(0, 0), (0, 1)}, friendly_border_xys)
+
+        # Each pair's friendly contribution island set is independent (not the same set of islands).
+        friendly_id_sets = [frozenset(c.island_id for c in friendly_contribs) for _, friendly_contribs, _, _ in stream_results]
+        self.assertNotEqual(friendly_id_sets[0], friendly_id_sets[1])
+
+        # All contributions have valid, finite sort_scores.
         for border_pair, friendly_contribs, target_contribs, _ in stream_results:
             for contrib in friendly_contribs + target_contribs:
                 self.assertIsNotNone(contrib.island_id)

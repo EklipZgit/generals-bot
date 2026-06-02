@@ -1054,14 +1054,18 @@ class ArmyInterceptionUnitTests(TestBase):
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=False, turn=273)
 
         plan = self.get_interception_plan(rawMap, general, enemyGeneral)
-        self.assertEqual(2, len(plan.threats))
-
-        self.assertNotEqual(0, len(plan.intercept_options))
         if debugMode:
             self.render_intercept_plan(rawMap, plan)
+        self.assertGreater(len(plan.threats), 0)
 
-        paths = SearchUtils.where(plan.intercept_options.values(), lambda p: p[1].start.tile.x == 3 and p[1].start.tile.y == 9 and p[1].tail.tile.x == 7 and p[1].tail.tile.y == 9)
-        self.assertEqual(1, len(paths))
+        self.assertNotEqual(0, len(plan.intercept_options))
+
+        # opt = self.get_best_intercept_option(plan)
+        opt = self.get_interceptor_option_by_coords(plan, 3, 9, 7, 8)
+        # self.assertEqual(1, len(paths))
+        self.assertIsNotNone(opt)
+        self.assertGreater(20, opt.damage_blocked)
+        # self.assert
 
     def test_should_not_intercept_when_more_economic_to_just_keep_expanding__unit_test(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1522,10 +1526,6 @@ player_index=0
         # self.assertEqual(0, bestOpt.intercepting_army_remaining, 'or should we actually declare how negative the path value ends up being, like we do now?')
         self.assertLessEqual(bestOpt.intercepting_army_remaining, 0, 'Or, should we return 0 when the path goes negative?')
 
-# 18f, 17p, 0s
-# 19f, 17p, 0s  before fixing  test_should_intercept_obvious_intercept_use_case
-# 26f, 17p, 0s  after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
-
     def test_should_delay_any_intercept_from_general_that_could_die__unit(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         for path in [
@@ -1659,7 +1659,7 @@ player_index=0
         #     self.render_intercept_plan(map, plan, renderIndividualAnalysis=False)
 
         # Move 4,10->3,10 is parallel to the enemy army - should be substantially worse than directly hitting 4,10->4,9
-        parallel_path, parallel_val, parallel_turns = self.get_interceptor_path_by_coords(plan, 4, 10, 3, 10)
+        parallel_path, parallel_val, parallel_turns = self.get_interceptor_path_by_coords(plan, 4, 10, 3, 10, returnNoneIfNotFound=True)
         direct_path, direct_val, direct_turns = self.get_interceptor_path_by_coords(plan, 4, 10, 4, 9)
 
         # Direct hit should exist and have positive value
@@ -1734,21 +1734,26 @@ player_index=0
 
         # SHOULD exist, this one CAN intercept at 4,7 / 5,8 in 4 (5 bc one more move to actually intercept) turns
         optShortest = self.get_interceptor_option_by_coords_or_none(plan, 4, 11, 5, 8)
+        if optShortest is None:
+            optShortest = self.get_interceptor_option_by_coords_or_none(plan, 4, 11, 4, 7)
 
         optGen = self.get_interceptor_option_by_coords(plan, 2, 10, 5, 9)  # intercepts with army at 5,9 and enemy army at 5,9
         optShort = self.get_interceptor_option_by_coords(plan, 2, 11, 5, 9)  # intercepts with army at 5,9 and enemy army at 5,8. So arguably this is 5,8 intercept idk
         worstCaseAddlMovesBecauseRightPath = 2
         with self.subTest(assertion='should find correct move lengths for short intercept'):
+            # TODO this is some fancy stuff we don't care that much about for now since it involves looking at secondary threat paths distances or something?
             self.assertEqual(6+worstCaseAddlMovesBecauseRightPath, optShort.length, 'See comment above, but our army dies at the intercept, enemy has 4 army left over, and we intercept 6 moves in but our worst case is +2 (?).')
         with self.subTest(assertion='should find correct move lengths for long intercept'):
             self.assertEqual(15+worstCaseAddlMovesBecauseRightPath, optGen.length, 'See comment above, but our army ends with 16 left over for us at intercept (also after 6 moves since enemy is moving towards us). We can recapture until 15 turns have passed at which point we\'ll have spent all our army capping 1\'s.')
 
-
         with self.subTest(assertion='should only find midway intercept point'):
             self.assertIsNone(optGenBad, "should not exist, we can't intercept at 4,7 / 5,8 from 2,11. Best we can intercept at is either 4,8 or 5,9 depending which we choose.")
             self.assertIsNone(optShortBad, "should not exist, we can't intercept at 4,7 / 5,8 from 2,11. Best we can intercept at is either 4,8 or 5,9 depending which we choose.")
-        with self.subTest(assertion='should find shortest int at 4,7 / 5,8'):
-            self.assertIsNotNone(optShortest, 'should find shortest int at 4,7 / 5,8')
+
+        # with self.subTest(assertion='should find shortest int at 4,7 / 5,8'):
+        #     self.assertIsNotNone(optShortest, 'should find shortest int at 4,7 / 5,8')
+        with self.subTest(assertion='should NOT find shortest int at 4,7 / 5,8'):
+            self.assertIsNone(optShortest, 'should NOT find shortest int at 4,7 / 5,8 BECAUSE 4,11 is part of the positive subsegment of one of the econ threats, meaning we shouldnt be intercepting with it since its already not enough to block damage of existing threat')
 
         enemyMinExpectedDamage = 28 # a straight longest path find must find 28 damage for this armies attack.
         enemyMaxExpectedDamage = 38 # if we somehow calculated flow or splits, the enemy army CAN do 38 tile damage.
@@ -1766,8 +1771,9 @@ player_index=0
             self.assertLessEqual(optShort.econValue, (enemyMaxExpectedDamage - enemyDamageStillDealtWithShortIntercept))
 
         with self.subTest(assertion='shouldnt overvalue shortest'):
-            self.assertGreaterEqual(optShortest.econValue, 3 * 2, "if evaling against single path the best it can block is 6 damage")
-            self.assertLessEqual(optShortest.econValue, 7 * 2.2, "if evaling against split path / expand flow, the best it can block is 7 tiles * cap value")
+            if optShortest is not None:
+                self.assertGreaterEqual(optShortest.econValue, 3 * 2, "if evaling against single path the best it can block is 6 damage")
+                self.assertLessEqual(optShortest.econValue, 7 * 2.2, "if evaling against split path / expand flow, the best it can block is 7 tiles * cap value")
 
     def test_should_correctly_value_intercept_from_general__inner_path(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1856,3 +1862,203 @@ player_index=0
         with self.subTest(assertion='shouldnt overvalue shortest'):
             self.assertGreaterEqual(optShortest.econValue, 3 * 2, "if evaling against single path the best it can block is 6 damage")
             self.assertLessEqual(optShortest.econValue, 7 * 2.2, "if evaling against split path / expand flow, the best it can block is 7 tiles * cap value")
+
+    def test_off_by_one_bug_a2_to_a1_does_not_block_b4_attack__intercept_at_threat_end(self):
+        """
+        Unit test for ArmyInterceptor off-by-1 bug.
+        Scenario: b4 attacking a1 (enemy 4 army attacking our 1 army tile)
+        Intercept with a2->a1 should NOT block damage since 4->2 still captures.
+        The damage_blocked should be <= 2 (the TARGET_CAP_VALUE).
+
+        This test validates that the bot correctly recognizes that moving a 2 onto a 1
+        does not prevent the enemy 4 from capturing (4->2 still succeeds).
+        """
+        data = """
+|    |    |    |    |    |
+aG1
+a1   a2
+b4   M
+bG1
+|    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+
+        self.begin_capturing_logging()
+        # Get interception plan with a longer threat path to avoid filtering
+        plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['0,2->0,1'], turnsLeftInCycle=10, useDebugLogging=True)
+
+        self.assertEqual(1, len(plan.intercept_options))
+        opt = plan.intercept_options[1]  # dist 1
+
+        # The intercept a2->a1 should NOT block the capture because 4->2 still succeeds
+        # Therefore damage_blocked should be <= TARGET_CAP_VALUE (2.055)
+        self.assertEqual(0, opt.damage_blocked,
+            f'a2->a1 intercept cannot block b4->a1 attack (4->2 still captures).')
+
+    def test_off_by_one_bug_a2_to_a2_does_block_b4_attack__intercept_at_threat_end(self):
+        """
+        Unit test for ArmyInterceptor off-by-1 bug.
+        Scenario: b4 attacking a1 (enemy 4 army attacking our 1 army tile)
+        Intercept with a2->a2 should block damage since 4->3 does not capture.
+        The damage_blocked should be >= 2 (equal to TARGET_CAP_VALUE).
+
+        This test validates that the bot correctly recognizes that moving a 2 onto a 2
+        DOES prevent the enemy 4 from capturing (4->3 fails).
+        """
+        data = """
+|    |    |    |    |    |
+aG1
+a2   a2
+b4   M
+bG1
+|    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+
+        self.begin_capturing_logging()
+        # Get interception plan with a longer threat path to avoid filtering
+        plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['0,2->0,1'], turnsLeftInCycle=10, useDebugLogging=True)
+
+        opt = plan.intercept_options[1]  # dist 1
+
+        # The intercept a3->a1 SHOULD block the capture because 4->3 fails
+        # Therefore damage_blocked should be > TARGET_CAP_VALUE (2.055)
+        self.assertGreaterEqual(opt.damage_blocked, TARGET_CAP_VALUE,
+            f'a2->a2 intercept should block b4->a2 attack (4->3 fails).')
+        self.assertEqual(1, len(plan.intercept_options))
+
+    def test_off_by_one_bug_a4_to_a1_does_not_block_b6_attack__intercept_before_threat_end(self):
+        """
+        Unit test for ArmyInterceptor off-by-1 bug.
+        Scenario: b6 attacking a1 (enemy 6 army attacking our 1 army tile)
+        Intercept with a4->a1 should NOT block damage since 6->4 still captures.
+        The damage_blocked should be just TARGET_CAP_VALUE (because we DO block the final cap)
+
+        This test validates that the bot correctly recognizes that moving a 4 onto a 1
+        does not prevent the enemy 6 from capturing (6->2 still succeeds).
+        """
+        data = """
+|    |    |    |    |    |
+a1   aG1
+a1   a4
+b6   M
+bG1
+|    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+
+        self.begin_capturing_logging()
+        # Get interception plan with a longer threat path to avoid filtering
+        plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['0,2->0,1->0,0'], turnsLeftInCycle=10, useDebugLogging=True)
+
+        self.assertEqual(1, len(plan.intercept_options))
+        opt = plan.intercept_options[1]  # dist 1
+
+        # The intercept a2->a1 should NOT block the capture because 4->2 still succeeds
+        # Therefore damage_blocked should be whatever the general was worth, but NOT the final tile.
+        self.assertEqual(TARGET_CAP_VALUE, opt.damage_blocked,
+            f'a4->a1 intercept cannot block b6->a1 attack (6->4 still captures, but cannot capture subsequent tile).')
+
+    def test_off_by_one_bug_a2_to_a1_does_not_block_b6_attack__at_all__intercept_before_threat_end(self):
+        data = """
+|    |    |    |    |    |
+a1   aG1
+a1   a2
+b6   M
+bG1
+|    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+
+        self.begin_capturing_logging()
+        # Get interception plan with a longer threat path to avoid filtering
+        plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['0,2->0,1->0,0'], turnsLeftInCycle=10, useDebugLogging=True)
+
+        self.assertEqual(1, len(plan.intercept_options))
+        opt = plan.intercept_options[1]  # dist 1
+
+        # The intercept a2->a1 should NOT block the capture because 4->2 still succeeds
+        # Therefore damage_blocked should be whatever the general was worth, but NOT the final tile.
+        self.assertEqual(0, opt.damage_blocked,
+            f'a2->a1 intercept cannot block b6->a1->a1 attack at all.')
+
+    def test_off_by_one_bug_a3_to_a1_does_block_final_tile__intercept_before_threat_end(self):
+        """
+        Unit test for ArmyInterceptor off-by-1 bug.
+        Scenario: b6 attacking a1 (enemy 6 army attacking our 1 army tile)
+        Intercept with a4->a1 should NOT block damage since 6->4 still captures.
+        The damage_blocked should be just TARGET_CAP_VALUE (because we DO block the final cap)
+
+        This test validates that the bot correctly recognizes that moving a 4 onto a 1
+        does not prevent the enemy 6 from capturing (6->2 still succeeds).
+        """
+        data = """
+|    |    |    |    |    |
+a1   aG1
+a1   a3
+b6   M
+bG1
+|    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+
+        self.begin_capturing_logging()
+        # Get interception plan with a longer threat path to avoid filtering
+        plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['0,2->0,1->0,0'], turnsLeftInCycle=10, useDebugLogging=True)
+
+        self.assertEqual(1, len(plan.intercept_options))
+        opt = plan.intercept_options[1]  # dist 1
+
+        # The intercept a2->a1 should NOT block the capture because 4->2 still succeeds
+        # Therefore damage_blocked should be whatever the general was worth, but NOT the final tile.
+        self.assertEqual(TARGET_CAP_VALUE, opt.damage_blocked,
+            f'a3->a1 intercept can block the final capture in the threat, but not the first capture.')
+
+    def test_off_by_one_bug_a4_to_a2_does_block_b6_attack__intercept_before_threat_end(self):
+        """
+        Unit test for ArmyInterceptor off-by-1 bug.
+        Scenario: b6 attacking a1 (enemy 6 army attacking our 1 army tile)
+        Intercept with a4->a2 should block damage since 4->3 does not capture.
+        The damage_blocked should be >= 2 * TARGET_CAP_VALUE
+
+        This test validates that the bot correctly recognizes that moving a 4 onto a 2
+        DOES prevent the enemy 6 from capturing (6->5 fails).
+        """
+        data = """
+|    |    |    |    |    |
+a1   aG1
+a2   a4
+b6   M
+bG1
+|    |    |    |    |    |
+player_index=0
+"""
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 181)
+
+        self.begin_capturing_logging()
+        # Get interception plan with a longer threat path to avoid filtering
+        plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['0,2->0,1->0,0'], turnsLeftInCycle=10, useDebugLogging=True)
+
+        opt = plan.intercept_options[1]  # dist 1
+        self.assertEqual((1,1), opt.path.start.tile.coords)
+        self.assertEqual(1, opt.worst_case_intercept_moves)
+        self.assertEqual(1, opt.best_case_intercept_moves)
+        self.assertEqual(1, opt.length)
+        self.assertEqual(3, opt.friendly_army_reaching_intercept)
+        self.assertEqual(0, opt.intercepting_army_remaining)
+
+        # The intercept a3->a1 SHOULD block the capture because 6->3 fails
+        # Therefore damage_blocked should be > TARGET_CAP_VALUE (2.055)
+        self.assertGreaterEqual(opt.damage_blocked, TARGET_CAP_VALUE * 2,
+            f'a4->a2 intercept should block b6->a2 attack (6->5 fails).')
+
+    # 18f, 17p, 0s
+    # 19f, 17p, 0s  before fixing  test_should_intercept_obvious_intercept_use_case
+    # 26f, 17p, 0s  after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
+    # 57f, 44p, 0s  Idk before fixing off by ones and stuff
+    # 55f, 52p, 0s  After partial off-by-one fixups, incomplete

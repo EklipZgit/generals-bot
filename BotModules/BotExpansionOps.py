@@ -539,6 +539,8 @@ class BotExpansionOps:
             interceptOptionsToLog: typing.List[InterceptionOptionInfo] = []
             for threatTile, interceptPlan in bot.intercept_plans.items():
                 for turns, option in interceptPlan.intercept_options.items():
+                    if option.path.start.tile in bot.cityAnalyzer.owned_contested_cities:
+                        option.econValue -= 20
                     addlOptions.append(option)
                     interceptOptionsSet.add(option)
                     interceptOptionsToLog.append(option)
@@ -550,8 +552,18 @@ class BotExpansionOps:
                 addlOptions.append(bot.city_capture_plan_option)
                 bot.info(f'cityOpt {bot.city_capture_plan_option.econValue / max(bot.city_capture_plan_option.length, 1):.2f} ({bot.city_capture_plan_option.econValue:.1f}e/{bot.city_capture_plan_option.length}t) {str(bot.city_capture_plan_option)}')
             if bot.quick_kill_city_plan_option is not None:
-                addlOptions.append(bot.quick_kill_city_plan_option)
-                bot.info(f'quickKillCityOpt {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) {str(bot.quick_kill_city_plan_option)}')
+                opt = bot.quick_kill_city_plan_option
+                if bot.quick_kill_city_plan_option.length > bot._map.remainingCycleTurns:
+                    optPath: Path = opt.path if not isinstance(opt, Path) else opt
+                    shortOpt = optPath.get_subsegment(bot._map.remainingCycleTurns)
+                    # it becomes worth whatever fraction of the full amount assigned was that this opt length is
+                    shortOpt.econValue = bot._map.remainingCycleTurns * opt.econValue / opt.length
+                    addlOptions.append(shortOpt)
+                    bot.info(f'quickKillCityOpt SHORTENED {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) -> {shortOpt.econValue / max(shortOpt.length, 1):.2f} ({shortOpt.econValue:.1f}e/{shortOpt.length}t)')
+
+                else:
+                    addlOptions.append(opt)
+                    bot.info(f'quickKillCityOpt {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) {str(bot.quick_kill_city_plan_option)}')
 
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
@@ -583,30 +595,50 @@ class BotExpansionOps:
                             # Walk from the enemy-general end (tail) toward our general (start).
                             # Find the last non-visible tile before the first visible tile —
                             # i.e., the fog-boundary tile closest to our side.
-                            enemyFogAttackFromTile = None
+                            enemyFogAttackFromTiles = []
                             distToEnFog = 0
+                            foundFog = False
                             for pathTile in bot.shortest_path_to_target_player.tileList:
                                 if not pathTile.visible:
-                                    enemyFogAttackFromTile = pathTile
+                                    enemyFogAttackFromTiles.append(pathTile)
+                                    foundFog = True
+                                if len(enemyFogAttackFromTiles) >= 5:
                                     break
-                                distToEnFog += 1
 
-                            if enemyFogAttackFromTile is not None:
+                                if not foundFog:
+                                    distToEnFog += 1
+                            if bot.enemy_attack_path is not None:
+                                for pathTile in reversed(bot.enemy_attack_path.tileList):
+                                    if not pathTile.visible:
+                                        enemyFogAttackFromTiles.append(pathTile)
+                                    if len(enemyFogAttackFromTiles) >= 10:
+                                        break
+
+                                    if not foundFog:
+                                        distToEnFog += 1
+
+                            if len(enemyFogAttackFromTiles) > 0:
                                 maxTurns = max(1, bot.opponent_tracker.get_predicted_attack_turn_by_dist_to_fog(bot.targetPlayer, distToEnFog))
                                 inTurns = min(20, maxTurns)
                                 predictedArmy = bot.opponent_tracker.get_approximate_fog_army_risk(bot.targetPlayer, None, inTurns=inTurns)
-                                armyOverrideMatrix.raw[enemyFogAttackFromTile.tile_index] = predictedArmy
+                                perTileArmy = predictedArmy // len(enemyFogAttackFromTiles)
+
                                 # Clone the bonus matrix so we don't mutate the shared one
                                 bonusCapturePointMatrixForFlow = bonusCapturePointMatrix.copy()
-                                bonusCapturePointMatrixForFlow.raw[enemyFogAttackFromTile.tile_index] = float(remainingCycleTurns) // 2 + 5
+                                econBonus = float(remainingCycleTurns) // 2 + 5
+                                econBonusPerTile = econBonus / len(enemyFogAttackFromTiles)
+                                for tile in enemyFogAttackFromTiles:
+                                    armyOverrideMatrix.raw[tile.tile_index] = perTileArmy
+                                    bonusCapturePointMatrixForFlow.raw[tile.tile_index] += econBonusPerTile
+                                    bot.viewInfo.midLeftGridText.raw[tile.tile_index] = f'a{perTileArmy}'
+                                    bot.viewInfo.bottomMidLeftGridText.raw[tile.tile_index] = f'e{econBonusPerTile:.2f}'
+
                                 logbook.info(
-                                    f'FE fog override: tile ({enemyFogAttackFromTile.x},{enemyFogAttackFromTile.y}) '
-                                    f'army={predictedArmy} econ={remainingCycleTurns}'
+                                    f'FE fog override: tile ({enemyFogAttackFromTiles[0].x},{enemyFogAttackFromTiles[0].y}) '
+                                    f'army={predictedArmy} econ={econBonus:.3f}'
                                 )
-                                bot.info(f'FE enemy fog of {predictedArmy} on tile {enemyFogAttackFromTile} val {remainingCycleTurns} fogDist {distToEnFog}')
-                                bot.viewInfo.add_targeted_tile(enemyFogAttackFromTile, TargetStyle.PURPLE)
-                                bot.viewInfo.bottomLeftGridText.raw[enemyFogAttackFromTile.tile_index] = str(predictedArmy)
-                                bot.viewInfo.bottomMidLeftGridText.raw[enemyFogAttackFromTile.tile_index] = str(remainingCycleTurns)
+                                bot.viewInfo.add_targeted_tiles_with_legend(enemyFogAttackFromTiles, f'FE enemy fog @{enemyFogAttackFromTiles[0]} e{econBonus:.2f} a{predictedArmy} fogDist {distToEnFog} inTurns {inTurns}', TargetStyle.PURPLE)
+
 
                         # Pass external plan options into FlowExpansion for integrated knapsacking
                         additionalOptionsToInclude = list(addlOptions)
@@ -1898,7 +1930,7 @@ class BotExpansionOps:
             if bot.info_render_expansion_matrix_values:
                 val = matrix[tile]
                 if val:
-                    bot.viewInfo.bottomLeftGridText[tile] = f'hx{val:0.3f}'
+                    bot.viewInfo.bottomLeftGridText[tile] = f'hx{val:0.2f}'
 
         return matrix
 
@@ -2174,6 +2206,6 @@ class BotExpansionOps:
                 matrix.raw[tile.tile_index] += bonus
 
             if bot.info_render_expansion_matrix_values:
-                bot.viewInfo.bottomLeftGridText[tile] = f'x{matrix.raw[tile.tile_index]:0.3f}'
+                bot.viewInfo.bottomLeftGridText[tile] = f'{"x" if matrix.raw[tile.tile_index] >= 0.0 else ""}{matrix.raw[tile.tile_index]:0.2f}'
 
         return matrix

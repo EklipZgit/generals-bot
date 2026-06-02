@@ -2839,10 +2839,10 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
     # if path.value >= 0:
     #     rating = (path.value ** 0.5) / 5
     if path.tileList[0].isCity or path.tileList[0].isGeneral:
-        rating += 0.1 * path.tileList[0].army + 0.1 * path.length
+        rating -= 1.0 / (path.tileList[0].army + 1) + 0.1 * path.length
         if deferCityGen:
             # Tiebreak city/general moves by moving the one with more captures first, letting us push down lines without splitting a line earlier
-            rating -= 30 / max(1, path.length)
+            rating -= 30
 
     for t in path.tileList[1:]:
         if t.visible:
@@ -2851,7 +2851,7 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
                     # if not deferring general / city then move these early to have more chance of a second push from them i guess? TODO probably wrong
                     rating += 0.1
                     if deferCityGen:
-                        rating -= 1.0
+                        rating -= 2.1
                 if t.army == 1:
                     rating -= 0.3
             elif t.player not in friendlyPlayers and t.isCity:
@@ -2988,6 +2988,8 @@ def find_optimal_expansion_path_to_move_first(
         else:
             logbook.info(f'    -path city{thisCityCapturePriority} vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} < city{maxCityCapturePriority} vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)}')
 
+    maxCityCapturePriority = 1 if path in cityCapturePaths else 0
+    logbook.info(f' FIRST PATH (city{maxCityCapturePriority} vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f}, deferring city/gen {deferringCityGen}) {str(path)}')
     return path
 
 

@@ -97,6 +97,9 @@ class FlowExpansionGroupedKnapsackTests(TestBase):
     def test_grouped_knapsack__logged_repro_template(self):
         self.skipTest('Paste FE_KNAPSACK_REPRO_BEGIN output here when debugging grouped knapsack conflict repair')
 
+    def test_grouped_knapsack__spare_capacity_fill_keeps_disjoint_external_after_maybe_substitution(self):
+        self.skipTest('Rejected spare-capacity fill regression; FE gather lookup validity should prevent the original issue')
+
     def test_grouped_knapsack__should_choose_two_local_enemy_captures_over_one_general_rally(self):
         self.begin_capturing_logging()
         repro = GroupedKnapsackPreGroupInput(

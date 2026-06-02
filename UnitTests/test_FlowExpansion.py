@@ -1533,12 +1533,17 @@ a17                 b7   b1   b1
 player_index=0
 """
         for turns, bestTurns, bestEcon, expectedPath in [
-            (7, 5, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->3,0  0,1->4,1'),
+            (7, 7, 6 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->3,0  0,1->4,1'),
+            (7, 6, 5 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->3,0  0,1->4,1'),
+            (6, 6, 5 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->3,0  0,1->4,1'),
             (3, 3, 3 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,0->3,0'),
             (5, 5, 4 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, '0,1->0,0->4,0'),
         ]:
             with self.subTest(turns=turns):
                 map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+
+                if bestTurns == 7:
+                    map.At(0, 1).army = 19
 
                 # if debugMode:
                 #     self.render_map(map)
@@ -1548,24 +1553,24 @@ player_index=0
 
                 expander, optCollection = self.run_army_flow_expansion_and_get_expander_and_collection(map, general, enemyGeneral, turns=turns, debugMode=debugMode, renderThresh=700, tileIslandSize=5, shouldRender=debugMode, method=method)
                 opts = optCollection.flow_plans
-                if turns == 7:
+                if turns >= 6:
                     try:
                         self.assertEqual(len(opts), 1)
                         # we expect it to RETURN the len 3 and len 4 best options at least
-                        opt3 = next(opt for opt in opts if opt.length == 3 and opt.get_first_move().source.coords == (0, 0))
-                        self.assertEqual(3 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL, round(opt3.econValue, 5))
-                        self.assertEqual(map.At(0, 0), opt3.tileList[0])
-                        self.assertEqual(map.At(1, 0), opt3.tileList[1])
-                        self.assertEqual(map.At(2, 0), opt3.tileList[2])
-                        self.assertEqual(map.At(3, 0), opt3.tileList[3])
+                        optChosen = opts[0]
+                        self.assertEqual((0, 1), optChosen.get_first_move().source.coords)
+                        self.assertEqual(bestTurns, optChosen.length)
+                        self.assertEqual(round(bestEcon, 5), round(optChosen.econValue, 5))
+                        self.assertEqual(map.At(0, 1), optChosen.tileList[0])
+                        self.assertEqual(map.At(0, 0), optChosen.tileList[1])
+                        self.assertEqual(map.At(1, 0), optChosen.tileList[2])
+                        self.assertEqual(map.At(2, 0), optChosen.tileList[3])
+                        self.assertEqual(map.At(3, 0), optChosen.tileList[4])
+                        self.assertEqual(map.At(4, 0), optChosen.tileList[5])
+                        self.assertEqual(map.At(4, 1), optChosen.tileList[6])
+                        if bestTurns == 7:
+                            self.assertEqual(map.At(5, 1), optChosen.tileList[7])
 
-                        opt4 = next(opt for opt in opts if opt.length == 4 and opt.get_first_move().source.coords == (0, 1))
-                        self.assertEqual(1 * IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL + 3, round(opt4.econValue, 5))
-                        self.assertEqual(map.At(0, 1), opt4.tileList[0])
-                        self.assertEqual(map.At(1, 1), opt4.tileList[1])
-                        self.assertEqual(map.At(2, 1), opt4.tileList[2])
-                        self.assertEqual(map.At(3, 1), opt4.tileList[3])
-                        self.assertEqual(map.At(4, 1), opt4.tileList[4])
                     except Exception as ex:
                         if debugMode:
                             self.render_flow_expansion_debug(expander, optCollection, renderAll=True)
@@ -2261,6 +2266,28 @@ player_index=0
 
         self.assertGreater(sum(1 for p in bot.last_flow_opt_collection.flow_plans if not isinstance(p, InterceptionOptionInfo) and p.length > 1), 0)
 
+    def test_should_choose_to_hold_enemy_city_with_200_army_in_20_moves(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_fail_to_find_flow_expansion_routes__what_the_fuck___fHjzkD6XM---0--484.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 480, fill_out_tiles=True)
+        # general.army += 100
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=480)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.flow_expander.log_debug = False
+        playerMap = simHost.get_player_map(general.player)
+        bot.armyTracker.reset_temp_tile_marked(playerMap.At(13, 2))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertGreater(sum(1 for p in bot.last_flow_opt_collection.flow_plans if not isinstance(p, InterceptionOptionInfo) and p.length > 1), 0)
+
     def test_should_not_find_delayed_enemy_city_capture_when_city_growth_outpaces_gather(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -2408,3 +2435,95 @@ player_index=0
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
         self.assertNoFriendliesKilled(map, general)
+
+    def test_should_not_pull_2_backwards_against_the_flow_node_arrows__wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_pull_2_backwards_against_the_flow_node_arrows__wtf___dG6GRZJrU---1--61.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 61, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=61)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwnedXY(0, 11)
+
+    def test_should_not_attack_with_general_first_when_could_easily_spend_everything_in_one_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_attack_with_general_first_when_could_easily_spend_everything_in_one_round___1I-QDnpNi---1--71.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 71, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=71)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertGreater(general.army, 15)
+
+    def test_should_flow_general_to_meet_enemy_army_who_hasnt_attacked_yet(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flow_general_to_meet_enemy_army_who_hasnt_attacked_yet___Nfzt7BNGF---0--130.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 130, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=130)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+    def test_should_flow_to_enemy_land_not_change_mind_and_flow_neutral(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flow_to_enemy_land_not_change_mind_and_flow_neutral___IBT1OnySb---1--92.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 92, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=92)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+
+
+    def test_should_flow_all_army_together_into_core_choke_area(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flow_all_army_together_into_core_choke_area___ves6WmvLS---0--228.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 228, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=228)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        #proof
+        # simHost.queue_player_moves_str(general.player, '17,5->17,6->15,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertGreater(playerMap.At(15,6).army, 110)

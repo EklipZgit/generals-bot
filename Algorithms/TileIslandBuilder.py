@@ -226,7 +226,7 @@ class IslandBuildMode(Enum):
 class TileIslandBuilder(object):
     def __init__(self, map: MapBase, intergeneralAnalysis: ArmyAnalyzer, averageTileIslandSize: int | None = None):
         if averageTileIslandSize is None:
-            averageTileIslandSize = 3
+            averageTileIslandSize = 1
         self.map: MapBase = map
         self.teams: typing.List[int] = MapBase.get_teams_array(map)
         self.friendly_team: int = self.teams[map.player_index]
@@ -330,6 +330,11 @@ class TileIslandBuilder(object):
             if mode == IslandBuildMode.GroupByArmy and island.team == ourTeam:
                 # we only break our own friendly islands up by player
                 nextNewIslands = self._break_apart_island_by_army(island, primaryPlayer=self.map.player_index)
+                # UnitTests/test_Expansion.py test_shouldnt_create_broken_islands_after_captures: Also apply size limits to ensure no army group exceeds desired_tile_island_size
+                finalIslands = []
+                for armyGroup in nextNewIslands:
+                    finalIslands.extend(self._break_apart_island_if_too_large(armyGroup))
+                nextNewIslands = finalIslands
             elif mode == IslandBuildMode.GroupByArmy and island.team == -1:
                 if self.break_apart_neutral_islands:
                     nextNewIslands = self._break_apart_island_if_too_large(island)
@@ -1916,10 +1921,12 @@ class TileIslandBuilder(object):
                 for tile in island.tile_set:
                     tIndex = tile.tile_index
                     if viewInfo.bottomRightGridText.raw[tIndex]:
-                        viewInfo.midRightGridText.raw[tIndex] = island.name
+                        viewInfo.bottomMidRightGridText.raw[tIndex] = island.name
+                        if not viewInfo.midRightGridText.raw[tIndex]:
+                            viewInfo.midRightGridText.raw[tIndex] = str(island.unique_id)
                     else:
                         viewInfo.bottomRightGridText.raw[tIndex] = island.name
-                    viewInfo.bottomMidRightGridText.raw[tIndex] = str(island.unique_id)
+                        viewInfo.bottomMidRightGridText.raw[tIndex] = str(island.unique_id)
 
 
             if printIslandInfoLines:

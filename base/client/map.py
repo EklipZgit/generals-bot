@@ -72,6 +72,7 @@ class TeamStats(object):
         self.score: int = score
         self.standingArmy: int = standingArmy
         self.cityCount: int = cityCount
+        """Including general"""
         self.fightingDiff: int = fightingDiff
         self.unexplainedTileDelta: int = unexplainedTileDelta
         self.teamId: int = teamId

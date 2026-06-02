@@ -74,13 +74,25 @@ class BotStateQueries:
         return value
 
     @staticmethod
-    def get_target_army_inc_adjacent_enemy(bot: EklipZBot, tile):
+    def get_target_army_inc_adjacent_enemy(bot: EklipZBot, tile) -> int:
         sumAdj = 0
         for adj in tile.adjacents:
             if BotStateQueries.is_tile_enemy(bot, adj):
                 sumAdj += adj.army - 1
         armyToSearch = sumAdj
         return armyToSearch
+
+    @staticmethod
+    def get_target_army_inc_adjacent_enemy_and_tiles(bot: EklipZBot, tile) -> typing.Tuple[int, typing.Set[Tile]]:
+        sumAdj = 0
+        adjTiles = set()
+        for adj in tile.adjacents:
+            if BotStateQueries.is_tile_enemy(bot, adj):
+                if adj.army > 1:
+                    sumAdj += adj.army - 1
+                    adjTiles.add(adj)
+        armyToSearch = sumAdj
+        return armyToSearch, adjTiles
 
     @staticmethod
     def parse_tile_str(bot: EklipZBot, tileStr: str):

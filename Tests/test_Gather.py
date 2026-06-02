@@ -979,3 +979,22 @@ b1   b1   b1   b1   b1   b1   bG1
 
         self.assertLess(playerMap.At(0, 16).army, 2, 'should fucking gather the 7')
         self.assertLess(playerMap.At(0, 15).army, 2, 'should keep fucking gathering the 7')
+
+    def test_still_must_delay_general_movement_when_gathering(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/still_must_delay_general_movement_when_gathering___fVqlPUZ7v---0--171.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 171, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=171)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertGreater(general.army, 30)

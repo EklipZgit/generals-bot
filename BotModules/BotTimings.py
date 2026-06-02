@@ -332,8 +332,8 @@ class BotTimings:
         countEnOnPath = 0
         countNeutOnPath = 0
 
-        launchTiming = 20
-        gatherSplit = 20
+        launchTiming = 24
+        gatherSplit = 24
         if BotStateQueries.is_still_ffa_and_non_dominant(bot) and bot.targetPlayer != -1:
             gatherSplit = 32
 
@@ -445,10 +445,10 @@ class BotTimings:
             launchTiming += 50
             gatherSplit += 50
 
-        if launchTiming > 30:
-            launchTiming = 30
-        if gatherSplit > 22:
-            gatherSplit = 22
+        if launchTiming > 34:
+            launchTiming = 34
+        if gatherSplit > 26:
+            gatherSplit = 26
 
         if launchTiming < gatherSplit:
             if not bypass:

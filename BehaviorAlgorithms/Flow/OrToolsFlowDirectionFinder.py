@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import io
 import os
 import pathlib
@@ -9,7 +10,8 @@ import struct
 import subprocess
 import sys
 import typing
-from collections import defaultdict
+from collections import defaultdict, deque
+from typing import Callable, Any
 
 import logbook
 import numpy as np
@@ -18,15 +20,88 @@ from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderAB
 from BehaviorAlgorithms.Flow.FlowGraphModels import IslandFlowNode, IslandMaxFlowGraph, FlowGraphMethod
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
 from BehaviorAlgorithms.Flow.NxFlowGraphData import NxFlowGraphData
+from BehaviorAlgorithms.Flow.TileIslandFlowRole import TileIslandFlowRole
 from MapMatrix import MapMatrix
+from Path import Path
 from PerformanceTimer import PerformanceTimer
+from base.client.tile import Tile
 
 DEMAND_SATURATION_FROM_GENERAL_ONLY = False
+DEBUG_OR_TOOLS_FAKE_NODE_ESCAPE_ARCS = True
+DEBUG_OR_TOOLS_FAKE_NODE_ESCAPE_COST = 1000000
 _ORTOOLS_SIDECAR_ENV_VAR = 'GENERALS_BOT_ORTOOLS_SIDECAR_PYTHON'
 
 
 class OrToolsSidecarError(Exception):
     pass
+
+
+# OR-Tools SimpleMinCostFlow.Status enum values. These are stable across the OR-Tools
+# versions we support; verified at runtime against smcf.OPTIMAL when solving in-process.
+_ORTOOLS_STATUS_NAMES: typing.Dict[int, str] = {
+    0: 'NOT_SOLVED',
+    1: 'OPTIMAL',
+    2: 'FEASIBLE',
+    3: 'INFEASIBLE',
+    4: 'UNBALANCED',
+    5: 'BAD_RESULT',
+    6: 'BAD_COST_RANGE',
+}
+
+
+class OrToolsSolveError(Exception):
+    """
+    Raised when SimpleMinCostFlow.solve() returns any status other than OPTIMAL.
+
+    Combats: UnitTests/test_FlowExpansion.FlowExpansionUnitTests.test_should_not_fail_to_find_flow_expansion_routes__what_the_fuck
+    Previously compute_flow swallowed every non-optimal status (e.g. status=3 INFEASIBLE
+    caused by unreachable demand islands) and silently returned an empty flow dict, which
+    made the whole flow expansion produce zero inter-island flow with no error. Interpreting
+    the status is the solver client's job, not the caller's, so any failure status is now
+    surfaced as an explicit exception carrying the decoded status name.
+    """
+
+    def __init__(self, status: int):
+        self.status: int = status
+        self.status_name: str = _ORTOOLS_STATUS_NAMES.get(status, f'UNKNOWN_{status}')
+        super().__init__(
+            f'OR-Tools SimpleMinCostFlow returned non-optimal status {status} ({self.status_name}). '
+            f'The min-cost-flow graph is not solvable as built — typically INFEASIBLE due to '
+            f'unreachable demand islands, or UNBALANCED supplies.'
+        )
+
+
+@dataclasses.dataclass(slots=True)
+class OrToolsSolveResult:
+    """Typed result of a successful (OPTIMAL) SimpleMinCostFlow solve.
+
+    flows[i] is the flow on the i-th arc (parallel to the graph_data arc arrays).
+    """
+
+    flows: typing.List[int]
+    optimal_cost: int
+
+
+@dataclasses.dataclass(slots=True)
+class FlowPathIslandConstraints:
+    constrained_source_island_ids: typing.Set[int]
+    allowed_destination_island_ids_by_source_id: typing.Dict[int, typing.Set[int]]
+
+
+def _build_solve_result_or_raise(
+    status: int,
+    optimal_status: int,
+    flows: typing.List[int],
+    optimal_cost: int | None,
+) -> OrToolsSolveResult:
+    """
+    Convert raw OR-Tools solve output (shared by the in-process client and the serialized
+    sidecar response) into a typed OrToolsSolveResult, raising OrToolsSolveError for any
+    non-optimal status instead of returning a sentinel/empty result.
+    """
+    if status != optimal_status:
+        raise OrToolsSolveError(status)
+    return OrToolsSolveResult(flows=[int(value) for value in flows], optimal_cost=int(optimal_cost))
 
 
 class OrToolsSidecarClient(object):
@@ -43,7 +118,7 @@ class OrToolsSidecarClient(object):
             cls._instance = cls()
         return cls._instance
 
-    def solve(self, graph_data: OrToolsGraphData) -> dict:
+    def solve(self, graph_data: OrToolsGraphData) -> OrToolsSolveResult:
         self._ensure_process_started()
         request = {
             'command': 'solve',
@@ -60,7 +135,15 @@ class OrToolsSidecarClient(object):
         error = response.get('error')
         if error:
             raise OrToolsSidecarError(error)
-        return response
+        # The sidecar wire format is a dict (a serialization boundary); decode it into the
+        # same typed result/exception contract as the in-process client so compute_flow is
+        # agnostic to which backend ran.
+        return _build_solve_result_or_raise(
+            int(response['status']),
+            int(response['optimal_status']),
+            response['flows'],
+            response['optimal_cost'],
+        )
 
     def _ensure_process_started(self) -> None:
         if self._process is not None and self._process.poll() is None:
@@ -163,7 +246,7 @@ class InProcOrToolsClient(object):
             cls._instance = cls()
         return cls._instance
 
-    def solve(self, graph_data: OrToolsGraphData) -> dict:
+    def solve(self, graph_data: OrToolsGraphData) -> OrToolsSolveResult:
         min_cost_flow = self._get_min_cost_flow_module()
         smcf = min_cost_flow.SimpleMinCostFlow()
         all_arcs = smcf.add_arcs_with_capacity_and_unit_cost(
@@ -174,16 +257,15 @@ class InProcOrToolsClient(object):
         )
         smcf.set_nodes_supplies(np.arange(len(graph_data.node_supplies), dtype=np.int64), graph_data.node_supplies)
         status = int(smcf.solve())
-        result = {
-            'status': status,
-            'optimal_status': int(smcf.OPTIMAL),
-            'flows': [],
-            'optimal_cost': None,
-        }
-        if status == int(smcf.OPTIMAL):
-            result['flows'] = [int(value) for value in smcf.flows(all_arcs)]
-            result['optimal_cost'] = int(smcf.optimal_cost())
-        return result
+        optimal_status = int(smcf.OPTIMAL)
+        # Interpret the status here so callers never have to guess what an empty result means;
+        # any non-optimal status (INFEASIBLE/UNBALANCED/etc) raises explicitly.
+        if status != optimal_status:
+            raise OrToolsSolveError(status)
+        return OrToolsSolveResult(
+            flows=[int(value) for value in smcf.flows(all_arcs)],
+            optimal_cost=int(smcf.optimal_cost()),
+        )
 
     def _get_min_cost_flow_module(self):
         if self._min_cost_flow_module is None:
@@ -220,6 +302,11 @@ class OrToolsGraphData(object):
         neutral_sinks: typing.Set[int],
         fake_nodes: typing.Set[int],
         cumulative_demand: int,
+        disconnected_component_island_ids: typing.Set[int] | None = None,
+        directed_repair_source_island_ids: typing.Set[int] | None = None,
+        directed_repair_sink_island_ids: typing.Set[int] | None = None,
+        overflow_dump_target_island_ids: typing.Set[int] | None = None,
+        debug_fake_escape_arc_indexes: typing.Set[int] | None = None,
     ):
         self.start_nodes: np.ndarray = start_nodes
         self.end_nodes: np.ndarray = end_nodes
@@ -238,6 +325,31 @@ class OrToolsGraphData(object):
         self.neutral_sinks: typing.Set[int] = neutral_sinks
         self.fake_nodes: typing.Set[int] = fake_nodes
         self.cumulative_demand: int = cumulative_demand
+        self.disconnected_component_island_ids: typing.Set[int] = (
+            disconnected_component_island_ids if disconnected_component_island_ids is not None else set()
+        )
+        """Island unique_ids that were in a graph component disconnected from the enemy general
+        and had to be bridged to a fake flow node to keep the min-cost-flow feasible. See the
+        Phase 3.5 connectivity repair in DirectOrToolsGraphBuilder.build()."""
+        self.directed_repair_source_island_ids: typing.Set[int] = (
+            directed_repair_source_island_ids if directed_repair_source_island_ids is not None else set()
+        )
+        """Island unique_ids that were supply nodes unable to reach any sink due to one-way borders,
+        repaired by draining to the fake node. See Phase 3.6 directed reachability repair."""
+        self.directed_repair_sink_island_ids: typing.Set[int] = (
+            directed_repair_sink_island_ids if directed_repair_sink_island_ids is not None else set()
+        )
+        """Island unique_ids that were sink nodes unreachable from any source due to one-way borders,
+        repaired by injecting from the fake node. See Phase 3.6 directed reachability repair."""
+        self.overflow_dump_target_island_ids: typing.Set[int] = (
+            overflow_dump_target_island_ids if overflow_dump_target_island_ids is not None else set()
+        )
+        """Island unique_ids that receive overflow dump arcs from the fake node to guarantee feasibility
+        when demand-saturation arcs are saturated. See Phase 3.4 overflow dump."""
+        self.debug_fake_escape_arc_indexes: typing.Set[int] = (
+            debug_fake_escape_arc_indexes if debug_fake_escape_arc_indexes is not None else set()
+        )
+        self.debug_fake_escape_usage_by_island: typing.Dict[int, int] = {}
 
 
 class DirectOrToolsGraphBuilder(object):
@@ -276,6 +388,46 @@ class DirectOrToolsGraphBuilder(object):
             f'{demand_text}{supply_text} topTiles={self._format_island_tiles(island)} borders=[{border_text}]'
         )
 
+    def _build_flow_path_island_constraints(
+        self,
+        islands: 'TileIslandBuilder',
+        constrained_flow_paths: typing.List[Path] | None,
+    ) -> FlowPathIslandConstraints:
+        constraints = FlowPathIslandConstraints(set(), {})
+        if not constrained_flow_paths:
+            return constraints
+
+        for path in constrained_flow_paths:
+            for move in path.get_move_list():
+                source_island = islands.tile_island_lookup.raw[move.source.tile_index]
+                destination_island = islands.tile_island_lookup.raw[move.dest.tile_index]
+                if source_island is None or destination_island is None:
+                    continue
+                source_island_id = source_island.unique_id
+                constraints.constrained_source_island_ids.add(source_island_id)
+                if source_island_id == destination_island.unique_id:
+                    continue
+                allowed_destinations = constraints.allowed_destination_island_ids_by_source_id.get(source_island_id)
+                if allowed_destinations is None:
+                    allowed_destinations = set()
+                    constraints.allowed_destination_island_ids_by_source_id[source_island_id] = allowed_destinations
+                allowed_destinations.add(destination_island.unique_id)
+
+        return constraints
+
+    def _is_border_edge_blocked_by_flow_path_constraints(
+        self,
+        source_island: 'TileIsland',
+        destination_island: 'TileIsland',
+        constraints: FlowPathIslandConstraints,
+    ) -> bool:
+        if source_island.unique_id not in constraints.constrained_source_island_ids:
+            return False
+        allowed_destinations = constraints.allowed_destination_island_ids_by_source_id.get(source_island.unique_id)
+        if allowed_destinations is None:
+            return True
+        return destination_island.unique_id not in allowed_destinations
+
     def build(
         self,
         islands: 'TileIslandBuilder',
@@ -290,6 +442,7 @@ class DirectOrToolsGraphBuilder(object):
         army_override_matrix: 'MapMatrixInterface[int] | None',
         negativeTiles: 'TileSet | None',
         threat_blocking_tiles: typing.Dict['Tile', typing.Any] | None,
+        constrained_flow_paths: typing.List[Path] | None,
         perf_timer: 'PerformanceTimer',
     ) -> OrToolsGraphData:
         """
@@ -299,6 +452,28 @@ class DirectOrToolsGraphBuilder(object):
 
         target_general_island = islands.tile_island_lookup.raw[enemy_general.tile_index]
         fr_general_island = islands.tile_island_lookup.raw[friendly_general.tile_index]
+        flow_path_constraints = self._build_flow_path_island_constraints(islands, constrained_flow_paths)
+
+        # Exclude islands that are not reachable on the map from ALL supply/demand and arc
+        # construction. Combats: UnitTests/test_FlowExpansion.FlowExpansionUnitTests.test_should_not_fail_to_find_flow_expansion_routes__what_the_fuck
+        # Unreachable demand islands (e.g. fogged enemy land disconnected from our territory)
+        # were being fed into the demands, leaving an isolated component with non-zero net
+        # supply, which made the whole min-cost-flow INFEASIBLE (status=3) and silently
+        # produced zero inter-island flow. The map already knows what is reachable, so we
+        # simply test a sample tile (highest-army tile) of each island against reachable_tiles.
+        excluded_island_ids: typing.Set[int] = set()
+        excluded_sample_tiles: typing.List['Tile'] = []
+        for island in islands.all_tile_islands:
+            sample_tile = island.tiles_by_army[0]
+            if sample_tile not in map_obj.reachable_tiles:
+                excluded_island_ids.add(island.unique_id)
+                excluded_sample_tiles.append(sample_tile)
+        if excluded_sample_tiles:
+            # This should be extremely rare; log the problematic sample tiles on one line.
+            logbook.info(
+                f'FLOW_EXCLUDED_UNREACHABLE_ISLANDS count={len(excluded_sample_tiles)} '
+                f'sampleTiles=[{", ".join(str(t) for t in excluded_sample_tiles)}]'
+            )
 
         def _get_island_army_sum(island: 'TileIsland') -> int:
             if army_override_matrix is None:
@@ -344,6 +519,10 @@ class DirectOrToolsGraphBuilder(object):
         with perf_timer.begin_move_event('OrTools build phase1 demands and in/out nodes per island'):
             flow_diag_islands: typing.Set[int] = set()
             for island in islands.all_tile_islands:
+                # Unreachable islands contribute no node, no supply/demand, and no split edge.
+                # See excluded_island_ids comment above (the __what_the_fuck test).
+                if island.unique_id in excluded_island_ids:
+                    continue
                 island_army_sum = _get_island_army_sum(island)
                 cost = island.tile_count # - 1
                 demand = island.tile_count - island_army_sum
@@ -410,21 +589,66 @@ class DirectOrToolsGraphBuilder(object):
                 arc_caps.append(100000)
                 arc_costs.append(cost)
 
+        # Tests/test_ArmyTracker.py ArmyTrackerTests.test_should_not_create_phantom_visible_army:
+        # Diagnose persistent INFEASIBLE status after fog-land builder fix. Log per-team supply/demand
+        # breakdown to identify if there are no enemy demand nodes or other imbalances.
+        friendly_demand_islands = []
+        enemy_demand_islands = []
+        neutral_demand_islands = []
+        for island in islands.all_tile_islands:
+            if island.unique_id in excluded_island_ids:
+                continue
+            if island.unique_id in demands:
+                demand = demands[island.unique_id]
+                if island.team == team:
+                    friendly_demand_islands.append((island.unique_id, demand, island.tile_count, island.sum_army))
+                elif island.team == target_team:
+                    enemy_demand_islands.append((island.unique_id, demand, island.tile_count, island.sum_army))
+                elif island.team == -1:
+                    neutral_demand_islands.append((island.unique_id, demand, island.tile_count, island.sum_army))
+        logbook.warning(
+            f'FLOW_INFEASIBLE_TEAM_BREAKDOWN team={team} target_team={target_team} '
+            f'friendly_demand_count={len(friendly_demand_islands)} friendly_demand_sum={sum(d for _, d, _, _ in friendly_demand_islands)} '
+            f'friendly_army_supply={friendly_army_supply} '
+            f'enemy_demand_count={len(enemy_demand_islands)} enemy_demand_sum={enemy_army_demand} '
+            f'neutral_demand_count={len(neutral_demand_islands)} neutral_demand_sum={sum(d for _, d, _, _ in neutral_demand_islands)} '
+            f'cumulative_demand={cumulative_demand}'
+        )
+
         # ----------------------------------------------------------------
         # Phase 2: border edges and neutral sinks (mirrors build_graph_data)
         # ----------------------------------------------------------------
         with perf_timer.begin_move_event('OrTools build phase2 border edges'):
             neut_sinks: typing.Set[int] = set()
             for island in islands.all_tile_islands:
+                # Skip unreachable islands entirely so we never create a border edge that
+                # references a node that phase 1 did not add (the __what_the_fuck test).
+                if island.unique_id in excluded_island_ids:
+                    continue
                 role = island_roles[island.unique_id]
 
                 for movable_island in island.border_islands:
+                    # Never create an edge into an unreachable neighbour island.
+                    if movable_island.unique_id in excluded_island_ids:
+                        continue
                     if self._is_border_edge_blocked_by_threat_blocking_tiles(island, movable_island, threat_blocking_tiles):
+                        logbook.warning(
+                            f'FLOW_THREAT_BLOCKED_BORDER_EDGE removedDirectedArc=-{island.unique_id}->{movable_island.unique_id} '
+                            f'sourceIsland={island.unique_id}(tile={island.tiles_by_army[0]},team={island.team},'
+                            f'army={island.sum_army},tiles={island.tile_count}) '
+                            f'destinationIsland={movable_island.unique_id}(tile={movable_island.tiles_by_army[0]},'
+                            f'team={movable_island.team},army={movable_island.sum_army},tiles={movable_island.tile_count})'
+                        )
+                        continue
+                    # UnitTests/FlowExpansionSubtests/test_FlowExpansion_ExternalOptions.py
+                    # ExternalOptionsTests.test_constrained_flow_paths_limit_only_outgoing_edges_from_path_islands:
+                    # path-constrained islands must only emit flow along island transitions explicitly present
+                    # in the supplied Path objects, while other islands may still emit edges into them.
+                    if self._is_border_edge_blocked_by_flow_path_constraints(island, movable_island, flow_path_constraints):
                         if self.log_debug:
-                            logbook.warning(
-                                f'FLOW_THREAT_BLOCKED_BORDER_EDGE '
-                                f'{island.unique_id}(team={island.team},tiles={self._format_island_tiles(island)}) '
-                                f'-> {movable_island.unique_id}(team={movable_island.team},tiles={self._format_island_tiles(movable_island)})'
+                            logbook.info(
+                                f'FLOW_PATH_CONSTRAINT_BLOCKED_BORDER_EDGE removedDirectedArc=-{island.unique_id}->{movable_island.unique_id} '
+                                f'sourceIsland={island.unique_id} destinationIsland={movable_island.unique_id}'
                             )
                         continue
                     # Edge: output port → neighbour input port (weight=1, capacity=100000)
@@ -433,40 +657,56 @@ class DirectOrToolsGraphBuilder(object):
                     arc_starts.append(src)
                     arc_ends.append(dst)
                     arc_caps.append(100000)
-                    cost = 3
+                    cost = 30
                     if island.team == team:
+                        # FROM FRIENDLY ISLAND
                         if movable_island.team == target_team:
                             # ALWAYS prefer to flow into enemy land from friendly land directly. This is our most time effective movement strategy.
-                            cost = 1
+                            # TODO we want to AVOID large enemy armies when on their land, but we DONT want to avoid them when they're on our land. Need to be intelligent about that then.
+                            # TODO keep in sync with other paths below
+                            cost = movable_island.sum_army / movable_island.tile_count
                         elif movable_island.team == team:
                             # TODO this is actually not ideal, we'd prefer going to neutral and merging back into friendly land when necessary (as it gives us more immediate short neut capture options to play with)
                             #  But currently we are unable to merge multiple border pair streams back into one gather path, so the 'merged in' path where we go neutral -> friendly land will never get used and kind
                             #  of just dead ends as a one-or-the-other group choice instead of trying to use the combined army from merging paths to capture.
                             #  Revisit later with some approach that recognizes the option to merge streams AFTER the border pair point kind like how we do the merge / collapse grouping logic for gather-through tile options or something idk.
                             #  THEN we can make this more expensive again so we prefer neut caps first over merging streams.
-                            cost -= 1
+                            cost = 100 // max(1, movable_island.sum_army / movable_island.tile_count)
+                            # 100 army = 1 cost
+                            # 50 army = 2 cost
+                            # 8 army = 12 cost
+                            # 5 army = 20 cost
+                            # 3 army = 33 cost
+                            # 2 army = 50 cost
+                            # 1 army = 100 cost
+                            # 0 army = 100 cost
+                            # NOTE the graduated costs are necessary to avoid merging streams by like, travelling through 2's before joining later, rather than joining the high value stream immediately (caused gathers to lose tiles without this)
+
                         elif movable_island.team == -1:
                             cost += 0
                     elif island.team == -1:
+                        # FROM NEUTRAL ISLAND
+                        if movable_island.team == team:
+                            # moving back onto our own land should be penalized
+                            cost += 2000 // max(1, movable_island.sum_army / movable_island.tile_count)
+                        elif movable_island.team == target_team:
+                            # low cost moving to enemy land, we want that
+                            # cost = 20 // max(1, movable_island.sum_army / movable_island.tile_count)
+                            cost = movable_island.sum_army / movable_island.tile_count
+                        elif movable_island.team == -1:
+                            # normal cost neutral to neutral
+                            cost += 0
+                    elif island.team == target_team:
+                        # FROM TARGET ISLAND
                         if movable_island.team == team:
                             # moving back onto our own land should be penalized
                             cost += 20000 // max(1, movable_island.sum_army / movable_island.tile_count)
                         elif movable_island.team == target_team:
                             # low cost moving to enemy land, we want that
-                            cost = 1
-                        elif movable_island.team == -1:
-                            # normal cost neutral to neutral
-                            cost += 0
-                    elif island.team == target_team:
-                        if movable_island.team == team:
-                            # moving back onto our own land should be penalized
-                            cost += 20000 // max(1, movable_island.sum_army / movable_island.tile_count)
-                        elif movable_island.team == target_team:
-                            # no cost moving to enemy land, we want that
-                            cost = 1
+                            cost = movable_island.sum_army / movable_island.tile_count
                         elif movable_island.team == -1:
                             # slight penalty moving to neutral from enemy land
-                            cost += 1
+                            cost += 10
 
 
                     # hack
@@ -484,8 +724,8 @@ class DirectOrToolsGraphBuilder(object):
                     if self.log_debug and (island.unique_id in flow_diag_islands or movable_island.unique_id in flow_diag_islands):
                         logbook.warning(
                             f'FLOW_DIAG_BORDER_EDGE use_neutral_flow={use_neutral_flow} '
-                            f'{island.unique_id}(team={island.team},army={island.sum_army},tiles={island.tile_count}) '
-                            f'-> {movable_island.unique_id}(team={movable_island.team},army={movable_island.sum_army},tiles={movable_island.tile_count}) '
+                            f'{island.unique_id}({island.tiles_by_army[0]} team={island.team},army={island.sum_army},tiles={island.tile_count}) '
+                            f'-> {movable_island.unique_id}({movable_island.tiles_by_army[0]} team={movable_island.team},army={movable_island.sum_army},tiles={movable_island.tile_count}) '
                             f'arc={src}->{dst} cost=1 cap=100000'
                         )
 
@@ -495,6 +735,7 @@ class DirectOrToolsGraphBuilder(object):
                     sink_flag = role.is_neutral_sink_no_neut
                 if sink_flag:
                     neut_sinks.add(island.unique_id)
+
         # ----------------------------------------------------------------
         # Phase 3: fakeNode (mirrors build_graph_data)
         # ----------------------------------------------------------------
@@ -536,6 +777,8 @@ class DirectOrToolsGraphBuilder(object):
                 # Find all friendly cities with unblocked edges
                 friendly_cities_with_edges = []
                 for island in islands.all_tile_islands:
+                    if island.unique_id in excluded_island_ids:
+                        continue
                     if island.team == team and any(tile.isCity for tile in island.tile_set):
                         unblocked_count = sum(
                             1 for b in island.border_islands
@@ -567,7 +810,7 @@ class DirectOrToolsGraphBuilder(object):
                     movable_tiles_with_edges = []
                     for tile in friendly_general.movable:
                         tile_island = islands.tile_island_lookup.raw[tile.tile_index]
-                        if tile_island is not None and tile_island.team == team:
+                        if tile_island is not None and tile_island.team == team and tile_island.unique_id not in excluded_island_ids:
                             unblocked_count = sum(
                                 1 for b in tile_island.border_islands
                                 if not self._is_border_edge_blocked_by_threat_blocking_tiles(tile_island, b, threat_blocking_tiles)
@@ -623,7 +866,7 @@ class DirectOrToolsGraphBuilder(object):
                     if len(pressure_islands_by_id) >= 11:
                         break
                     pressure_island = islands.tile_island_lookup.raw[pressure_tile.tile_index]
-                    if pressure_island is not None:
+                    if pressure_island is not None and pressure_island.unique_id not in excluded_island_ids:
                         pressure_islands_by_id[pressure_island.unique_id] = pressure_island
                 pressure_islands = list(pressure_islands_by_id.values())
                 friendly_pressure_capacities_by_island_id = {}
@@ -655,7 +898,7 @@ class DirectOrToolsGraphBuilder(object):
             if use_neutral_flow:
                 for neut_sink_id in neut_sinks:
                     isl = islands.tile_islands_by_unique_id[neut_sink_id]
-                    capacity = isl.tile_count
+                    capacity = 100000
                     arc_starts.append(fake_node)
                     arc_ends.append(neut_sink_id)
                     arc_caps.append(capacity)
@@ -668,7 +911,7 @@ class DirectOrToolsGraphBuilder(object):
             # -targetGeneralIsland.unique_id → fakeNode
             arc_starts.append(-target_general_island.unique_id)
             arc_ends.append(fake_node)
-            arc_caps.append(10000)
+            arc_caps.append(100000)
             arc_costs.append(backpressure_weight)
             all_node_ids.add(-target_general_island.unique_id)
 
@@ -697,6 +940,43 @@ class DirectOrToolsGraphBuilder(object):
                 arc_costs.append(0)
                 all_node_ids.add(friendly_pressure_island_id)
 
+            # ---------------------------------------------------------------------------------
+            # OVERFLOW DUMP arcs (guarantee feasibility).
+            # ---------------------------------------------------------------------------------
+            # The distributed demand-saturation arcs above have capacities that sum to EXACTLY the
+            # fake node supply (fake_node_excess_supply), leaving zero routing slack. When the chosen
+            # injection islands (enemy general + friendly pressure islands) cannot forward all of the
+            # injected phantom army to reachable real demand, the min-cost-flow becomes INFEASIBLE
+            # (proven by the FLOW_FEASIBILITY_BUG max-flow/min-cut diagnostic: the saturated min-cut
+            # is exactly these fake-node arcs). The original NetworkXFlowDirectionFinder never hit this
+            # because it injects all phantom supply through the enemy general AND friendly general with
+            # capacity=1000000 (uncapped), giving the solver a high-capacity escape.
+            #
+            # We restore that escape WITHOUT discarding the distributed-pressure behaviour by adding
+            # high-cost, high-capacity overflow arcs from the fake node into both the enemy general and
+            # the friendly fake sink. Total fake out-capacity now exceeds its supply, so the solver is
+            # never FORCED to saturate the cheap distributed arcs; it prefers them (cost 0 / backpressure)
+            # and only routes the un-placeable remainder through these expensive overflow arcs, which
+            # the central general / friendly-sink regions can forward to whatever demand is reachable.
+            # OVERFLOW_DUMP_COST is higher than every other fake-node / bridge cost so overflow is a
+            # genuine last resort and never perturbs the normal flow solution.
+            OVERFLOW_DUMP_COST = 100000
+            overflow_dump_capacity = 100000
+            for overflow_target_island_id in (target_general_island.unique_id, fr_fake_sink_island.unique_id):
+                arc_starts.append(fake_node)
+                arc_ends.append(overflow_target_island_id)
+                arc_caps.append(overflow_dump_capacity)
+                arc_costs.append(OVERFLOW_DUMP_COST)
+                all_node_ids.add(overflow_target_island_id)
+            # Always-on log: records that the overflow-dump safety valve exists for this build so that
+            # if it is ever exercised (or still insufficient) the FLOW_FEASIBILITY_BUG diagnostic below
+            # can be correlated with it.
+            logbook.warning(
+                f'FLOW_OVERFLOW_DUMP fakeNode={fake_node} overflowCapacityEach={overflow_dump_capacity} '
+                f'cost={OVERFLOW_DUMP_COST} enemyGeneralIsland={target_general_island.unique_id} '
+                f'friendlyFakeSinkIsland={fr_fake_sink_island.unique_id}'
+            )
+
             # Log total fake node arc capacity for debugging
             total_fake_node_capacity = fake_node_enemy_general_fallback_capacity + sum(friendly_pressure_capacities_by_island_id.values())
             logbook.warning(
@@ -704,9 +984,525 @@ class DirectOrToolsGraphBuilder(object):
                 f'excess_supply={fake_node_excess_supply} total_fake_node_capacity={total_fake_node_capacity} '
             )
 
+        # Track overflow dump targets for rendering (only set when cumulative_demand > 0)
+        overflow_dump_target_island_ids: typing.Set[int] = set()
+        if cumulative_demand > 0:
+            overflow_dump_target_island_ids = {target_general_island.unique_id, fr_fake_sink_island.unique_id}
+
+        # Track directed repair islands for rendering (initialized before phase 3.6)
+        directed_repair_source_island_ids: typing.Set[int] = set()
+        directed_repair_sink_island_ids: typing.Set[int] = set()
+
+        # ----------------------------------------------------------------
+        # Phase 3.5: connectivity repair (GUARANTEES FEASIBILITY)
+        # ----------------------------------------------------------------
+        # A min-cost-flow with globally balanced supply is still INFEASIBLE when the arc
+        # graph splits into >=2 weakly connected components and some component has non-zero
+        # net supply: that component cannot route its supply/demand to the rest of the graph
+        # (the single main fakeNode supply = cumulative_demand counts ALL included islands,
+        # but only the main component can reach the fakeNode). This is the root cause of every
+        # OrToolsSolveError INFEASIBLE we have seen (e.g. fogged enemy/neutral land cut off
+        # from our territory after threat_blocking_tiles removed border edges).
+        #
+        # Fix: after ALL edges are built (split + border + fakeNode arcs, with threat-blocked
+        # edges already excluded), do an undirected BFS for connected components seeded from
+        # the enemy general's component (the "main graph"). Every OTHER component gets bridged
+        # to the main fakeNode through an ADDITIONAL fake flow node attached to one arbitrary
+        # island in that component. Because every island has a +id->-id split and borders are
+        # symmetric, a single bridge per component is enough for any supply in it to route to
+        # the global balancing fakeNode, so the whole graph becomes one connected, balanced,
+        # feasible component. The bridge arcs use a high cost so the solver only routes through
+        # them when forced to (for feasibility), never preferentially over real expansion paths,
+        # and the bridge/comp-fake nodes are tracked in fake_nodes so they never appear as real
+        # island-to-island flow edges.
+        #
+        # The arbitrary island per disconnected component is chosen deterministically as the
+        # island whose highest-army tile (tiles_by_army[0]) has the smallest
+        # intergeneral_analysis.aMap distance value, so the choice is stable across rebuilds.
+        all_fake_node_ids: typing.Set[int] = {fake_node}
+        disconnected_component_island_ids: typing.Set[int] = set()
+        with perf_timer.begin_move_event('OrTools build phase3.5 connectivity repair'):
+            # Build the connectivity adjacency from REAL island arcs ONLY (split edges +id->-id
+            # and border edges -A->+B). We MUST exclude the fakeNode arcs here: the single main
+            # fakeNode connects the enemy general island, the friendly fake sink, and scattered
+            # pressure islands all together, which would falsely merge genuinely separate
+            # territory regions into one component and hide the real disconnections that cause
+            # INFEASIBLE. Restricting to real island nodes gives the true land-connectivity graph.
+            adjacency: typing.Dict[int, typing.List[int]] = defaultdict(list)
+            for arc_idx in range(len(arc_starts)):
+                start_node = arc_starts[arc_idx]
+                end_node = arc_ends[arc_idx]
+                if abs(start_node) not in islands.tile_islands_by_unique_id:
+                    continue
+                if abs(end_node) not in islands.tile_islands_by_unique_id:
+                    continue
+                adjacency[start_node].append(end_node)
+                adjacency[end_node].append(start_node)
+
+            visited: typing.Set[int] = set()
+
+            def _bfs_component(seed: int) -> typing.List[int]:
+                """Undirected BFS collecting every node reachable from seed (excluding already-visited)."""
+                if seed in visited:
+                    return []
+                component: typing.List[int] = []
+                queue: typing.Deque[int] = deque((seed,))
+                visited.add(seed)
+                while queue:
+                    node = queue.popleft()
+                    component.append(node)
+                    for neighbour in adjacency[node]:
+                        if neighbour not in visited:
+                            visited.add(neighbour)
+                            queue.append(neighbour)
+                return component
+
+            # Seed the "main graph" from the enemy general island, then walk every other island
+            # looking for components disconnected from it. Timed separately so the BFS connectivity
+            # loop cost is visible in the perf logs (it runs on every flow graph build).
+            aMap = intergeneral_analysis.aMap
+            with perf_timer.begin_move_event('OrTools build phase3.5 BFS connectivity loop'):
+                # The main fakeNode connects to the enemy general (and friendly fake sink / pressure
+                # islands), so the whole main graph is captured by this single seed BFS.
+                _bfs_component(target_general_island.unique_id)
+
+                for island in islands.all_tile_islands:
+                    if island.unique_id in excluded_island_ids:
+                        continue
+                    if island.unique_id in visited:
+                        continue
+                    # This island is in a component disconnected from the enemy general's main graph.
+                    # Collect the whole component, then bridge it to the main fakeNode.
+                    component_nodes = _bfs_component(island.unique_id)
+                    component_island_ids = [
+                        node_id for node_id in component_nodes
+                        if node_id > 0 and node_id in islands.tile_islands_by_unique_id
+                    ]
+                    if not component_island_ids:
+                        # Component had no real islands (only output ports / fake nodes); nothing to bridge.
+                        continue
+                    chosen_island = min(
+                        (islands.tile_islands_by_unique_id[node_id] for node_id in component_island_ids),
+                        key=lambda isl: aMap.raw[isl.tiles_by_army[0].tile_index],
+                    )
+
+                    comp_fake_node = random.randint(1000000, 9000000)
+                    while comp_fake_node in all_node_ids or comp_fake_node in islands.tile_islands_by_unique_id:
+                        comp_fake_node = random.randint(1000000, 9000000)
+
+                    # Bridge arcs (high cost so they are only used when required for feasibility):
+                    #   comp_fake -> +chosen_island   : inject supply into the disconnected component
+                    #   -chosen_island -> comp_fake    : drain supply out of the disconnected component
+                    #   comp_fake <-> main fakeNode    : connect the component to the global balancing node
+                    bridge_arcs = (
+                        (comp_fake_node, chosen_island.unique_id),
+                        (-chosen_island.unique_id, comp_fake_node),
+                        (comp_fake_node, fake_node),
+                        (fake_node, comp_fake_node),
+                    )
+                    for bridge_start, bridge_end in bridge_arcs:
+                        arc_starts.append(bridge_start)
+                        arc_ends.append(bridge_end)
+                        arc_caps.append(100000)
+                        arc_costs.append(10000)
+                        all_node_ids.add(bridge_start)
+                        all_node_ids.add(bridge_end)
+
+                    node_supply_map[comp_fake_node] = 0
+                    all_node_ids.add(comp_fake_node)
+                    all_fake_node_ids.add(comp_fake_node)
+                    disconnected_component_island_ids.add(chosen_island.unique_id)
+
+                    component_net_supply = sum(node_supply_map.get(node_id, 0) for node_id in component_nodes)
+                    # Always-on log: a disconnected component had to be bridged to keep the flow feasible.
+                    logbook.warning(
+                        f'FLOW_CONNECTIVITY_REPAIR disconnected component bridged: compFakeNode={comp_fake_node} '
+                        f'islandCount={len(component_island_ids)} netSupply={component_net_supply} '
+                        f'chosenIsland={chosen_island.unique_id}(team={chosen_island.team},'
+                        f'tile={chosen_island.tiles_by_army[0]},aDist={aMap.raw[chosen_island.tiles_by_army[0].tile_index]})'
+                    )
+
+        # ----------------------------------------------------------------
+        # Phase 3.6: post-repair feasibility verification diagnostic.
+        # ----------------------------------------------------------------
+        # Every flow expansion attempt is ALWAYS feasible by construction; any INFEASIBLE result
+        # is a BUG in this graph setup. After the connectivity repair, the graph MUST be globally
+        # balanced (sum of all node supplies == 0) AND every weakly connected component (over ALL
+        # arcs, including the fakeNode + bridge arcs) MUST have net supply 0 -- otherwise the
+        # min-cost-flow will be INFEASIBLE. This block recomputes weak components over the FULL
+        # arc set and logs any component whose net supply is non-zero so the root cause is visible.
+        with perf_timer.begin_move_event('OrTools build phase3.6 feasibility verification'):
+            full_parent: typing.Dict[int, int] = {}
+
+            def _full_find(node_id: int) -> int:
+                root = node_id
+                while full_parent.get(root, root) != root:
+                    root = full_parent.get(root, root)
+                while full_parent.get(node_id, node_id) != root:
+                    nxt = full_parent.get(node_id, node_id)
+                    full_parent[node_id] = root
+                    node_id = nxt
+                return root
+
+            def _full_union(node_a: int, node_b: int) -> None:
+                root_a = _full_find(node_a)
+                root_b = _full_find(node_b)
+                if root_a != root_b:
+                    full_parent[root_b] = root_a
+
+            for arc_idx in range(len(arc_starts)):
+                _full_union(arc_starts[arc_idx], arc_ends[arc_idx])
+
+            full_comp_members: typing.Dict[int, typing.List[int]] = defaultdict(list)
+            for node_id in all_node_ids:
+                full_comp_members[_full_find(node_id)].append(node_id)
+
+            global_net_supply = sum(node_supply_map.get(node_id, 0) for node_id in all_node_ids)
+            if global_net_supply != 0:
+                logbook.error(
+                    f'FLOW_FEASIBILITY_BUG global net supply != 0 (globalNetSupply={global_net_supply}). '
+                    f'The min-cost-flow graph is UNBALANCED and will be INFEASIBLE -- this is a graph-setup bug.'
+                )
+            for comp_root, member_nodes in full_comp_members.items():
+                net_supply = sum(node_supply_map.get(node_id, 0) for node_id in member_nodes)
+                if net_supply == 0:
+                    continue
+                supply_islands = []
+                for node_id in member_nodes:
+                    supply = node_supply_map.get(node_id, 0)
+                    if node_id > 0 and supply != 0 and node_id in islands.tile_islands_by_unique_id:
+                        isl = islands.tile_islands_by_unique_id[node_id]
+                        supply_islands.append(f'{node_id}(t{isl.team},{isl.tiles_by_army[0]},or_supply={supply})')
+                logbook.error(
+                    f'FLOW_FEASIBILITY_BUG weak component with non-zero net supply remains after repair: '
+                    f'root={comp_root} nodeCount={len(member_nodes)} netSupply={net_supply} '
+                    f'containsMainFakeNode={fake_node in member_nodes} '
+                    f'supplyIslands=[{", ".join(supply_islands[:48])}]'
+                )
+
+            # DIRECTED reachability check. A balanced, weakly-connected min-cost-flow is still
+            # INFEASIBLE if some sink (supply<0) cannot be reached from ANY source (supply>0) along
+            # DIRECTED arcs, or some source cannot reach ANY sink. This happens when threat-blocking
+            # removed a border edge in only one direction (the block check is directional), leaving a
+            # one-way border so flow physically cannot reach a demand island. Log every such node so
+            # the directional graph-setup bug is visible.
+            forward_adj: typing.Dict[int, typing.List[int]] = defaultdict(list)
+            reverse_adj: typing.Dict[int, typing.List[int]] = defaultdict(list)
+            for arc_idx in range(len(arc_starts)):
+                forward_adj[arc_starts[arc_idx]].append(arc_ends[arc_idx])
+                reverse_adj[arc_ends[arc_idx]].append(arc_starts[arc_idx])
+
+            def _directed_reach(adjacency_map: typing.Dict[int, typing.List[int]], seeds: typing.Iterable[int]) -> typing.Set[int]:
+                reached: typing.Set[int] = set()
+                queue: typing.Deque[int] = deque()
+                for seed in seeds:
+                    if seed not in reached:
+                        reached.add(seed)
+                        queue.append(seed)
+                while queue:
+                    node = queue.popleft()
+                    for neighbour in adjacency_map[node]:
+                        if neighbour not in reached:
+                            reached.add(neighbour)
+                            queue.append(neighbour)
+                return reached
+
+            source_nodes = [node_id for node_id in all_node_ids if node_supply_map.get(node_id, 0) > 0]
+            sink_nodes = [node_id for node_id in all_node_ids if node_supply_map.get(node_id, 0) < 0]
+            with perf_timer.begin_move_event('OrTools build phase3.6 directed reachability BFS repair'):
+                forward_reachable_from_sources = _directed_reach(forward_adj, source_nodes)
+                backward_reachable_from_sinks = _directed_reach(reverse_adj, sink_nodes)
+                real_forward_adj: typing.Dict[int, typing.List[int]] = defaultdict(list)
+                real_reverse_adj: typing.Dict[int, typing.List[int]] = defaultdict(list)
+                with perf_timer.begin_move_event('OrTools build phase3.6 real adjacency for SCC repair'):
+                    for arc_idx in range(len(arc_starts)):
+                        arc_start = arc_starts[arc_idx]
+                        arc_end = arc_ends[arc_idx]
+                        if abs(arc_start) in all_fake_node_ids or abs(arc_end) in all_fake_node_ids:
+                            continue
+                        real_forward_adj[arc_start].append(arc_end)
+                        real_reverse_adj[arc_end].append(arc_start)
+                    real_sink_nodes = [
+                        sink_node for sink_node in sink_nodes
+                        if abs(sink_node) not in all_fake_node_ids
+                    ]
+                    real_backward_reachable_from_sinks = _directed_reach(real_reverse_adj, real_sink_nodes)
+
+                # DIRECTED reachability REPAIR. Flow expansion must ALWAYS be feasible, so we repair
+                # rather than just diagnose. A balanced, weakly-connected graph is still INFEASIBLE if a
+                # sink (supply<0) cannot be reached from ANY source along DIRECTED arcs, or a source
+                # cannot reach ANY sink. This happens when threat-blocking removed a border edge in only
+                # one direction (the block check is directional), leaving a one-way border that traps an
+                # island's army. Repair: drain each trapped source's output to the fake node
+                # (-source -> fakeNode) and let the fake node fill each trapped sink directly
+                # (fakeNode -> +sink), at high cost so only the trapped army uses these arcs. The fake
+                # node can always push into the enemy general (a sink) and is fed by the drains, so every
+                # trapped source/sink becomes routable.
+                DIRECTED_REPAIR_COST = 100000
+                directed_repair_sources: typing.List[int] = []
+                directed_repair_sinks: typing.List[int] = []
+                scc_index_by_node: typing.Dict[int, int] = {}
+                scc_lowlink_by_node: typing.Dict[int, int] = {}
+                scc_stack: typing.List[int] = []
+                scc_nodes_on_stack: typing.Set[int] = set()
+                scc_components: typing.List[typing.List[int]] = []
+                scc_next_index = 0
+
+                def _strongconnect(node_id: int) -> None:
+                    nonlocal scc_next_index
+                    scc_index_by_node[node_id] = scc_next_index
+                    scc_lowlink_by_node[node_id] = scc_next_index
+                    scc_next_index += 1
+                    scc_stack.append(node_id)
+                    scc_nodes_on_stack.add(node_id)
+
+                    for target_node_id in real_forward_adj[node_id]:
+                        if target_node_id not in scc_index_by_node:
+                            _strongconnect(target_node_id)
+                            scc_lowlink_by_node[node_id] = min(
+                                scc_lowlink_by_node[node_id],
+                                scc_lowlink_by_node[target_node_id],
+                            )
+                        elif target_node_id in scc_nodes_on_stack:
+                            scc_lowlink_by_node[node_id] = min(
+                                scc_lowlink_by_node[node_id],
+                                scc_index_by_node[target_node_id],
+                            )
+
+                    if scc_lowlink_by_node[node_id] != scc_index_by_node[node_id]:
+                        return
+                    component_nodes: typing.List[int] = []
+                    while True:
+                        stack_node_id = scc_stack.pop()
+                        scc_nodes_on_stack.remove(stack_node_id)
+                        component_nodes.append(stack_node_id)
+                        if stack_node_id == node_id:
+                            break
+                    scc_components.append(component_nodes)
+
+                with perf_timer.begin_move_event('OrTools build phase3.6 SCC terminal surplus repair'):
+                    for node_id in real_forward_adj.keys() | real_reverse_adj.keys():
+                        if node_id not in scc_index_by_node:
+                            _strongconnect(node_id)
+
+                    scc_id_by_node: typing.Dict[int, int] = {}
+                    for scc_id, component_nodes in enumerate(scc_components):
+                        for node_id in component_nodes:
+                            scc_id_by_node[node_id] = scc_id
+                    scc_has_outgoing_edge: typing.List[bool] = [False] * len(scc_components)
+                    for source_node_id, target_node_ids in real_forward_adj.items():
+                        source_scc_id = scc_id_by_node[source_node_id]
+                        for target_node_id in target_node_ids:
+                            if source_scc_id != scc_id_by_node[target_node_id]:
+                                scc_has_outgoing_edge[source_scc_id] = True
+
+                    for scc_id, component_nodes in enumerate(scc_components):
+                        if scc_has_outgoing_edge[scc_id]:
+                            continue
+                        scc_net_supply = sum(node_supply_map.get(node_id, 0) for node_id in component_nodes)
+                        if scc_net_supply <= 0:
+                            continue
+                        for source_node in component_nodes:
+                            if node_supply_map.get(source_node, 0) <= 0:
+                                continue
+                            if source_node in all_fake_node_ids:
+                                continue
+                            if source_node not in islands.tile_islands_by_unique_id:
+                                continue
+                            # Tests/test_ArmyTracker.py
+                            # ArmyTrackerTests.test_should_drop_crazy_broken_army and
+                            # ArmyTrackerTests.test_should_not_capture_fog_island_neutral_then_invent_infinite_army:
+                            # a closed real SCC with positive net supply cannot discharge all army through real
+                            # arcs regardless of unlimited edge capacities. Detect that terminal surplus SCC in
+                            # O(V+E) before solving and add a targeted high-cost drain only for its real sources.
+                            arc_starts.append(source_node)
+                            arc_ends.append(fake_node)
+                            arc_caps.append(100000)
+                            arc_costs.append(DIRECTED_REPAIR_COST)
+                            directed_repair_sources.append(source_node)
+                            directed_repair_source_island_ids.add(source_node)
+                for source_node in source_nodes:
+                    if source_node in all_fake_node_ids:
+                        continue
+                    if source_node in real_backward_reachable_from_sinks:
+                        continue
+                    # Tests/test_ArmyTracker.py
+                    # ArmyTrackerTests.test_should_drop_crazy_broken_army and
+                    # ArmyTrackerTests.test_should_not_capture_fog_island_neutral_then_invent_infinite_army:
+                    # detect source islands whose supply cannot reach any real demand through real arcs
+                    # before solving. This is a targeted O(V+E) directed reachability check, not an
+                    # all-source fake-node escape hatch and not a post-solver retry.
+                    arc_starts.append(source_node)
+                    arc_ends.append(fake_node)
+                    arc_caps.append(100000)
+                    arc_costs.append(DIRECTED_REPAIR_COST)
+                    directed_repair_sources.append(source_node)
+                    directed_repair_source_island_ids.add(source_node)
+                for sink_node in sink_nodes:
+                    if sink_node in forward_reachable_from_sources:
+                        continue
+                    if sink_node in all_fake_node_ids:
+                        continue
+                    arc_starts.append(fake_node)
+                    arc_ends.append(sink_node)
+                    arc_caps.append(100000)
+                    arc_costs.append(DIRECTED_REPAIR_COST)
+                    all_node_ids.add(sink_node)
+                    directed_repair_sinks.append(sink_node)
+                    directed_repair_sink_island_ids.add(sink_node)
+                for source_node in source_nodes:
+                    if source_node in backward_reachable_from_sinks:
+                        continue
+                    if source_node in all_fake_node_ids:
+                        continue
+                    arc_starts.append(-source_node)
+                    arc_ends.append(fake_node)
+                    arc_caps.append(100000)
+                    arc_costs.append(DIRECTED_REPAIR_COST)
+                    all_node_ids.add(-source_node)
+                    directed_repair_sources.append(source_node)
+                if directed_repair_sources or directed_repair_sinks:
+                    # Always-on log: directional one-way borders trapped some supply/demand and we
+                    # bridged the trapped nodes to the fake node to keep the flow feasible.
+                    logbook.warning(
+                        f'FLOW_DIRECTED_REPAIR bridged directionally-trapped nodes to fakeNode={fake_node}: '
+                        f'trappedSourceCount={len(directed_repair_sources)} trappedSinkCount={len(directed_repair_sinks)} '
+                        f'trappedSources={directed_repair_sources[:48]} trappedSinks={directed_repair_sinks[:48]}'
+                    )
+
+            # Definitive feasibility check: a balanced, reachable graph can STILL be INFEASIBLE if a
+            # finite-capacity cut cannot carry the required supply. Run a max-flow from a virtual
+            # super-source (-> every supply node, cap=supply) to a virtual super-sink (every demand node
+            # ->, cap=demand). If maxflow < total supply the graph is INFEASIBLE; we then log the min-cut
+            # (super-source side) so the exact saturated bottleneck arcs/islands are visible. This is the
+            # final verification that the connectivity/overflow/directed repairs above did their job.
+            if global_net_supply == 0:
+                super_source = -987654321
+                super_sink = -987654322
+                residual: typing.Dict[int, typing.Dict[int, int]] = defaultdict(dict)
+
+                def _add_residual_arc(u: int, v: int, cap: int) -> None:
+                    residual[u][v] = residual[u].get(v, 0) + cap
+                    if u not in residual[v]:
+                        residual[v][u] = residual[v].get(u, 0)
+
+                def _bfs_augment() -> int:
+                    parent: typing.Dict[int, int] = {super_source: super_source}
+                    queue: typing.Deque[int] = deque((super_source,))
+                    while queue:
+                        node = queue.popleft()
+                        if node == super_sink:
+                            break
+                        for neighbour, cap in residual[node].items():
+                            if cap > 0 and neighbour not in parent:
+                                parent[neighbour] = node
+                                queue.append(neighbour)
+                    if super_sink not in parent:
+                        return 0
+                    bottleneck = None
+                    cursor = super_sink
+                    while cursor != super_source:
+                        prev = parent[cursor]
+                        edge_cap = residual[prev][cursor]
+                        bottleneck = edge_cap if bottleneck is None else min(bottleneck, edge_cap)
+                        cursor = prev
+                    cursor = super_sink
+                    while cursor != super_source:
+                        prev = parent[cursor]
+                        residual[prev][cursor] -= bottleneck
+                        residual[cursor][prev] = residual[cursor].get(prev, 0) + bottleneck
+                        cursor = prev
+                    return bottleneck
+
+                # Timed separately: the max-flow augmenting BFS loop is the most expensive part of the
+                # feasibility verification and runs on every flow graph build, so monitor its cost.
+                with perf_timer.begin_move_event('OrTools build phase3.6 max-flow feasibility BFS loop'):
+                    for arc_idx in range(len(arc_starts)):
+                        _add_residual_arc(arc_starts[arc_idx], arc_ends[arc_idx], int(arc_caps[arc_idx]))
+                    total_required_flow = 0
+                    for node_id in all_node_ids:
+                        supply = node_supply_map.get(node_id, 0)
+                        if supply > 0:
+                            _add_residual_arc(super_source, node_id, supply)
+                            total_required_flow += supply
+                        elif supply < 0:
+                            _add_residual_arc(node_id, super_sink, -supply)
+
+                    max_flow_value = 0
+                    augment = _bfs_augment()
+                    while augment > 0:
+                        max_flow_value += augment
+                        augment = _bfs_augment()
+
+                if max_flow_value < total_required_flow:
+                    # Min cut = nodes still reachable from super_source in the residual graph.
+                    cut_reached: typing.Set[int] = set()
+                    cut_queue: typing.Deque[int] = deque((super_source,))
+                    cut_reached.add(super_source)
+                    while cut_queue:
+                        node = cut_queue.popleft()
+                        for neighbour, cap in residual[node].items():
+                            if cap > 0 and neighbour not in cut_reached:
+                                cut_reached.add(neighbour)
+                                cut_queue.append(neighbour)
+                    saturated_cut_arcs = []
+                    for arc_idx in range(len(arc_starts)):
+                        u = arc_starts[arc_idx]
+                        v = arc_ends[arc_idx]
+                        if u in cut_reached and v not in cut_reached:
+                            u_desc = u
+                            v_desc = v
+                            if abs(u) in islands.tile_islands_by_unique_id:
+                                u_isl = islands.tile_islands_by_unique_id[abs(u)]
+                                u_desc = f'{u}(t{u_isl.team},{u_isl.tiles_by_army[0]})'
+                            if abs(v) in islands.tile_islands_by_unique_id:
+                                v_isl = islands.tile_islands_by_unique_id[abs(v)]
+                                v_desc = f'{v}(t{v_isl.team},{v_isl.tiles_by_army[0]})'
+                            saturated_cut_arcs.append(f'{u_desc}->{v_desc}:cap{int(arc_caps[arc_idx])}')
+                    cut_source_nodes = []
+                    for node_id in cut_reached:
+                        supply = node_supply_map.get(node_id, 0)
+                        if supply <= 0:
+                            continue
+                        node_desc = str(node_id)
+                        if node_id in islands.tile_islands_by_unique_id:
+                            isl = islands.tile_islands_by_unique_id[node_id]
+                            node_desc = f'{node_id}(t{isl.team},{isl.tiles_by_army[0]},supply={supply})'
+                        cut_source_nodes.append(node_desc)
+                    logbook.error(
+                        f'FLOW_FEASIBILITY_BUG capacity cut cannot carry required supply: maxFlow={max_flow_value} '
+                        f'requiredFlow={total_required_flow} deficit={total_required_flow - max_flow_value} '
+                        f'cutSourceSideNodeCount={len(cut_reached)} mainFakeInCut={fake_node in cut_reached} '
+                        f'cutSources=[{", ".join(cut_source_nodes[:48])}] '
+                        f'saturatedCutArcs=[{", ".join(saturated_cut_arcs[:48])}]'
+                    )
+
         # ----------------------------------------------------------------
         # Phase 4: build sorted node index arrays (mirrors NxToOrToolsConverter)
         # ----------------------------------------------------------------
+        debug_fake_escape_arc_indexes: typing.Set[int] = set()
+        if DEBUG_OR_TOOLS_FAKE_NODE_ESCAPE_ARCS:
+            with perf_timer.begin_move_event('OrTools build debug fake escape arcs'):
+                for node_id in list(all_node_ids):
+                    if node_id == 0:
+                        continue
+                    if abs(node_id) in all_fake_node_ids:
+                        continue
+                    debug_fake_escape_arc_indexes.add(len(arc_starts))
+                    arc_starts.append(node_id)
+                    arc_ends.append(fake_node)
+                    arc_caps.append(100000)
+                    arc_costs.append(DEBUG_OR_TOOLS_FAKE_NODE_ESCAPE_COST)
+                    debug_fake_escape_arc_indexes.add(len(arc_starts))
+                    arc_starts.append(fake_node)
+                    arc_ends.append(node_id)
+                    arc_caps.append(100000)
+                    arc_costs.append(DEBUG_OR_TOOLS_FAKE_NODE_ESCAPE_COST)
+                logbook.warning(
+                    f'FLOW_DEBUG_FAKE_ESCAPE_ENABLED fakeNode={fake_node} '
+                    f'arcCount={len(debug_fake_escape_arc_indexes)} cost={DEBUG_OR_TOOLS_FAKE_NODE_ESCAPE_COST}'
+                )
+
         with perf_timer.begin_move_event('OrTools build phase4 node index arrays'):
             all_node_ids.discard(0)
             node_list = sorted(all_node_ids)
@@ -758,8 +1554,13 @@ class DirectOrToolsGraphBuilder(object):
             idx_to_node=idx_to_node,
             demand_lookup=demands,
             neutral_sinks=neut_sinks,
-            fake_nodes={fake_node},
+            fake_nodes=all_fake_node_ids,
             cumulative_demand=cumulative_demand,
+            disconnected_component_island_ids=disconnected_component_island_ids,
+            directed_repair_source_island_ids=directed_repair_source_island_ids,
+            directed_repair_sink_island_ids=directed_repair_sink_island_ids,
+            overflow_dump_target_island_ids=overflow_dump_target_island_ids,
+            debug_fake_escape_arc_indexes=debug_fake_escape_arc_indexes,
         )
         result.friendly_army_supply = friendly_army_supply
         result.enemy_army_demand = enemy_army_demand
@@ -917,36 +1718,28 @@ class OrToolsFlowComputer(object):
 
     def compute_flow(
         self,
+        islands: 'TileIslandBuilder',
         graph_data: OrToolsGraphData,
         method: FlowGraphMethod = FlowGraphMethod.OrToolsSimpleMinCost,
     ) -> typing.Dict[int, typing.Dict[int, int]]:
         """
         Solve min-cost flow and return a flow dict matching the NX format.
-        Returns an empty dict if the problem is infeasible.
+        Raises OrToolsSolveError if the solver returns any non-optimal status (e.g. INFEASIBLE).
         """
         use_inproc = self._should_use_inproc_ortools()
         solve_scope_name = 'OrTools inproc.solve()' if use_inproc else 'OrTools sidecar.solve()'
         with self.perf_timer.begin_move_event(solve_scope_name):
             if use_inproc:
-                response = self.inproc_client.solve(graph_data)
+                solve_result = self.inproc_client.solve(graph_data)
             else:
-                response = self.sidecar_client.solve(graph_data)
+                solve_result = self.sidecar_client.solve(graph_data)
 
         if self.log_debug:
             logbook.info(
                 f'OrTools {"inproc" if use_inproc else "sidecar"}: {len(graph_data.node_ids)} nodes, {len(graph_data.start_nodes)} arcs, '
                 f'cumulative_demand={graph_data.cumulative_demand}'
             )
-
-        status = int(response['status'])
-        optimal_status = int(response['optimal_status'])
-
-        if status != optimal_status:
-            logbook.warning(f'OrTools SimpleMinCostFlow solve status={status} (not OPTIMAL) — returning empty flow dict')
-            return {}
-
-        if self.log_debug:
-            logbook.info(f'OrTools optimal_cost={response["optimal_cost"]}')
+            logbook.info(f'OrTools optimal_cost={solve_result.optimal_cost}')
 
         with self.perf_timer.begin_move_event('OrTools flow_dict builder post-solve'):
             flow_dict: typing.Dict[int, typing.Dict[int, int]] = defaultdict(lambda: defaultdict(int))
@@ -967,11 +1760,12 @@ class OrToolsFlowComputer(object):
             root_output_flow_by_island: dict[int, int] = defaultdict(int)
             root_output_fake_flow_by_island: dict[int, int] = defaultdict(int)
             root_input_supply_by_island: dict[int, int] = {}
+            debug_fake_escape_usage_by_island: dict[int, int] = defaultdict(int)
             for island_id, demand in graph_data.demand_lookup.items():
                 if demand < 0:
                     root_input_supply_by_island[island_id] = -demand
 
-            solution_flows = response['flows']
+            solution_flows = solve_result.flows
 
             for arc_idx in range(len(solution_flows)):
                 flow_amount = int(solution_flows[arc_idx])
@@ -989,6 +1783,15 @@ class OrToolsFlowComputer(object):
                 from_is_fake = abs(from_orig) in fake_nodes
                 to_is_fake = abs(to_orig) in fake_nodes
                 is_fake_saturation_arc = from_is_fake or to_is_fake
+                if arc_idx in graph_data.debug_fake_escape_arc_indexes:
+                    if from_is_fake and not to_is_fake and to_orig > 0:
+                        debug_fake_escape_usage_by_island[to_orig] += flow_amount
+                    elif not from_is_fake and to_is_fake and from_orig > 0:
+                        debug_fake_escape_usage_by_island[from_orig] -= flow_amount
+                    elif not from_is_fake and to_is_fake and from_orig < 0:
+                        debug_fake_escape_usage_by_island[-from_orig] -= flow_amount
+                    elif from_is_fake and not to_is_fake and to_orig < 0:
+                        debug_fake_escape_usage_by_island[-to_orig] += flow_amount
 
                 if is_fake_saturation_arc:
                     fake_arc_count += 1
@@ -1012,7 +1815,7 @@ class OrToolsFlowComputer(object):
                         total_root_output_real_flow += flow_amount
                         root_output_flow_by_island[root_output_island_id] += flow_amount
 
-                if self.log_debug:
+                if self.log_debug and (from_is_fake or to_is_fake):
                     logbook.info(
                         f'  OrTools arc {arc_idx}: {from_orig} -> {to_orig} '
                         f'flow={flow_amount} from_fake={from_is_fake} to_fake={to_is_fake}'
@@ -1031,6 +1834,12 @@ class OrToolsFlowComputer(object):
                 if is_fake_saturation_arc:
                     logbook.warning(
                         f'FLOW_DEMAND_SATURATION_SOLVED_ARC arc={arc_idx} {from_orig}->{to_orig} '
+                        f'flow={flow_amount} cost={int(graph_data.unit_costs[arc_idx])} cap={int(graph_data.capacities[arc_idx])} '
+                        f'from_fake={from_is_fake} to_fake={to_is_fake}'
+                    )
+                if arc_idx in graph_data.debug_fake_escape_arc_indexes:
+                    logbook.error(
+                        f'FLOW_DEBUG_FAKE_ESCAPE_USED_ARC arc={arc_idx} {from_orig}->{to_orig} '
                         f'flow={flow_amount} cost={int(graph_data.unit_costs[arc_idx])} cap={int(graph_data.capacities[arc_idx])} '
                         f'from_fake={from_is_fake} to_fake={to_is_fake}'
                     )
@@ -1077,6 +1886,26 @@ class OrToolsFlowComputer(object):
                         f'totalFakeArcFlow={total_fake_arc_flow} totalRealArcFlow={total_real_arc_flow} '
                         f'rootInputSupplyByIsland={suspicious_root_supplies}'
                     )
+
+            with self.perf_timer.begin_move_event('OrTools debug fake escape usage summarize'):
+                graph_data.debug_fake_escape_usage_by_island = dict(debug_fake_escape_usage_by_island)
+                if graph_data.debug_fake_escape_arc_indexes:
+                    if graph_data.debug_fake_escape_usage_by_island:
+                        debug_usage_descriptions: typing.List[str] = []
+                        for island_id, debug_army in sorted(graph_data.debug_fake_escape_usage_by_island.items()):
+                            island = islands.tile_islands_by_unique_id.get(island_id)
+                            if island is None:
+                                debug_usage_descriptions.append(f'{island_id}:debugArmy={debug_army}')
+                                continue
+                            debug_usage_descriptions.append(
+                                f'{island_id}({island.tiles_by_army[0]} team={island.team},army={island.sum_army},'
+                                f'tiles={island.tile_count}):debugArmy={debug_army}'
+                            )
+                        logbook.error(
+                            f'FLOW_DEBUG_FAKE_ESCAPE_USED usageByIsland=[{", ".join(debug_usage_descriptions)}]'
+                        )
+                    else:
+                        logbook.warning('FLOW_DEBUG_FAKE_ESCAPE_UNUSED no debug fake escape arcs carried flow')
 
             # Add diagnostic logging for zero real flow scenarios (always fire, not gated by log_debug)
             if graph_data.cumulative_demand == 0:
@@ -1128,6 +1957,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         self.army_override_matrix: 'MapMatrixInterface[int] | None' = None
         self.negative_tiles: 'TileSet | None' = None
         self.threat_blocking_tiles: typing.Dict['Tile', typing.Any] | None = None
+        self.constrained_flow_paths: typing.List[Path] | None = None
 
         self._intergeneral_analysis: 'ArmyAnalyzer' = intergeneral_analysis
         self._nx_finder: NetworkXFlowDirectionFinder | None = None
@@ -1219,6 +2049,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
             self.army_override_matrix,
             self.negative_tiles,
             self.threat_blocking_tiles,
+            self.constrained_flow_paths,
             perf_timer=self.perf_timer,
         )
 
@@ -1238,7 +2069,7 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
         render_on_exception: bool = True,
     ) -> typing.Dict[int, typing.Dict[int, int]]:
         computer = OrToolsFlowComputer(self.perf_timer, self.log_debug)
-        return computer.compute_flow(graph_data, method)
+        return computer.compute_flow(islands, graph_data, method)
 
     def build_flow_graph(
         self,
@@ -1347,4 +2178,5 @@ class OrToolsFlowDirectionFinder(FlowDirectionFinderABC):
                 no_neut_graph_lookup,
                 with_neut_graph_lookup,
             )
+            result.debug_fake_escape_usage_by_island = dict(graph_data_no_neut.debug_fake_escape_usage_by_island)
         return result

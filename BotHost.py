@@ -167,7 +167,9 @@ class BotHostBase(object):
                     currentMap.result = False
                     self.notify_game_over()
 
-        gc.collect()
+        # Skip gc.collect during tests (no viewer) to avoid 50ms delays between turns
+        if self.has_viewer:
+            gc.collect()
 
     def receive_update_no_move(self, currentMap: MapBase, updateReceivedTime: float):
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
@@ -214,7 +216,9 @@ class BotHostBase(object):
                     currentMap.result = False
                     self.notify_game_over()
 
-        gc.collect()
+        # Skip gc.collect during tests (no viewer) to avoid 50ms delays between turns
+        if self.has_viewer:
+            gc.collect()
 
     def save_txtmap(self, map: MapBase):
         if self.noLog and DebugHelper.IS_RUNNING_UNIT_TESTS:

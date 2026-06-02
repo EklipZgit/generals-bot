@@ -208,17 +208,17 @@ class GeneralsViewer(object):
     def _initViewier(self, alignTop: bool, alignLeft: bool):
         bottomPos, leftPos, rightPos, topPos, alignTop, alignLeft = self.get_config_positions(alignTop, alignLeft)
 
-        self.infoLineHeight = 16
+        self.infoLineHeight = 13
         self.infoRowHeight = 350
-        self.statsWidth = 650
+        self.statsWidth = 550
 
         scoreCellHeightMult = 3.5
 
         if self.cellHeight is None:
-            self.cellHeight = min(85, int((1080 - self.scoreRowHeight) / (self._map.rows + 4 + scoreCellHeightMult)))
+            self.cellHeight = min(85, int((1260 - self.scoreRowHeight) / (self._map.rows + 4 + scoreCellHeightMult)))
             # self.cellHeight = min(85, (1080 - self.infoRowHeight - self.scoreRowHeight) // (self._map.rows + 1))
             self.cellHeight = max(29, self.cellHeight)
-            self.cellWidth = self.cellHeight
+            self.cellWidth = self.cellHeight + 2
 
         self.cellHeightOverTwo = self.cellHeight / 2
         self.cellWidthOverTwo = self.cellWidth / 2
@@ -268,20 +268,20 @@ class GeneralsViewer(object):
 
         window_title = str(self._name)
         pygame.display.set_caption(window_title)
-        self._medFontHeight = min(2 * self.cellHeight // 5, 30)
-        self._smallFontHeight = min(self.cellHeight // 4, 17)
-        self._lrgFontHeight = 3 * self.cellHeight // 5 + 1
-        self._medFont = pygame.font.SysFont('Arial', self._medFontHeight)
-        self._infoFont = pygame.font.SysFont('Arial', self.infoLineHeight)
-        self._smallFont = pygame.font.SysFont('Arial', self._smallFontHeight)
+        self._medFontHeight = min(2 * self.cellHeight // 6, 30)
+        self._smallFontHeight = min(self.cellHeight // 5, 17)
+        self._lrgFontHeight = 3 * self.cellHeight // 5
+        self._medFont = pygame.font.SysFont('Verdana', self._medFontHeight)
+        self._infoFont = pygame.font.SysFont('Verdana', self.infoLineHeight - 1)
+        self._smallFont = pygame.font.SysFont('Verdana', self._smallFontHeight)
         self._lrgFont = pygame.font.SysFont('Arial', self._lrgFontHeight)
-        self._smallFontWidth = self._smallFontHeight / 2.27
-        self._medFontWidth = self._medFontHeight / 2.27
+        self._smallFontWidth = self._smallFontHeight / 1.6
+        self._medFontWidth = self._medFontHeight / 1.6
         self._lrgFontWidth = self._lrgFontHeight / 2.27
         # self.statsSpaceFromLeft = self.get_large_text_offset_from_right("Turn: 1000, (.50) ")
         samplePerfText = ".004 Rebuilding intergeneral_analysis "
         self.perfWidthCutoff = len(samplePerfText)
-        self.statsSpaceFromLeft = self.get_any_text_width(samplePerfText, self.infoLineHeight / 2.27) + 1
+        self.statsSpaceFromLeft = self.get_any_text_width(samplePerfText, self.infoLineHeight / 1.6) + 10
 
         self._clock = pygame.time.Clock()
 

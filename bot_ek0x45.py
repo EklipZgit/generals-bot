@@ -569,6 +569,8 @@ class EklipZBot(object):
         if self.last_init_turn == self._map.turn:
             return
 
+        self.quick_kill_city_plan_option = None
+
         self.was_defending_economy = self.defend_economy
         self.defend_economy = False
 
@@ -579,6 +581,7 @@ class EklipZBot(object):
 
         self.gathers = None
         self.gatherNodes = None
+        self.expansion_plan = ExpansionPotential(0, 0, 0, None, [], 0.0, self._map.turn)
 
         timeSinceLastUpdate = 0
         now = time.perf_counter()
@@ -701,6 +704,11 @@ class EklipZBot(object):
                             if self.armyTracker.try_find_army_sink(player.index, annihilatedFog, tookNeutCity=BotCityOps.did_player_just_take_fog_city(self, player.index)):
                                 break
 
+        if not self.is_lag_massive_map or self._map.turn < 3 or (self._map.turn + 3) % 5 == 0:
+            with self.perf_timer.begin_move_event('Inter-general analysis'):
+                # also rescans chokes, now.
+                BotCentralDefense.rebuild_intergeneral_analysis_for_central_defense(self)
+
         if not self.is_pre_resume_init_turn:
             with self.perf_timer.begin_move_event('ArmyTracker fog land builder'):
                 fogTileCounts = self.opponent_tracker.get_all_player_fog_tile_count_dict()
@@ -716,14 +724,6 @@ class EklipZBot(object):
                 self.recalculate_player_paths(force=True)
             if self.targetPlayerExpectedGeneralLocation is None:
                 self.targetPlayerExpectedGeneralLocation = self.general
-
-        if self.board_analysis is None:
-            return
-
-        if not self.is_lag_massive_map or self._map.turn < 3 or (self._map.turn + 3) % 5 == 0:
-            with self.perf_timer.begin_move_event('Inter-general analysis'):
-                # also rescans chokes, now.
-                BotCentralDefense.rebuild_intergeneral_analysis_for_central_defense(self)
 
         with self.perf_timer.begin_move_event('get_alt_en_gen_positions'):
             if not self.is_lag_massive_map or (self._map.turn + 2) % 5 == 0:
@@ -1096,14 +1096,15 @@ class EklipZBot(object):
                 logbook.info(f'DEFENSE_NEG_COPY context=quick_expansion_check source=defenseCriticalTileSet sourceTiles={[str(t) for t in defenseCriticalTileSet]} copiedTiles={[str(t) for t in negs]}')
                 BotExpansionOps._add_expansion_threat_negs(self, negs)
                 checkCityRoundEndPlans = self._map.is_army_bonus_turn
-                with self.perf_timer.begin_move_event('capture_cities pre-expansion option'):
-                    self.city_capture_plan_option = BotCityOps.capture_cities_plan_option(self, negs)
                 with self.perf_timer.begin_move_event('quick kill city pre-expansion option'):
+                    self.quick_kill_city_plan_option = None
                     quickKillNegs = defenseCriticalTileSet.copy()
                     logbook.info(f'DEFENSE_NEG_COPY context=quick_kill_city source=defenseCriticalTileSet copiedTiles={[str(t) for t in quickKillNegs]}')
                     quickKillNegs.update(self.cityAnalyzer.owned_contested_cities)
                     logbook.info(f'DEFENSE_NEG_UPDATE context=quick_kill_city source=owned_contested_cities addedTiles={[str(t) for t in self.cityAnalyzer.owned_contested_cities]} resultTiles={[str(t) for t in quickKillNegs]}')
                     self.quick_kill_city_plan_option = BotCityOps.get_quick_kill_on_enemy_cities_plan_option(self, quickKillNegs)
+                with self.perf_timer.begin_move_event('capture_cities pre-expansion option'):
+                    self.city_capture_plan_option = BotCityOps.capture_cities_plan_option(self, negs)
                 self.expansion_plan = BotExpansionOps.build_expansion_plan(self, timeLimit=0.01, expansionNegatives=negs, pathColor=(150, 100, 150), includeExtraGenAndCityArmy=checkCityRoundEndPlans)
 
                 self.capture_line_tracker.process_plan(self.targetPlayer, self.expansion_plan)
@@ -1563,6 +1564,36 @@ class EklipZBot(object):
 
         # NOTE NOTHING PAST THIS POINT CAN TAKE ANY EXTRA TIME
 
+        if self.expansion_plan and self.expansion_plan.selected_option:
+            deferred = []
+            deferring = False
+            if self.expansion_plan.turns_used < self._map.remainingCycleTurns - 1:
+                deferring = True
+
+            move = self.expansion_plan.selected_option.get_first_move()
+            if move is not None:
+                if move.source.player == self._map.player_index and move.source.army > 1 and BotPathingUtils.is_move_safe_valid(self, move):
+                    self.info(f'Fallback to selected expansion plan opt {self.expansion_plan.selected_option}: {move}')
+                    return move
+                logbook.info(
+                    f'Skipping stale selected expansion plan opt {self.expansion_plan.selected_option}: {move} '
+                    f'sourcePlayer={move.source.player} sourceArmy={move.source.army} '
+                    f'destPlayer={move.dest.player} destArmy={move.dest.army}')
+
+
+            for opt in self.expansion_plan.all_paths:
+                move = opt.get_first_move()
+                if move is not None and move.source.player == self._map.player_index and move.source.army > 1:
+                    if deferring and SearchUtils.any_where(opt.tileList, lambda t: t.player == self._map.player_index and (t.isGeneral or t.isCity)):
+                        self.info(f'Deferred exp opt {opt} due to gen/city movement')
+                        deferred.append(move)
+                    else:
+                        self.info(f'Fallback Fallback move using expansion plan opt {opt}: {move}')
+                        return move
+            if deferred:
+                self.info(f'Playing deferred opt {deferred[0]} because no non-deferred found')
+                return deferred[0]
+
         if not BotStateQueries.is_all_in(self):
             with self.perf_timer.begin_move_event(f'No move found leafMove'):
                 leafMove = BotExpansionOps.find_leaf_move(self, self.leafMoves)
@@ -1600,22 +1631,6 @@ class EklipZBot(object):
 
         if move is None:
             self.info("Found-no-moves-gather found no move, random expansion move?")
-            if self.expansion_plan and self.expansion_plan.selected_option:
-                deferred = []
-                deferring = False
-                if self.expansion_plan.turns_used < self._map.remainingCycleTurns - 1:
-                    deferring = True
-                for opt in self.expansion_plan.all_paths:
-                    move = opt.get_first_move()
-                    if move is not None and move.source.player == self._map.player_index and move.source.army > 1:
-                        if deferring and SearchUtils.any_where(opt.tileList, lambda t: t.player == self._map.player_index and (t.isGeneral or t.isCity)):
-                            self.info(f'Deferred exp opt {opt} due to gen/city movement')
-                            deferred.append(move)
-                        else:
-                            return move
-                if deferred:
-                    self.info(f'Playing deferred opt {deferred[0]} because no non-deferred found')
-                    return deferred[0]
 
 
         elif BotPathingUtils.is_move_safe_valid(self, move):

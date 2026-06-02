@@ -107,21 +107,25 @@ class GeneralsClientHost(object):
         self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
 
         logbook.info("game thread start...?")
+        updateLoopExitReason = "get_updates generator exhausted without exception"
 
         # Start Receiving Updates
         try:
             for update in self._game.get_updates():
                 over = self._set_update(update)
                 if over:
+                    updateLoopExitReason = f"game result update processed: {update[0]}"
                     break
 
         except ValueError:  # Already in match, restart
+            updateLoopExitReason = "ValueError from get_updates"
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
             logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
-            
+
             logbook.info("Exit: Already in queue in _start_update_loop")
         except:
+            updateLoopExitReason = "unexpected exception from get_updates/update processing"
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
             #logbook.info("inf")  # Log it or whatever here
@@ -136,9 +140,18 @@ class GeneralsClientHost(object):
 
         self._running = False
         if self._game:
+            logbook.info(
+                f"update loop ended; reason={updateLoopExitReason}; "
+                f"game.terminated={self._game.terminated}; "
+                f"game._running={self._game._running}; "
+                f"seen_update={self._game._seen_update}; "
+                f"lastCommunicationAgeSeconds={time.time_ns() / (10 ** 9) - self._game.lastCommunicationTime:.2f}"
+            )
             self._game._terminate()
+        else:
+            logbook.info(f"update loop ended; reason={updateLoopExitReason}; game client missing")
 
-        logbook.info("crashed out of update loop, creating suicide thread")
+        logbook.info("update loop ended, creating suicide thread")
 
         create_thread(self._suicide_in_4_seconds)
 

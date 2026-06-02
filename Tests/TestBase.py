@@ -2465,7 +2465,8 @@ class TestBase(unittest.TestCase):
             yStart: int | None = None,
             xEnd: int | None = None,
             yEnd: int | None = None,
-            chooseHighestVtOverMostRecaptures: bool = False
+            chooseHighestVtOverMostRecaptures: bool = False,
+            returnNoneIfNotFound: bool = False
     ) -> typing.Tuple[Path | None, int, int]:
         """
         Returns Path, value, turnsUsed if a path is found that starts and ends at those positions
@@ -2503,7 +2504,7 @@ class TestBase(unittest.TestCase):
                 bestOptDist = dist
                 maxVt = vt
 
-        if bestOpt is None:
+        if bestOpt is None and not returnNoneIfNotFound:
             self.fail(f'No intercept option found for xStart {xStart}, yStart {yStart}, xEnd {xEnd}, yEnd {yEnd}')
 
         return bestOpt, bestOptAmt, bestOptDist

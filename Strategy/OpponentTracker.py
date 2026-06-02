@@ -1744,7 +1744,7 @@ class OpponentTracker(object):
 
         if cityLimit is None:
             enScores = self.get_current_team_scores_by_player(player)
-            cityLimit = int(inTurns * enScores.tileCount / max(1, enScores.cityCount)) + 1
+            cityLimit = 1 + (enScores.cityCount // max(1, enScores.cityCount + inTurns // 5))
         cityTotal = self.get_next_fog_city_amounts(player, cityLimit=cityLimit)
 
         armyRisk += cityTotal

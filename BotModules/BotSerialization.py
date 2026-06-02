@@ -61,6 +61,14 @@ class BotSerialization:
             bot.is_blocking_neutral_city_captures = BotStateQueries.parse_bool(bot, resume_data[f'bot_is_blocking_neutral_city_captures'])
         if f'bot_was_allowing_neutral_cities_last_turn' in resume_data:
             bot.was_allowing_neutral_cities_last_turn = BotStateQueries.parse_bool(bot, resume_data[f'bot_was_allowing_neutral_cities_last_turn'])
+        if f'bot_city_capture_plan_tiles' in resume_data:
+            # Tests/test_CityContestation.py CityContestationTests.test_should_serialize_and_deserialize_city_capture_plan_tiles:
+            # Preserve the existing city capture plan across resume so CITY_SAFETY_NEGS existing-plan can use those negatives.
+            bot.city_capture_plan_tiles = BotSerialization.convert_string_to_tile_set(bot, resume_data[f'bot_city_capture_plan_tiles'])
+        if f'bot_city_capture_plan_last_updated' in resume_data:
+            # Tests/test_CityContestation.py CityContestationTests.test_should_serialize_and_deserialize_city_capture_plan_tiles:
+            # The existing-plan branch depends on the plan timestamp being close to the resumed turn.
+            bot.city_capture_plan_last_updated = int(resume_data[f'bot_city_capture_plan_last_updated'])
         if f'bot_finishing_exploration' in resume_data:  # ={self.finishing_exploration}')
             bot.finishing_exploration = BotStateQueries.parse_bool(bot, resume_data[f'bot_finishing_exploration'])
         if f'bot_targeting_army' in resume_data:  # ={self.targetingArmy.tile.x},{self.targetingArmy.tile.y}')
@@ -110,6 +118,30 @@ class BotSerialization:
                 for player in bot._map.players:
                     if not bot._map.is_player_on_team_with(bot._map.player_index, player.index):
                         bot.armyTracker.should_recalc_fog_land_by_player[player.index] = False
+
+        # Tests/test_ArmyTracker.py ArmyTrackerTests.test_should_not_create_phantom_visible_army:
+        # The TempFogTiles block above disables the enemy fog-land rebuild on resume. If the
+        # serialized predicted enemy general location was not covered by those temp fog tiles it
+        # stays a neutral (player == -1) tile. Flow expansion then anchors the enemy-general island
+        # on a non-target-team (neutral) tile, producing a degenerate / INFEASIBLE min-cost-flow
+        # graph (and, when that neutral tile has no island, a NoneType crash). Force the fog-land
+        # builder to re-run for the target player so the predicted general tile gets attributed to
+        # the enemy before expansion runs.
+        # Also handle the case where the predicted general tile is incorrectly owned by the friendly
+        # team (not just neutral), which also produces an INFEASIBLE graph by anchoring on a friendly
+        # island instead of an enemy island.
+        # The fog-land builder is skipped on is_pre_resume_init_turn, so we need to ensure it runs
+        # on the current turn by setting the flag and also setting is_pre_resume_init_turn=False.
+        if (
+                bot.targetPlayer >= 0
+                and bot.targetPlayerExpectedGeneralLocation is not None
+                and (
+                        bot.targetPlayerExpectedGeneralLocation.player == -1
+                        or bot._map.is_player_on_team_with(bot._map.player_index, bot.targetPlayerExpectedGeneralLocation.player)
+                )
+        ):
+            bot.armyTracker.should_recalc_fog_land_by_player[bot.targetPlayer] = True
+
         if f'DiscoveredNeutral' in resume_data:
             tiles = BotSerialization.convert_string_to_tile_set(bot, resume_data[f'DiscoveredNeutral'])
             for tile in tiles:

@@ -3525,3 +3525,58 @@ whoever has less extra troops will always get ahead
 
         self.assertOwnedXY(14, 10, 'should not lose its mind around fog armies and should just cap the fucking city lol')
 
+
+    def test_shouldnt_defend_economy_when_only_10_land_ahead_and_safe_lol(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_defend_economy_when_only_10_land_ahead_and_safe_lol____ihkAHUri---0--238.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 238, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=238)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
+        self.assertNoFriendliesKilled(map, general)
+
+    def test_should_not_gather_general_ahead_of_when_about_to_actually_fucking_attack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_gather_general_ahead_of_when_about_to_actually_fucking_attack___VDASrHraD---1--161.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 161, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=161)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertGreater(general.army, 34, 'should not have fucking sent general army yet jesus christ')
+
+
+    def test_should_finish_recapturing_city_that_was_already_being_defense_gathered(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_finish_recapturing_city_that_was_already_being_defense_gathered___SqBnYf43x---1--398.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 398, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=398)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,8->12,9->13,9->13,7->14,7->14,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(12,9)

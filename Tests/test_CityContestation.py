@@ -1,5 +1,6 @@
 from BoardAnalyzer import BoardAnalyzer
 from BotModules.BotRendering import BotRendering
+from BotModules.BotSerialization import BotSerialization
 from CityAnalyzer import CityAnalyzer
 from Sim.GameSimulator import GameSimulatorHost
 from Strategy.WinConditionAnalyzer import WinCondition
@@ -58,6 +59,38 @@ class CityContestationTests(TestBase):
         self.assertTrue(reloadBot.cityAnalyzer.is_contested(reloadCity, captureCutoffAgoTurns=20))
         self.assertEqual(3, reloadBot.win_condition_analyzer.get_city_contestation_count(reloadCity))
         self.assertEqual(2, reloadBot.win_condition_analyzer.get_city_contestation_count(reloadCity, within_last_turns=10))
+
+    def test_should_serialize_and_deserialize_city_capture_plan_tiles(self):
+        mapFile = 'GameContinuationEntries/should_not_play_city_defense_when_city_right_by_general_wtf___tlcZQJVRh---1--161.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 161, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=161)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        plannedTiles = {bot._map.GetTile(2, 13), bot._map.GetTile(3, 13), bot._map.GetTile(4, 13)}
+        bot.city_capture_plan_tiles = plannedTiles
+        bot.city_capture_plan_last_updated = bot._map.turn
+
+        dumped = BotRendering.dump_turn_data_to_string(bot)
+        resumeData = {}
+        for line in dumped.split('\n'):
+            if '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            resumeData[key] = value
+
+        self.assertEqual(BotSerialization.convert_tile_set_to_string(bot, plannedTiles), resumeData['bot_city_capture_plan_tiles'])
+        self.assertEqual(str(bot._map.turn), resumeData['bot_city_capture_plan_last_updated'])
+
+        rawMap.resume_data.update(resumeData)
+        reloadHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        reloadBot = self.get_debug_render_bot(reloadHost, general.player)
+        reloadPlannedTiles = {reloadBot._map.GetTile(2, 13), reloadBot._map.GetTile(3, 13), reloadBot._map.GetTile(4, 13)}
+
+        self.assertEqual(reloadPlannedTiles, reloadBot.city_capture_plan_tiles)
+        self.assertEqual(161, reloadBot.city_capture_plan_last_updated)
 
     def test_should_gather_at_enemy_city_in_sane_way(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

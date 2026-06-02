@@ -189,18 +189,28 @@ class BotRendering:
 
         first = set()
         dupes = set()
+        first_option_by_tile = {}
+        duplicate_option_details = []
 
         for opt in optsSorted:
             for tile in opt.tileSet:
                 if tile in first:
                     dupes.add(tile)
+                    duplicate_option_details.append(
+                        f'{tile.x},{tile.y}: first={first_option_by_tile[tile]} duplicate={str(opt)}'
+                    )
                 else:
                     first.add(tile)
+                    first_option_by_tile[tile] = str(opt)
 
         if len(dupes) > 0:
             vi.add_targeted_tiles_with_legend(dupes, 'GRAY = DUPLICATE FLOW OPTION TILES', TargetStyle.GRAY, radiusReduction=-1, )
         if dupes:
             vi.add_info_line('FE DUPE: ' + f'|'.join(f'{t.x},{t.y}' for t in dupes))
+            logbook.warning(
+                f'FLOW_RENDER_DUPLICATE_OPTION_TILES count={len(dupes)} '
+                f'details=[{" || ".join(duplicate_option_details[:64])}]'
+            )
 
         if optsSorted:
             try:
@@ -234,6 +244,22 @@ class BotRendering:
                     f'rootsIncNeut={incNeutRoots} rootEdgesIncNeut={incNeutEdges} '
                     f'arrowsAdded={arrowsAfter - arrowsBefore} arrowsTotal={arrowsAfter}'
                 )
+
+            # Render red target circles around islands connected to fake nodes
+            graph_data = expander.flow_graph_data
+            if graph_data is not None:
+                fake_connected_island_ids = set()
+                fake_connected_island_ids.update(graph_data.disconnected_component_island_ids)
+                fake_connected_island_ids.update(graph_data.directed_repair_source_island_ids)
+                fake_connected_island_ids.update(graph_data.directed_repair_sink_island_ids)
+                fake_connected_island_ids.update(graph_data.overflow_dump_target_island_ids)
+
+                if fake_connected_island_ids:
+                    for island_id in fake_connected_island_ids:
+                        island = expander.island_builder.tile_islands_by_unique_id.get(island_id)
+                        if island is not None:
+                            for tile in island.tile_set:
+                                vi.add_targeted_tile(tile, TargetStyle.RED, radiusReduction=-5)
         if not bot.info_render_tile_islands:
             expander.island_builder.add_tile_islands_to_view_info(vi, printIslandInfoLines=False, renderIslandNames=True, renderIslandColors=False)
 
@@ -380,6 +406,10 @@ class BotRendering:
         data.append(f'bot_is_rapid_capturing_neut_cities={bot.is_rapid_capturing_neut_cities}')
         data.append(f'bot_is_blocking_neutral_city_captures={bot.is_blocking_neutral_city_captures}')
         data.append(f'bot_was_allowing_neutral_cities_last_turn={bot.was_allowing_neutral_cities_last_turn}')
+        # Tests/test_CityContestation.py CityContestationTests.test_should_serialize_and_deserialize_city_capture_plan_tiles:
+        # Resume tests need the existing city plan preserved so CITY_SAFETY_NEGS existing-plan behavior can be exercised.
+        data.append(f'bot_city_capture_plan_tiles={BotSerialization.convert_tile_set_to_string(bot, bot.city_capture_plan_tiles)}')
+        data.append(f'bot_city_capture_plan_last_updated={bot.city_capture_plan_last_updated}')
         data.append(f'bot_finishing_exploration={bot.finishing_exploration}')
         if bot.targetingArmy:
             data.append(f'bot_targeting_army={bot.targetingArmy.tile.x},{bot.targetingArmy.tile.y}')

@@ -347,20 +347,33 @@ class GeneralsClient(object):
     def get_updates(self) -> typing.Generator[typing.Tuple[str, dict], typing.Any, typing.Any]:
         idleTimeout = 900  # 15 minutes
         startTime = time.perf_counter()
+        exitReason = "get_updates loop exited without explicit reason"
+        lastRawMessage = None
         while True:
             try:
                 msg = self._ws.recv()
+                lastRawMessage = msg
 
                 # logbook.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
                 self.lastCommunicationTime = time.time_ns() / (10 ** 9)
             except WebSocketConnectionClosedException as ex:
-                logbook.info("socket closed")
+                exitReason = f"websocket connection closed while receiving: {ex}"
+                logbook.info(
+                    f"socket closed; terminated={self.terminated}; "
+                    f"_running={self._running}; seen_update={self._seen_update}; "
+                    f"lastCommunicationAgeSeconds={time.time_ns() / (10 ** 9) - self.lastCommunicationTime:.2f}"
+                )
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
                 logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
                 break
             except:
-                logbook.info("other error happened in get updates loop")
+                exitReason = "unexpected exception in get_updates recv"
+                logbook.info(
+                    f"other error happened in get updates loop; terminated={self.terminated}; "
+                    f"_running={self._running}; seen_update={self._seen_update}; "
+                    f"lastRawMessage={json.dumps(lastRawMessage)}"
+                )
                 raise
 
             if not msg.strip():
@@ -434,12 +447,14 @@ class GeneralsClient(object):
             elif msg[0] == "ping_tile":
                 yield msg[0], msg[1]
             elif msg[0] in ["game_won", "game_lost"]:
+                exitReason = f"received terminal game result {msg[0]}"
                 logbook.info(f'\r\nRESULT\r\nmsg[0] {json.dumps(msg[0])}\r\nmsg[1] {json.dumps(msg[1])}\r\n----')
                 yield msg[0], msg[1]
                 break
             elif msg[0] == "gio_error" and msg[1].startswith('You must choose a username'):
                 self._send(["set_username", self.userid, self.server_username, self.bot_key])
             elif msg[0] == "removed_from_queue":
+                exitReason = "removed_from_queue"
                 raise ValueError("Server kicked from queue, restart")
             elif msg[0] == "chat_message":
                 chat_room = msg[1]
@@ -502,14 +517,17 @@ class GeneralsClient(object):
                 time.sleep(2)
                 raise ValueError("Already in game")
             elif msg[0] == "server_down":
+                exitReason = "server_down"
                 logbook.info("server_down, Server is down???")
                 raise ValueError("Server is down")
             elif msg[0] == "server_restart":
+                exitReason = "server_restart"
                 logbook.info("server_restart, Server is restarting???")
                 raise ValueError("Server is restarting")
             elif msg[0] == "error_set_username":
                 logbook.info("error_set_username, ???")
             elif msg[0] == "error_banned":
+                exitReason = "error_banned"
                 sleepDuration = random.choice(range(20, 60))
                 logbook.info(
                     f"TOO MANY CONNECTION ATTEMPTS? {msg}\n:( sleeping and then trying again in {sleepDuration}")
@@ -519,6 +537,11 @@ class GeneralsClient(object):
                 logbook.info('Game loop _terminate complete')
             else:
                 logbook.info(f"Unknown message type: {msg}")
+        logbook.info(
+            f"get_updates exiting; reason={exitReason}; terminated={self.terminated}; "
+            f"_running={self._running}; seen_update={self._seen_update}; "
+            f"lastRawMessage={json.dumps(lastRawMessage)}"
+        )
 
     def can_reply(self, message: str) -> bool:
         toCheck = 'g' + 'en' + 'ge' + 'ral'
@@ -562,6 +585,7 @@ class GeneralsClient(object):
 
     def _terminate(self):
         if self.terminated:
+            logbook.info("Ignoring duplicate _terminate call because client is already terminated")
             return
         self.terminated = True
         self._running = False
@@ -575,7 +599,10 @@ class GeneralsClient(object):
             except:
                 logbook.info(traceback.format_exc())
 
-        logbook.info(" PRE lock IN TERMINATE")
+        logbook.info(
+            f" PRE lock IN TERMINATE; seen_update={self._seen_update}; "
+            f"lastCommunicationAgeSeconds={time.time_ns() / (10 ** 9) - self.lastCommunicationTime:.2f}"
+        )
         with self._lock:
             # self._send(["leave_game"])
             logbook.info(" in lock IN TERMINATE, calling self.close()")

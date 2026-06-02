@@ -132,7 +132,7 @@ class BotDefense:
                 outputDefenseCriticalTileSet.update(interceptPath.tileList)
                 continue
 
-            if interceptMove is not None and intOption is not None and intOption.econValue / intOption.length > 2.5:
+            if interceptMove is not None and intOption is not None and (intOption.econValue / intOption.length > 1.0):
                 vt = intOption.econValue / intOption.length
                 bot.info(f'def int move against {threat.path.start.tile} vt {vt:.2f} ({intOption.econValue:.2f}/{intOption.length}), blk {intOption.damage_blocked:.1f}, wci {intOption.worst_case_intercept_moves}, bci {intOption.best_case_intercept_moves}, rt {intOption.recapture_turns}')
                 return interceptMove, interceptPath
@@ -194,6 +194,11 @@ class BotDefense:
                         anyLeafIsSameDistAsThreat = len(leavesGreaterThanDistance) > 0
                         if anyLeafIsSameDistAsThreat:
                             bot.info(f'defense anyLeafIsSameDistAsThreat {anyLeafIsSameDistAsThreat}')
+                            for leaf in leavesGreaterThanDistance:
+                                if leaf.toTile == threat.path.start.tile and len(leaf.children) == 0:
+                                    bot.info(f'Defense directly targeting threat tile {leaf.tile}->{leaf.toTile}')
+                                    return Move(leaf.tile, leaf.toTile, False), None
+
                         move_closest_value_func = BotDefense.get_defense_tree_move_prio_func(bot, threat, anyLeafIsSameDistAsThreat, printDebug=DebugHelper.IS_DEBUGGING)
                         move = BotGatherOps.get_tree_move_default(bot, gatherNodes, move_closest_value_func)
                 if move:
@@ -216,7 +221,8 @@ class BotDefense:
                             citiesInPruned = SearchUtils.Counter(0)
                             GatherTreeNode.foreach_tree_node(pruned, lambda n: citiesInPruned.add(1 * ((n.tile.isGeneral or n.tile.isCity) and bot._map.is_tile_friendly(n.tile))))
                             turnGap = threat.turns - sumPrunedTurns
-                            sumPruned += (turnGap * citiesInPruned.value // 2)
+                            # TODO this was uncommented but seems highly suspicious
+                            # sumPruned += (turnGap * citiesInPruned.value // 2)
                             if sumPruned < survivalThreshold:
                                 if SearchUtils.BYPASS_TIMEOUTS_FOR_DEBUGGING:
                                     raise AssertionError(
@@ -564,14 +570,16 @@ class BotDefense:
 
                 if not bot._map.is_player_on_team_with(threats[0].threatPlayer, bot.targetPlayer) and bot.targetPlayer != -1 and not bot.territories.is_tile_in_friendly_territory(tile):
                     continue
+                isDeathThreat = False
 
                 with bot.perf_timer.begin_move_event(f'INT @{str(tile)} Tile Block'):
                     blockingTiles = bot.army_interceptor.get_intercept_blocking_tiles_for_split_hinting(tile, threatsWeCareAboutByTile, negTiles)
 
                     if len(blockingTiles) > 0:
-                        bot.viewInfo.add_info_line(f'for threat {str(tile)}, blocking tiles were {"  ".join([str(v) for v in blockingTiles.values()])}')
+                        bot.viewInfo.add_info_line(f'for threat {str(tile)}..{"|".join(str(t.path.tail.tile) for t in threats)}, blocking tiles were {"  ".join(str(v) for v in sorted(blockingTiles.values(), key=lambda v: v.tile.army))}')
 
-                    if SearchUtils.any_where(threats, lambda t: t.threatType == ThreatType.Kill):
+                    if SearchUtils.any_where(threats, lambda t: t.threatType == ThreatType.Kill and t.path.tail.tile.isGeneral and t.threatValue > 0):
+                        isDeathThreat = True
                         bot.blocking_tile_info = blockingTiles
 
                     blocks = blockingTiles
@@ -585,6 +593,17 @@ class BotDefense:
                             else:
                                 for blockedDest in values.blocked_destinations:
                                     existing.add_blocked_destination(blockedDest)
+                    if not isDeathThreat:
+                        if blocks is None:
+                            blocks = {}
+                        for t in bot.cityAnalyzer.owned_contested_cities:
+                            if t in blocks:
+                                continue
+                            # TODO allow splitting and leaving half if we think we can still hold with half maybe...?
+                            contestedCityBlock = ThreatBlockInfo(t, amount_needed_to_block=t.army)
+                            for m in t.movable:
+                                contestedCityBlock.add_blocked_destination(m)
+                            blocks[t] = contestedCityBlock
 
                 with bot.perf_timer.begin_move_event(f'INT @{str(tile)} Calc'):
                     shouldBypass = BotDefense.should_bypass_army_danger_due_to_last_move_turn(bot, tile)
@@ -927,7 +946,7 @@ class BotDefense:
             at = 0
             for turns, intercept in threatInterceptionPlan.intercept_options.items():
                 if BotDefense._is_invalid_defense_intercept_for_threat(bot, intercept.path, threat):
-                    bot.info(f'{turns}: bypassing defense intercept from threatened tile {intercept}')
+                    logbook.info(f'{turns}t: bypassing defense intercept from threatened tile {intercept}')
                     continue
                 optVt = intercept.econValue / turns
                 optAt = intercept.friendly_army_reaching_intercept / turns
@@ -935,13 +954,13 @@ class BotDefense:
                 if optVt > vt:
                     vt = optVt
                     at = optAt
-                    bot.info(f'{turns}: val/turn {optVt:.2f} > {vt:.2f}, replacing {interceptingOption} with {intercept}')
+                    bot.info(f'{turns}t: val/turn {optVt:.2f} > {vt:.2f}, replacing {interceptingOption} with {intercept}')
                     interceptingOption = intercept
                     interceptPath = interceptingOption.path
                 elif vt < 1 and optAt > at:
                     vt = optVt
                     at = optAt
-                    bot.info(f'{turns}: army/turn {optAt:.2f} > {at:.2f} (vt {optVt:.2f} vs {vt:.2f}), replacing {interceptingOption} with {intercept}')
+                    bot.info(f'{turns}t: army/turn {optAt:.2f} > {at:.2f} (vt {optVt:.2f} vs {vt:.2f}), replacing {interceptingOption} with {intercept}')
                     interceptingOption = intercept
                     interceptPath = interceptingOption.path
 
@@ -1475,12 +1494,15 @@ class BotDefense:
         tookTooLong = interceptPath.length > threat.turns
         notEnoughDamageBlocked = False
         armyLeftOver = False
+        abandoningContestedCity = False
         if interceptingOption is not None:
+            abandoningContestedCity = interceptPath.start.tile in bot.win_condition_analyzer.city_analyzer.owned_contested_cities
             isDelayed = interceptingOption.requiredDelay > 0
             notEnoughDamageBlocked = False
             armyLeftOver = threat.threatValue - interceptingOption.friendly_army_reaching_intercept > 0
             if threat.path.tail.tile.isGeneral:
-                armyLeftOver = interceptingOption.intercepting_army_remaining > 0
+                # TODO why was this here?
+                # armyLeftOver = interceptingOption.intercepting_army_remaining > 0
                 if tookTooLong or notEnoughDamageBlocked or armyLeftOver:
                     bot.viewInfo.add_info_line(
                         f'DEF int BYP: rem ar {interceptingOption.intercepting_army_remaining}, long {"T" if tookTooLong else "F"}, notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
@@ -1488,6 +1510,10 @@ class BotDefense:
                         with bot.perf_timer.begin_move_event(f'def solo interception @ {threat.path.start.tile}'):
                             return BotDefense.check_kill_threat_only_defense_interception(bot, threat)
                     return None, None, None, False
+            elif abandoningContestedCity:
+                bot.info(f'DEF int aband skip... long {"T" if tookTooLong else "F"}: incl{interceptingOption}')
+                bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, abandContest {"T" if abandoningContestedCity else "F"}, {interceptPath}')
+                return None, None, None, False
 
         bot.viewInfo.color_path(PathColorer(
             interceptPath, 1, 1, 1,
@@ -1497,16 +1523,16 @@ class BotDefense:
             intOptInfo = f' {interceptingOption}'
         mv = BotPathingUtils.get_first_path_move(bot, interceptPath)
         if BotRepetition.detect_repetition(bot, mv, 6, 3):
-            bot.info(f'DEF int REP SKIP... incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
-            bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
+            bot.info(f'DEF int REP SKIP... long {"T" if tookTooLong else "F"}: incl{intOptInfo}')
+            bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, abandContest {"T" if abandoningContestedCity else "F"}, {interceptPath}')
             mv = None
         elif BotRepetition.detect_repetition(bot, mv, 4, 2):
             bot.curPath = interceptPath.get_subsegment(3)
-            bot.info(f'DEF int REP incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
-            bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
+            bot.info(f'DEF int REP long {"T" if tookTooLong else "F"}: incl{intOptInfo}')
+            bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, abandContest {"T" if abandoningContestedCity else "F"}, {interceptPath}')
         else:
-            bot.info(f'DEF int incl{intOptInfo}: long {"T" if tookTooLong else "F"}')
-            bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, {interceptPath}')
+            bot.info(f'DEF int long {"T" if tookTooLong else "F"}: incl{intOptInfo}')
+            bot.info(f'    notBlock {"T" if notEnoughDamageBlocked else "F"}, armyLeft {"T" if armyLeftOver else "F"}, abandContest {"T" if abandoningContestedCity else "F"}, {interceptPath}')
 
         if mv is None:
             return None, None, None, False
@@ -1984,6 +2010,8 @@ class BotDefense:
         if bot.targetPlayer == -1:
             return False
 
+        alreadyDefEconomy = bot.defend_economy
+
         if bot.targetPlayerObj.last_seen_move_turn < bot._map.turn - 100:
             bot.viewInfo.add_info_line(f'ignoring econ defense against afk player')
             return False
@@ -2045,7 +2073,8 @@ class BotDefense:
         if bot._map.turn >= 100:
             econRatio = 1.1
             skipDefAfterArmyRatio = 1.42
-            enemyCatchUpOffset = -(min(20, abs(10 - bot._map.remainingCycleTurns) // 2))
+            # 20 turns left in cycle should be -5
+            enemyCatchUpOffset = -(min(20, abs(bot._map.remainingCycleTurns - 20))) - 5
 
             winningEcon = bot.opponent_tracker.winning_on_economy(econRatio, cityValue=25, againstPlayer=bot.targetPlayer, offset=enemyCatchUpOffset)
             winningArmy = bot.opponent_tracker.winning_on_army(skipDefAfterArmyRatio)
@@ -2054,21 +2083,27 @@ class BotDefense:
                 pathLen = bot.shortest_path_to_target_player.length
 
             playerArmyNearGeneral = BotCombatQueries.sum_friendly_army_near_or_on_tiles(bot, bot.shortest_path_to_target_player.tileList, distance=pathLen // 4 + 1)
-            armyThresh = int(bot.targetPlayerObj.standingArmy ** 0.93)
+            armyThresh = bot.opponent_tracker.get_approximate_fog_army_risk(bot.targetPlayer, 5, inTurns=1)
             hasEnoughArmyNearGeneral = playerArmyNearGeneral > armyThresh
 
-            bot.defend_economy = winningEcon and (not winningArmy or not hasEnoughArmyNearGeneral) or bot.defend_economy
+            bot.defend_economy = winningEcon and (not winningArmy or not hasEnoughArmyNearGeneral)
+            info = f'woe{econRatio:.1f} (eCat {enemyCatchUpOffset}) {str(winningEcon)[0]}, woa{skipDefAfterArmyRatio} {str(winningArmy)[0]}, enough_near_gen{playerArmyNearGeneral}/{armyThresh} {str(hasEnoughArmyNearGeneral)[0]}'
             if bot.defend_economy:
                 if not hasEnoughArmyNearGeneral and winningArmy:
                     bot.viewInfo.add_info_line("FORCING MAX GATHER TIMINGS BECAUSE NOT ENOUGH ARMY NEAR GEN AND DEFENDING ECONOMY")
                     bot.timings.split = bot.timings.cycleTurns
                 logbook.info(
                     f"\n\nDEF ECONOMY! winning_on_econ({econRatio}) {str(winningEcon)[0]}, on_army({skipDefAfterArmyRatio}) {str(winningArmy)[0]}, enough_near_gen({playerArmyNearGeneral}/{armyThresh}) {str(hasEnoughArmyNearGeneral)[0]}")
-                winningText = f"! woe{econRatio} {str(winningEcon)[0]}, woa{skipDefAfterArmyRatio} {str(winningArmy)[0]}, sa{playerArmyNearGeneral}/{armyThresh} {str(hasEnoughArmyNearGeneral)[0]}"
+                winningText = f"! {info}"
+            elif alreadyDefEconomy:
+                logbook.info(
+                    f"\n\nDEFENDING ECONOMY due to SOMEONE ELSE? w_econ(rat {econRatio} eCat {enemyCatchUpOffset}) {str(winningEcon)[0]}, on_army({skipDefAfterArmyRatio}) {str(winningArmy)[0]}, enough_near_gen({playerArmyNearGeneral}/{armyThresh}) {str(hasEnoughArmyNearGeneral)[0]}")
+                winningText = f"? {info}"
+                bot.defend_economy = True
             else:
                 logbook.info(
                     f"\n\nNOT DEFENDING ECONOMY? w_econ(rat {econRatio} eCat {enemyCatchUpOffset}) {str(winningEcon)[0]}, on_army({skipDefAfterArmyRatio}) {str(winningArmy)[0]}, enough_near_gen({playerArmyNearGeneral}/{armyThresh}) {str(hasEnoughArmyNearGeneral)[0]}")
-                winningText = f"  woe{econRatio} (eCat {enemyCatchUpOffset}) {str(winningEcon)[0]}, woa{skipDefAfterArmyRatio} {str(winningArmy)[0]}, sa{playerArmyNearGeneral}/{armyThresh} {str(hasEnoughArmyNearGeneral)[0]}"
+                winningText = f"  {info}"
 
         bot.viewInfo.add_stats_line(winningText)
         bot.viewInfo.addlTimingsLineText = winningText

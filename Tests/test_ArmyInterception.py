@@ -37,6 +37,7 @@ class ArmyInterceptionTests(TestBase):
         bot.info_render_board_analysis_choke_widths = True
         bot.info_render_army_emergence_values = False
         bot.army_interceptor.log_debug = True
+        bot.army_interceptor.log_eval_debug = True
         if clearCurPath:
             bot.curPath = None
 
@@ -2768,3 +2769,21 @@ setting bestInterceptTable[dist 1]:
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
         self.assertGreater(playerMap.At(2, 6).army, 399, 'should have pulled the extra 97 with')
+    def test_should_take_short_intercept_not_janky_long_one(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_take_short_intercept_not_janky_long_one___q5jf9smTj---1--87.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 87, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=87)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '13,7->13,2')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertLess(playerMap.At(13,5).army, 5)

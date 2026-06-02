@@ -282,16 +282,23 @@ class DangerAnalyzer(object):
             added = tailLookup.get(threatStart)
 
             for path in army.expectedPaths:
-                if path is None or path.length <= 0:
+                if path is None or path.length <= 0 or path.start is None:
                     continue
+                path = path.get_positive_subsegment(army.player, self.map.team_ids_by_player_index)
+                if path is None or path.start is None:
+                    continue
+                threatType = ThreatType.Econ
                 if path.start.tile == threatStart:
                     if path.tail.tile not in added:
                         if path.tail.tile.isGeneral:
+                            threatType = ThreatType.Kill
+
                             countGen += 1
                             if countGen > 2:
                                 logbook.info(f'bypassing {countGen}+ general threat {path}')
                                 continue
                         elif path.tail.tile.isCity:
+                            threatType = ThreatType.Kill
                             countCity += 1
                             if countCity > 2:
                                 logbook.info(f'bypassing {countCity}+ city threat {path}')
@@ -303,7 +310,7 @@ class DangerAnalyzer(object):
                                 continue
 
                         added.add(path.tail.tile)
-                        threat = ThreatObj(path.length - 1, path.value, path, ThreatType.Econ, None)
+                        threat = ThreatObj(path.length - 1, path.value, path, threatType, None)
                         threatList.append(threat)
 
         if alwaysIncludeArmy or alwaysIncludeRecentlyMoved or includeArmiesWithThreats:
@@ -586,7 +593,7 @@ class DangerAnalyzer(object):
                 depth,
                 noNeutralCities=army.value < 150,
                 searchingPlayer=army.player,
-                incrementBackward=True)
+                incrementBackward=False)
 
             if path:
                 armiesAlreadyInPath = []
@@ -603,6 +610,7 @@ class DangerAnalyzer(object):
                         f"Army tile mismatch threat searcher found a path! Army {str(army)}, path {str(path)}")
                     if path.value > 0 and (
                             curThreat is None or path.length < curThreat.length or (path.value > curThreat.value and path.length == curThreat.length)):
+                        logbook.info(f'Replacing threat {curThreat} with {path} from army {army}')
                         curThreat = path
                     army.include_path(path)
 
@@ -612,6 +620,7 @@ class DangerAnalyzer(object):
                 army = armies[army]
             analysis = self._get_army_analysis(curThreat.tail.tile, army)
             threatObj = ThreatObj(curThreat.length - 1, curThreat.value, curThreat, ThreatType.Kill, saveTile, analysis)
+            logbook.info(f'Threat found {curThreat}')
             return threatObj
         else:
             logbook.info("no fastest threat found")

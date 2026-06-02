@@ -230,6 +230,7 @@ class IslandMaxFlowGraph(object):
         'flow_node_lookup_by_tile_inc_neut',
         'flow_node_lookup_by_island_no_neut',
         'flow_node_lookup_by_island_inc_neut',
+        'debug_fake_escape_usage_by_island',
     )
     def __init__(
         self,
@@ -258,6 +259,7 @@ class IslandMaxFlowGraph(object):
 
         self.flow_node_lookup_by_island_no_neut: typing.Dict[int, IslandFlowNode] = flowNodeIslandIdLookupNoNeut
         self.flow_node_lookup_by_island_inc_neut: typing.Dict[int, IslandFlowNode] = flowNodeIslandIdLookupIncNeut
+        self.debug_fake_escape_usage_by_island: typing.Dict[int, int] = {}
 
     # def copy(self) -> IslandMaxFlowGraph:
     #     """

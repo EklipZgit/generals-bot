@@ -61,6 +61,7 @@ class WinConditionAnalyzer(object):
         self.is_contesting_cities: bool = False
         self.target_player: int = -1
         self.target_player_location: Tile = map.GetTile(0, 0)
+        self.best_target_player_attack_target: Tile | None = self.target_player_location
         self.recommended_offense_plan_turns: int = 0
         self.recommended_city_defense_plan_turns: int = 0
         self.our_best_attack_plan: GatherCapturePlan | None = None
@@ -173,6 +174,7 @@ class WinConditionAnalyzer(object):
 
             self.target_player = targetPlayer
             self.target_player_location: Tile = targetPlayerExpectedGeneralLocation
+            self.best_target_player_attack_target = self.target_player_location
 
         if self.target_player == -1:
             self.viable_win_conditions.add(WinCondition.WinOnEconomy)
@@ -350,6 +352,20 @@ class WinConditionAnalyzer(object):
                 self._log_verbose(f'NOT able to contest {str(self.target_player_location)} with expected enDefense {enDefense} vs our offense {ourOffense}')
 
         self.is_contesting_cities = ableToContest
+        bestAttackCity = min(
+            [
+                city for city in self.contestable_cities
+                if city.isCity
+                and rawBDists[city.tile_index] < rawADists[city.tile_index]
+                and rawADists[city.tile_index] < self.board_analysis.inter_general_distance
+            ],
+            key=lambda city: rawADists[city.tile_index],
+            default=None,
+        )
+        if bestAttackCity is not None:
+            self.best_target_player_attack_target = bestAttackCity
+        else:
+            self.best_target_player_attack_target = self.target_player_location
         logbook.info(f'city contest analysis: {len(self.contestable_cities)} contestable, ableToContest={ableToContest}, attackTime={attackTime}')
         return ableToContest
 

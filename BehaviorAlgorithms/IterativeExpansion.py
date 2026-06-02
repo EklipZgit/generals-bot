@@ -164,6 +164,13 @@ class ArmyFlowExpander(object):
         self._dynamic_heuristic_falsehood_ratio: float = 0.0
         """As we get low on time, this will be increased from zero to begin an inconsistent heuristic that prefers gathering larger amounts of army per turn, but stops guaranteeing (nearly) optimal results."""
 
+    @property
+    def flow_graph_data(self):
+        """Exposes the flow graph data from the active flow direction finder for rendering purposes."""
+        if self.method == FlowGraphMethod.OrToolsSimpleMinCost and self._ortools_flow_direction_finder is not None:
+            return self._ortools_flow_direction_finder.ortools_graph_data
+        return None
+
     def get_expansion_options(
             self,
             islands: TileIslandBuilder,
@@ -2235,6 +2242,17 @@ class ArmyFlowExpander(object):
             # if showBackfillNeut:
             #     ArmyFlowExpander._include_flow_with_colors(viewInfo, flowGraph.enemy_backfill_neut_dump_edges, Colors.DARK_PURPLE)
 
+        if flowGraph.debug_fake_escape_usage_by_island:
+            for island_id, debug_army in flowGraph.debug_fake_escape_usage_by_island.items():
+                flow_node = flowGraph.flow_node_lookup_by_island_no_neut.get(island_id)
+                if flow_node is None:
+                    flow_node = flowGraph.flow_node_lookup_by_island_inc_neut.get(island_id)
+                if flow_node is None:
+                    continue
+                for tile in flow_node.island.tile_set:
+                    viewInfo.targetedTiles.append((tile, TargetStyle.GOLD, -4))
+                    viewInfo.midLeftGridText.raw[tile.tile_index] = str(debug_army)
+
     def _capture_last_run_flow_stats(self):
         self.last_run = ArmyFlowExpanderLastRun()
         finder = self._get_networkx_flow_direction_finder()
@@ -2310,7 +2328,7 @@ class ArmyFlowExpander(object):
                 destX = sum(allDestX) / len(allDestX)
                 destY = sum(allDestY) / len(allDestY)
 
-                viewInfo.draw_diagonal_arrow_between_xy(sourceX, sourceY, destX, destY, label=f'{destinationEdge.edge_army}', color=sourceColor, alpha=179, labelAlpha=255)
+                viewInfo.draw_diagonal_arrow_between_xy(sourceX - 0.15, sourceY - 0.15, destX - 0.15, destY - 0.15, label=f'{destinationEdge.edge_army}', color=sourceColor, alpha=179, labelAlpha=255)
                 q.append(destinationEdge.target_flow_node)
 
     @staticmethod

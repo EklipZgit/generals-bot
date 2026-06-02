@@ -135,6 +135,9 @@ class BotGatherOps:
         gathString = ""
         gathStartTime = time.perf_counter()
         gatherTargets = bot.target_player_gather_targets.copy()
+        gatherTargets = bot.defensive_spanning_tree.copy()
+        path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing)
+        gatherTargets.update(path.tileList)
         if len(gatherTargets) == 2:
             gatherTargets = set()
             gatherTargets.add(bot.general)
@@ -209,8 +212,8 @@ class BotGatherOps:
                             continue
 
                         if (
-                            bot.territories.territoryMap[useTile] != bot.general.player
-                            and bot.territories.territoryMap[useTile] not in bot._map.teammates
+                            bot.territories.territoryMap.raw[useTile.tile_index] != bot.general.player
+                            and bot.territories.territoryMap.raw[useTile.tile_index] not in bot._map.teammates
                             and (
                                 BotPathingUtils.distance_from_target_path(bot, leaf.source) <= BotPathingUtils.distance_from_target_path(bot, leaf.dest)
                                 or BotPathingUtils.distance_from_target_path(bot, leaf.source) > bot.shortest_path_to_target_player.length / 3
@@ -298,6 +301,7 @@ class BotGatherOps:
             useTrueValueGathered = False
             tgTurns = -1
             includeGatherTreeNodesThatGatherNegative = bot.defend_economy
+            pruneToValuePerTurn = False
             distancePriorities = bot.board_analysis.intergeneral_analysis.bMap
             if bot.defend_economy:
                 turnInCycle = bot.timings.get_turn_in_cycle(bot._map.turn)
@@ -307,9 +311,14 @@ class BotGatherOps:
                 splitTurns = bot.timings.splitTurns
                 launchTiming = bot.timings.launchTiming
                 tgTurns = remainingCycleTurns - 5
+
                 useTrueValueGathered = True
 
-                gatherTargets = {centralDefensePoint}
+                gatherTargets = bot.defensive_spanning_tree.copy()
+                path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing)
+                gatherTargets.update(path.tileList)
+
+                # gatherTargets = {centralDefensePoint}
                 bot.info(
                     f'DEF_ECON_GATHER_TURNS turn={bot._map.turn} turnInCycle={turnInCycle} remainingCycleTurns={remainingCycleTurns} '
                     f'splitTurns={splitTurns} launchTiming={launchTiming} centralDefensePoint={centralDefensePoint} '
@@ -327,6 +336,11 @@ class BotGatherOps:
                         gathString = f" +NO_MAT_RISKPATH {tgTurns}t" + gathString
                     else:
                         gathString = " +RISKPATH" + gathString
+                if tgTurns < 10:
+                    tgTurns = 10
+                    pruneToValuePerTurn = True
+
+                tgTurns += bot.distance_from_general(centralDefensePoint)
 
                 for t in gatherTargets:
                     bot.viewInfo.add_targeted_tile(t, TargetStyle.WHITE, radiusReduction=11)
@@ -343,7 +357,7 @@ class BotGatherOps:
                 distancePriorities=distancePriorities,
                 useTrueValueGathered=useTrueValueGathered,
                 targetTurns=tgTurns,
-                pruneToValuePerTurn=False)
+                pruneToValuePerTurn=pruneToValuePerTurn)
 
         if move is not None:
             if move.dest.player != bot.player.index and move.dest not in bot.target_player_gather_targets and not bot.flanking and needToKillTiles is not None and move.dest in needToKillTiles:
@@ -441,8 +455,10 @@ class BotGatherOps:
         turnOffset = bot._map.turn + bot.timings.offsetTurns
         turnCycleOffset = turnOffset % bot.timings.cycleTurns
 
-        # BotGatherOps.get_tree_move_default_value_func(bot) if not bot.defend_economy and not bot.likely_kill_push else BotGatherOps.get_tree_move_most_army_value_distance_factored_func(bot)
-        gatherNodeMoveSelectorFunc = BotGatherOps.get_tree_move_most_army_value_distance_factored_func(bot)
+        # When not defending economy and not likely kill push, delay cities/generals (gather them last)
+        # When defending economy or likely kill push, do NOT delay cities
+        delayCities = not bot.defend_economy and not (bot.likely_kill_push and len(bot._map.players[bot._map.player_index].cities) > 1)
+        gatherNodeMoveSelectorFunc = BotGatherOps.get_tree_move_most_army_value_distance_factored_func(bot, delayCities=delayCities)
         # if bot.likely_kill_push:
         #     potThreat = bot.dangerAnalyzer.fastestPotentialThreat
         #     if potThreat is None and bot.enemy_attack_path is not None:
@@ -450,7 +466,6 @@ class BotGatherOps:
         #         potThreat = ThreatObj(bot.enemy_attack_path.length, bot.enemy_attack_path.value, bot.enemy_attack_path, ThreatType.Vision, armyAnalysis=aa)
         #     if potThreat is not None:
         #         gatherNodeMoveSelectorFunc = BM.BotDefense.BotDefense.get_defense_tree_move_prio_func(bot, potThreat)
-
 
         if force or (bot._map.turn >= 50 and turnCycleOffset < bot.timings.splitTurns and startTiles is not None and len(startTiles) > 0):
             bot.finishing_exploration = False
@@ -554,11 +569,11 @@ class BotGatherOps:
                     value = prunedValue
                     bot.viewInfo.add_info_line(f"{reason}pruned to max G/T {prunedValue:.1f}/{prunedCount}t  {prunedValue/max(1, prunedCount):.2f}vt (min {minGather:.0f})  (from {value:.1f}/{turnsUsed}t  {value/max(1, turnsUsed):.2f}vt)")
                     turnInCycle = bot.timings.get_turn_in_cycle(bot._map.turn)
-                    if prunedCount + turnInCycle > bot.timings.splitTurns:
-                        newSplit = prunedCount + turnInCycle
-                        bot.viewInfo.add_info_line(f'updating timings to gatherSplit {newSplit} due to defensive gather')
-                        bot.timings.splitTurns = newSplit
-                        bot.timings.launchTiming = max(bot.timings.splitTurns, bot.timings.launchTiming)
+                    # if prunedCount + turnInCycle > bot.timings.splitTurns:
+                    #     newSplit = prunedCount + turnInCycle
+                    #     bot.viewInfo.add_info_line(f'updating timings to gatherSplit {newSplit} due to defensive gather')
+                    #     bot.timings.splitTurns = newSplit
+                    #     bot.timings.launchTiming = max(bot.timings.splitTurns, bot.timings.launchTiming)
 
                 bot.gatherNodes = gatherNodes
 
@@ -906,13 +921,16 @@ class BotGatherOps:
         return default_value_func
 
     @staticmethod
-    def get_tree_move_most_army_value_distance_factored_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+    def get_tree_move_most_army_value_distance_factored_func(bot, delayCities: bool = False) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
         frPlayers = bot._map.get_teammates(bot.player.index)
         def default_value_func(currentTile, currentPriorityObject):
             negCityCount = army = 0
             isNotEnemyCity = True
             if currentPriorityObject is not None:
-                (prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity) = currentPriorityObject
+                if delayCities:
+                    (lastIsntDelayableCity, prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity) = currentPriorityObject
+                else:
+                    (prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity) = currentPriorityObject
                 army -= 1
             nextIsNotEnemyCity = isNotEnemyCity
             isNotEnemyCity = True
@@ -933,7 +951,14 @@ class BotGatherOps:
             prioVal = army - 5 * negDistFromPlayArea
             if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                 logbook.info(f'prio at {currentTile} = {prioVal} (dist={-negDistFromPlayArea}, army={army})')
-            return prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity
+
+            if delayCities:
+                # When delayCities is True, set isntDelayableCity to False for cities/generals (making them lower priority)
+                # This causes cities/generals to be gathered last when not defending economy
+                isntDelayableCity = not (currentTile.isGeneral or currentTile.isCity)
+                return isntDelayableCity, prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity
+            else:
+                return prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity
 
         return default_value_func
 

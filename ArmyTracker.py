@@ -1860,7 +1860,8 @@ class ArmyTracker(object):
             maxArmy.update()
             maxArmy.last_moved_turn = self.map.turn - 1
             # maxArmy.player = fogTile.player
-            # self.armies[fogTile] = maxArmy
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_duplicate_army_out_of_fog covers the case where resolve_fog_emergence returns an army but it's not added to self.armies[fogTile]. This causes find_new_armies to create a duplicate army. Uncommenting this line fixes the duplication.
+            self.armies[fogTile] = maxArmy
             maxArmy.path = sourceFogArmyPath
             maxArmy.expectedPaths = []
         else:

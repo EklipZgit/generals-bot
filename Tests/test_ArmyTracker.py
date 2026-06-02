@@ -1465,7 +1465,7 @@ a1   b1   b1   bG1
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,10->13,10')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -1478,7 +1478,7 @@ a1   b1   b1   bG1
         self.skipTest("TODO add asserts")  #  for should_not_capture_fog_island_neutral_then_invent_infinite_army
 
     def test_should_drop_crazy_broken_army(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_drop_crazy_broken_army___n3y3Ih2k7---0--164.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 164, fill_out_tiles=True)
 
@@ -1524,7 +1524,7 @@ a1   b1   b1   bG1
         self.assertNoFriendliesKilled(map, general, allyGen)
 
     def test_should_not_create_phantom_visible_army(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_create_phantom_visible_army___1sM7IUnt5---3--133.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 133, fill_out_tiles=False)
 
@@ -1981,6 +1981,7 @@ a1   b1   b1   bG1
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, '3,16->1,16->1,13->0,13->0,11->1,11->1,8->3,8')
+        simHost.sim.ignore_illegal_moves = True
         bot = self.get_debug_render_bot(simHost, general.player)
         realArmy = bot.get_army_at_x_y(3, 16)
         del bot.armyTracker.armies[realArmy.tile]
@@ -2803,3 +2804,4 @@ a1   b1   b1   bG1
         # 61-71  (May 28 2026, before tweaking for bad detanglement when pushing armies back into the fog)
         # 56-72
         # 58-74
+        # 55-77 May 29th commit, before fixing test_should_not_duplicate_army_out_of_fog

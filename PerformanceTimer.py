@@ -10,18 +10,19 @@ NS_CONVERTER = (10 ** 9)
 
 
 class MoveEvent(object):
-    def __init__(self, event_name: str, parent: MoveEvent | None):
+    def __init__(self, event_name: str, parent: MoveEvent | None, turn: int):
         self.event_name: str = event_name
         self.event_start_time: float = time.perf_counter()
         self.event_end_time: float | None = None
         self.parent: MoveEvent | None = parent
+        self.turn: int = turn
 
     def __enter__(self):
         return self
 
     def __exit__(self, *args, **kwargs):
         self.event_end_time = time.perf_counter()
-        logbook.info(f'--------------------\n      Complete: ({self.event_end_time - self.event_start_time:.4f}) {self.event_name}\n^^^--------------^^^')
+        logbook.info(f'--------------------\n      Complete t{self.turn}: ({self.event_end_time - self.event_start_time:.4f}) {self.event_name}\n^^^--------------^^^')
 
     def get_duration(self):
         endTime = self.event_end_time
@@ -55,10 +56,10 @@ class MoveTimer(object):
                 self._event_stack.put(parent)
                 break
 
-        event = MoveEvent(event_description, parent)
+        event = MoveEvent(event_description, parent, self.turn)
         self.event_list.append(event)
         self._event_stack.put(event)
-        logbook.info(f'\nvvv--------------vvv\nBeginning: {event_description} ({event.event_start_time - self.move_beginning_time:.4f} in)')
+        logbook.info(f'\nvvv--------------vvv\nBeginning t{self.turn}: {event_description} ({event.event_start_time - self.move_beginning_time:.4f} in)')
         return event
 
     def get_events_organized_longest_to_shortest(self, limit: int = 15, indentSize: int = 3) -> typing.List[str]:

@@ -8,6 +8,7 @@ import DebugHelper
 import Gather
 import logbook
 
+from Interfaces import TilePlanInterface
 import SearchUtils
 from BotModules.BotCityCaptureControl import BotCityCaptureControl
 from BotModules.BotCombatQueries import BotCombatQueries
@@ -113,8 +114,9 @@ class BotCityOps:
             bot: EklipZBot,
             negativeTiles: typing.Set[Tile],
             forceNeutralCapture: bool = False,
-    ) -> typing.Tuple[Path | None, Move | None, typing.Any | None]:
+    ) -> typing.Tuple[Path | None, Move | None, TilePlanInterface | None]:
         negativeTiles = negativeTiles.copy()
+
         if BotStateQueries.is_all_in(bot, ) and not bot.all_in_city_behind:
             return None, None, None
         logbook.info(f"------------\n     CAPTURE_CITIES (force_city_take {bot.force_city_take}), negative_tiles {str(negativeTiles)}\n--------------")
@@ -201,6 +203,9 @@ class BotCityOps:
                 isNeutCity = True
 
         if path is None:
+            if bot.quick_kill_city_plan_option is not None:
+                bot.info(f'NO ENEMY CITY FOUND but we already had a quick kill')
+                return None, None, None
             logbook.info(f"xxxxxxxxx\n  xxxxx\n    NO ENEMY CITY FOUND or Neutral city prioritized??? mustContestEnemy {mustContestEnemy} shouldAllowNeutralCapture {shouldAllowNeutralCapture} forceNeutralCapture {forceNeutralCapture}\n  xxxxx\nxxxxxxxx")
 
             downOnCities = not bot.opponent_tracker.even_or_up_on_cities(bot.targetPlayer)
@@ -227,13 +232,15 @@ class BotCityOps:
                         bot.enemy_expansion_plan = None
 
                         BotTimings.set_all_in_cycle_to_hit_with_current_timings(bot, 50, bufferTurnsEndOfCycle=5)
+                        return None, None, None
 
             bot.all_in_city_behind = False
 
             return None, None, None
 
-        if bot.all_in_city_behind:
+        if bot.all_in_city_behind and (WinCondition.WinOnEconomy in bot.win_condition_analyzer.viable_win_conditions or WinCondition.DefendEconomicLead in bot.win_condition_analyzer.viable_win_conditions or WinCondition.DefendContestedFriendlyCity in bot.win_condition_analyzer.viable_win_conditions):
             BotComms.send_teammate_communication(bot, "Ceasing all-in, hold", bot.locked_launch_point)
+            bot.info("Ceasing all-in, hold")
             bot.all_in_city_behind = False
             bot.is_all_in_army_advantage = False
             bot.is_all_in_losing = False
@@ -339,7 +346,7 @@ class BotCityOps:
             bot: EklipZBot,
             negativeTiles: typing.Set[Tile],
             forceNeutralCapture: bool = False,
-    ) -> typing.Any | None:
+    ) -> TilePlanInterface | None:
         _, _, planOption = BotCityOps.capture_cities_with_plan_option(bot, negativeTiles, forceNeutralCapture=forceNeutralCapture)
         if planOption is not None:
             bot.info(f'city capture option {planOption.econValue / max(planOption.length, 1):.2f} ({planOption.econValue:.1f}e/{planOption.length}t) {planOption}')
@@ -729,7 +736,11 @@ class BotCityOps:
             logbook.info(
                 f"{bot.get_elapsed()} searching for depth {cityDepthSearch} dest bfs kill on city {enemyCity.x},{enemyCity.y}")
             bot.viewInfo.add_targeted_tile(enemyCity, TargetStyle.RED)
-            armyToSearch = BotStateQueries.get_target_army_inc_adjacent_enemy(bot, enemyCity) + 1.5
+            (armyToSearch, enNegs) = BotStateQueries.get_target_army_inc_adjacent_enemy_and_tiles(bot, enemyCity)
+            armyToSearch += 1.0
+
+            armyToSearchNegs = negTilesToUse.copy() if negTilesToUse is not None else set()
+            armyToSearchNegs.update(enNegs)
 
             addlIncrementing = SearchUtils.Counter(0)
 
@@ -758,7 +769,7 @@ class BotCityOps:
                     max(1.5, armyToSearch),
                     0.1,
                     cityDepthSearch,
-                    negTilesToUse,
+                    armyToSearchNegs,
                     preferCapture=True,
                     searchingPlayer=bot.general.player,
                     additionalIncrement=addlIncrementing.value / 2,
@@ -770,7 +781,7 @@ class BotCityOps:
                     max(1.5, armyToSearch),
                     0.1,
                     cityDepthSearch,
-                    negTilesToUse,
+                    armyToSearchNegs,
                     preferCapture=False,
                     searchingPlayer=bot.general.player,
                     additionalIncrement=addlIncrementing.value / 2,
@@ -806,7 +817,11 @@ class BotCityOps:
                 logbook.info(f'bypassing negativeTiles for city quick kill on {str(tgCity)} due to it being part of threat path')
                 negTilesToUse = set()
 
-            armyToSearch = BotStateQueries.get_target_army_inc_adjacent_enemy(bot, tgCity) + 1
+            (armyToSearch, armyToSearchNegs) = BotStateQueries.get_target_army_inc_adjacent_enemy_and_tiles(bot, tgCity)
+            armyToSearch += 1.0
+            if negTilesToUse is not None:
+                armyToSearchNegs.update(negTilesToUse)
+
             cityPath = shortestKill.get_subsegment(3, end=True)
             maxDur = int(bot.player.tileCount ** 0.32) + 1
             path, move, planOption = BotCityOps.plan_city_capture_with_plan_option(
@@ -818,7 +833,7 @@ class BotCityOps:
                 targetGatherArmy=tgCity.army + armyToSearch - 1,
                 killSearchDist=5,
                 gatherMaxDuration=maxDur,
-                negativeTiles=negTilesToUse)
+                negativeTiles=armyToSearchNegs)
             if planOption is not None:
                 bot.info(f'plan_city_capture quick kill plan option @{tgCity}')
                 BotCityOps._apply_city_capture_plan_value(bot, planOption, tgCity)
@@ -881,7 +896,7 @@ class BotCityOps:
             gatherMaxDuration: int,
             negativeTiles: typing.Set[Tile],
             gatherMinDuration: int = 0,
-    ) -> typing.Tuple[Path | None, Move | None, typing.Any | None]:
+    ) -> typing.Tuple[Path | None, Move | None, TilePlanInterface | None]:
         if targetGatherArmy < targetKillArmy + targetCity.army:
             raise AssertionError(f'You cant gather less army {targetGatherArmy} to a city than the kill requirement {targetKillArmy} or the kill requirement will never fire and you will gather-loop.')
 
@@ -1338,16 +1353,18 @@ class BotCityOps:
                     cityDefVal -= 10
                 searchNegs = set()
                 if bot.city_capture_plan_last_updated > bot._map.turn - 2 and targetCity in bot.city_capture_plan_tiles:
-                    bot.viewInfo.add_stats_line(f'updating existing city capture plan tiles. cityDefVal {cityDefVal}')
-                    searchNegs.update(bot.city_capture_plan_tiles)
+                    oldCityDefVal = cityDefVal
                     for t in bot.city_capture_plan_tiles:
+                        if bot._map.team_ids_by_player_index[t.player] != bot._map.friendly_team:
+                            continue
+                        searchNegs.add(t)
                         cityDefVal += t.army - 1
                     cityDefVal -= targetCity.army
-                    if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
-                        logbook.info(
-                            f'CITY_SAFETY_NEGS existing-plan turn={bot._map.turn} searchNegCount={len(searchNegs)} '
-                            f'searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)}'
-                        )
+                    bot.viewInfo.add_stats_line(f'updating existing city capture plan tiles. cityDefVal {oldCityDefVal} -> {cityDefVal}')
+                    logbook.info(
+                        f'CITY_SAFETY_NEGS existing-plan turn={bot._map.turn}, searchNegCount={len(searchNegs)}, '
+                        f'searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)}, cityDefVal={cityDefVal}'
+                    )
                 else:
                     tgCities = [targetCity] if targetCity is not None else list(bot.cityAnalyzer.city_scores.keys())
                     if len(tgCities) > 0:
@@ -1364,14 +1381,13 @@ class BotCityOps:
                             cityDefContributions.append(f'{t.x},{t.y}:+{contribution}/{max(0, t.army - 1)}')
                             BotCityOps._log_city_defense_tile_contribution(bot, t, tgCities[0], defTile, defTurns, contribution)
                         bot.viewInfo.add_stats_line(f'new city capture plan tiles? cityDefVal {cityDefVal}')
-                        if DebugHelper.is_debug_or_unit_test_mode():
-                            logbook.info(
-                                f'CITY_SAFETY_NEGS new-plan turn={bot._map.turn} targetCandidates={BotCityOps._format_city_safety_tiles(tgCities)} '
-                                f'nearCityCount={len(playerTilesNearCity)} searchNegCount={len(searchNegs)} '
-                                f'nearCityTiles={BotCityOps._format_city_safety_tiles(playerTilesNearCity)} '
-                                f'searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)} '
-                                f'cityDefContributions={" | ".join(cityDefContributions)}'
-                            )
+                        logbook.info(
+                            f'CITY_SAFETY_NEGS new-plan turn={bot._map.turn} cityDefVal={cityDefVal} targetCandidates={BotCityOps._format_city_safety_tiles(tgCities)} '
+                            f'nearCityCount={len(playerTilesNearCity)} searchNegCount={len(searchNegs)} '
+                            f'nearCityTiles={BotCityOps._format_city_safety_tiles(playerTilesNearCity)} '
+                            f'searchNegs={BotCityOps._format_city_safety_tiles(searchNegs)} '
+                            f'cityDefContributions={" | ".join(cityDefContributions)}'
+                        )
                     else:
                         bot.viewInfo.add_stats_line(f'bypassing neut cities, 0 neut cities available :( cityDefVal {cityDefVal}')
                         return False
@@ -1381,15 +1397,14 @@ class BotCityOps:
                     defTile = targetCity
                 attackNegs = set(searchNegs)
                 attackNegs.update(bot.largePlayerTiles)
-                if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
-                    logbook.info(
-                        f'CITY_SAFETY_ATTACK_INPUT turn={bot._map.turn} defTile={defTile.x},{defTile.y}:p{defTile.player}:a{defTile.army}:vis{defTile.visible}:disc{defTile.discovered} '
-                        f'threatTurns={threatTurns} defTurns={defTurns} distPenalty={distPenalty} enDistPenalty={enDistPenalty} '
-                        f'generalContribution={generalContribution} cityContribution={cityContribution} cityDefVal={cityDefVal} '
-                        f'largePlayerTileCount={len(bot.largePlayerTiles)} searchNegCount={len(searchNegs)} attackNegCount={len(attackNegs)} '
-                        f'largePlayerTiles={BotCityOps._format_city_safety_tiles(bot.largePlayerTiles)} '
-                        f'attackNegs={BotCityOps._format_city_safety_tiles(attackNegs)}'
-                    )
+                logbook.info(
+                    f'CITY_SAFETY_ATTACK_INPUT turn={bot._map.turn} defTile={defTile.x},{defTile.y}:p{defTile.player}:a{defTile.army}:vis{defTile.visible}:disc{defTile.discovered} '
+                    f'threatTurns={threatTurns} defTurns={defTurns} distPenalty={distPenalty} enDistPenalty={enDistPenalty} '
+                    f'generalContribution={generalContribution} cityContribution={cityContribution} cityDefVal={cityDefVal} '
+                    f'largePlayerTileCount={len(bot.largePlayerTiles)} searchNegCount={len(searchNegs)} attackNegCount={len(attackNegs)} '
+                    f'largePlayerTiles={BotCityOps._format_city_safety_tiles(bot.largePlayerTiles)} '
+                    f'attackNegs={BotCityOps._format_city_safety_tiles(attackNegs)}'
+                )
                 risk = bot.win_condition_analyzer.get_approximate_attack_against(
                     [defTile],
                     inTurns=threatTurns,

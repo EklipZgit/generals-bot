@@ -385,6 +385,8 @@ class BotTargeting:
                 logbook.info(f'en city @{tile} skipped because win condition analyzer didnt think it was contestable.')
                 continue
 
+            lastContested = bot.win_condition_analyzer.city_contestation_history.get(tile, None)
+            lastContestedTurnsAgo = bot._map.turn - (lastContested[-1].turn if lastContested else 0)
             if bot.territories.is_tile_in_friendly_territory(tile) or bot._map.is_player_on_team_with(bot.targetPlayer, tile.player):
                 if approxed >= 2:
                     bot.viewInfo.add_stats_line(f'en city @{tile} approxed > 2')
@@ -394,7 +396,7 @@ class BotTargeting:
                     bot.viewInfo.add_stats_line(f'en city @{tile} skipped, temp fog prediction')
                     continue
 
-                if tile in prevApproxed and tile not in bot.city_capture_plan_tiles and not bot._map.is_army_bonus_turn:
+                if tile in prevApproxed and tile not in bot.city_capture_plan_tiles and not bot._map.is_army_bonus_turn and SearchUtils.any_where(bot.city_capture_plan_tiles, lambda t: t.isCity and not bot._map.is_player_friendly(t.player) and t.player != -1):
                     bot.viewInfo.add_stats_line(f'en city @{tile} skipped, prevApproxed and not in plan')
                     continue
 
@@ -405,8 +407,11 @@ class BotTargeting:
                     continue
 
                 timing = 30 - ((bot._map.turn + 5) % 50) % 10
-                with bot.perf_timer.begin_move_event(f'en city @{tile} approx attack/def {timing}t'):
-                    curLeft, ourAttack, theirDef = bot.win_condition_analyzer.get_dynamic_approximate_attack_defense(tile, negativeTiles, minTurns=4, maxTurns=timing)
+                if lastContestedTurnsAgo < 20:
+                    timing = min(max(25 - lastContestedTurnsAgo, 10), timing)
+                defensePenaltyTurns = 10 - min(20, max(0, lastContestedTurnsAgo - 10))
+                with bot.perf_timer.begin_move_event(f'en city @{tile} approx attack/def {timing}t defPenT{defensePenaltyTurns}'):
+                    curLeft, ourAttack, theirDef = bot.win_condition_analyzer.get_dynamic_approximate_attack_defense(tile, negativeTiles, minTurns=4, maxTurns=timing, defensePenaltyTurns=defensePenaltyTurns)
                     bot.enemy_city_approxed_attacks[tile] = (curLeft, ourAttack, theirDef)
 
                 diff = ourAttack - theirDef

@@ -24,6 +24,7 @@ from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotTimings import BotTimings
 from DangerAnalyzer import ThreatType, ThreatObj
 from Gather import GatherTreeNode, GatherCapturePlan
+from Interfaces.TilePlanInterface import PathMove
 from Path import Path, MoveListPath
 from Strategy.WinConditionAnalyzer import WinCondition
 from StrategyModels import ExpansionPotential
@@ -355,7 +356,7 @@ class BotCityOps:
     @staticmethod
     def _apply_city_capture_plan_value(
             bot: EklipZBot,
-            planOption: GatherCapturePlan,
+            planOption: TilePlanInterface,
             targetCity: Tile,
     ):
         remainingTurnsInCycle = bot.timings.get_turns_left_in_cycle(bot._map.turn)
@@ -585,7 +586,7 @@ class BotCityOps:
     @staticmethod
     def get_quick_kill_on_enemy_cities_plan_option(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> TilePlanInterface | None:
         # Force recompile
-        foundCap = None
+        foundCap: TilePlanInterface | None = None
         enemyCitiesOrderedByPriority = BotCityOps.get_enemy_cities_by_priority(bot)
         for enemyCity in enemyCitiesOrderedByPriority:
             enMovedNear = False
@@ -631,8 +632,9 @@ class BotCityOps:
                 BotCityOps._apply_city_capture_plan_value(bot, killPath, killPath.tail.tile)
                 return killPath
         possibleNeutralCities = []
-        possibleNeutralCities.extend(c for c in bot.cityAnalyzer.city_scores.keys() if
-                not c.visible
+        possibleNeutralCities.extend(
+            c for c in bot.cityAnalyzer.city_scores.keys()
+            if not c.visible
                 and not bot.territories.is_tile_in_enemy_territory(c)
                 and (
                         (c.army < 4 and bot.territories.territoryDistances[bot.targetPlayer].raw[c.tile_index] > 3)
@@ -725,12 +727,18 @@ class BotCityOps:
                 cityDepthSearch -= 1
 
             if bot.dangerAnalyzer.fastestThreat is not None and enemyCity in bot.dangerAnalyzer.fastestThreat.path.tileSet:
-                logbook.info(f'bypassing negativeTiles for city quick kill on {str(enemyCity)} due to it being part of threat path')
+                logbook.info(
+                    f'bypassing base negativeTiles for city quick kill on {str(enemyCity)} due to it being part of threat path; '
+                    f'clearedBaseNegTiles={[str(t) for t in negTilesToUse]} adjacentEnemyNegTilesWillStillApply=True'
+                )
                 negTilesToUse = set()
                 cityDepthSearch -= 1
 
             if bot.dangerAnalyzer.fastestPotentialThreat is not None and enemyCity in bot.dangerAnalyzer.fastestPotentialThreat.path.tileSet:
-                logbook.info(f'bypassing negativeTiles for city quick kill on {str(enemyCity)} due to it being part of POTENTIAL threat path')
+                logbook.info(
+                    f'bypassing base negativeTiles for city quick kill on {str(enemyCity)} due to it being part of POTENTIAL threat path; '
+                    f'clearedBaseNegTiles={[str(t) for t in negTilesToUse]} adjacentEnemyNegTilesWillStillApply=True'
+                )
                 negTilesToUse = set()
 
             logbook.info(
@@ -741,6 +749,13 @@ class BotCityOps:
 
             armyToSearchNegs = negTilesToUse.copy() if negTilesToUse is not None else set()
             armyToSearchNegs.update(enNegs)
+            logbook.info(
+                f'QUICK_KILL_CITY_SEARCH city={enemyCity} cityArmy={enemyCity.army} '
+                f'armyToSearch={armyToSearch:.1f} depth={cityDepthSearch} '
+                f'baseNegTiles={[str(t) for t in negTilesToUse] if negTilesToUse is not None else None} '
+                f'adjacentEnemyNegTiles={[str(t) for t in enNegs]} '
+                f'combinedNegTiles={[str(t) for t in armyToSearchNegs]}'
+            )
 
             addlIncrementing = SearchUtils.Counter(0)
 
@@ -806,6 +821,11 @@ class BotCityOps:
                     bot.info(
                         f"En city kill len {killPath.length} on {str(enemyCity)}: {str(killPath)}")
                     shortestKill = killPath
+            if killPath is None:
+                precomputedPlan = bot.win_condition_analyzer.contestable_city_offense_plans.get(enemyCity, None)
+                if precomputedPlan is not None and (shortestKill is None or shortestKill.length > precomputedPlan.length):
+                    bot.info(f'En city kill WinCondAn passthru {enemyCity}: {precomputedPlan}')
+                    shortestKill = precomputedPlan
 
         if shortestKill is not None:
             tgCity = shortestKill.tail.tile
@@ -814,14 +834,26 @@ class BotCityOps:
                 negTilesToUse = set()
 
             if bot.dangerAnalyzer.fastestThreat is not None and tgCity in bot.dangerAnalyzer.fastestThreat.path.tileSet:
-                logbook.info(f'bypassing negativeTiles for city quick kill on {str(tgCity)} due to it being part of threat path')
+                logbook.info(
+                    f'bypassing base negativeTiles for city quick kill on {str(tgCity)} due to it being part of threat path; '
+                    f'clearedBaseNegTiles={[str(t) for t in negTilesToUse]} adjacentEnemyNegTilesWillStillApply=True'
+                )
                 negTilesToUse = set()
 
             (armyToSearch, armyToSearchNegs) = BotStateQueries.get_target_army_inc_adjacent_enemy_and_tiles(bot, tgCity)
             armyToSearch += 1.0
             if negTilesToUse is not None:
                 armyToSearchNegs.update(negTilesToUse)
+            logbook.info(
+                f'QUICK_KILL_CITY_PLAN city={tgCity} cityArmy={tgCity.army} '
+                f'armyToSearch={armyToSearch:.1f} targetKillArmy={armyToSearch - 1:.1f} '
+                f'targetGatherArmy={tgCity.army + armyToSearch - 1:.1f} '
+                f'baseNegTiles={[str(t) for t in negTilesToUse] if negTilesToUse is not None else None} '
+                f'combinedNegTiles={[str(t) for t in armyToSearchNegs]}'
+            )
 
+            if isinstance(shortestKill, GatherCapturePlan):
+                return shortestKill
             cityPath = shortestKill.get_subsegment(3, end=True)
             maxDur = int(bot.player.tileCount ** 0.32) + 1
             path, move, planOption = BotCityOps.plan_city_capture_with_plan_option(
@@ -854,7 +886,6 @@ class BotCityOps:
                 planPath = shortestKill.get_subsegment(1)
                 BotCityOps._apply_city_capture_plan_value(bot, planPath, tgCity)
                 return planPath
-
         return None
 
     @staticmethod
@@ -1340,7 +1371,7 @@ class BotCityOps:
                     f'cityPlanTiles={BotCityOps._format_city_safety_tiles(bot.city_capture_plan_tiles)}'
                 )
 
-            with bot.perf_timer.begin_move_event(f'approximate attack / def ({threatTurns}t, minFogDist {minFogDist})'):
+            with bot.perf_timer.begin_move_event(f'c{targetCity} approx attack / def ({threatTurns}t, minFogDist {minFogDist})'):
                 defTurns = threatTurns
                 distPenalty = bot.distance_from_general(targetCity) if targetCity is not None else 4
                 enDistPenalty = bot.shortest_path_to_target_player.length - bot.board_analysis.intergeneral_analysis.bMap.raw[targetCity.tile_index] if targetCity is not None else 0

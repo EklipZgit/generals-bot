@@ -844,7 +844,8 @@ class BotExpansionOps:
                 for t in otherPath.tileSet:
                     planOpt = bot.intercept_plans.get(t, None)
                     if planOpt is not None:
-                        intPath = None
+                        bestReplacementOption = None
+                        bestReplacementVt = 0.0
                         for turns, option in planOpt.intercept_options.items():
                             if option == planOpt:
                                 bot.info(f'THIS SHOULD NOT HAPPEN, option == planOpt {planOpt}')
@@ -862,19 +863,23 @@ class BotExpansionOps:
                                 lambda threatObj: threatObj.path.tail.tile.isGeneral,
                             )
                             if p.start.tile == otherPath.get_first_move().source and (isOneMoveLargeIntercept or isGeneralDefenseIntercept or econValue / turns > interceptVtCutoff):
-                                bot.viewInfo.add_info_line(f'EXP INDIR INT ON {str(t)} W {str(otherPath)}')
+                                optionVt = option.econValue / max(option.length, 1)
+                                if bestReplacementOption is None or optionVt > bestReplacementVt or (optionVt == bestReplacementVt and option.worst_case_intercept_moves < bestReplacementOption.worst_case_intercept_moves):
+                                    bestReplacementOption = option
+                                    bestReplacementVt = optionVt
 
-                                if option.requiredDelay > 0:
-                                    bot.viewInfo.add_info_line(f'   HAD DELAY {option}')
-                                    plan.blocking_tiles.update(option.tileSet)
-                                    plan.intercept_waiting.append(option)
-                                else:
-                                    plan.includes_intercept = True
-                                    bot.viewInfo.add_info_line(f'   REPLACING WITH {option} ({option.path})')
-                                    anyIntercept = True
-                                    plan.selected_option = option
-                                    plan.all_paths[plan.all_paths.index(otherPath)] = option
-                                    break
+                        if bestReplacementOption is not None:
+                            bot.viewInfo.add_info_line(f'EXP INDIR INT ON {str(t)} W {str(otherPath)}')
+                            if bestReplacementOption.requiredDelay > 0:
+                                bot.viewInfo.add_info_line(f'   HAD DELAY {bestReplacementOption}')
+                                plan.blocking_tiles.update(bestReplacementOption.tileSet)
+                                plan.intercept_waiting.append(bestReplacementOption)
+                            else:
+                                plan.includes_intercept = True
+                                bot.viewInfo.add_info_line(f'   REPLACING WITH {bestReplacementOption} ({bestReplacementOption.path})')
+                                anyIntercept = True
+                                plan.selected_option = bestReplacementOption
+                                plan.all_paths[plan.all_paths.index(otherPath)] = bestReplacementOption
 
                         if anyIntercept:
                             plan.includes_intercept = True

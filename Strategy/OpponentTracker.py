@@ -5,6 +5,7 @@ import logbook
 import typing
 
 import Path
+import SearchUtils
 from ArmyTracker import Army
 from StrategyModels import CycleStatsData, PlayerMoveCategory, UnresolvedEmergenceData
 from ViewInfo import ViewInfo, TargetStyle
@@ -315,6 +316,7 @@ class OpponentTracker(object):
             rawTeams = [i for i, p in enumerate(self.map.players)]
 
         self._team_indexes = []
+        """Lookup from the index in all our arrays per team, to the actual team integer value used by the map. So if the map has teams=[2, 7] then this array is [2, 7]? I think. I'm not even sure this is right, this seems pretty convoluted."""
 
         self._team_lookup_by_player: typing.List[int] = MapBase.get_teams_array(map)
         self._players_lookup_by_team: typing.List[typing.List[int]] = [[] for i in range(SAFE_PLAYERS_CAP)]
@@ -324,6 +326,8 @@ class OpponentTracker(object):
         self._emergences: typing.List[typing.Tuple[Tile, int, int]] = []
         self.current_largest_unresolved_emergence_by_player: typing.List[UnresolvedEmergenceData | None] = [None for p in self.map.players]
         self.largest_unresolved_emergence_history_by_player: typing.List[typing.Dict[int, UnresolvedEmergenceData]] = [{} for p in self.map.players]
+        self.approximate_per_city_gather_distance: float = 6.0
+        """This approximates how many gather turns a player needs to spend in the fog per city we allow them to 'gather' when judging fog risk."""
         self._revealed: typing.Set[Tile] = set()
         self._moves_into_fog: typing.List[Army] = []
         self._vision_losses: typing.Set[Tile] = set()
@@ -839,6 +843,17 @@ class OpponentTracker(object):
             self._handle_moves_into_fog(currentCycleStats)
             self._update_team_cycle_stats_based_on_turn_deltas(currentCycleStats, currentTeamStats=curTurnScores, lastTurnTeamStats=lastTurnScores)
             self._handle_vision_losses(currentCycleStats)
+
+        currentCycleStats.fog_city_count = curTurnScores.cityCount
+        for pIdx in currentCycleStats.players:
+            p = self.map.players[pIdx]
+            if p.tileCount == 0:
+                continue
+            for c in p.cities:
+                if c.visible:
+                    currentCycleStats.fog_city_count -= 1
+            if p.general is not None and p.general.isGeneral and p.general.visible:
+                currentCycleStats.fog_city_count -= 1
 
         self._update_team_cycle_stats_relative_to_last_cycle(currentCycleStats, currentTeamStats=curTurnScores, lastCycleScores=lastCycleScores)
 
@@ -1682,7 +1697,7 @@ class OpponentTracker(object):
 
         armyRisk = stats.approximate_fog_army_available_total + opponentArmyOffset
 
-        inTurns = 50 - self.map.turn % 50
+        inTurns = self.map.remainingCycleTurns
         if cityLimit is None:
             enScores = self.get_current_team_scores_by_player(againstPlayer)
             cityLimit = int(inTurns * enScores.tileCount / max(1, enScores.cityCount)) + 1
@@ -1694,7 +1709,7 @@ class OpponentTracker(object):
         gatherOffset = 0
 
         turn = self.map.turn
-        remainingCycleTime = 50 - (self.map.turn % 50)
+        remainingCycleTime = self.map.remainingCycleTurns
         enScores = self.get_current_team_scores_by_player(againstPlayer)
         queueLists = [self._gather_queues_new_by_player[p].as_tile_list() for p in stats.players]
 
@@ -1734,31 +1749,41 @@ class OpponentTracker(object):
         logbook.info('\n'.join(logEntries))
         return i
 
-    def get_approximate_fog_army_risk(self, player: int, cityLimit: int | None = None, inTurns: int = 0) -> int:
+    def get_approximate_fog_army_risk(self, player: int, cityLimit: int | None = None, inTurns: int = 0, logContext: str | None = None) -> int:
         """Very fast, does not do any searches"""
         stats = self.get_current_cycle_stats_by_player(player)
         if stats is None:
+            if logContext is not None:
+                logbook.info(f'FOG_ARMY_RISK context={logContext} player={player} stats=None result=0')
             return 0
 
         armyRisk = stats.approximate_fog_army_available_total
-
+        startingArmyRisk = armyRisk
+        requestedCityLimit = cityLimit
         if cityLimit is None:
-            enScores = self.get_current_team_scores_by_player(player)
-            cityLimit = 1 + (enScores.cityCount // max(1, enScores.cityCount + inTurns // 5))
-        cityTotal = self.get_next_fog_city_amounts(player, cityLimit=cityLimit)
+            # we assume one city per 6 turns spent gathering
+            cityLimit = self.estimate_fog_city_usage_count_by_cycle_behavior(player, inTurns)
+        else:
+            cityLimit = min(cityLimit, stats.fog_city_count)
+
+        cityTotal = self.get_fog_city_risk_in_turns_by_cycle_behavior(player, inTurns=inTurns, cityLimit=cityLimit)
 
         armyRisk += cityTotal
 
         gatherOffset = 0
+        cityIncomeTotal = 0
+        gatherQueueTotal = 0
 
         pTileQueueLists = [self.get_player_gather_queue(pIndex).as_tile_list(includeOnesAndZeros=False) for pIndex in stats.players]
 
         if inTurns > 0:
-            remainingCycleTime = 50 - (self.map.turn % 50)
+            remainingCycleTime = self.map.remainingCycleTurns
             enScores = self.get_current_team_scores_by_player(player)
             for i in range(inTurns):
                 if (i + remainingCycleTime) & 1 == 0:
-                    armyRisk += min(cityLimit, enScores.cityCount)
+                    cityIncome = min(cityLimit, enScores.cityCount)
+                    cityIncomeTotal += cityIncome
+                    armyRisk += cityIncome
 
                 if i > remainingCycleTime:
                     # TODO neither of these seemed right, the heck? we already have the gather offset here, why would we ALSO increment the full thing...?
@@ -1769,7 +1794,21 @@ class OpponentTracker(object):
 
                 for tList in pTileQueueLists:
                     if i < len(tList):
-                        armyRisk += tList[i] - 1 + gatherOffset
+                        gatherQueueValue = tList[i] - 1 + gatherOffset
+                        gatherQueueTotal += gatherQueueValue
+                        armyRisk += gatherQueueValue
+
+        if logContext is not None:
+            logbook.info(
+                f'FOG_ARMY_RISK context={logContext} player={player} inTurns={inTurns} '
+                f'requestedCityLimit={requestedCityLimit} derivedCityLimit={cityLimit} '
+                f'fogCityCount={stats.fog_city_count} approximatePerCityGatherDistance={self.approximate_per_city_gather_distance} '
+                f'movesSpentGatheringFogTiles={stats.moves_spent_gathering_fog_tiles} '
+                f'startingFogArmy={startingArmyRisk} fogCityArmyTotal={stats.approximate_fog_city_army} '
+                f'fogCityContribution={cityTotal} futureCityIncome={cityIncomeTotal} '
+                f'gatherQueueContribution={gatherQueueTotal} playerQueueCount={len(pTileQueueLists)} '
+                f'queueLengths={[len(q) for q in pTileQueueLists]} result={armyRisk}'
+            )
 
         return armyRisk
 
@@ -1777,18 +1816,27 @@ class OpponentTracker(object):
         """Returns the amount of army expected to be gatherable from up to cityLimit fog cities RIGHT NOW."""
 
         cycleStats = self.get_current_cycle_stats_by_player(player)
-        scores = self.current_team_scores[self._team_lookup_by_player[player]]
 
         # TODO replace this with a queue system for cities too, instead.
         totalAmt = cycleStats.approximate_fog_city_army
 
-        cityCount = scores.cityCount
+        cityCount = cycleStats.fog_city_count
+        if cityCount == 0:
+            return 0
         if cityCount <= cityLimit:
-            return max(0, totalAmt - max(0, 3 * (cityCount - 2)))
+            # we say each city costs about 6 moves to gather and we leave behind 1 army per 2 moves so we have to leave behind cityLimit * 3 army
+            cityDistanceLeftBehindArmy = int((SearchUtils.fast_sum(cityCount) * self.approximate_per_city_gather_distance) / 2)
+            return max(0, totalAmt - cityDistanceLeftBehindArmy)
 
-        amtPerCity = totalAmt // max(1, cityCount - 1)
+        amtPerCity = totalAmt // cityCount
 
-        return amtPerCity * cityLimit
+        # # TODO we tend to grab the larger cities first, so if we're gathering 3/6 they will likely have more than half of all the army i have on cities. We should weight for that.
+        # limitRat = cityLimit / cityCount
+
+        # we say each city costs about 6 moves to gather so we have to leave behind cityLimit * 3 army
+        cityDistanceLeftBehindArmy = int(SearchUtils.fast_sum(cityLimit) * self.approximate_per_city_gather_distance / 2)
+
+        return amtPerCity * cityLimit - cityDistanceLeftBehindArmy
 
     def get_predicted_attack_turn_by_dist_to_fog(self, forPlayer: int, distToEnemyFog: int):
         # TODO this needs to take into account the enemies historical emergence distances and timings.
@@ -2143,8 +2191,35 @@ class OpponentTracker(object):
 
         # Calculate the expected city-based army offset based on their cities vs our spanning tree
         # This assumes their city spanning tree should be similar to ours in size
+        cityLimit = self.estimate_fog_city_usage_count_by_cycle_behavior(player)
+        self.get_next_fog_city_amounts(player, cityLimit)
         expected_city_spanning_offset = int(enScores.cityCount / 4 * our_city_spanning_tree_tile_count)
 
         total_fog_risk = fog_army_component + city_component - expected_city_spanning_offset
 
         return total_fog_risk, fog_army_component, city_component, expected_city_spanning_offset
+
+    def estimate_fog_city_usage_count_by_cycle_behavior(self, player: int, inTurns: int = 0) -> int:
+        """
+
+        :param player:
+        :param inTurns:
+        :return: The number of cities that we expect the player could have consumed this round based on fog gather moves.
+        """
+        stats = self.get_current_cycle_stats_by_player(player)
+        cityPotentialCount = round(max(stats.moves_spent_gathering_fog_tiles, stats.moves_spent_gathering_fog_tiles + inTurns) / self.approximate_per_city_gather_distance)
+        return max(0, min(stats.fog_city_count, cityPotentialCount))
+
+    def get_fog_city_risk_in_turns_by_cycle_behavior(self, player, inTurns: int = 0, cityLimit: int = -1):
+        if cityLimit == -1:
+            cityLimit = self.estimate_fog_city_usage_count_by_cycle_behavior(player, inTurns)
+
+        return self.get_next_fog_city_amounts(player, cityLimit=cityLimit)
+
+    def estimate_city_contest_econ_value(self, asPlayer: int, enPlayer: int, armyReachingContestableCity: int) -> float:
+        enemyTeamCityCount = self.get_current_team_scores_by_player(enPlayer).cityCount
+        # They get a 2 city penalty (because our contested city is counting up, and they have one less city counting up) to their city econ rate
+        cityContestedIncrementPenalty = 2
+        cityContestBonus = armyReachingContestableCity / max(0.1, enemyTeamCityCount - cityContestedIncrementPenalty)
+
+        return cityContestBonus

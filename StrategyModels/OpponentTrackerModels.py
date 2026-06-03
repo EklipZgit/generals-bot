@@ -76,6 +76,9 @@ class CycleStatsData:
         self.approximate_fog_city_army: int = 0
         """The amount of army probably accumulated on cities / generals currently unused. Takes into account the amount of cities they can gather per cycle etc."""
 
+        self.fog_city_count: int = 0
+        """The number of cities + generals the team has minus the number of cities and generals that are visible."""
+
     # FOR DEBUGGING
     @property
     def approximate_fog_army_available_total(self) -> int:

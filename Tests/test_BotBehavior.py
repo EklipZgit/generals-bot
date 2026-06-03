@@ -3580,3 +3580,25 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwnedXY(12,9)
+
+    def test_should_contest_both_enemy_city_and_retake_contested_friendly_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_contest_both_enemy_city_and_retake_contested_friendly_city___RHP4FgKyM---1--502.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 502, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 2, 16)
+        self.move_enemy_city(map, 0,10, 7,17)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=502)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(1, 10)
+        self.assertOwnedXY(14,12)

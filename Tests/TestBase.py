@@ -1736,6 +1736,27 @@ class TestBase(unittest.TestCase):
         oldGeneral.army = 1
         return enemyGeneral
 
+    def move_enemy_city(
+            self,
+            map: MapBase,
+            oldX: int,
+            oldY: int,
+            newX: int,
+            newY: int
+    ) -> Tile:
+        oldCity = map.At(oldX, oldY)
+        oldArm = oldCity.army
+        newCity = map.At(newX, newY)
+        newArmOld = newCity.army
+        newCity.army = oldArm
+        newCity.player = oldCity.player
+        newCity.isCity = True
+        oldCity.isCity = False
+        oldCity.isMountain = True
+        newCity.isMountain = False
+        oldCity.army = newArmOld
+        return newCity
+
     def swap_tile_army_x_y(
             self,
             map: MapBase,

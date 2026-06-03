@@ -132,6 +132,16 @@ class BotGatherOps:
         if not leafMoves:
             leafMoves = []
 
+        if bot.quick_kill_city_plan_option is not None:
+            city = bot.quick_kill_city_plan_option.tail.tile
+            cutoff = 25 - bot.quick_kill_city_plan_option.length
+            if city in bot.win_condition_analyzer.contestable_cities and bot.win_condition_analyzer.was_city_recently_contested(city, capture_cutoff_ago_turns=cutoff):
+                bot.viewInfo.add_info_line(f'Bypassing econ defense due to recently contested city')
+                return bot.quick_kill_city_plan_option.get_first_move()
+            if bot.quick_kill_city_plan_option.length < 6:
+                bot.viewInfo.add_info_line(f'Bypassing econ defense due to short city quick kill')
+                return bot.quick_kill_city_plan_option.get_first_move()
+
         gathString = ""
         gathStartTime = time.perf_counter()
         gatherTargets = bot.target_player_gather_targets.copy()

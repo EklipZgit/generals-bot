@@ -418,6 +418,7 @@ class Path(TilePlanInterface):
             t = curPathNode.tile
             curGatherTreeNode = GatherTreeNode(t, prevPathTile)
             if prevGatherTreeNode is not None:
+                prevGatherTreeNode.toGather = curGatherTreeNode
                 curGatherTreeNode.children.append(prevGatherTreeNode)
 
             if map.is_tile_on_team_with(t, forPlayer):

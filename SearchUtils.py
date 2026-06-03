@@ -4977,3 +4977,11 @@ def get_player_tiles_near_up_to_army_amount(map: MapBase, fromTiles: typing.List
     )
 
     return foundTiles
+
+
+def fast_sum(n: int) -> int:
+    """
+    :param n: the n to sum 1..n
+    :return: The summation of all integers from 1 to n inclusive
+    """
+    return (n * (n + 1)) >> 1

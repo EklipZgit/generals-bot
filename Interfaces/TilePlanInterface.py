@@ -103,7 +103,7 @@ class TilePlanInterface(ABC):
         if not moves:
             return None
         lastMove = moves[-1]
-        return PathMove(lastMove.source, PathMove(lastMove.dest, None), move_half=lastMove.move_half)
+        return PathMove(lastMove.dest, None)
 
     @property
     def start(self) -> PathMove | None:

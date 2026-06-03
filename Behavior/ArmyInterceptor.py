@@ -15,6 +15,7 @@ from Interfaces.TilePlanInterface import PathMove
 from Models import Move
 from Interfaces import TilePlanInterface, MapMatrixInterface
 from Path import Path
+from Strategy import OpponentTracker
 from ViewInfo import TargetStyle
 from base.client.map import MapBase, Tile
 
@@ -412,10 +413,13 @@ class ArmyInterceptor(object):
         threats: typing.List[ThreatObj],
         turnsLeftInCycle: int,
         otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None,
-        opponentTracker: typing.Any | None = None,
+        opponentTracker: OpponentTracker = None,
         contestableEnemyCities: typing.Iterable[Tile] | None = None,
     ) -> ArmyInterception | None:
         threatValues, ignoredThreats = self._prune_threats_to_valuable_threat_info(threats, turnsLeftInCycle)
+        if opponentTracker is None:
+            opponentTracker = OpponentTracker(self.map)
+            opponentTracker.analyze_turn(threats[0].threatPlayer)
 
         if len(threatValues) == 0:
             return None
@@ -444,7 +448,7 @@ class ArmyInterceptor(object):
 
         interception.base_threat_army = self._get_threats_army_amount(threats)
         # potentialRecaptureArmyInterceptTable = self._get_potential_intercept_table(turnsLeftInCycle, interception.base_threat_army)
-        interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles, opponentTracker)
+        interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, opponentTracker, otherThreatsBlockingTiles)
         if len(interception.intercept_options) == 0:
             logbook.warning(f'No intercept options found, retrying shared chokes but being more lenient filtering out threats')
             # try again, more friendly
@@ -458,7 +462,7 @@ class ArmyInterceptor(object):
 
                 interception.base_threat_army = self._get_threats_army_amount(interception.threats)
 
-                interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, otherThreatsBlockingTiles, opponentTracker)
+                interception.intercept_options = self._get_intercept_plan_options(interception, turnsLeftInCycle, opponentTracker, otherThreatsBlockingTiles)
 
         if len(interception.intercept_options) == 0:
             logbook.warning(f'No intercept options found, retrying non-middlest positive-depth intercept points')
@@ -1064,29 +1068,12 @@ class ArmyInterceptor(object):
             return -1
         return closestDist
 
-    def _get_enemy_team_city_count(self, targetPlayer: int, opponentTracker: typing.Any | None) -> int:
-        if opponentTracker is not None:
-            scores = opponentTracker.get_current_team_scores_by_player(targetPlayer)
-            if scores is not None and scores.cityCount > 0:
-                return scores.cityCount
-
-        targetTeam = self.map.team_ids_by_player_index[targetPlayer]
-        cityCount = 0
-        for player in self.map.players:
-            if self.map.team_ids_by_player_index[player.index] != targetTeam:
-                continue
-            if player.dead:
-                continue
-            cityCount += 1
-            cityCount += len(player.cities)
-        return cityCount
-
     def _get_intercept_plan_options(
             self,
             interception: ArmyInterception,
             turnsLeftInCycle: int,
+            opponentTracker: OpponentTracker,
             otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None,
-            opponentTracker: typing.Any | None = None,
             includeNonMiddlestPositiveDepthFallback: bool = False
     ) -> typing.Dict[int, InterceptionOptionInfo]:
         """turnsToIntercept -> econValueOfIntercept, interceptPath"""
@@ -1333,8 +1320,8 @@ class ArmyInterceptor(object):
                             (enemyArmyCollidedWithAtIntercept - enemyArmyLeftAfterIntercept) - 2 * interception.distance_from_threat_to_contestable_en_city,
                         )
                         if armyReachingContestableCity > 0:
-                            enemyTeamCityCount = self._get_enemy_team_city_count(interception.threats[0].threatPlayer, opponentTracker)
-                            cityContestBonus = armyReachingContestableCity // max(0.2, enemyTeamCityCount - 2)
+                            cityContestBonus = opponentTracker.estimate_city_contest_econ_value(asPlayer=self.map.player_index, enPlayer=interception.threats[0].threatPlayer, armyReachingContestableCity=armyReachingContestableCity)
+
                             thisValue += cityContestBonus
 
                     if self.log_debug and cityContestBonus > 0:

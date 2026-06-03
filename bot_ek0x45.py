@@ -1950,6 +1950,7 @@ class EklipZBot(object):
         self.launchPoints.append(self.general)
         self.army_interceptor = ArmyInterceptor(self._map, self.board_analysis, viewInfo=self.viewInfo)
         self.win_condition_analyzer = WinConditionAnalyzer(self._map, self.opponent_tracker, self.cityAnalyzer, self.territories, self.board_analysis)
+        self.win_condition_analyzer.info = self.info
         self.cityAnalyzer.win_condition_analyzer = self.win_condition_analyzer
         self.capture_line_tracker = CaptureLineTracker(self._map)
         BotTimings.timing_cycle_ended(self)

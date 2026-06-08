@@ -54,7 +54,7 @@ __unittest = True
 _overrideBypass = os.environ.get('bypass_ui', 'False') == 'True'
 
 class TestBase(unittest.TestCase):
-    GLOBAL_BYPASS_REAL_TIME_TEST = False
+    GLOBAL_BYPASS_REAL_TIME_TEST = True
     GLOBAL_BYPASS_RENDERING = False or _overrideBypass or GLOBAL_BYPASS_REAL_TIME_TEST
     """Change to True to have NO TEST bring up a viewer at all"""
 

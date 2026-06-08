@@ -159,17 +159,22 @@ class BotPathingUtils:
                         bot.curPathPrio = -1
                     else:
                         move = bot.curPath.get_first_move()
-                        lastFrom = None
-                        lastTo = None
-                        if bot._map.last_player_index_submitted_move:
-                            lastFrom, lastTo, _ = bot._map.last_player_index_submitted_move
+                        if move is not None:
+                            lastFrom = None
+                            lastTo = None
+                            if bot._map.last_player_index_submitted_move:
+                                lastFrom, lastTo, _ = bot._map.last_player_index_submitted_move
 
-                        if move.source == lastFrom and move.dest == lastTo:
-                            bot.curPath.pop_first_move()
-                            move = bot.curPath.get_first_move()
+                            if move.source == lastFrom and move.dest == lastTo:
+                                bot.curPath.pop_first_move()
+                                move = bot.curPath.get_first_move()
+                                if move is None:
+                                    bot.curPath = None
+                                    bot.curPathPrio = -1
 
-                        bot.info(f"CurPath cont {move}")
-                        return (True, BotRepetition.move_half_on_repetition(bot, move, 6, 3))
+                            if move is not None:
+                                bot.info(f"CurPath cont {move}")
+                                return (True, BotRepetition.move_half_on_repetition(bot, move, 6, 3))
 
         bot.info("path move failed...? setting curPath to none...")
         bot.info(f'path move WAS {bot.curPath}')

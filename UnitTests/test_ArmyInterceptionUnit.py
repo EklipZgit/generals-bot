@@ -2062,3 +2062,4 @@ player_index=0
     # 26f, 17p, 0s  after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
     # 57f, 44p, 0s  Idk before fixing off by ones and stuff
     # 55f, 52p, 0s  After partial off-by-one fixups, incomplete
+    # 52f, 55p, 0s  After allowing intercepts from tiles that are in the path-direct positive tile sets based on how much army they intercepted with. Which is wrong now that I think about it.

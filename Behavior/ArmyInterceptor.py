@@ -1517,7 +1517,6 @@ class ArmyInterceptor(object):
 
         threatTile = interception.threats[0].path.start.tile
 
-
         def valueFunc(curTile: Tile, prioObj):
             (
                 dist,
@@ -1526,6 +1525,9 @@ class ArmyInterceptor(object):
                 negArmy,
                 fromTile
             ) = prioObj
+            in_bounding_box = (6 <= curTile.x <= 7) and (5 <= curTile.y <= 7)
+            if in_bounding_box and self.log_debug:
+                logbook.info(f'POPPED {curTile} with dist={dist}, euclidIntDist={euclidIntDist}, negTileCapPoints={negTileCapPoints}, negArmy={negArmy}, fromTile={fromTile}')
 
             if curTile.player != searchingPlayer:
                 return None
@@ -1550,6 +1552,13 @@ class ArmyInterceptor(object):
         numPositions = len(positionsByTurn)
 
         def prioFunc(nextTile: Tile, prioObj):
+
+            dist: int
+            toEuclidLast: float
+            negTileCapPoints: float
+            negArmy: int
+            toTile: Tile
+
             (
                 dist,
                 toEuclidLast,
@@ -1561,10 +1570,21 @@ class ArmyInterceptor(object):
             dist += 1
             fromEuclidCur = 100
 
+            # UnitTests/test_ArmyInterceptionUnit/ArmyInterceptionUnitTests/test_should_correctly_value_intercept_from_general - logging to understand why path selection doesn't pick tile closest to enemy threat average position
+            in_bounding_box = (6 <= nextTile.x <= 7) and (5 <= nextTile.y <= 7)
+
             if interception.furthest_common_intercept_distances.raw[nextTile.tile_index] > threatDistFromCommon + 1:
+                if in_bounding_box and self.log_debug:
+                    logbook.info(f'BOUNDING BOX: {nextTile} skipped due to furthest_common_intercept_distances')
+                if in_bounding_box and self.log_debug:
+                    logbook.info(f'BOUNDING BOX EVAL: {nextTile}->{toTile} SKIP furthest_common_intercept_distances')
                 return None
 
             if nextTile.isCity and nextTile.isNeutral:
+                if in_bounding_box and self.log_debug:
+                    logbook.info(f'BOUNDING BOX: {nextTile} skipped due to neutral city')
+                if in_bounding_box and self.log_debug:
+                    logbook.info(f'BOUNDING BOX EVAL: {nextTile}->{toTile} SKIP neutral city')
                 return None
 
             if self.map.is_tile_on_team_with(nextTile, searchingPlayer):
@@ -1577,16 +1597,23 @@ class ArmyInterceptor(object):
 
             negArmy += 1
 
+            approxPosX: float = -1.0
+            approxPosY: float = -1.0
+
             # newDist =
-            distB = threatDistMap.raw[nextTile.tile_index]
-            distA = threatDistMap.raw[toTile.tile_index]
-            distTuple = positionsByTurn[distB] if distB < numPositions else None
-            lastDistTuple = positionsByTurn[distA] if 0 <= distA < numPositions else None
-            if distTuple:
-                approxPosX, approxPosY = distTuple
+            nextTileDistToThreat: int = threatDistMap.raw[nextTile.tile_index]
+            toTileDistToThreat: int = threatDistMap.raw[toTile.tile_index]
+            nextDistTuple = positionsByTurn[nextTileDistToThreat - 1] if 0 < nextTileDistToThreat <= numPositions else None
+            toDistTuple = positionsByTurn[toTileDistToThreat] if 0 <= toTileDistToThreat < numPositions else None
+            if nextDistTuple:
+                approxPosX, approxPosY = nextDistTuple
                 fromEuclidCur = self.map.euclidDist(approxPosX, approxPosY, nextTile.x, nextTile.y)
-                if lastDistTuple:
-                    lastApproxPosX, lastApproxPosY = lastDistTuple
+                if in_bounding_box and self.log_debug:
+                    logbook.info(
+                        f'EVAL FOR: {nextTile}->{toTile} Euclid {nextTile}<->{approxPosX:.2f},{approxPosY:.2f}={fromEuclidCur:.3f}')
+
+                if toDistTuple:
+                    lastApproxPosX, lastApproxPosY = toDistTuple
                     isApproxMtn = self.map.grid[round(approxPosY)][round(approxPosX)].isObstacle
                     # TODO this can exclude the sqrt part of euclid...
 
@@ -1598,28 +1625,32 @@ class ArmyInterceptor(object):
                         # if threatBlock and toTile in threatBlock.blocked_destinations:
                         #     return None
                         # if toTile in threatBlock.blocked_destinations:
-                        if distA is None:
+                        if toTileDistToThreat is None:
                             # if not DebugHelper.IS_DEBUGGING:
                             #     return None
-                            raise AssertionError(f'{repr(interceptAtTile)}->{repr(toTile)}: {distA}')
-                        if distB is None:
+                            raise AssertionError(f'{repr(interceptAtTile)}->{repr(toTile)}: {toTileDistToThreat}')
+                        if nextTileDistToThreat is None:
                             # if not DebugHelper.IS_DEBUGGING:
                             #     return None
-                            raise AssertionError(f'{repr(interceptAtTile)}->{repr(nextTile)}: {distB}')
+                            raise AssertionError(f'{repr(interceptAtTile)}->{repr(nextTile)}: {nextTileDistToThreat}')
 
                         # TODO THIS IS NO LONGER VALID ALONE BECAUSE WE PRUNE POOR ADJACENCIES, SO WE NO LONGER CHECK EVERYTHING CLOSER, THERE ARE CASES WHERE WE PLAN PARALLELS NEXT TO THINGS. SEE test_should_continue_to_intercept_army
-                        if distA > distB:
+                        if toTileDistToThreat > nextTileDistToThreat:
                             # return None
                             toEuclid = self.map.euclidDist(approxPosX, approxPosY, toTile.x, toTile.y)
                             toLastEuclid = self.map.euclidDist(lastApproxPosX, lastApproxPosY, toTile.x, toTile.y)
                             # if toEuclid > euclidIntDistRecalcFromLast + 0.8 and toEuclid >= 1:  # this fails when trying to intercept threats that could go either way around a mountain.
                             if fromEuclidCur < toLastEuclid + 0.5: # and toEuclid >= 1
                                 # we're moving away from the intercept... we were closer last move.
-                                if self.log_debug:
+                                if in_bounding_box and self.log_debug:
+                                    logbook.info(f'BOUNDING BOX SKIP: {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat} fromEuclidCur={fromEuclidCur:.3f} toLastEuclid={toLastEuclid:.3f} toEuclid={toEuclid:.3f} approxPos=({approxPosX:.2f},{approxPosY:.2f}) lastApproxPos=({lastApproxPosX:.2f},{lastApproxPosY:.2f})')
+                                elif self.log_debug:
                                     logbook.info(f'skipping {nextTile}->{toTile} because fromEuclidCur {fromEuclidCur:.3f} < toLastEuclid {toLastEuclid:.3f} + 0.5  :  (toEuclid {toEuclid:.3f}, toEuclidLast {toEuclidLast:.3f}) (approxX {approxPosX:.2f}, approxY {approxPosY:.2f}), (lastApproxX {lastApproxPosX:.2f}, lastApproxY {lastApproxPosY:.2f})')
                                 return None
                             else:
-                                if self.log_debug:
+                                if in_bounding_box and self.log_debug:
+                                    logbook.info(f'BOUNDING BOX ALLOW: {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat} fromEuclidCur={fromEuclidCur:.3f} toLastEuclid={toLastEuclid:.3f} toEuclid={toEuclid:.3f} approxPos=({approxPosX:.2f},{approxPosY:.2f}) lastApproxPos=({lastApproxPosX:.2f},{lastApproxPosY:.2f})')
+                                elif self.log_debug:
                                     logbook.info(f'ALLOWING {nextTile}->{toTile} because fromEuclidCur {fromEuclidCur:.3f} > toLastEuclid {toLastEuclid:.3f} + 0.5  :  (toEuclid {toEuclid:.3f}, toEuclidLast {toEuclidLast:.3f}) (approxX {approxPosX:.2f}, approxY {approxPosY:.2f}), (lastApproxX {lastApproxPosX:.2f}, lastApproxY {lastApproxPosY:.2f})')
 
                 #
@@ -1631,16 +1662,25 @@ class ArmyInterceptor(object):
                 #         # we're moving away from the intercept... we were closer last move.
                 #         return None
             else:
-                if distA > distB:
+                if toTileDistToThreat > nextTileDistToThreat:
                     # we're moving away from the intercept... we were closer last move.
-                    if self.log_debug:
+                    if in_bounding_box and self.log_debug:
+                        logbook.info(f'BOUNDING BOX SKIP (no pos): {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} > nextTileDistToThreat={nextTileDistToThreat}')
+                    elif self.log_debug:
                         logbook.info(
-                            f'(no pos) skipping {nextTile}->{toTile} because distA {distA} > distB {distB}')
+                            f'(no pos) skipping {nextTile}->{toTile} because toTileDistToThreat {toTileDistToThreat} > nextTileDistToThreat {nextTileDistToThreat}')
                     return None
+                else:
+                    if in_bounding_box and self.log_debug:
+                        logbook.info(f'BOUNDING BOX EVAL (no pos, toTileDistToThreat <= nextTileDistToThreat): {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat}')
                 # happens when we intercept further than the threat length eg defending a city (?)
                 pass
                 #euclidIntDistRecalcFromLast = 100
                 # raise Exception(f'This shouldnt be possible {nextTile}  <-  {toTile}  dist {dist}')
+
+            if in_bounding_box and self.log_debug:
+                threatPosAtDist = f'({approxPosX:.2f},{approxPosY:.2f})' if nextDistTuple else 'None'
+                logbook.info(f'BOUNDING BOX EVAL: {nextTile}->{toTile} RETURN prio=(dist={dist}, fromEuclidCur={fromEuclidCur:.3f}, negTileCapPoints={negTileCapPoints}, negArmy={negArmy}) threatPosAtDist{nextTileDistToThreat}={threatPosAtDist}')
 
             return (
                 dist,
@@ -1675,9 +1715,25 @@ class ArmyInterceptor(object):
         if self.log_debug:
             logbook.info(f'@{str(interceptAtTile)} depth{maxDepth} returned {len(paths)} paths.')
         for path in paths:
+            # path.tail.tile is actually start tile since we're about to reverse the path.
             if path.tail.tile in interception.positive_threat_subsegment_negative_tile_indexes:
-                logbook.info(f'  skipping path len {path.length} starting at negative tile {path.tail.tile}')
-                continue
+                allInSet = True
+                for threat in interception.threats:
+                    if path.tail.tile not in threat.path.tileSet:
+                        allInSet = False
+                        break
+                if allInSet:
+                    logbook.info(
+                        f'  skipping path len {path.length} starting at positive_threat_subsegment_negative_tile_indexes tile {path.tail.tile} because every single threat path included this start tile')
+                    continue
+
+                armyFact = (interception.base_threat_army * (path.length + 1)) // (path.length + 2)
+                if path.tail.tile.army < armyFact:
+                    logbook.info(f'  skipping path len {path.length} starting at positive_threat_subsegment_negative_tile_indexes tile {path.tail.tile} due to army {path.tail.tile.army} < {armyFact:.2f} ((base_threat_army {interception.base_threat_army} * (path.length {path.length} + 1)) // (path.length {path.length} + 2))')
+                    continue
+                else:
+                    logbook.info(f'  Hmmm, allowing {path.length} starting at positive_threat_subsegment_negative_tile_indexes tile {path.tail.tile} due to army {path.tail.tile.army} > {armyFact:.2f} ((base_threat_army {interception.base_threat_army} * (path.length {path.length} + 1)) // (path.length {path.length} + 2))')
+
             revPath = path.get_reversed()
             if self.log_debug:
                 logbook.info(f'  path len {revPath.length} -- {str(revPath)}')

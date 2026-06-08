@@ -229,6 +229,8 @@ class GameSimulator(object):
         # Determine move order using the resolver instead of simple turn-based alternating priority
         valid_moves = []
         for player, move in move_list:
+            p = self.players[player]
+            p.move_history.append(move)
             if move is not None:
                 valid_moves.append((player, move))
             elif not dont_require_all_players_to_move:
@@ -277,7 +279,6 @@ class GameSimulator(object):
 
     def _execute_move(self, player_index: int, move: Move):
         player = self.players[player_index]
-        player.move_history.append(move)
         sourceTile = self.sim_map.GetTile(move.source.x, move.source.y)
         destTile = self.sim_map.GetTile(move.dest.x, move.dest.y)
         if sourceTile.player != player_index:
@@ -1030,6 +1031,11 @@ class GameSimulatorHost(object):
             assert srcTile.y == actualMove.source.y
             assert destTile.x == actualMove.dest.x
             assert destTile.y == actualMove.dest.y
+
+    def assert_last_move_not_none(self, player: int):
+        pObj = self.sim.players[player]
+        actualMove = pObj.move_history[-1]
+        assert actualMove is not None
 
     def get_player_tile_from_move_str(self, player: int, move_str: str) -> typing.Tuple[Tile, bool]:
         """

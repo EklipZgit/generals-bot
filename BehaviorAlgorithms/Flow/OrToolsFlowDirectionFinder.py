@@ -657,7 +657,7 @@ class DirectOrToolsGraphBuilder(object):
                     arc_starts.append(src)
                     arc_ends.append(dst)
                     arc_caps.append(100000)
-                    cost = 30
+                    cost = 100
                     if island.team == team:
                         # FROM FRIENDLY ISLAND
                         if movable_island.team == target_team:
@@ -688,7 +688,7 @@ class DirectOrToolsGraphBuilder(object):
                         # FROM NEUTRAL ISLAND
                         if movable_island.team == team:
                             # moving back onto our own land should be penalized
-                            cost += 2000 // max(1, movable_island.sum_army / movable_island.tile_count)
+                            cost += 20 // max(1, movable_island.sum_army / movable_island.tile_count)
                         elif movable_island.team == target_team:
                             # low cost moving to enemy land, we want that
                             # cost = 20 // max(1, movable_island.sum_army / movable_island.tile_count)

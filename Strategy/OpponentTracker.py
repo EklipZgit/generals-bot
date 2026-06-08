@@ -357,6 +357,11 @@ class OpponentTracker(object):
     def analyze_turn(self, targetPlayer: int):
         self.current_differential_vs_us_by_team: typing.Dict[int, CycleStatsData]
         self.targetPlayer = targetPlayer
+        teamStatsNoneByTeam = {team: self.current_team_cycle_stats[team] is None for team in self._team_indexes}
+        logbook.info(
+            f'OT_ANALYZE_BEGIN turn={self.map.turn} targetPlayer={targetPlayer} '
+            f'teamStatsNoneByTeam={teamStatsNoneByTeam}'
+        )
 
         for player in self.map.players:
             # if we don't figure out anything else, then probably a fog gather. Default to that at start of each turn.
@@ -371,7 +376,17 @@ class OpponentTracker(object):
 
             # also was incrementing the gather tiles
             teamStats = self.calculate_cycle_stats(team, curTurnTeamScore)
-            self.current_team_cycle_stats[team] = teamStats
+            logbook.info(
+                f'OT_ANALYZE_TEAM_STATS turn={self.map.turn} targetPlayer={targetPlayer} team={team} '
+                f'calculatedStatsIsNone={teamStats is None} '
+                f'previousStatsIsNone={self.current_team_cycle_stats[team] is None} '
+                f'lastCycleEndTurn={self.get_last_cycle_end_turn()} '
+                f'curTurnTeamScoreNone={curTurnTeamScore is None}'
+            )
+            # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack__no_flags_450_repro:
+            # Resume initialization can analyze a no-move turn before cycle history is available, so calculate_cycle_stats returns None. Preserve the initialized or deserialized current cycle stats instead of corrupting them.
+            if teamStats is not None:
+                self.current_team_cycle_stats[team] = teamStats
 
             if self.map.turn == 2:
                 # fake the turn 0 data so we can do stuff in first cycle still.
@@ -393,6 +408,11 @@ class OpponentTracker(object):
         self._vision_losses = set()
 
         self.recalculate_average_tile_values()
+        teamStatsNoneByTeam = {team: self.current_team_cycle_stats[team] is None for team in self._team_indexes}
+        logbook.info(
+            f'OT_ANALYZE_END turn={self.map.turn} targetPlayer={targetPlayer} '
+            f'teamStatsNoneByTeam={teamStatsNoneByTeam}'
+        )
 
     def _start_team_score_next_cycle_and_record_efficiencies(self, curTurnTeamScore: TeamStats, team: int, teamStats: CycleStatsData | None):
         # do the final pass on the current cycle data and then start a new cycle.
@@ -663,6 +683,11 @@ class OpponentTracker(object):
         return '\n'.join(data)
 
     def load_from_map_data(self, data: typing.Dict[str, str]):
+        teamStatsNoneByTeam = {team: self.current_team_cycle_stats[team] is None for team in self._team_indexes}
+        logbook.info(
+            f'OT_LOAD_BEGIN turn={self.map.turn} teamIndexes={self._team_indexes} '
+            f'teamStatsNoneByTeam={teamStatsNoneByTeam}'
+        )
         for c in range(self.get_cycle_index()):
             for t, hist in enumerate(self.team_attack_cycle_timings):
                 hist.append(TeamAttackData(t, 0, 0.0, 0.0))
@@ -719,6 +744,11 @@ class OpponentTracker(object):
             if stats is None:
                 stats = CycleStatsData(team, self.get_team_players(team))
                 self.current_team_cycle_stats[team] = stats
+            logbook.info(
+                f'OT_LOAD_CURRENT_STATS_TEAM turn={self.map.turn} team={team} '
+                f'hasSerializedCurrentStats={f"ot_{team}_stats_moves_spent_capturing_fog_tiles" in data} '
+                f'statsIsNoneAfterInit={self.current_team_cycle_stats[team] is None}'
+            )
             if f'ot_{team}_stats_moves_spent_capturing_fog_tiles' in data:
                 stats.moves_spent_capturing_fog_tiles = int(data[f'ot_{team}_stats_moves_spent_capturing_fog_tiles'])
                 stats.moves_spent_capturing_visible_tiles = int(data[f'ot_{team}_stats_moves_spent_capturing_visible_tiles'])
@@ -744,6 +774,13 @@ class OpponentTracker(object):
                 else:
                     stats.number_assumed_two_expansions_that_may_be_fog_distance = stats.moves_spent_capturing_fog_tiles
                 stats.approximate_fog_city_army = int(data[f'ot_{team}_stats_approximate_fog_city_army'])
+                logbook.info(
+                    f'OT_LOAD_CURRENT_STATS_VALUES turn={self.map.turn} team={team} '
+                    f'fogArmy={stats.approximate_fog_army_available_total} '
+                    f'fogArmyTrue={stats.approximate_fog_army_available_total_true} '
+                    f'fogCityArmy={stats.approximate_fog_city_army} '
+                    f'gatheredThisCycle={stats.approximate_army_gathered_this_cycle}'
+                )
 
         for player in self.map.players:
             if player.index == self.map.player_index or player.index in self.map.teammates:
@@ -778,13 +815,27 @@ class OpponentTracker(object):
                         fq.set_amount_for_size(size, num)
 
         for team in self._team_indexes:
+            logbook.info(
+                f'OT_LOAD_POST_UPDATE_BEFORE turn={self.map.turn} team={team} '
+                f'statsIsNone={self.current_team_cycle_stats[team] is None} '
+                f'lastCycleEndTurn={self.get_last_cycle_end_turn()}'
+            )
             self._update_cycle_stats_and_moves_no_checks(team, self.map.get_team_stats_by_team_id(team), self.get_last_cycle_end_turn(), skipTurn=True)
+            logbook.info(
+                f'OT_LOAD_POST_UPDATE_AFTER turn={self.map.turn} team={team} '
+                f'statsIsNone={self.current_team_cycle_stats[team] is None}'
+            )
 
         if self.map.is_army_bonus_turn:
             for team in self._team_indexes:
                 self.team_score_data_history[team][self.map.turn] = self.map.get_team_stats_by_team_id(team)
 
         self.skip_this_turn = True
+        teamStatsNoneByTeam = {team: self.current_team_cycle_stats[team] is None for team in self._team_indexes}
+        logbook.info(
+            f'OT_LOAD_END turn={self.map.turn} '
+            f'teamStatsNoneByTeam={teamStatsNoneByTeam} skipThisTurn={self.skip_this_turn}'
+        )
 
     def calculate_cycle_stats(self, team: int, curTurnScores: TeamStats) -> CycleStatsData | None:
         lastCycleEndTurn = self.get_last_cycle_end_turn()
@@ -851,8 +902,10 @@ class OpponentTracker(object):
                 continue
             for c in p.cities:
                 if c.visible:
+                    logbook.info(f"Player {pIdx} city {c} is visible, reducing fog city count from {currentCycleStats.fog_city_count} to {currentCycleStats.fog_city_count - 1}")
                     currentCycleStats.fog_city_count -= 1
             if p.general is not None and p.general.isGeneral and p.general.visible:
+                logbook.info(f"Player {pIdx} general {p.general} is visible, reducing fog city count from {currentCycleStats.fog_city_count} to {currentCycleStats.fog_city_count - 1}")
                 currentCycleStats.fog_city_count -= 1
 
         self._update_team_cycle_stats_relative_to_last_cycle(currentCycleStats, currentTeamStats=curTurnScores, lastCycleScores=lastCycleScores)
@@ -1207,6 +1260,7 @@ class OpponentTracker(object):
         nextStats.approximate_fog_army_available_total = currentCycleStats.approximate_fog_army_available_total
         nextStats.approximate_fog_army_available_total_true = currentCycleStats.approximate_fog_army_available_total_true
         nextStats.approximate_fog_city_army = currentCycleStats.approximate_fog_city_army
+        nextStats.fog_city_count = currentCycleStats.fog_city_count
         fogTileCount, fogArmyAmount, fogCityCount, playerCountAliveOnTeam = self.calculate_team_fog_tile_data(currentCycleStats.team)
         # fog cities also get army bonus, and this is cycle bonus turn.
         nextStats.approximate_fog_city_army += fogCityCount
@@ -1816,6 +1870,8 @@ class OpponentTracker(object):
         """Returns the amount of army expected to be gatherable from up to cityLimit fog cities RIGHT NOW."""
 
         cycleStats = self.get_current_cycle_stats_by_player(player)
+        if cycleStats is None:
+            raise ValueError(f"Player {player} has no cycle stats available")
 
         # TODO replace this with a queue system for cities too, instead.
         totalAmt = cycleStats.approximate_fog_city_army

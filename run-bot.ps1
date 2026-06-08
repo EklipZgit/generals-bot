@@ -1138,17 +1138,27 @@ function Start-WindowsTerminalBotServerLiveBots {
 
     $windowName = 'BotServerLiveBots'
     <#
-    FFA
+    dev tab
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai" -right'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -LoadGameResultUtils
 
     # time for the terminal window to open
     start-sleep -seconds 3
 
     <#
+    FFA
+    #>
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai" -right'
+
+    <#
     1v1 only
     #>
     Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game 1v1 -name "EklipZ_ai" -right'
+
+    <#
+    public ek 14
+    #>
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py') -game 1v1"
 
     # <#
     # 1v1 ffa cycler
@@ -1164,12 +1174,6 @@ function Start-WindowsTerminalBotServerLiveBots {
     #         Start-Sleep -Seconds 1
     #     }
     # }
-
-    <#
-    dev tab
-    #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -LoadGameResultUtils
-
     <#
     private ek 14
     #>

@@ -148,6 +148,9 @@ class BotGatherOps:
         gatherTargets = bot.defensive_spanning_tree.copy()
         path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing)
         gatherTargets.update(path.tileList)
+        if bot.likely_kill_push and bot.enemy_attack_path is not None:
+            gatherTargets = bot.enemy_attack_path.tileSet.copy()
+            bot.info(f'LIKELY_KILL_PUSH_GATHER_TARGETS using enemy_attack_path targets count={len(gatherTargets)} path={bot.enemy_attack_path}')
         if len(gatherTargets) == 2:
             gatherTargets = set()
             gatherTargets.add(bot.general)
@@ -327,6 +330,9 @@ class BotGatherOps:
                 gatherTargets = bot.defensive_spanning_tree.copy()
                 path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing)
                 gatherTargets.update(path.tileList)
+                if bot.likely_kill_push and bot.enemy_attack_path is not None:
+                    gatherTargets = bot.enemy_attack_path.tileSet.copy()
+                    bot.info(f'LIKELY_KILL_PUSH_DEF_ECON_GATHER_TARGETS using enemy_attack_path targets count={len(gatherTargets)} path={bot.enemy_attack_path}')
 
                 # gatherTargets = {centralDefensePoint}
                 bot.info(
@@ -657,7 +663,8 @@ class BotGatherOps:
                 teams=MapBase.get_teams_array(bot._map),
                 additionalIncrement=additionalIncrement,
                 preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
-                viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
+                    minTurns=minTurnsForMaxArmyGatheredPerTurn,
+                    viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
 
         totalValue = 0
         turns = 0
@@ -1027,7 +1034,8 @@ class BotGatherOps:
             priorityMatrix: MapMatrixInterface[float] | None = None,
             skipTiles: TileSet | None = None,
             shouldLog: bool = False,
-            fastMode: bool = False
+            fastMode: bool = False,
+            minTurnsForMaxArmyGatheredPerTurn: int = 0
     ) -> typing.Tuple[Move | None, int, int, typing.Union[None, typing.List[GatherTreeNode]]]:
         if useTrueValueGathered and targetArmy > -1:
             targetArmy += 1
@@ -1065,6 +1073,7 @@ class BotGatherOps:
                         teams=MapBase.get_teams_array(bot._map),
                         additionalIncrement=additionalIncrement,
                         preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
+                        minTurns=minTurnsForMaxArmyGatheredPerTurn,
                         viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
 
                 totalValue = 0
@@ -1102,6 +1111,7 @@ class BotGatherOps:
                     teams=MapBase.get_teams_array(bot._map),
                     additionalIncrement=additionalIncrement,
                     preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
+                    minTurns=minTurnsForMaxArmyGatheredPerTurn,
                     viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
 
             gatherMove = BotGatherOps.get_tree_move_default(bot, gatherNodes, valueFunc=leafMoveSelectionValueFunc)
@@ -1148,6 +1158,8 @@ class BotGatherOps:
                         viewInfo=None,
                         searchingPlayer=bot.general.player,
                         fastMode=True,
+                        maximizeValuePerTurn=maximizeArmyGatheredPerTurn,
+                        useTrueValueGathered=useTrueValueGathered,
                         cutoffTime=time.perf_counter() + maxTime
                     )
                     gatherNodes = []
@@ -1180,6 +1192,7 @@ class BotGatherOps:
                     teams=MapBase.get_teams_array(bot._map),
                     additionalIncrement=additionalIncrement,
                     preferPrune=bot.expansion_plan.preferred_tiles if bot.expansion_plan is not None else None,
+                    minTurns=minTurnsForMaxArmyGatheredPerTurn,
                     viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
 
             totalValue = 0

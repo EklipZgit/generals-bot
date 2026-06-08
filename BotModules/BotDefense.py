@@ -1464,6 +1464,13 @@ class BotDefense:
 
         for tile in potThreat.path.tileList:
             if bot._map.is_tile_friendly(tile) and potThreat.threatValue + tile.army > potThreat.turns and tile not in shortestSet:
+                if tile == bot.general or (bot.expansion_plan is not None and tile in bot.expansion_plan.preferred_tiles):
+                    logbook.info(
+                        f"POTENTIAL_THREAT_NEG_ADD target={targetTile} tile={tile} "
+                        f"isGeneral={tile == bot.general} isExpansionPreferred={bot.expansion_plan is not None and tile in bot.expansion_plan.preferred_tiles} "
+                        f"threatValue={potThreat.threatValue} tileArmy={tile.army} threatTurns={potThreat.turns} "
+                        f"inShortestToTarget={tile in shortestSet}"
+                    )
                 potNegs.add(tile)
 
         return potNegs

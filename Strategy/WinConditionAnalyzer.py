@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import DebugHelper
+import BotModules as BM
 import Gather
 import SearchUtils
 from BehaviorAlgorithms.IterativeExpansion import ITERATIVE_EXPANSION_EN_CAP_VAL
@@ -15,6 +16,7 @@ from MapMatrix import TileSet
 from Gather import GatherCapturePlan
 from Path import Path
 from PerformanceTimer import PerformanceTimer
+from StrategyModels.ExpansionPotential import ExpansionPotential
 from Territory import TerritoryClassifier
 from .OpponentTracker import OpponentTracker
 from base.client.map import MapBase, Tile
@@ -66,6 +68,9 @@ class WinConditionAnalyzer(object):
         self.recommended_offense_plan_turns: int = 0
         self.recommended_city_defense_plan_turns: int = 0
         self.our_best_attack_plan: GatherCapturePlan | None = None
+        self.all_in_plan: Path | None = None
+        self.projected_loss_all_in_active: bool = False
+        self.projected_loss_all_in_target: Tile | None = None
         self._verbose_logging_enabled: bool = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
 
         self.contestable_city_offense_plans: typing.Dict[Tile, GatherCapturePlan | None] = {}
@@ -141,6 +146,12 @@ class WinConditionAnalyzer(object):
             data.append(f'ot_city_{city.x}_{city.y}={serialized}')
         return data
 
+    def dump_projected_loss_all_in_state(self) -> typing.List[str]:
+        data: typing.List[str] = [f'wca_projected_loss_all_in_active={self.projected_loss_all_in_active}']
+        if self.projected_loss_all_in_target is not None:
+            data.append(f'wca_projected_loss_all_in_target={self.projected_loss_all_in_target.x},{self.projected_loss_all_in_target.y}')
+        return data
+
     def load_city_contestation_history_from_map_data(self, data: typing.Dict[str, str]):
         self.city_contestation_history = {}
         prefix = 'ot_city_'
@@ -155,6 +166,13 @@ class WinConditionAnalyzer(object):
             if value:
                 entries = [CityOwnershipTransfer.deserialize(entry) for entry in value.split('|') if entry]
             self.city_contestation_history[city] = entries
+
+    def load_projected_loss_all_in_state_from_map_data(self, data: typing.Dict[str, str]):
+        if 'wca_projected_loss_all_in_active' in data:
+            self.projected_loss_all_in_active = data['wca_projected_loss_all_in_active'].lower().strip() == 'true'
+        if 'wca_projected_loss_all_in_target' in data:
+            x_raw, y_raw = data['wca_projected_loss_all_in_target'].split(',')
+            self.projected_loss_all_in_target = self.map.GetTile(int(x_raw), int(y_raw))
 
     def _refresh_verbose_logging_enabled(self):
         self._verbose_logging_enabled = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
@@ -179,6 +197,11 @@ class WinConditionAnalyzer(object):
         if self.target_player == -1:
             self.viable_win_conditions.add(WinCondition.WinOnEconomy)
             return
+
+        if self.all_in_plan is not None:
+            self.viable_win_conditions.add(WinCondition.KillAllIn)
+        if self.projected_loss_all_in_active:
+            self.viable_win_conditions.add(WinCondition.KillAllIn)
 
         with perfTimer.begin_move_event('WCA rough offense'):
             self._get_rough_offense(perfTimer)
@@ -296,13 +319,18 @@ class WinConditionAnalyzer(object):
                         elif t.player == -1:
                             ourOffensePlan.econValue += 1.0
                     ourOffense = ourOffensePlan.gathered_army
+                    isFogPrediction = False
+                    if not city.discovered and city.isTempFogPrediction:
+                        ourOffense = int(ourOffense * 0.9)
+                        ourOffense -= 6
+                        isFogPrediction = True
                     ourOffensePlan.econValue += self.opponent_tracker.estimate_city_contest_econ_value(self.map.player_index, self.target_player, ourOffense)
                     self.contestable_city_offense_plans[city] = ourOffensePlan
                     if self._verbose_logging_enabled: logbook.info(
                         f'\r\nWCA_EN_CITY_OFFENSE_PLAN city={city} ogAttackTime={ogAttackTime} attackTime={attackTime} '
                         f'ourDistanceToCity={ourDistanceToCity} enemyDistanceToCity={enemyDistanceToCity} '
                         f'offensePlanLength={ourOffensePlan.length} offenseGatherTurns={ourOffensePlan.gather_turns} '
-                        f'offenseGatheredArmy={ourOffense}'
+                        f'offenseGatheredArmy={ourOffense} isFogPrediction={str(isFogPrediction)[0]}'
                     )
                     defenseMethod = 'none'
 
@@ -574,6 +602,69 @@ class WinConditionAnalyzer(object):
     def is_winning_and_defending_economic_lead_wont_lose_economy(self) -> bool:
         return self.opponent_tracker.winning_on_economy(byRatio=1.04, offset=-10)
 
+    def force_kill_all_in_if_projected_round_loss(
+            self,
+            bot,
+            expansion_plan: ExpansionPotential,
+            enemy_expansion_plan: ExpansionPotential,
+            economyRatioRequired: float = 0.90,
+            armyRatioRequired: float = 0.90,
+            minimumEconomyGap: float = 10.0
+    ) -> bool:
+        if self.target_player == -1:
+            return False
+
+        ourStats = self.opponent_tracker.get_current_team_scores_by_player(self.map.player_index)
+        enemyStats = self.opponent_tracker.get_current_team_scores_by_player(self.target_player)
+        cityValue = self.map.remainingCycleTurns // 2
+        ourProjectedEconomy = ourStats.tileCount + ourStats.cityCount * cityValue
+        enemyProjectedEconomy = enemyStats.tileCount + enemyStats.cityCount * cityValue
+
+        ourExpansionEconomy = expansion_plan.cumulative_econ_value
+        enemyExpansionEconomy = enemy_expansion_plan.cumulative_econ_value
+        ourProjectedEconomy += ourExpansionEconomy
+        enemyProjectedEconomy += enemyExpansionEconomy
+        ourProjectedArmy = ourStats.standingArmy + ourProjectedEconomy
+        enemyProjectedArmy = enemyStats.standingArmy + enemyProjectedEconomy
+        projectedEconomyGap = enemyProjectedEconomy - ourProjectedEconomy
+        economyLost = ourProjectedEconomy < enemyProjectedEconomy * economyRatioRequired and projectedEconomyGap >= minimumEconomyGap
+        armyLost = ourProjectedArmy < enemyProjectedArmy * armyRatioRequired
+
+        logbook.info(
+            f'WCA_PROJECTED_ROUND_LOSS turn={self.map.turn} '
+            f'ourProjectedEconomy={ourProjectedEconomy:.2f} enemyProjectedEconomy={enemyProjectedEconomy:.2f} '
+            f'ourExpansionEconomy={ourExpansionEconomy:.2f} enemyExpansionEconomy={enemyExpansionEconomy:.2f} '
+            f'projectedEconomyGap={projectedEconomyGap:.2f} '
+            f'economyRatioRequired={economyRatioRequired:.2f} '
+            f'ourProjectedArmy={ourProjectedArmy} enemyProjectedArmy={enemyProjectedArmy} '
+            f'armyRatioRequired={armyRatioRequired:.2f} economyLost={economyLost} armyLost={armyLost}'
+        )
+
+        if not economyLost or not armyLost:
+            return False
+
+        self.all_in_plan = BM.BotKillTiming.BotKillTiming.find_all_in_option(bot)
+        if self.all_in_plan is None:
+            self.info(
+                f'WCA projected round loss found no viable KillAllIn plan: '
+                f'econ {ourProjectedEconomy:.2f} vs {enemyProjectedEconomy:.2f}, '
+                f'army {ourProjectedArmy:.2f} vs {enemyProjectedArmy:.2f}'
+            )
+            return False
+
+        self.viable_win_conditions = {WinCondition.KillAllIn}
+        self.projected_loss_all_in_active = True
+        self.projected_loss_all_in_target = self.all_in_plan.tail.tile
+        bot.is_all_in_losing = True
+        bot.all_in_losing_counter = max(bot.all_in_losing_counter, 1)
+        self.info(
+            f'WCA KillAllIn: will lose '
+            f'econ {ourProjectedEconomy:.0f} vs {enemyProjectedEconomy:.0f}, '
+            f'army {ourProjectedArmy} vs {enemyProjectedArmy}, '
+            f'allInPlan {self.all_in_plan}'
+        )
+        return True
+
     def is_threat_of_loss_to_city_contest(self, perfTimer: PerformanceTimer) -> bool:
         weAreSlightlyAhead = self.opponent_tracker.winning_on_economy(byRatio=1.1, offset=-10)
         if WinCondition.DefendContestedFriendlyCity in self.last_viable_win_conditions:
@@ -784,7 +875,7 @@ class WinConditionAnalyzer(object):
             bestValue = fogRiskValue
             bestPlan = gatherNodes
             bestFogRisk = fogVal
-            bestTurns = inTurns
+            bestTurns = max(1, inTurns)
         elif not noLog and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
             logbook.info(f'<  RAW gather attack {fogRiskValue} in {inTurns}t, < best {bestValue} in {bestTurns}t')
 
@@ -801,7 +892,7 @@ class WinConditionAnalyzer(object):
             bestValue = prunedFogRiskValue
             bestPlan = prunedGatherNodes
             bestFogRisk = prunedFogVal
-            bestTurns = inTurns
+            bestTurns = max(1, inTurns)
         elif not noLog and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
             logbook.info(f'<  PRUNE + FOG gather attack {prunedFogRiskValue} in {inTurns}t, < best {bestValue} in {bestTurns}t')
 
@@ -814,13 +905,13 @@ class WinConditionAnalyzer(object):
                     f'APPROX_ATTACK_PRUNED_SHORT_RESULT prunedValue={prunedValue} prunedTurns={prunedGatherTurns} prunedFogShortVal={prunedFogShortVal} '
                     f'prunedNodeCount={len(prunedGatherNodes)}, prunedFogShortRiskValue={prunedFogShortRiskValue}'
                 )
-            if prunedFogShortRiskValue / prunedShortTurns > bestValue / bestTurns:
+            if prunedShortTurns > 0 and prunedFogShortRiskValue / prunedShortTurns > bestValue / bestTurns:
                 if not noLog and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                     logbook.info(f'>> PRUNE + FOG SHORT gather attack {prunedFogShortRiskValue} in {prunedShortTurns}, > best {bestValue} in {bestTurns}t')
                 bestValue = prunedFogShortRiskValue
                 bestPlan = prunedGatherNodes
                 bestFogRisk = prunedFogShortVal
-                bestTurns = prunedShortTurns
+                bestTurns = max(1, prunedShortTurns)
             elif not noLog and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                 logbook.info(f'<  PRUNE + FOG SHORT gather attack {prunedFogShortRiskValue} in {prunedShortTurns}t, < best {bestValue} in {bestTurns}t')
 
@@ -839,7 +930,7 @@ class WinConditionAnalyzer(object):
                 bestValue = attackPathRiskVal
                 bestPlan = fakeGathNodes
                 bestFogRisk = 0
-                bestTurns = maxAttack.length
+                bestTurns = max(1, maxAttack.length)
 
             if use_fog:
                 addlRisk = self.get_additional_fog_gather_risk_for_gather_nodes(fakeGathNodes, asPlayer, inTurns, forceFogRisk=forceFogRisk, fogPenaltyTurns=fogPenaltyTurns)
@@ -856,7 +947,7 @@ class WinConditionAnalyzer(object):
                     bestValue = attackPathRiskVal
                     bestPlan = fakeGathNodes
                     bestFogRisk = addlRisk
-                    bestTurns = inTurns
+                    bestTurns = max(1, inTurns)
                 elif not noLog and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                     logbook.info(f'<  MAX PATH + FOG {attackPathRiskVal} in {inTurns}t, < best {bestValue} in {bestTurns}t')
         elif use_fog:
@@ -868,7 +959,7 @@ class WinConditionAnalyzer(object):
                     bestValue = attackPathRiskVal
                     bestPlan = []
                     bestFogRisk = attackPathRiskVal
-                    bestTurns = inTurns
+                    bestTurns = max(1, inTurns)
                 elif not noLog and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                     logbook.info(f'<  NO PATH + FOG {attackPathRiskVal} in {inTurns}t, < best {bestValue} in {bestTurns}t but no gatherTreeNodes')
             elif not noLog and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:

@@ -365,7 +365,8 @@ class BotCombatOps:
 
                 logbook.info(f"Performing depth {depth} BFS kill search on enemy kings")
                 fullKillReq = targetArmy + additionalKillArmyRequirement
-                killPath = SearchUtils.dest_breadth_first_target(bot._map, altEnGenPositions, fullKillReq, 0.05, depth, attackNegTiles, bot.general.player, False, 3)
+                altEnGenGoalPositions = {altEnGenPosition: (0, -fullKillReq, 1.0) for altEnGenPosition in altEnGenPositions}
+                killPath = SearchUtils.dest_breadth_first_target(bot._map, altEnGenGoalPositions, fullKillReq, 0.05, depth, attackNegTiles, bot.general.player, False, 3)
                 killChance = 0.0
                 if killPath:
                     killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
@@ -566,6 +567,8 @@ class BotCombatOps:
     def get_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if not BotStateQueries.is_all_in(bot):
             return None
+        if bot.win_condition_analyzer.projected_loss_all_in_active:
+            return None
 
         hitGeneralInTurns = bot.all_in_army_advantage_cycle - bot.all_in_army_advantage_counter % bot.all_in_army_advantage_cycle
         if bot.is_all_in_army_advantage and bot.targetPlayerObj.tileCount < 90:
@@ -626,6 +629,21 @@ class BotCombatOps:
                 logDebug=False,
                 viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
             if gathCapPlan is None:
+                if bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind:
+                    # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack:
+                    # If the known-general army-advantage all-in cannot produce a gather plan anymore, stop treating
+                    # the attack as viable so normal defensive/expansion fallback logic can run instead of looping no-plan gathers.
+                    bot.info(
+                        f'Ceasing army-advantage all-in after failed PCST gather. '
+                        f'is_all_in_losing {bot.is_all_in_losing}, '
+                        f'is_all_in_army_advantage {bot.is_all_in_army_advantage}, '
+                        f'all_in_city_behind {bot.all_in_city_behind}, targets {str([str(t) for t in targets])}'
+                    )
+                    bot.is_all_in_losing = False
+                    bot.all_in_losing_counter = 0
+                    bot.is_all_in_army_advantage = False
+                    bot.all_in_army_advantage_counter = 0
+                    bot.all_in_city_behind = False
                 return None
 
             move = gathCapPlan.get_first_move()
@@ -1686,6 +1704,12 @@ class BotCombatOps:
 
         allInLosingCounterThreshold = frStats.tileCount // 5 + 15
         allInLosingCounterThreshold = max(50, allInLosingCounterThreshold)
+
+        # Tests/test_BotBehavior.py::test_should_detect_lost_round_and_detect_all_in_opportunity_and_set_up_all_in_instead sets projected-loss all-in state through WinConditionAnalyzer/BotKillTiming; preserve that all-in flag instead of clearing it through the older score-threshold counter path.
+        if bot.win_condition_analyzer.projected_loss_all_in_active:
+            bot.is_all_in_losing = True
+            bot.all_in_losing_counter = max(bot.all_in_losing_counter, allInLosingCounterThreshold + 1)
+            return True
 
         bot.is_all_in_losing = False
 

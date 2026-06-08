@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typing
 
+import logbook
 from BotModules.BotCentralDefense import BotCentralDefense
 from BotModules.BotStateQueries import BotStateQueries
 from Directives import Timings
@@ -42,8 +43,28 @@ class BotSerialization:
             bot.all_in_army_advantage_counter = int(resume_data[f'bot_all_in_army_advantage_counter'])
         if f'bot_all_in_army_advantage_cycle' in resume_data:  # ={self.all_in_army_advantage_cycle}')
             bot.all_in_army_advantage_cycle = int(resume_data[f'bot_all_in_army_advantage_cycle'])
+        # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack:
+        # Preserve resume-only all-in/city and failed-attack state so continuation tests mirror the live failed attack branch.
+        if f'bot_all_in_city_behind' in resume_data:
+            bot.all_in_city_behind = BotStateQueries.parse_bool(bot, resume_data[f'bot_all_in_city_behind'])
         if f'bot_defend_economy' in resume_data:
             bot.defend_economy = BotStateQueries.parse_bool(bot, resume_data[f'bot_defend_economy'])
+
+        if f'bot_attack_failed_turn' in resume_data:
+            bot.attackFailedTurn = int(resume_data[f'bot_attack_failed_turn'])
+        if f'bot_count_failed_quick_attacks' in resume_data:
+            bot.countFailedQuickAttacks = int(resume_data[f'bot_count_failed_quick_attacks'])
+        if f'bot_count_failed_high_depth_attacks' in resume_data:
+            bot.countFailedHighDepthAttacks = int(resume_data[f'bot_count_failed_high_depth_attacks'])
+        if f'bot_last_target_attack_turn' in resume_data:
+            bot.lastTargetAttackTurn = int(resume_data[f'bot_last_target_attack_turn'])
+
+        if f'bot_force_far_gathers' in resume_data:
+            bot.force_far_gathers = BotStateQueries.parse_bool(bot, resume_data[f'bot_force_far_gathers'])
+        if f'bot_force_far_gathers_turns' in resume_data:
+            bot.force_far_gathers_turns = int(resume_data[f'bot_force_far_gathers_turns'])
+        if f'bot_force_far_gathers_sleep_turns' in resume_data:
+            bot.force_far_gathers_sleep_turns = int(resume_data[f'bot_force_far_gathers_sleep_turns'])
 
         if f'bot_timings_launch_timing' in resume_data:
             # self.timings = None
@@ -176,7 +197,20 @@ class BotSerialization:
             bot.tileIslandBuilder.rebuild_islands_from_ids(island_id_matrix)
 
         bot.win_condition_analyzer.load_city_contestation_history_from_map_data(resume_data)
+        bot.win_condition_analyzer.load_projected_loss_all_in_state_from_map_data(resume_data)
+        logbook.info(
+            f'BOT_SERIALIZATION_PRE_OT_LOAD turn={bot._map.turn} '
+            f'targetPlayer={bot.targetPlayer} '
+            f'teamIdsByPlayer={bot._map.team_ids_by_player_index} '
+            f'otCurrentStatsKeys={[k for k in sorted(resume_data.keys()) if k.startswith("ot_") and "_stats_" in k and "_c_" not in k]}'
+        )
         bot.opponent_tracker.load_from_map_data(resume_data)
+        teamStatsNoneByTeam = {team: bot.opponent_tracker.current_team_cycle_stats[team] is None for team in bot.opponent_tracker._team_indexes}
+        logbook.info(
+            f'BOT_SERIALIZATION_POST_OT_LOAD turn={bot._map.turn} '
+            f'targetPlayer={bot.targetPlayer} '
+            f'teamStatsNoneByTeam={teamStatsNoneByTeam}'
+        )
         if bot.targetPlayer >= 0:
             bot._lastTargetPlayerCityCount = bot.opponent_tracker.get_current_team_scores_by_player(bot.targetPlayer).cityCount
 

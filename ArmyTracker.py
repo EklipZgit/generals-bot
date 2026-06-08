@@ -1096,6 +1096,13 @@ class ArmyTracker(object):
                 f'revertArmy={revert.army} revertPlayer={revert.player} revertTempFog={revert.isTempFogPrediction}')
             # NEVER modify visible tile army values
             if not revert.tile.visible:
+                # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_skip_stale_fog_revert_player_change_after_general_prediction_corrected covers a stale fog prediction revert recorded before a tile was corrected into a general. Once the tile is a confirmed general with an owner, the old fog snapshot must not demote it back to unknown/enemy ownership.
+                if revert.tile.isGeneral and revert.tile.player != revert.player and revert.tile.player != -1:
+                    logbook.warn(
+                        f'FOG_TILE_REVERT_SKIP_GENERAL_OWNER turn={self.map.turn} army={army} tile={revert.tile} '
+                        f'currentArmy={revert.tile.army} currentPlayer={revert.tile.player} currentTempFog={revert.tile.isTempFogPrediction} '
+                        f'revertArmy={revert.army} revertPlayer={revert.player} revertTempFog={revert.isTempFogPrediction}')
+                    continue
                 revert.tile.army = revert.army
                 revert.tile.player = revert.player
                 revert.tile.isTempFogPrediction = revert.isTempFogPrediction

@@ -21,6 +21,7 @@ _EXPORTS = {
     'BotEventHandlers': 'BotEventHandlers',
     'BotLifecycle': 'BotLifecycle',
     'BotSerialization': 'BotSerialization',
+    'BotKillTiming': 'BotKillTiming',
 }
 
 

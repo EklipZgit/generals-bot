@@ -5,6 +5,7 @@ import typing
 
 import BotModules as BM
 import SearchUtils
+from Behavior.ArmyInterceptor import InterceptionOptionInfo
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotRepetition import BotRepetition
 from DangerAnalyzer import ThreatObj
@@ -638,3 +639,32 @@ class BotPathingUtils:
         if distFromCenterY < 0:
             distFromCenterY = 0
         return distFromCenterX + distFromCenterY
+
+    @staticmethod
+    def get_truncated_expansion_option(opt: TilePlanInterface, toTurns: int) -> TilePlanInterface:
+        """
+        Use this to make sure the bot can select important moves that take longer than the end of the round appropriately, like a 4 move city contestation when only 3 moves left in round etc.
+        Does not guarantee that the .tileList .tileSet .tail etc are actually shorter, just reduces length and scales econValue according to its original value per turn.
+        :param opt:
+        :param toTurns:
+        :return:
+        """
+        shortOpt = opt
+        if isinstance(opt, Path):
+            optPath: Path = opt
+            shortOpt = optPath.get_subsegment(toTurns)
+        elif isinstance(opt, InterceptionOptionInfo):
+            optPath: Path = opt.path
+            shortOpt = optPath.get_subsegment(toTurns)
+        elif isinstance(opt, GatherCapturePlan):
+            shortOpt = opt.clone()
+            shortOpt._turns = toTurns
+        else:
+            logbook.error(f'UNEXPECTED TYPE {type(opt)} IN get_truncated_expansion_option')
+            shortOpt = opt.clone()
+            # shortOpt.length = toTurns
+            shortOpt.turns = toTurns
+
+        # it becomes worth whatever fraction of the full amount assigned was that this opt length is
+        shortOpt.econValue = toTurns * opt.econValue / opt.length
+        return shortOpt

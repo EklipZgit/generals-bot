@@ -52,6 +52,7 @@ from BotModules.BotEventHandlers import BotEventHandlers
 from BotModules.BotExplorationOps import BotExplorationOps
 from BotModules.BotExpansionOps import BotExpansionOps
 from BotModules.BotGatherOps import BotGatherOps
+from BotModules.BotKillTiming import BotKillTiming
 from BotModules.BotLifecycle import BotLifecycle
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotRendering import BotRendering
@@ -197,6 +198,7 @@ class EklipZBot(object):
         self.city_capture_plan_tiles: typing.Set[Tile] = set()
         self.city_capture_plan_last_updated: int = 0
         self.city_capture_plan_option: TilePlanInterface | None = None
+        self.contest_city_plan_option: TilePlanInterface | None = None
         self.quick_kill_city_plan_option: TilePlanInterface | None = None
         self._expansion_value_matrix: MapMatrixInterface[float] | None = None
         self.targetPlayer = -1
@@ -570,6 +572,7 @@ class EklipZBot(object):
             return
 
         self.quick_kill_city_plan_option = None
+        self.contest_city_plan_option = None
 
         self.was_defending_economy = self.defend_economy
         self.defend_economy = False
@@ -1104,10 +1107,25 @@ class EklipZBot(object):
                     logbook.info(f'DEFENSE_NEG_UPDATE context=quick_kill_city source=owned_contested_cities addedTiles={[str(t) for t in self.cityAnalyzer.owned_contested_cities]} resultTiles={[str(t) for t in quickKillNegs]}')
                     self.quick_kill_city_plan_option = BotCityOps.get_quick_kill_on_enemy_cities_plan_option(self, quickKillNegs)
                 with self.perf_timer.begin_move_event('capture_cities pre-expansion option'):
-                    self.city_capture_plan_option = BotCityOps.capture_cities_plan_option(self, negs)
+                    self.contest_city_plan_option = BotCityOps.get_city_contestation_plan_option(self)
+                    self.city_capture_plan_option = BotCityOps.capture_cities_plan_option(
+                        self,
+                        negs,
+                        includeContestOption=False,
+                        ignoreContestSuppressionForNeutral=True,
+                        preferNeutralCapture=True,
+                    )
                 self.expansion_plan = BotExpansionOps.build_expansion_plan(self, timeLimit=0.01, expansionNegatives=negs, pathColor=(150, 100, 150), includeExtraGenAndCityArmy=checkCityRoundEndPlans)
 
                 self.capture_line_tracker.process_plan(self.targetPlayer, self.expansion_plan)
+
+                if self.enemy_expansion_plan is not None:
+                    with self.perf_timer.begin_move_event('WCA projected round loss check'):
+                        self.win_condition_analyzer.force_kill_all_in_if_projected_round_loss(
+                            self,
+                            self.expansion_plan,
+                            self.enemy_expansion_plan
+                        )
 
                 if redoTimings:
                     self.timings = BotTimings.get_timings(self)
@@ -1397,25 +1415,53 @@ class EklipZBot(object):
                 self.info(f'City preemptive defense move! {str(cityDefenseMove)}')
                 return cityDefenseMove
 
-        if (
-                self.expansion_plan
-                and self.expansion_plan.selected_option is not None
-                and (
-                    self.expansion_plan.selected_option is self.city_capture_plan_option
-                    or self.expansion_plan.selected_option is self.quick_kill_city_plan_option
-                )
-        ):
-            move = self.expansion_plan.selected_option.get_first_move()
-            if move is not None and not BotRepetition.detect_repetition(self, move):
-                targetCity = None
-                if isinstance(self.expansion_plan.selected_option, GatherCapturePlan):
-                    targetCity = self.expansion_plan.selected_option.gather_target
+        if self.expansion_plan and self.expansion_plan.selected_option is not None:
+            selectedCityOption = self.expansion_plan.selected_option
+            selectedTargetCity = None
+            if isinstance(selectedCityOption, GatherCapturePlan):
+                selectedTargetCity = selectedCityOption.gather_target
+            else:
+                selectedTargetCity = selectedCityOption.tail.tile
+                if selectedTargetCity is None and selectedCityOption.tail.prev is not None:
+                    self.info(f"BUG BUG BUG expansion plan selected option tail had no tile {selectedCityOption}")
+                    selectedTargetCity = selectedCityOption.tail.prev.tile
+            cityCaptureTarget = None
+            if self.city_capture_plan_option is not None:
+                if isinstance(self.city_capture_plan_option, GatherCapturePlan):
+                    cityCaptureTarget = self.city_capture_plan_option.gather_target
                 else:
-                    targetCity = self.expansion_plan.selected_option.tail.tile
-                self.info(f'Pass thru EXP city option! {move} targeting {targetCity}')
-                if targetCity.isNeutral:
-                    self.cityAnalyzer.last_targeted_neut_city = targetCity
-                return move
+                    cityCaptureTarget = self.city_capture_plan_option.tail.tile
+            contestCityTarget = None
+            if self.contest_city_plan_option is not None:
+                if isinstance(self.contest_city_plan_option, GatherCapturePlan):
+                    contestCityTarget = self.contest_city_plan_option.gather_target
+                else:
+                    contestCityTarget = self.contest_city_plan_option.tail.tile
+            quickKillTarget = None
+            if self.quick_kill_city_plan_option is not None:
+                if isinstance(self.quick_kill_city_plan_option, GatherCapturePlan):
+                    quickKillTarget = self.quick_kill_city_plan_option.gather_target
+                else:
+                    quickKillTarget = self.quick_kill_city_plan_option.tail.tile
+            selectedMatchesCityOption = (
+                    selectedCityOption is self.city_capture_plan_option
+                    or selectedCityOption is self.contest_city_plan_option
+                    or selectedCityOption is self.quick_kill_city_plan_option
+                    or selectedTargetCity is not None and selectedTargetCity == cityCaptureTarget
+                    or selectedTargetCity is not None and selectedTargetCity == contestCityTarget
+                    or selectedTargetCity is not None and selectedTargetCity == quickKillTarget
+            )
+            move = selectedCityOption.get_first_move()
+            if selectedMatchesCityOption and move is not None and not BotRepetition.detect_repetition(self, move):
+                targetCity = selectedTargetCity
+                if targetCity is not None and (targetCity.isCity or targetCity.isGeneral):
+                    self.info(f'Pass thru EXP city option! {move} targeting {targetCity}')
+                    if targetCity is None:
+                        self.info(f"BUG BUG BUG expansion plan selected option tail had no tile {selectedCityOption}")
+                        return None
+                    if targetCity.isNeutral:
+                        self.cityAnalyzer.last_targeted_neut_city = targetCity
+                    return move
 
         # with self.perf_timer.begin_move_event(f'capture_cities'):
         #     (cityPath, gatherMove) = BotCityOps.capture_cities(self, defenseCriticalTileSet)
@@ -1430,7 +1476,7 @@ class EklipZBot(object):
         #     return BotPathingUtils.get_first_path_move(self, cityPath)
 
         # AFTER city capture because of test_should_contest_city_not_intercept_it. If this causes problems, then NEED to feed city attack/defense into the RoundPlanner and stop this hacky order shit...
-        if self.expansion_plan and self.expansion_plan.includes_intercept and not self.is_all_in_losing:
+        if self.expansion_plan and self.expansion_plan.includes_intercept and not self.is_all_in_losing and not self.win_condition_analyzer.projected_loss_all_in_active:
             move = self.expansion_plan.selected_option.get_first_move()
             if not BotRepetition.detect_repetition(self, move):
                 self.info(f'Pass thru EXP int! {move} {self.expansion_plan.selected_option}')
@@ -1454,10 +1500,17 @@ class EklipZBot(object):
             # already logged
             return largeArmyExpContinuationMove
 
+        projectedLossAllInMove = BotKillTiming.get_projected_loss_all_in_move(self, defenseCriticalTileSet)
+        if projectedLossAllInMove is not None:
+            return projectedLossAllInMove
+
         if 50 <= self._map.turn < 75:
             move = BotExpansionOps.try_gather_tendrils_towards_enemy(self)
             if move is not None:
                 return move
+
+        if self.win_condition_analyzer.projected_loss_all_in_active:
+            self.curPath = None
 
         if self.curPath is not None:
             (foundMove, move) = BotPathingUtils.continue_cur_path(self, threat, defenseCriticalTileSet)
@@ -1473,7 +1526,7 @@ class EklipZBot(object):
             # already logged
             return allInMove
 
-        if not self.defend_economy:
+        if not self.defend_economy and not self.likely_kill_push:
             expMove = BotExpansionOps.try_find_main_timing_expansion_move_if_applicable(self, defenseCriticalTileSet)
             if expMove is not None:
                 return expMove  # already logged
@@ -1906,7 +1959,6 @@ class EklipZBot(object):
 
         self.teams = MapBase.get_teams_array(map)
         self.opponent_tracker = OpponentTracker(self._map, self.viewInfo)
-        self.opponent_tracker.analyze_turn(-1)
         self.expansion_plan = ExpansionPotential(0, 0, 0, None, [], 0.0, self._map.turn)
 
         for teammate in self._map.teammates:

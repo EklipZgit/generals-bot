@@ -396,7 +396,17 @@ class BotRendering:
         data.append(f'bot_is_all_in_army_advantage={bot.is_all_in_army_advantage}')
         data.append(f'bot_all_in_army_advantage_counter={bot.all_in_army_advantage_counter}')
         data.append(f'bot_all_in_army_advantage_cycle={bot.all_in_army_advantage_cycle}')
+        # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack:
+        # Dump resume-only all-in/city and failed-attack state so continuation tests preserve the live failed attack branch.
+        data.append(f'bot_all_in_city_behind={bot.all_in_city_behind}')
         data.append(f'bot_defend_economy={bot.defend_economy}')
+        data.append(f'bot_attack_failed_turn={bot.attackFailedTurn}')
+        data.append(f'bot_count_failed_quick_attacks={bot.countFailedQuickAttacks}')
+        data.append(f'bot_count_failed_high_depth_attacks={bot.countFailedHighDepthAttacks}')
+        data.append(f'bot_last_target_attack_turn={bot.lastTargetAttackTurn}')
+        data.append(f'bot_force_far_gathers={bot.force_far_gathers}')
+        data.append(f'bot_force_far_gathers_turns={bot.force_far_gathers_turns}')
+        data.append(f'bot_force_far_gathers_sleep_turns={bot.force_far_gathers_sleep_turns}')
         if bot.timings is not None:
             data.append(f'bot_timings_launch_timing={bot.timings.launchTiming}')
             data.append(f'bot_timings_split_turns={bot.timings.splitTurns}')

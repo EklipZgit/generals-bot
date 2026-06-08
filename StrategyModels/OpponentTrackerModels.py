@@ -114,6 +114,7 @@ class CycleStatsData:
         myClone.approximate_fog_army_available_total = self.approximate_fog_army_available_total
         myClone.approximate_fog_army_available_total_true = self.approximate_fog_army_available_total_true
         myClone.approximate_fog_city_army = self.approximate_fog_city_army
+        myClone.fog_city_count = self.fog_city_count
         return myClone
 
     def __str__(self) -> str:

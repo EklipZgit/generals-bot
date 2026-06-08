@@ -563,6 +563,7 @@ def _knapsack_max_set_gather_iterative_prune(
         fastMode: bool = False,
         slowMode: bool = False,
         renderLive: bool = True,
+        maximizeValuePerTurn: bool = False,
 ) -> typing.Tuple[int, typing.Set[Tile]]:
     """
 
@@ -819,7 +820,10 @@ def _knapsack_max_set_gather_iterative_prune(
 
             curTurns = len(rootForestSubset) - len(rootTiles)
             if totalTurns > 0:
-                if bestVal < gatherVal:
+                isBestSet = bestVal < gatherVal
+                if maximizeValuePerTurn:
+                    isBestSet = bestVal / max(1, bestTurns) < gatherVal / max(1, curTurns)
+                if isBestSet:
                     bestVal = gatherVal
                     bestSet = rootForestSubset.copy()
                     bestStart = newStartTilesDict.copy()
@@ -2100,6 +2104,8 @@ def gather_max_set_iterative_plan(
         fastMode: bool = False,
         slowMode: bool = False,
         renderLive: bool = False,
+        maximizeValuePerTurn: bool = False,
+        useTrueValueGathered: bool = True,
 ) -> GatherCapturePlan:
     """
     Does black magic and shits out a spiderweb with numbers in it, sometimes the numbers are even right.
@@ -2383,6 +2389,7 @@ def gather_max_set_iterative_plan(
         fastMode=fastMode,
         slowMode=slowMode,
         renderLive=renderLive,
+        maximizeValuePerTurn=maximizeValuePerTurn,
     )
 
     gcp: GatherCapturePlan | None = None
@@ -2396,7 +2403,7 @@ def gather_max_set_iterative_plan(
             gathSet,
             searchingPlayer=searchingPlayer,
             priorityMatrix=valueMatrix,
-            useTrueValueGathered=True,
+            useTrueValueGathered=useTrueValueGathered,
             # valueMatrix=valueMatrix,  # TODO do econ value from value matrix, maybe? or something?
         )
 

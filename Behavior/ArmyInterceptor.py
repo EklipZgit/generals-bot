@@ -469,8 +469,8 @@ class ArmyInterceptor(object):
             interception.intercept_options = self._get_intercept_plan_options(
                 interception,
                 turnsLeftInCycle,
-                otherThreatsBlockingTiles,
                 opponentTracker,
+                otherThreatsBlockingTiles,
                 includeNonMiddlestPositiveDepthFallback=True)
 
         return interception
@@ -1361,8 +1361,7 @@ class ArmyInterceptor(object):
                         bestInterceptTable[curDist] = opt
                         continue
 
-                    if thisValue >= existing.econValue:
-                        if thisValue > existing.econValue or worstCaseInterceptMoves < existing.worst_case_intercept_moves:
+                    if self._should_replace_best_intercept_option(interception, existing, opt):
                             if self.log_debug:
                                 logbook.info(f'replacing bestInterceptTable[dist {curDist}]:\n  prev {str(existing)}\n  new  {str(opt)}')
                                 logbook.info(
@@ -1373,11 +1372,6 @@ class ArmyInterceptor(object):
                                     f'newRawValueNoRecap {rawValueNoRecap:.2f}, existingRecaptureTurns {existing.recapture_turns}, '
                                     f'newWorstCase {worstCaseInterceptMoves}, existingWorstCase {existing.worst_case_intercept_moves}, baseLen {baseLen}')
                             bestInterceptTable[curDist] = opt
-                        elif self.log_debug:
-                            logbook.info(
-                                f'DIAG_INTERCEPT_CHOICE dist {curDist} action tie-kept-existing, thisValue {thisValue:.2f}, '
-                                f'existingValue {existing.econValue:.2f}, newWorstCase {worstCaseInterceptMoves}, '
-                                f'existingWorstCase {existing.worst_case_intercept_moves}, newStart {path.start.tile}, existingStart {existing.path.start.tile}')
                     elif self.log_debug:
                         logbook.info(
                             f'DIAG_INTERCEPT_CHOICE dist {curDist} action keep-existing, thisValue {thisValue:.2f}, '
@@ -1395,6 +1389,32 @@ class ArmyInterceptor(object):
                     logbook.info(f'best turns {i} = NONE')
 
         return bestInterceptTable
+
+    def _should_replace_best_intercept_option(
+            self,
+            interception: ArmyInterception,
+            existing: InterceptionOptionInfo,
+            candidate: InterceptionOptionInfo,
+    ) -> bool:
+        if candidate.econValue < existing.econValue:
+            return False
+
+        if candidate.econValue > existing.econValue:
+            return True
+
+        if candidate.worst_case_intercept_moves < existing.worst_case_intercept_moves:
+            return True
+
+        if candidate.worst_case_intercept_moves > existing.worst_case_intercept_moves:
+            return False
+
+        targetMap = self.map.distance_mapper.get_tile_dist_matrix(interception.target_tile)
+        candidateDist = targetMap.raw[candidate.path.tail.tile.tile_index]
+        existingDist = targetMap.raw[existing.path.tail.tile.tile_index]
+
+        # UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_prefer_intercept_option_closer_to_enemy_threat_position_when_other_values_tie:
+        # When actual intercept paths are equivalent by value and timing, prefer the path whose intercept tile is closer to the enemy threat position instead of relying on traversal order.
+        return candidateDist < existingDist
 
     def filter_interception_best_points(
             self,
@@ -1562,44 +1582,45 @@ class ArmyInterceptor(object):
             distA = threatDistMap.raw[toTile.tile_index]
             distTuple = positionsByTurn[distB] if distB < numPositions else None
             lastDistTuple = positionsByTurn[distA] if 0 <= distA < numPositions else None
-            if distTuple and lastDistTuple:
+            if distTuple:
                 approxPosX, approxPosY = distTuple
                 fromEuclidCur = self.map.euclidDist(approxPosX, approxPosY, nextTile.x, nextTile.y)
-                lastApproxPosX, lastApproxPosY = lastDistTuple
-                isApproxMtn = self.map.grid[round(approxPosY)][round(approxPosX)].isObstacle
-                # TODO this can exclude the sqrt part of euclid...
+                if lastDistTuple:
+                    lastApproxPosX, lastApproxPosY = lastDistTuple
+                    isApproxMtn = self.map.grid[round(approxPosY)][round(approxPosX)].isObstacle
+                    # TODO this can exclude the sqrt part of euclid...
 
-                if toTile is not None and not isApproxMtn:
-                    # euclidIntDistRecalcFromLast = self.map.euclidDist(lastApproxPosX, lastApproxPosY, nextTile.x, nextTile.y)
-                    # TODO needs to switch to negative tiles, and only be supplied when in actual danger and need to intercept with OTHER tiles than the negative tiles, EG last second defense
-                    # threatBlock = otherThreatsBlockingTiles.get(nextTile, None)
-                    # if threatBlock and threatBlock.amount_needed_to_block > nextTile.army:
-                    # if threatBlock and toTile in threatBlock.blocked_destinations:
-                    #     return None
-                    # if toTile in threatBlock.blocked_destinations:
-                    if distA is None:
-                        # if not DebugHelper.IS_DEBUGGING:
+                    if toTile is not None and not isApproxMtn:
+                        # euclidIntDistRecalcFromLast = self.map.euclidDist(lastApproxPosX, lastApproxPosY, nextTile.x, nextTile.y)
+                        # TODO needs to switch to negative tiles, and only be supplied when in actual danger and need to intercept with OTHER tiles than the negative tiles, EG last second defense
+                        # threatBlock = otherThreatsBlockingTiles.get(nextTile, None)
+                        # if threatBlock and threatBlock.amount_needed_to_block > nextTile.army:
+                        # if threatBlock and toTile in threatBlock.blocked_destinations:
                         #     return None
-                        raise AssertionError(f'{repr(interceptAtTile)}->{repr(toTile)}: {distA}')
-                    if distB is None:
-                        # if not DebugHelper.IS_DEBUGGING:
-                        #     return None
-                        raise AssertionError(f'{repr(interceptAtTile)}->{repr(nextTile)}: {distB}')
+                        # if toTile in threatBlock.blocked_destinations:
+                        if distA is None:
+                            # if not DebugHelper.IS_DEBUGGING:
+                            #     return None
+                            raise AssertionError(f'{repr(interceptAtTile)}->{repr(toTile)}: {distA}')
+                        if distB is None:
+                            # if not DebugHelper.IS_DEBUGGING:
+                            #     return None
+                            raise AssertionError(f'{repr(interceptAtTile)}->{repr(nextTile)}: {distB}')
 
-                    # TODO THIS IS NO LONGER VALID ALONE BECAUSE WE PRUNE POOR ADJACENCIES, SO WE NO LONGER CHECK EVERYTHING CLOSER, THERE ARE CASES WHERE WE PLAN PARALLELS NEXT TO THINGS. SEE test_should_continue_to_intercept_army
-                    if distA > distB:
-                        # return None
-                        toEuclid = self.map.euclidDist(approxPosX, approxPosY, toTile.x, toTile.y)
-                        toLastEuclid = self.map.euclidDist(lastApproxPosX, lastApproxPosY, toTile.x, toTile.y)
-                        # if toEuclid > euclidIntDistRecalcFromLast + 0.8 and toEuclid >= 1:  # this fails when trying to intercept threats that could go either way around a mountain.
-                        if fromEuclidCur < toLastEuclid + 0.5: # and toEuclid >= 1
-                            # we're moving away from the intercept... we were closer last move.
-                            if self.log_debug:
-                                logbook.info(f'skipping {nextTile}->{toTile} because fromEuclidCur {fromEuclidCur:.3f} < toLastEuclid {toLastEuclid:.3f} + 0.5  :  (toEuclid {toEuclid:.3f}, toEuclidLast {toEuclidLast:.3f}) (approxX {approxPosX:.2f}, approxY {approxPosY:.2f}), (lastApproxX {lastApproxPosX:.2f}, lastApproxY {lastApproxPosY:.2f})')
-                            return None
-                        else:
-                            if self.log_debug:
-                                logbook.info(f'ALLOWING {nextTile}->{toTile} because fromEuclidCur {fromEuclidCur:.3f} > toLastEuclid {toLastEuclid:.3f} + 0.5  :  (toEuclid {toEuclid:.3f}, toEuclidLast {toEuclidLast:.3f}) (approxX {approxPosX:.2f}, approxY {approxPosY:.2f}), (lastApproxX {lastApproxPosX:.2f}, lastApproxY {lastApproxPosY:.2f})')
+                        # TODO THIS IS NO LONGER VALID ALONE BECAUSE WE PRUNE POOR ADJACENCIES, SO WE NO LONGER CHECK EVERYTHING CLOSER, THERE ARE CASES WHERE WE PLAN PARALLELS NEXT TO THINGS. SEE test_should_continue_to_intercept_army
+                        if distA > distB:
+                            # return None
+                            toEuclid = self.map.euclidDist(approxPosX, approxPosY, toTile.x, toTile.y)
+                            toLastEuclid = self.map.euclidDist(lastApproxPosX, lastApproxPosY, toTile.x, toTile.y)
+                            # if toEuclid > euclidIntDistRecalcFromLast + 0.8 and toEuclid >= 1:  # this fails when trying to intercept threats that could go either way around a mountain.
+                            if fromEuclidCur < toLastEuclid + 0.5: # and toEuclid >= 1
+                                # we're moving away from the intercept... we were closer last move.
+                                if self.log_debug:
+                                    logbook.info(f'skipping {nextTile}->{toTile} because fromEuclidCur {fromEuclidCur:.3f} < toLastEuclid {toLastEuclid:.3f} + 0.5  :  (toEuclid {toEuclid:.3f}, toEuclidLast {toEuclidLast:.3f}) (approxX {approxPosX:.2f}, approxY {approxPosY:.2f}), (lastApproxX {lastApproxPosX:.2f}, lastApproxY {lastApproxPosY:.2f})')
+                                return None
+                            else:
+                                if self.log_debug:
+                                    logbook.info(f'ALLOWING {nextTile}->{toTile} because fromEuclidCur {fromEuclidCur:.3f} > toLastEuclid {toLastEuclid:.3f} + 0.5  :  (toEuclid {toEuclid:.3f}, toEuclidLast {toEuclidLast:.3f}) (approxX {approxPosX:.2f}, approxY {approxPosY:.2f}), (lastApproxX {lastApproxPosX:.2f}, lastApproxY {lastApproxPosY:.2f})')
 
                 #
                 # prevDistTuple = positionsByTurn.get(dist - 1, None)

@@ -551,16 +551,16 @@ class BotExpansionOps:
             if bot.city_capture_plan_option is not None:
                 addlOptions.append(bot.city_capture_plan_option)
                 bot.info(f'cityOpt {bot.city_capture_plan_option.econValue / max(bot.city_capture_plan_option.length, 1):.2f} ({bot.city_capture_plan_option.econValue:.1f}e/{bot.city_capture_plan_option.length}t) {str(bot.city_capture_plan_option)}')
+            contestCityPlanOption = getattr(bot, 'contest_city_plan_option', None)
+            if contestCityPlanOption is not None:
+                addlOptions.append(contestCityPlanOption)
+                bot.info(f'contestCityOpt {contestCityPlanOption.econValue / max(contestCityPlanOption.length, 1):.2f} ({contestCityPlanOption.econValue:.1f}e/{contestCityPlanOption.length}t) {str(contestCityPlanOption)}')
             if bot.quick_kill_city_plan_option is not None:
                 opt = bot.quick_kill_city_plan_option
                 if bot.quick_kill_city_plan_option.length > bot._map.remainingCycleTurns:
-                    optPath: Path = opt.path if not isinstance(opt, Path) else opt
-                    shortOpt = optPath.get_subsegment(bot._map.remainingCycleTurns)
-                    # it becomes worth whatever fraction of the full amount assigned was that this opt length is
-                    shortOpt.econValue = bot._map.remainingCycleTurns * opt.econValue / opt.length
+                    shortOpt = BotPathingUtils.get_truncated_expansion_option(bot.quick_kill_city_plan_option, bot._map.remainingCycleTurns)
                     addlOptions.append(shortOpt)
                     bot.info(f'quickKillCityOpt SHORTENED {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) -> {shortOpt.econValue / max(shortOpt.length, 1):.2f} ({shortOpt.econValue:.1f}e/{shortOpt.length}t)')
-
                 else:
                     addlOptions.append(opt)
                     bot.info(f'quickKillCityOpt {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) {str(bot.quick_kill_city_plan_option)}')
@@ -980,7 +980,9 @@ class BotExpansionOps:
                     if army is not None:
                         army.include_path(otherPath)
 
-            bot.viewInfo.add_stats_line(f'EN EXP AVAIL {expUtilPlan.turns_used} {expUtilPlan.cumulative_econ_value:.2f} - (fr{expUtilPlan.en_tiles_captured} neut{expUtilPlan.neut_tiles_captured})')
+            enemyExpansionSummary = f'EN EXP AVAIL {expUtilPlan.turns_used} {expUtilPlan.cumulative_econ_value:.2f} - (fr{expUtilPlan.en_tiles_captured} neut{expUtilPlan.neut_tiles_captured})'
+            bot.viewInfo.add_stats_line(enemyExpansionSummary)
+            bot.info(enemyExpansionSummary)
 
         plan = ExpansionPotential(
             expUtilPlan.turns_used,

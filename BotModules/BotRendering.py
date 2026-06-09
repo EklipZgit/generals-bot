@@ -412,6 +412,7 @@ class BotRendering:
             data.append(f'bot_timings_split_turns={bot.timings.splitTurns}')
             data.append(f'bot_timings_quick_expand_turns={bot.timings.quickExpandTurns}')
             data.append(f'bot_timings_cycle_turns={bot.timings.cycleTurns}')
+            data.append(f'bot_timings_disallow_enemy_gather={bot.timings.disallowEnemyGather}')
 
         data.append(f'bot_is_rapid_capturing_neut_cities={bot.is_rapid_capturing_neut_cities}')
         data.append(f'bot_is_blocking_neutral_city_captures={bot.is_blocking_neutral_city_captures}')

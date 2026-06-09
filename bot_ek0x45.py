@@ -718,15 +718,26 @@ class EklipZBot(object):
                 for player in self._map.players:
                     self.armyTracker.update_fog_prediction(player.index, fogTileCounts[player.index], self.targetPlayerExpectedGeneralLocation)
 
-        self._evaluatedUndiscoveredCache = []
-        with self.perf_timer.begin_move_event('get_predicted_target_player_general_location'):
-            maxTile: Tile = BotTargeting.get_predicted_target_player_general_location(self)
-            logbook.info(f'DEBUG: en tile {maxTile} get_predicted_target_player_general_location')
-            if (self.targetPlayerExpectedGeneralLocation != maxTile or self.shortest_path_to_target_player is None) and maxTile is not None:
-                self.targetPlayerExpectedGeneralLocation = maxTile
-                self.recalculate_player_paths(force=True)
-            if self.targetPlayerExpectedGeneralLocation is None:
-                self.targetPlayerExpectedGeneralLocation = self.general
+            self._evaluatedUndiscoveredCache = []
+            with self.perf_timer.begin_move_event('get_predicted_target_player_general_location'):
+                if self.targetPlayerExpectedGeneralLocation is None:
+                    maxTile: Tile = BotTargeting.get_predicted_target_player_general_location(self)
+                    logbook.info(f'DEBUG: en tile {maxTile} get_predicted_target_player_general_location')
+                    if maxTile is not None:
+                        self.targetPlayerExpectedGeneralLocation = maxTile
+                        self.recalculate_player_paths(force=True)
+                    else:
+                        self.targetPlayerExpectedGeneralLocation = self.general
+                elif self.targetPlayerExpectedGeneralLocation.visible and not self.targetPlayerExpectedGeneralLocation.isGeneral:
+                    maxTile: Tile = BotTargeting.get_predicted_target_player_general_location(self)
+                    logbook.info(f'DEBUG: en tile {maxTile} get_predicted_target_player_general_location')
+                    if self.targetPlayerExpectedGeneralLocation != maxTile and maxTile is not None:
+                        self.targetPlayerExpectedGeneralLocation = maxTile
+                        self.recalculate_player_paths(force=True)
+                elif self.shortest_path_to_target_player is None:
+                    # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army:
+                    # Resume data can restore an existing predicted enemy general while path caches are empty. Rebuild paths to that prediction instead of treating the empty cache as permission to replace it with a fresh density guess.
+                    self.recalculate_player_paths(force=True)
 
         with self.perf_timer.begin_move_event('get_alt_en_gen_positions'):
             if not self.is_lag_massive_map or (self._map.turn + 2) % 5 == 0:

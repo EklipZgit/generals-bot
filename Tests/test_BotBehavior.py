@@ -3747,3 +3747,23 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
         self.assertMinArmyNearTiles(playerMap, bot.enemy_attack_path.tileList, general.player, 70, 2, 'should have recognized the threat and be prepared for inbound death')
 
+    def test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army(self):
+        self.begin_capturing_logging()
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army___DbXfAlcFV---0--271.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 271, fill_out_tiles=True)
+        self.assertEqual(80, len(map.players[enemyGeneral.player].tiles))
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=271)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=29)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(20, simHost, 'should just fucking attack and cap bro')

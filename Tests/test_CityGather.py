@@ -1909,7 +1909,6 @@ class CityGatherTests(TestBase):
 
         simHost.assert_last_move_not_none(general.player)
 
-
     def test_should_not_take_city_when_definitely_going_to_die_after_lol(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_take_city_when_definitely_going_to_die_after_lol___3ixo2Karh---0--251.txtmap'

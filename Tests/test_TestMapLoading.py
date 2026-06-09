@@ -2,6 +2,17 @@ from TestBase import TestBase
 
 
 class TestMapLoadingTests(TestBase):
+    def test_fill_out_tiles_respects_resume_enemy_tile_count_after_generating_fog_cities(self):
+        mapFile = 'GameContinuationEntries/should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army___DbXfAlcFV---0--271.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 271, fill_out_tiles=True)
+
+        self.assertEqual(80, map.players[enemyGeneral.player].tileCount)
+        self.assertEqual(80, len(map.players[enemyGeneral.player].tiles))
+        self.assertEqual(80, sum(1 for tile in map.get_all_tiles() if tile.player == enemyGeneral.player))
+        self.assertEqual(4, map.players[enemyGeneral.player].cityCount)
+        self.assertEqual(3, len(map.players[enemyGeneral.player].cities))
+        self.assertEqual(240, map.players[enemyGeneral.player].score)
+
     def test_fill_out_tiles_preserves_target_score_when_enemy_already_has_target_tiles(self):
         mapFile = 'GameContinuationEntries/should_play_defensively_when_equalizing_on_cities_and_up_massively_on_tiles___aRLuObTKX---1--214.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 214, fill_out_tiles=True)

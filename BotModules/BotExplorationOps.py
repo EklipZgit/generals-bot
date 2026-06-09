@@ -31,6 +31,45 @@ if typing.TYPE_CHECKING:
 
 class BotExplorationOps:
     @staticmethod
+    def _try_get_super_careful_flank_flow_expansion_move(
+            bot: EklipZBot,
+            pathToCheck: Path,
+            turns: int,
+    ) -> Move | None:
+        startTiles = pathToCheck.convert_to_dist_dict(offset=0 - pathToCheck.length)
+        for t in list(startTiles.keys()):
+            if t.isSwamp or SearchUtils.any_where(t.movable, lambda m: m.isSwamp):
+                startTiles.pop(t)
+
+        if len(startTiles) == 0 or bot.last_flow_opt_collection is None:
+            bot.info('could not find a super careful flank gath move')
+            return None
+
+        requiredTiles = set(startTiles.keys())
+        bestOption = None
+        bestValuePerTurn = 0.0
+        for flowOption in bot.last_flow_opt_collection.flow_plans:
+            if flowOption.requiredDelay > 0 or flowOption.length > turns:
+                continue
+            if len(requiredTiles.intersection(flowOption.tileSet)) == 0:
+                continue
+            move = flowOption.get_first_move()
+            if move is None or not BotPathingUtils.is_move_safe_valid(bot, move):
+                continue
+            valuePerTurn = flowOption.econValue / max(flowOption.length, 1)
+            if bestOption is None or valuePerTurn > bestValuePerTurn:
+                bestOption = flowOption
+                bestValuePerTurn = valuePerTurn
+
+        if bestOption is None:
+            bot.info('could not find a super careful flank gath move')
+            return None
+
+        move = bestOption.get_first_move()
+        bot.info(f'superCareful flank gath using FE option for {turns}t: {move} ({bestOption.econValue:.2f}/{bestOption.length}t)')
+        return move
+
+    @staticmethod
     def get_optimal_exploration(
             bot: EklipZBot,
             turns,
@@ -215,35 +254,37 @@ class BotExplorationOps:
                     return None
                 turns = 3 + (bot.timings.get_turns_left_in_cycle(bot._map.turn) + 1) % 4
                 with bot.perf_timer.begin_move_event(f'superCareful flank gath {turns}t'):
-                    startTiles = pathToCheck.convert_to_dist_dict(offset=0 - pathToCheck.length)
-                    for t in list(startTiles.keys()):
-                        if t.isSwamp or SearchUtils.any_where(t.movable, lambda m: m.isSwamp):
-                            startTiles.pop(t)
-                    move = None
-                    if len(startTiles) > 0:
-                        move, valGathered, turnsUsed, nodes = BotGatherOps.get_gather_to_target_tiles(
-                            bot,
-                            startTiles,
-                            maxTime=0.002,
-                            gatherTurns=turns,
-                            negativeSet=defenseCriticalTileSet,
-                            targetArmy=1,
-                            useTrueValueGathered=True,
-                            includeGatherTreeNodesThatGatherNegative=False,
-                            maximizeArmyGatheredPerTurn=True,
-                            priorityMatrix=BotExpansionOps.get_expansion_weight_matrix(bot, mult=10))
-
+                    move = BotExplorationOps._try_get_super_careful_flank_flow_expansion_move(bot, pathToCheck, turns)
+                    # startTiles = pathToCheck.convert_to_dist_dict(offset=0 - pathToCheck.length)
+                    # for t in list(startTiles.keys()):
+                    #     if t.isSwamp or SearchUtils.any_where(t.movable, lambda m: m.isSwamp):
+                    #         startTiles.pop(t)
+                    # move = None
+                    # if len(startTiles) > 0:
+                    #     move, valGathered, turnsUsed, nodes = BotGatherOps.get_gather_to_target_tiles(
+                    #         bot,
+                    #         startTiles,
+                    #         maxTime=0.002,
+                    #         gatherTurns=turns,
+                    #         negativeSet=defenseCriticalTileSet,
+                    #         targetArmy=1,
+                    #         useTrueValueGathered=True,
+                    #         includeGatherTreeNodesThatGatherNegative=False,
+                    #         maximizeArmyGatheredPerTurn=True,
+                    #         priorityMatrix=BotExpansionOps.get_expansion_weight_matrix(bot, mult=10))
+                    #
+                    # if move:
+                    #     forcedHalf = False
+                    #     if 4 < valGathered <= move.source.army // 2 and not BotPathingUtils.is_move_towards_enemy(bot, move):
+                    #         move.move_half = True
+                    #         forcedHalf = True
+                    #     bot.info(f'superCareful flank gath for {turns}t: {move} ({valGathered} in {turnsUsed}t). Half {forcedHalf}')
                     if move:
-                        forcedHalf = False
-                        if 4 < valGathered <= move.source.army // 2 and not BotPathingUtils.is_move_towards_enemy(bot, move):
-                            move.move_half = True
-                            forcedHalf = True
-                        bot.info(f'superCareful flank gath for {turns}t: {move} ({valGathered} in {turnsUsed}t). Half {forcedHalf}')
                         return move
 
-                leafMove = BotExplorationOps._get_vision_expanding_available_move(bot, coreNegs, pathToCheck)
-                if leafMove is not None:
-                    return leafMove
+                # leafMove = BotExplorationOps._get_vision_expanding_available_move(bot, coreNegs, pathToCheck)
+                # if leafMove is not None:
+                #     return leafMove
 
             return None
 

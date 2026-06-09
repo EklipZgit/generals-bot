@@ -70,7 +70,12 @@ class BotSerialization:
             # self.timings = None
             # if self._map.turn % 50 != 0:
             cycleTurns = bot._map.turn + bot._map.remainingCycleTurns
-            bot.timings = Timings(0, 0, 0, 0, 0, cycleTurns, disallowEnemyGather=True)
+            disallowEnemyGather = False
+            if f'bot_timings_disallow_enemy_gather' in resume_data:
+                disallowEnemyGather = BotStateQueries.parse_bool(bot, resume_data[f'bot_timings_disallow_enemy_gather'])
+            # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army:
+            # Resume timing state must preserve whether enemy/neutral gathering was allowed. Live BotTimings defaults this to False, so old saves without this field should not become more defensive by disabling enemy gathers.
+            bot.timings = Timings(0, 0, 0, 0, 0, cycleTurns, disallowEnemyGather=disallowEnemyGather)
             bot.timings.launchTiming = int(resume_data[f'bot_timings_launch_timing'])
             bot.timings.splitTurns = int(resume_data[f'bot_timings_split_turns'])
             bot.timings.quickExpandTurns = int(resume_data[f'bot_timings_quick_expand_turns'])

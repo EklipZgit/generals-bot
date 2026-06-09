@@ -44,6 +44,42 @@ if typing.TYPE_CHECKING:
 
 class BotExpansionOps:
     @staticmethod
+    def _add_super_careful_flank_gath_capture_bonuses(bot: EklipZBot, matrix: MapMatrixInterface[float]) -> None:
+        pathToCheck = bot.sketchiest_potential_inbound_flank_path
+        if pathToCheck is None or bot.targetPlayerObj is None or len(bot.targetPlayerObj.tiles) == 0:
+            return
+        if bot.enemy_attack_path is not None and bot.likely_kill_push:
+            return
+        if BotTargeting.is_ffa_situation(bot):
+            return
+
+        pathToCheck = pathToCheck.get_subsegment_excluding_trailing_visible()
+        if pathToCheck is None or pathToCheck.tail is None:
+            return
+
+        winningMassivelyOnArmy = bot.opponent_tracker.winning_on_army(byRatio=1.4) and bot.opponent_tracker.winning_on_economy(byRatio=1.15)
+        winningMassivelyOnEcon = bot.opponent_tracker.winning_on_army(byRatio=1.1) and bot.opponent_tracker.winning_on_economy(byRatio=1.4)
+        winningInTheMiddle = bot.opponent_tracker.winning_on_army(byRatio=1.25) and bot.opponent_tracker.winning_on_economy(byRatio=1.05, offset=-25)
+        winningByEnoughToBeSuperCareful = winningMassivelyOnArmy or winningMassivelyOnEcon or winningInTheMiddle
+        flankIsCloserThanThreeFifths = bot.distance_from_general(pathToCheck.tail.tile) < 3 * bot.shortest_path_to_target_player.length // 5
+        if not winningByEnoughToBeSuperCareful or not flankIsCloserThanThreeFifths:
+            return
+
+        candidateTiles = []
+        for tile in pathToCheck.tileList:
+            if tile.visible:
+                continue
+            if tile.isSwamp or SearchUtils.any_where(tile.movable, lambda m: m.isSwamp):
+                continue
+            candidateTiles.append(tile)
+
+        candidateTiles.sort(key=lambda t: bot.distance_from_general(t))
+        for tile in candidateTiles[:4]:
+            matrix.raw[tile.tile_index] += 0.08
+            if bot.info_render_expansion_matrix_values:
+                bot.viewInfo.add_targeted_tile(tile, targetStyle=TargetStyle.TEAL, radiusReduction=14)
+
+    @staticmethod
     def _get_intercept_option_path_key(option: InterceptionOptionInfo) -> tuple:
         return option.path.start.tile.coords, option.path.tail.tile.coords
 
@@ -2062,6 +2098,8 @@ class BotExpansionOps:
                 if bot._map.get_distance_between(bot.targetPlayerExpectedGeneralLocation, tile) < cutoff:
                     continue
                 matrix.raw[tile.tile_index] += 0.05
+
+        BotExpansionOps._add_super_careful_flank_gath_capture_bonuses(bot, matrix)
 
         endOfCyclePenaltyRatio = 35 / (bot._map.cycleTurn + 5)
         if searchingForFirstContact:

@@ -456,9 +456,31 @@ class TestBase(unittest.TestCase):
                         scoreOverflow -= reduceBy
 
                     if scoreOverflow > 0 and len(protectedFileVisibleTiles) == 0:
-                        raise AssertionError(f'Unable to trim enemy player {player.index} score overflow {scoreOverflow} to match target score {targetScore}')
+                        raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: Unable to trim enemy player {player.index} score overflow {scoreOverflow} to match target score {targetScore}')
 
                     recalc_player_stats()
+
+            for player in map.players:
+                playerChar, _ = chars[player.index]
+                if f'{playerChar}Tiles' in gameData:
+                    expectedTiles = int(gameData[f'{playerChar}Tiles'])
+                    if len(player.tiles) != expectedTiles:
+                        raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: load_map_and_generals fill_out_tiles player {player.index} len(player.tiles) {len(player.tiles)} != txtmap {playerChar}Tiles {expectedTiles}')
+                    if player.tileCount != expectedTiles:
+                        raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: load_map_and_generals fill_out_tiles player {player.index} player.tileCount {player.tileCount} != txtmap {playerChar}Tiles {expectedTiles}')
+                if f'{playerChar}CityCount' in gameData:
+                    expectedCityCount = int(gameData[f'{playerChar}CityCount'])
+                    expectedCitiesLen = expectedCityCount
+                    if player.general is not None:
+                        expectedCitiesLen -= 1
+                    if player.cityCount != expectedCityCount:
+                        raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: load_map_and_generals fill_out_tiles player {player.index} player.cityCount {player.cityCount} != txtmap {playerChar}CityCount {expectedCityCount}')
+                    if len(player.cities) != expectedCitiesLen:
+                        raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: load_map_and_generals fill_out_tiles player {player.index} len(player.cities) {len(player.cities)} != txtmap {playerChar}CityCount minus general {expectedCitiesLen}')
+                if f'{playerChar}Score' in gameData:
+                    expectedScore = int(gameData[f'{playerChar}Score'])
+                    if player.score != expectedScore:
+                        raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: load_map_and_generals fill_out_tiles player {player.index} player.score {player.score} != txtmap {playerChar}Score {expectedScore}')
 
         map.scores = [Score(p.index, p.score, p.tileCount, p.dead) for p in map.players]
 
@@ -1460,6 +1482,33 @@ class TestBase(unittest.TestCase):
             generateTilesFunc,
             bypassDefaultSkip=True)
 
+        def reset_enemy_generated_fog_tile(tile: Tile) -> bool:
+            if tile.player != enemyGeneral.player:
+                return False
+            if tile.isGeneral:
+                return False
+            oldArmy = tile.army
+            wasCity = tile.isCity
+            map.reset_wrong_undiscovered_fog_guess(tile)
+            countTilesEnemy.add(-1)
+            countScoreEnemy.add(-oldArmy)
+            if wasCity:
+                countCitiesEnemy.add(-1)
+            newTiles.discard(tile)
+            return True
+
+        if enemyGeneralTileCount is not None and enemyGeneralTileCount >= 0 and countTilesEnemy.value > enemyGeneralTileCount and not respectPlayerVision:
+            # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army:
+            # Txtmap resume data owns the target player's tile count. Trim excess generated fog land before army-score balancing so the score reconciliation does not preserve armies on tiles that should not exist.
+            generatedFogCandidates = SearchUtils.where(
+                map.get_all_tiles(),
+                lambda t: t.player == enemyGeneral.player and not t.isGeneral and not t.isCity and (t in newTiles or t.isTempFogPrediction or not t.discovered))
+            generatedFogCandidates.sort(key=lambda t: 0 - map.distance_mapper.get_distance_between(general, t))
+            for tile in generatedFogCandidates:
+                if countTilesEnemy.value <= enemyGeneralTileCount:
+                    break
+                reset_enemy_generated_fog_tile(tile)
+
         if armies is not None and not respectPlayerVision:
             # Collapse duplicate entangled fog army predictions: keep one army location with value,
             # and reduce duplicate entangled positions to minimum army so they do not over-inflate score.
@@ -1477,7 +1526,7 @@ class TestBase(unittest.TestCase):
                 return False
             if tile.player != enemyGeneral.player:
                 return False
-            if tile.isGeneral or tile.isCity:
+            if tile.isGeneral:
                 return False
             if tile in bannedEnemyTiles:
                 return False
@@ -1505,7 +1554,7 @@ class TestBase(unittest.TestCase):
             # Then drop outskirt / temp fog guesses until target tile count is met.
             if countTilesEnemy.value > enemyGeneralTileCount:
                 outskirtCandidates = SearchUtils.where(
-                    map.pathable_tiles,
+                    map.get_all_tiles(),
                     lambda t: can_reset_enemy_fog_tile(t))
                 outskirtCandidates.sort(key=lambda t: (0 if t.isTempFogPrediction else 1, -enemyMap[t], -t.army))
                 for tile in outskirtCandidates:

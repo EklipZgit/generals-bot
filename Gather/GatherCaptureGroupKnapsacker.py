@@ -29,7 +29,6 @@ class GroupedKnapsackInput:
     target_island_sets: list[list[int]]
     item_tile_sets: list[list[int]]
     is_external_item: dict[int, bool]
-    item_descriptions: list[str]
     max_iterations: int = 32
 
 
@@ -44,7 +43,6 @@ class GroupedKnapsackPreGroupItem:
     friendly_island_set: list[int]
     target_island_set: list[int]
     item_tile_set: list[int]
-    description: str
 
 
 @dataclass(slots=True)
@@ -59,7 +57,6 @@ class GroupedKnapsackResult:
     max_value: int
     chosen_indices: list[int]
     chosen_weight: int
-    chosen_descriptions: list[str]
     blacklist: list[int]
     iteration_summaries: list[GroupedKnapsackIterationSummary]
     groups: list[int] | None = None
@@ -127,7 +124,7 @@ def _describe_grouped_knapsack_option(input_data: GroupedKnapsackInput, index: i
     return (
         f'idx={index} weight={input_data.weights[index]} value={input_data.values[index]} '
         f'econ={input_data.econ_values[index]:.2f} vpt={_get_option_value_per_turn(input_data, index):.3f} '
-        f'tiles={sorted(input_data.item_tile_sets[index])} desc={input_data.item_descriptions[index]}')
+        f'tiles={sorted(input_data.item_tile_sets[index])}')
 
 
 def _describe_grouped_knapsack_external_flag(input_data: GroupedKnapsackInput, index: int) -> str:
@@ -136,7 +133,7 @@ def _describe_grouped_knapsack_external_flag(input_data: GroupedKnapsackInput, i
     return 'flow'
 
 
-def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: bool = True) -> GroupedKnapsackPrunedGrouping:
+def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: bool = True, noLogVerbose: bool = True) -> GroupedKnapsackPrunedGrouping:
     sorted_indices = sorted(
         range(len(input_data.weights)),
         key=lambda idx: (
@@ -226,7 +223,7 @@ def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: b
                         f'input_group={input_group} frontier={input_group_frontier} '
                         f'option={_describe_grouped_knapsack_option(input_data, index)}')
                 continue
-            if not noLog:
+            if not noLogVerbose:
                 logbook.info(
                     f'Grouped knapsack prune: adding to group root={root} '
                     f'type={_describe_grouped_knapsack_external_flag(input_data, index)} '
@@ -291,13 +288,13 @@ def prune_and_get_groups_for_knapsack(input_data: GroupedKnapsackInput, noLog: b
 def solve_grouped_knapsack_input(
         input_data: GroupedKnapsackInput,
         noLog: bool = True,
+        noLogVerbose: bool = True,
         perfTimer: PerformanceTimer | None = None
 ) -> GroupedKnapsackResult:
     turn_budget = input_data.turn_budget
     weights = input_data.weights
     values = input_data.values
-    item_descriptions = input_data.item_descriptions
-    grouping = prune_and_get_groups_for_knapsack(input_data, noLog=noLog)
+    grouping = prune_and_get_groups_for_knapsack(input_data, noLog=noLog, noLogVerbose=noLogVerbose)
 
     active_idx = sorted(grouping.active_indices, key=lambda i: (grouping.groups_by_index[i], i))
     a_groups = [grouping.groups_by_index[i] for i in active_idx]
@@ -459,9 +456,8 @@ def solve_grouped_knapsack_input(
                     for local_idx, original_idx in enumerate(repair_candidate_indices)
                     if input_data.is_external_item.get(original_idx, False)
                 },
-                item_descriptions=[input_data.item_descriptions[idx] for idx in repair_candidate_indices],
                 max_iterations=input_data.max_iterations)
-            repair_grouping = prune_and_get_groups_for_knapsack(repair_input, noLog=noLog)
+            repair_grouping = prune_and_get_groups_for_knapsack(repair_input, noLog=noLog, noLogVerbose=noLogVerbose)
             repair_active_idx = sorted(repair_grouping.active_indices, key=lambda i: (repair_grouping.groups_by_index[i], i))
             repair_groups = [repair_grouping.groups_by_index[i] for i in repair_active_idx]
             repair_weights = [repair_input.weights[i] for i in repair_active_idx]
@@ -541,7 +537,6 @@ def solve_grouped_knapsack_input(
         max_value=max_value,
         chosen_indices=chosen_orig_idx,
         chosen_weight=chosen_weight,
-        chosen_descriptions=[item_descriptions[i] for i in chosen_orig_idx],
         blacklist=[],
         iteration_summaries=iteration_summaries,
         groups=[grouping.groups_by_index.get(i, -1) for i in range(len(weights))]
@@ -591,7 +586,6 @@ def solve_grouped_knapsack_pre_group_input(
             for idx, item in enumerate(input_data.items)
             if item.is_external
         },
-        item_descriptions=[item.description for item in input_data.items],
         max_iterations=input_data.max_iterations,
     )
     result = solve_grouped_knapsack_input(grouped_input, noLog=noLog)
@@ -626,6 +620,5 @@ def _format_pre_group_item_for_test(item: GroupedKnapsackPreGroupItem, indent: i
         f'{prefix}    econ_value={item.econ_value!r},',
         f'{prefix}    friendly_island_set={item.friendly_island_set!r},',
         f'{prefix}    target_island_set={item.target_island_set!r},',
-        f'{prefix}    item_tile_set={item.item_tile_set!r},',
-        f'{prefix}    description={item.description!r}),',
+        f'{prefix}    item_tile_set={item.item_tile_set!r}),',
     ]

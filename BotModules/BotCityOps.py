@@ -437,7 +437,7 @@ class BotCityOps:
         planOption.gather_target = targetCity
 
     @staticmethod
-    def should_proactively_take_cities(bot):
+    def should_proactively_take_cities(bot: EklipZBot):
         dist = BotPathingUtils.distance_from_general(bot, bot.targetPlayerExpectedGeneralLocation)
         if bot.targetPlayer != -1:
             if len(bot.targetPlayerObj.tiles) == 0 and bot._map.is_walled_city_game and dist > 20:
@@ -476,7 +476,7 @@ class BotCityOps:
         return False
 
     @staticmethod
-    def find_neutral_city_path(bot, ignoreContestSuppression: bool = False) -> Path | None:
+    def find_neutral_city_path(bot: EklipZBot, ignoreContestSuppression: bool = False) -> Path | None:
         is1v1 = bot._map.remainingPlayers == 2 or bot._map.is_2v2
         wayAheadOnEcon = bot.opponent_tracker.winning_on_economy(byRatio=1.15, cityValue=40, offset=-5)
         isNotLateGame = bot._map.turn < 500 and bot.player.standingArmy < 220
@@ -585,7 +585,7 @@ class BotCityOps:
         return path
 
     @staticmethod
-    def _check_should_wait_city_capture(bot) -> typing.Tuple[Path | None, bool]:
+    def _check_should_wait_city_capture(bot: EklipZBot) -> typing.Tuple[Path | None, bool]:
         generalArmy = bot.general.army
         for city, score in sorted(bot.cityAnalyzer.city_scores.items(), key=lambda tup: BotPathingUtils.distance_from_general(bot, tup[0]))[:10]:
             qk = SearchUtils.dest_breadth_first_target(bot._map, [city], preferCapture=True, noNeutralCities=False)
@@ -1308,12 +1308,12 @@ class BotCityOps:
         BotCityCaptureControl.block_neutral_captures(bot, reason)
 
     @staticmethod
-    def ensure_reachability_matrix_built(bot):
+    def ensure_reachability_matrix_built(bot: EklipZBot):
         with bot.perf_timer.begin_move_event(f'rebuild_reachability_costs_matrix'):
             bot.cityAnalyzer.ensure_reachability_matrix_built(force=False)
 
     @staticmethod
-    def should_rapid_capture_neutral_cities(bot) -> bool:
+    def should_rapid_capture_neutral_cities(bot: EklipZBot) -> bool:
         if bot.targetPlayer == -1:
             return True
 
@@ -1387,7 +1387,7 @@ class BotCityOps:
         return False
 
     @staticmethod
-    def find_rapid_city_path(bot) -> Path | None:
+    def find_rapid_city_path(bot: EklipZBot) -> Path | None:
         if not BotCityOps.should_rapid_capture_neutral_cities(bot):
             return None
 

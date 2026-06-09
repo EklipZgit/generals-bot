@@ -1,10 +1,12 @@
 import logbook
 
 import SearchUtils
+from BotModules.BotStateQueries import BotStateQueries
 from Directives import Timings
 from MapMatrix import MapMatrix
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
+from Strategy.WinConditionAnalyzer import WinCondition
 from TestBase import TestBase
 from base.client.tile import Tile, TILE_FOG
 from BotModules.BotCombatOps import BotCombatOps
@@ -1274,7 +1276,7 @@ class BotBehaviorTests(TestBase):
                     self.assertGreater(bot._map.players[general.player].tileCount, 65)
                     self.assertEqual(-1, city.player)
 
-                self.assertFalse(bot.is_all_in())
+                self.assertFalse(BotStateQueries.is_all_in(bot))
 
     def test_should_switch_to_all_in_and_time_with_cycle_appropriately(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1320,11 +1322,11 @@ class BotBehaviorTests(TestBase):
                 if shouldAllIn:
                     if not moveEnemyCity and turn > 210:
                         self.assertEqual(general.player, city.player)
-                        self.assertFalse(bot.is_all_in(), "should have immediately found and sat on the enemy city, and stopped all-inning to hold the city instead.")
+                        self.assertFalse(BotStateQueries.is_all_in(bot), "should have immediately found and sat on the enemy city, and stopped all-inning to hold the city instead.")
                         self.assertNoRepetition(simHost, minForRepetition=2)
                     else:
                         self.assertTrue(bot.all_in_city_behind, "should still be all-inning for cities")
-                        self.assertTrue(bot.is_all_in(), "should not have immediately found and sat on the enemy city, and still be all-inning")
+                        self.assertTrue(BotStateQueries.is_all_in(bot), "should not have immediately found and sat on the enemy city, and still be all-inning")
                 else:
                     if runForTurns > 15 or turn > 215:
                         self.assertGreater(bot._map.players[general.player].tileCount, 63)
@@ -2080,7 +2082,7 @@ whoever has less extra troops will always get ahead
         self.assertIsNone(winner)
 
         self.assertFalse(bot.is_all_in_losing)
-        self.assertFalse(bot.is_all_in())
+        self.assertFalse(BotStateQueries.is_all_in(bot))
         self.assertEqual(4, enPlayer.cityCount)
 
     def test_should_not_let_en_army_run_around_friendly_territory_due_to_threat_killer_move(self):
@@ -3601,4 +3603,147 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwnedXY(1, 10)
-        self.assertOwnedXY(14,12)
+        self.assertOwnedXY(14, 12)
+
+    def test_should_not_gather_AWAY_from_enemy_land_when_needToKill(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_gather_AWAY_from_enemy_land_when_needToKill___5vkV_-LbW---1--80.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 80, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=80)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_gather_AWAY_from_enemy_land_when_needToKill")
+
+    def test_should_detect_runaround_threat_and_split_attack_up_towards_1s_to_avoid_being_stunlocked_the_rest_of_the_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_detect_runaround_threat_and_split_attack_up_towards_1s_to_avoid_being_stunlocked_the_rest_of_the_round___5vkV_-LbW---1--130.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 130, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=130)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_detect_runaround_threat_and_split_attack_up_towards_1s_to_avoid_being_stunlocked_the_rest_of_the_round")
+
+    def test_should_detect_lost_round_and_detect_all_in_opportunity_and_set_up_all_in_instead(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_detect_lost_round_and_detect_all_in_opportunity_and_set_up_all_in_instead___5vkV_-LbW---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 19, 9)
+        enemyGeneral.army = 11
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+
+        # the all-in setup here is attack from gen on the exact turn that would reach the enemy general on round end, so IMMEDIATELY here.
+        # then pull our 3 and all in immediately.
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,16->12,13->12,12z  12,13->11,13  15,9->15,10  13,10->13,9  15,12->14,12->14,11  19,9->19,10->16,10')
+        # next round
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,16->11,16  12,17->11,17  12,15->11,15  14,12->15,12->14,12  19,14->19,12->20,12  20,7->19,7->19,9  20,14->20,9->19,9  17,8->19,8->19,9')
+
+        # proof
+        # simHost.queue_player_moves_str(general.player, '14,19->14,18->16,18->16,10->18,10  17,19->16,19->16,18  17,12->16,12  14,20->14,18->16,18->16,10->19,10->19,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+        self.assertIn(WinCondition.KillAllIn, bot.win_condition_analyzer.viable_win_conditions)
+        self.assertTrue(bot.is_all_in_losing)
+        self.assertGreater(bot.all_in_losing_counter, 0)
+        self.assertTrue(BotStateQueries.is_all_in(bot))
+        self.assertIsNotNone(bot.win_condition_analyzer.all_in_plan)
+        self.assertTrue(bot.win_condition_analyzer.projected_loss_all_in_active)
+        # self.assertEqual(enemyGeneral, bot.win_condition_analyzer.projected_loss_all_in_target)
+        # self.assertEqual(enemyGeneral, bot.win_condition_analyzer.all_in_plan.tail.tile)
+        self.assertIn(map.GetTile(14, 18), bot.win_condition_analyzer.all_in_plan.tileSet)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertLess(general.army, 3, 'should have moved the general or tbh just attacked with the 36, not sure which is better.')
+
+    def test_should_detect_lost_round_and_detect_all_in_opportunity_and_set_up_all_in_instead__long(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_detect_lost_round_and_detect_all_in_opportunity_and_set_up_all_in_instead___5vkV_-LbW---1--137.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 137, fill_out_tiles=True)
+        enemyGeneral = self.move_enemy_general(map, enemyGeneral, 19, 9)
+        enemyGeneral.army = 11
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=137)
+
+        # the all-in setup here is attack from gen on the exact turn that would reach the enemy general on round end, so IMMEDIATELY here.
+        # then pull our 3 and all in immediately.
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,16->12,13->12,12z  12,13->11,13  15,9->15,10  13,10->13,9  15,12->14,12->14,11  19,9->19,10->16,10')
+        # next round
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,16->11,16  12,17->11,17  12,15->11,15  14,12->16,12  19,14->19,12->20,12  20,7->19,7->19,9  20,14->20,9->19,9  17,8->19,8->19,9')
+
+        # proof
+        # simHost.queue_player_moves_str(general.player, '14,19->14,18->16,18->16,10->18,10  17,19->16,19->16,18  17,12->16,12  14,20->14,18->16,18->16,10->19,10->19,9')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=32)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwned(general.player, enemyGeneral)
+
+
+    def test_should_recognize_likely_inbound_kill_threat_and_defend_against_path_through_13_9_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_likely_inbound_kill_threat_and_defend_against_path_through_13_9_tile___w1c3_ivrK---0--276.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 276, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=276)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTrue(bot.likely_kill_push)
+
+    def test_should_recognize_likely_inbound_kill_threat_and_defend_against_path_through_13_9_tile__long(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_likely_inbound_kill_threat_and_defend_against_path_through_13_9_tile__long___w1c3_ivrK---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=250)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertMinArmyNearTiles(playerMap, bot.enemy_attack_path.tileList, general.player, 70, 2, 'should have recognized the threat and be prepared for inbound death')
+

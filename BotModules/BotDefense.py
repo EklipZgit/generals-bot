@@ -1060,7 +1060,7 @@ class BotDefense:
         return shouldBypass
 
     @staticmethod
-    def should_force_gather_to_enemy_tiles(bot) -> bool:
+    def should_force_gather_to_enemy_tiles(bot: EklipZBot) -> bool:
         """
         Determine whether we've let too much enemy tiles accumulate near our general,
          and it is getting out of hand and we should spend a cycle just gathering to kill them.
@@ -1081,7 +1081,7 @@ class BotDefense:
         return forceGatherToEnemy
 
     @staticmethod
-    def check_for_danger_tile_moves(bot) -> Move | None:
+    def check_for_danger_tile_moves(bot: EklipZBot) -> Move | None:
         dangerTiles = BotDefense.get_danger_tiles(bot)
         if len(dangerTiles) == 0 or bot.all_in_losing_counter > 15:
             return None
@@ -1121,7 +1121,7 @@ class BotDefense:
                 return move
 
     @staticmethod
-    def find_sketchy_fog_flank_from_enemy_in_play_area(bot) -> Path | None:
+    def find_sketchy_fog_flank_from_enemy_in_play_area(bot: EklipZBot) -> Path | None:
         """
         Hunts for a sketchy flank attack point the enemy might be inclined to abuse from a city/general,
         and returns it as a fog-only path to the enemy attack source.
@@ -1151,12 +1151,12 @@ class BotDefense:
         return sketchyPath
 
     @staticmethod
-    def find_sketchiest_fog_flank_from_enemy(bot) -> Path | None:
+    def find_sketchiest_fog_flank_from_enemy(bot: EklipZBot) -> Path | None:
         """
         Hunts for a sketchy flank attack point the enemy might be inclined to abuse from a city/general,
         and returns it as a fog-only path to the enemy attack source.
         """
-        territoryDists = bot.territories.territoryDistances[bot.general.player]
+        territoryDistsRaw = bot.territories.territoryDistances[bot.general.player].raw
 
         enemyLaunchPoints = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=5, cutoffEmergenceRatio=0.25)
         for c in bot.targetPlayerObj.cities:
@@ -1168,15 +1168,17 @@ class BotDefense:
         depth = min(35, distCap)
 
         missingCities = bot.opponent_tracker.get_team_unknown_city_count_by_player(bot.targetPlayer)
+        aMapRaw = bot.board_analysis.intergeneral_analysis.aMap.raw
+        flankableFogRaw = bot.board_analysis.flankable_fog_area_matrix.raw
 
         def valueFunc(tile: Tile, prioVals) -> typing.Tuple | None:
-            if tile not in bot.board_analysis.flankable_fog_area_matrix:
+            if not flankableFogRaw[tile.tile_index]:
                 return None
 
             if prioVals:
                 dist, negSumTerritoryDists, _, usedUnkCities = prioVals
 
-                return 0 - bot.board_analysis.intergeneral_analysis.aMap[tile], 0 - negSumTerritoryDists, dist
+                return 0 - aMapRaw[tile.tile_index], 0 - negSumTerritoryDists, dist
             return None
 
         def prioFunc(tile: Tile, prioVals) -> typing.Tuple | None:
@@ -1195,15 +1197,15 @@ class BotDefense:
                 if usedUnkCities > missingCities:
                     return None
 
-            if tile not in bot.board_analysis.flankable_fog_area_matrix:
+            if not flankableFogRaw[tile.tile_index]:
                 return None
 
-            return dist + 1, negSumTerritoryDists - territoryDists[tile], bot.board_analysis.intergeneral_analysis.aMap[tile], usedUnkCities
+            return dist + 1, negSumTerritoryDists - territoryDistsRaw[tile.tile_index], aMapRaw[tile.tile_index], usedUnkCities
 
         skip = set()
 
         for tile in bot._map.get_all_tiles():
-            if tile not in bot.board_analysis.flankable_fog_area_matrix:
+            if not flankableFogRaw[tile.tile_index]:
                 skip.add(tile)
 
         startTiles = {}
@@ -1237,21 +1239,22 @@ class BotDefense:
             flankingPlayer: int,
             flankPlayerLaunchPoints: typing.List[Tile],
             depth: int,
-            targetDistMap,
+            targetDistMap: MapMatrixInterface[int],
             validEmergencePointMatrix,
             maxFogRange: int = -1
     ) -> Path | None:
         if maxFogRange == -1:
             maxFogRange = bot.board_analysis.inter_general_distance + 2
+        tMapRaw = bot.territories.territoryMap.raw
 
         def prioFunc(curTile: Tile, prioObj):
             dist, negMaxPerTurn, zoningPenalty, fogTileCount, sequentialNonFog, totalNonFog, minDistFogEmergence, hadPossibleVision, hadDefiniteVision, fromTile = prioObj
 
-            hasPossibleVision = SearchUtils.any_where(curTile.adjacents, lambda t: t.player == targetPlayer or (not curTile.visible and bot.territories.territoryMap[t] == targetPlayer))
+            hasPossibleVision = SearchUtils.any_where(curTile.adjacents, lambda t: t.player == targetPlayer or (not curTile.visible and tMapRaw[t.tile_index] == targetPlayer))
             hasDefiniteVision = SearchUtils.any_where(curTile.adjacents, lambda t: t.player == targetPlayer)
 
             if fromTile is not None:
-                hasPossibleFromVision = SearchUtils.any_where(fromTile.adjacents, lambda t: t.player == targetPlayer or (not fromTile.visible and bot.territories.territoryMap[t] == targetPlayer))
+                hasPossibleFromVision = SearchUtils.any_where(fromTile.adjacents, lambda t: t.player == targetPlayer or (not fromTile.visible and tMapRaw[t.tile_index] == targetPlayer))
                 hasDefiniteFromVision = SearchUtils.any_where(fromTile.adjacents, lambda t: t.player == targetPlayer)
 
                 if not hasPossibleFromVision and not hasDefiniteFromVision and hasDefiniteVision:
@@ -1278,13 +1281,13 @@ class BotDefense:
         def valueFunc(curTile: Tile, prioObj):
             dist, negMaxPerTurn, zoningPenalty, fogTileCount, sequentialNonFog, totalNonFog, minDistFogEmergence, hasPossibleVision, hasDefiniteVision, fromTile = prioObj
 
-            if fromTile is not None and targetDistMap[fromTile] < targetDistMap[curTile]:
+            if fromTile is not None and targetDistMap.raw[fromTile.tile_index] < targetDistMap.raw[curTile.tile_index]:
                 return None
             if sequentialNonFog > 0:
                 return None
             if totalNonFog > maxFogRange:
                 return None
-            if validEmergencePointMatrix is not None and curTile not in validEmergencePointMatrix:
+            if validEmergencePointMatrix is not None and not validEmergencePointMatrix.raw[curTile.tile_index]:
                 return None
 
             return minDistFogEmergence - zoningPenalty
@@ -1381,6 +1384,9 @@ class BotDefense:
         threatDist = threatenedTileDistMap.raw[threat.path.start.tile.tile_index]
 
         shortestTiles = threat.armyAnalysis.shortestPathWay.tiles
+        threatDistMapRaw = threatDistMap.raw
+        threatenedTileDistMapRaw = threatenedTileDistMap.raw
+        startTile = threat.path.start.tile
 
         def move_closest_negative_value_func(curTile: Tile, currentPriorityObject):
             toTile = None
@@ -1390,20 +1396,20 @@ class BotDefense:
             lastRootHeur = 0
             lastNegClosenessToThreat = -1000
             lastArmy = 0
-            rootDistToThreat = threatDistMap.raw[curTile.tile_index]
+            rootDistToThreat = threatDistMapRaw[curTile.tile_index]
             depth = 0
             if currentPriorityObject is not None:
                 lastIsntDelayable, lastIsInterceptingIn1, lastNotInShortest, lastRootHeur, lastNegClosenessToThreat, lastArmy, depth, rootDistToThreat, toTile = currentPriorityObject
 
-            isMovable = curTile in threat.path.start.tile.movable
-            isMovableToThreatButNotIntercepting = toTile != threat.path.start.tile and isMovable and threatenedTileDistMap.raw[curTile.tile_index] < threatDist
+            isMovable = curTile in startTile.movable
+            isMovableToThreatButNotIntercepting = toTile != startTile and isMovable and threatenedTileDistMapRaw[curTile.tile_index] < threatDist
 
-            closenessToThreat = threatenedTileDistMap.raw[curTile.tile_index]
+            closenessToThreat = threatenedTileDistMapRaw[curTile.tile_index]
             inShortest = curTile in shortestTiles
             if threatDist > closenessToThreat and inShortest:
                 closenessToThreat = 0 - closenessToThreat
 
-            isInterceptingIn1 = threatDistMap.raw[curTile.tile_index] == 2 and toTile is not None and threatDistMap.raw[toTile.tile_index] == 1
+            isInterceptingIn1 = threatDistMapRaw[curTile.tile_index] == 2 and toTile is not None and threatDistMapRaw[toTile.tile_index] == 1
 
             if isMovableToThreatButNotIntercepting:
                 closenessToThreat += 20
@@ -1652,22 +1658,26 @@ class BotDefense:
 
     @staticmethod
     def get_enemy_probable_attack_path(bot: EklipZBot, enemyPlayer: int) -> Path | None:
+        teams = bot._map.team_ids_by_player_index
+        enTeam = teams[enemyPlayer]
+        frTeam = teams[bot.general.player]
+        flankMatRaw = bot.board_analysis.flankable_fog_area_matrix.raw
         def valFunc(curTile: Tile, prioObj):
             (dist, negArmySum, sumX, sumY, goalIncrement) = prioObj
-            if curTile not in bot.board_analysis.flankable_fog_area_matrix:
+            if not flankMatRaw[curTile.tile_index]:
                 return None
-            if not bot._map.is_tile_on_team_with(curTile, enemyPlayer):
+            if teams[curTile.player] != enTeam:
                 return None
             if curTile.visible:
                 return None
 
-            return 0 - negArmySum
+            return (0 - negArmySum, -dist, sumX, sumY)
 
         def priorityFunc(nextTile, currentPriorityObject):
             (dist, negArmySum, sumX, sumY, goalIncrement) = currentPriorityObject
             dist += 1
 
-            if bot._map.is_player_on_team_with(nextTile.player, enemyPlayer):
+            if teams[nextTile.player] == enTeam:
                 negArmySum -= nextTile.army
             negArmySum += 1
             negArmySum -= goalIncrement
@@ -1927,7 +1937,7 @@ class BotDefense:
         return dangerPaths
 
     @staticmethod
-    def determine_should_defend_ally(bot) -> bool:
+    def determine_should_defend_ally(bot: EklipZBot) -> bool:
         threat = bot.dangerAnalyzer.fastestAllyThreat
 
         if bot.teammate_communicator is not None:
@@ -1991,7 +2001,7 @@ class BotDefense:
         return True
 
     @staticmethod
-    def get_approximate_fog_risk_deficit(bot) -> int:
+    def get_approximate_fog_risk_deficit(bot: EklipZBot) -> int:
         cycleTurnsLeft = bot.timings.get_turns_left_in_cycle(bot._map.turn)
 
         pathWorth = BotStateQueries.get_player_army_amount_on_path(bot, bot.target_player_gather_path, bot.general.player)
@@ -2007,7 +2017,7 @@ class BotDefense:
         return 0
 
     @staticmethod
-    def should_abandon_king_defense(bot) -> bool:
+    def should_abandon_king_defense(bot: EklipZBot) -> bool:
         return bot._map.remainingPlayers == 2 and not bot.opponent_tracker.winning_on_economy(byRatio=bot.behavior_losing_on_economy_skip_defense_threshold)
 
     @staticmethod
@@ -2267,7 +2277,7 @@ class BotDefense:
         return None
 
     @staticmethod
-    def calculate_general_danger(bot):
+    def calculate_general_danger(bot: EklipZBot):
         depth = bot.distance_from_general(bot.targetPlayerExpectedGeneralLocation)
         if depth < 9:
             depth = 9
@@ -2408,7 +2418,7 @@ class BotDefense:
         return None
 
     @staticmethod
-    def check_should_defend_economy_based_on_large_tiles(bot) -> bool:
+    def check_should_defend_economy_based_on_large_tiles(bot: EklipZBot) -> bool:
         largeEnemyTiles = BotCombatQueries.find_large_tiles_near(
             bot,
             [t for t in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles],

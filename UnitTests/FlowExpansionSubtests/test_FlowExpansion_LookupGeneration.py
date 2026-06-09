@@ -1277,7 +1277,7 @@ aG1  a4   a1   a1   a1   a4   bC3  bG1
         self.assertEqual(1, len(city_turn_one_enriched), 'Delayed gather with one extra army should still produce exactly one feasible city capture plan.')
 
         enriched = city_turn_one_enriched[0]
-        self.assertEqual(5, enriched.combined_turn_cost, 'The feasible delayed city capture should take four gather turns plus one capture turn.')
+        self.assertEqual(5, enriched.turns, 'The feasible delayed city capture should take four gather turns plus one capture turn.')
         self.assertEqual(4, enriched.capture_entry.required_army, 'The one-tile bC3 capture should still require four arriving army before delayed city growth adjustments.')
         self.assertAlmostEqual(8.05, enriched.capture_entry.econ_value, places=3, msg='The delayed single-city enriched entry should include the base enemy capture value, the +6 city bonus, and the scaled post-capture city-army bonus.')
 
@@ -1308,7 +1308,7 @@ aG5  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
         self.assertEqual(0, len(capture_turn_three_entries), 'The aG5 fixture should not have enough delayed support to reach the second enemy city.')
 
         enriched = capture_turn_two_entries[0]
-        self.assertEqual(7, enriched.combined_turn_cost, 'The feasible aG5 delayed plan should take five gather turns plus two capture turns.')
+        self.assertEqual(7, enriched.turns, 'The feasible aG5 delayed plan should take five gather turns plus two capture turns.')
         self.assertEqual(6, enriched.capture_entry.required_army, 'Capturing bC3 and the following b1 should require six arriving army in the raw capture table.')
         self.assertAlmostEqual(14.1, enriched.capture_entry.econ_value, places=3, msg='The aG5 delayed multi-city enriched entry should include the base capture value, the +6 city bonus, and the scaled post-capture city-army bonus.')
 
@@ -1333,7 +1333,7 @@ aG7  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
         self.assertEqual(1, len(capture_turn_three_entries), 'The aG7 fixture should produce exactly one delayed plan that reaches the second enemy city.')
 
         enriched = capture_turn_three_entries[0]
-        self.assertEqual(8, enriched.combined_turn_cost, 'The feasible aG7 delayed plan should take five gather turns plus three capture turns.')
+        self.assertEqual(8, enriched.turns, 'The feasible aG7 delayed plan should take five gather turns plus three capture turns.')
         self.assertEqual(8, enriched.capture_entry.required_army, 'Capturing bC3, b1, and bC1 should require eight arriving army in the raw capture table.')
         self.assertAlmostEqual(22.15, enriched.capture_entry.econ_value, places=3, msg='The aG7 delayed multi-city enriched entry should include both +6 city bonuses and the scaled post-capture city-army bonus.')
 
@@ -1358,7 +1358,7 @@ aG9  a4   a1   a1   a1   a4   bC3  b1   bC1  b1   bG1
         self.assertEqual(1, len(capture_turn_four_entries), 'The aG9 fixture should produce exactly one delayed plan that reaches the b1 after the second enemy city.')
 
         enriched = capture_turn_four_entries[0]
-        self.assertEqual(9, enriched.combined_turn_cost, 'The feasible aG9 delayed plan should take five gather turns plus four capture turns.')
+        self.assertEqual(9, enriched.turns, 'The feasible aG9 delayed plan should take five gather turns plus four capture turns.')
         self.assertEqual(10, enriched.capture_entry.required_army, 'Capturing bC3, b1, bC1, and the following b1 should require ten arriving army in the raw capture table.')
         self.assertAlmostEqual(24.2, enriched.capture_entry.econ_value, places=3, msg='The aG9 delayed multi-city enriched entry should include both +6 city bonuses and the scaled post-capture city-army bonus through the tile after bC1.')
 
@@ -2113,7 +2113,7 @@ a7   b2
           requires walking 5 tiles — 5 move-turns just for that piece, not 1.
 
           When the lookup table says gath_turns=2 for [a16, a12] and cap_turns=5 for 5 enemy
-          tiles, the combined_turn_cost=7 is a lie: the real cost is at least cap_turns +
+          tiles, the turns=7 is a lie: the real cost is at least cap_turns +
           distance(a12→border) = 5+5 = 10, meaning the plan is much worse than reported AND
           may be physically impossible within the assumed turn window.
 
@@ -2466,7 +2466,7 @@ a3   aG10 a2   a2   a2                                                b2   N4   
                 f'req={cap.required_army} gath={enriched.gather_entry.gathered_army}'
             )
             self.assertEqual(
-                13, enriched.combined_turn_cost,
+                13, enriched.turns,
                 f'Capture entry including b2 (col 14) has cap_turns={cap.turns} < 13; '
                 f'the neutrals are mandatory traversal and cannot be skipped. '
                 f'req={cap.required_army} gath={enriched.gather_entry.gathered_army}'

@@ -2826,3 +2826,29 @@ setting bestInterceptTable[dist 1]:
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(playerMap.At(13,5).army, 5)
+
+    def test_should_fucking_intercept_and_finish_out_the_round_normally(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_fucking_intercept_and_finish_out_the_round_normally___DXpYdlvhe---1--83.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 83, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=83)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '15,6->14,6->14,7->17,7->17,6->16,6->16,5')
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '14,11->13,11->13,8->14,8  15,9->15,7')  # ACHIEVES 3 TILE DIFF
+        # simHost.queue_player_moves_str(general.player, '14,11->15,11->15,8')  # ACHIEVES 2 TILE DIFF
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.info_render_expansion_matrix_values = True
+        bot.info_render_flow_expand = True
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=17)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(1, simHost, 'fucking, do the thing')

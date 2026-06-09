@@ -80,7 +80,7 @@ class BotEventHandlers:
         return None
 
     @staticmethod
-    def reevaluate_after_player_capture(bot):
+    def reevaluate_after_player_capture(bot: EklipZBot):
         if bot._map.remainingPlayers <= 3:
             if not bot.opponent_tracker.winning_on_economy(byRatio=0.8):
                 bot.viewInfo.add_info_line("not even on economy, going all in effective immediately")

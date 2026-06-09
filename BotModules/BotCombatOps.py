@@ -1070,7 +1070,7 @@ class BotCombatOps:
         return largeTilesNearTargets[0:limit]
 
     @staticmethod
-    def continue_killing_target_army(bot) -> Move | None:
+    def continue_killing_target_army(bot: EklipZBot) -> Move | None:
         if bot.targetingArmy.tile in bot.armyTracker.armies:
             army = bot.armyTracker.armies[bot.targetingArmy.tile]
 
@@ -1090,7 +1090,7 @@ class BotCombatOps:
                 threats = [ThreatObj(p.length - 1, p.value, p, ThreatType.Kill) for p in bot.targetingArmy.expectedPaths]
                 if len(threats) > 0:
                     with bot.perf_timer.begin_move_event(f'NEW INTERCEPT CONT @{str(bot.targetingArmy)}'):
-                        plan = bot.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=bot.timings.get_turns_left_in_cycle(bot._map.turn))
+                        plan = bot.army_interceptor.get_interception_plan(threats, turnsLeftInCycle=bot.timings.get_turns_left_in_cycle(bot._map.turn), )
                         if plan is not None:
                             bestOpt = None
                             bestOptAmt = 0
@@ -1186,7 +1186,7 @@ class BotCombatOps:
         return move_half
 
     @staticmethod
-    def find_key_enemy_vision_tiles(bot):
+    def find_key_enemy_vision_tiles(bot: EklipZBot):
         keyTiles = set()
         genPlayer = bot._map.players[bot.general.player]
         distFactor = 2
@@ -1658,7 +1658,7 @@ class BotCombatOps:
         return bestTurns, bestAttack, bestDef
 
     @staticmethod
-    def check_should_be_all_in_losing(bot) -> bool:
+    def check_should_be_all_in_losing(bot: EklipZBot) -> bool:
         general = bot.general
         if general is None:
             bot.is_all_in_losing = False
@@ -1754,7 +1754,7 @@ class BotCombatOps:
         return bot.is_all_in_losing
 
     @staticmethod
-    def worth_attacking_target(bot) -> bool:
+    def worth_attacking_target(bot: EklipZBot) -> bool:
         timingFactor = 1.0
         if bot._map.turn < 50:
             bot.viewInfo.add_info_line("Not worth attacking, turn < 50")
@@ -1877,7 +1877,7 @@ class BotCombatOps:
             return value >= neededVal
 
     @staticmethod
-    def determine_should_winning_all_in(bot):
+    def determine_should_winning_all_in(bot: EklipZBot):
         if bot.targetPlayer < 0:
             return False
 

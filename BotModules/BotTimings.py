@@ -43,7 +43,7 @@ class BotTimings:
         bot.all_in_army_advantage_cycle = cycle
 
     @staticmethod
-    def get_opponent_cycle_stats(bot) -> CycleStatsData | None:
+    def get_opponent_cycle_stats(bot: EklipZBot) -> CycleStatsData | None:
         if bot.targetPlayer == -1:
             return None
 
@@ -94,7 +94,7 @@ class BotTimings:
         return finalGreedTurnsAvail
 
     @staticmethod
-    def prune_timing_split_if_necessary(bot):
+    def prune_timing_split_if_necessary(bot: EklipZBot):
         if bot.target_player_gather_path is None:
             return
 
@@ -120,7 +120,7 @@ class BotTimings:
                 bot.timings.splitTurns = timingAdjusted
 
     @staticmethod
-    def get_remaining_move_time(bot) -> float:
+    def get_remaining_move_time(bot: EklipZBot) -> float:
         used = bot.perf_timer.get_elapsed_since_update(bot._map.turn)
         moveCycleTime = 0.5
         latencyBuffer = 0.3
@@ -131,7 +131,7 @@ class BotTimings:
         return remaining
 
     @staticmethod
-    def timing_cycle_ended(bot):
+    def timing_cycle_ended(bot: EklipZBot):
         bot.is_winning_gather_cyclic = False
         bot.viewInfo.add_info_line(f'Timing cycle ended, turn {bot._map.turn}')
         bot.cities_gathered_this_cycle = set()
@@ -156,7 +156,7 @@ class BotTimings:
         bot.flanking = False
 
     @staticmethod
-    def get_timings_old(bot) -> Timings:
+    def get_timings_old(bot: EklipZBot) -> Timings:
         with bot.perf_timer.begin_move_event('GatherAnalyzer scan'):
             bot.gatherAnalyzer.scan()
 
@@ -321,7 +321,7 @@ class BotTimings:
         return timings
 
     @staticmethod
-    def get_timings(bot) -> Timings:
+    def get_timings(bot: EklipZBot) -> Timings:
         with bot.perf_timer.begin_move_event('GatherAnalyzer scan'):
             bot.gatherAnalyzer.scan()
 
@@ -332,8 +332,8 @@ class BotTimings:
         countEnOnPath = 0
         countNeutOnPath = 0
 
-        launchTiming = 24
-        gatherSplit = 24
+        launchTiming = 20
+        gatherSplit = 20
         if BotStateQueries.is_still_ffa_and_non_dominant(bot) and bot.targetPlayer != -1:
             gatherSplit = 32
 
@@ -445,10 +445,10 @@ class BotTimings:
             launchTiming += 50
             gatherSplit += 50
 
-        if launchTiming > 34:
-            launchTiming = 34
-        if gatherSplit > 26:
-            gatherSplit = 26
+        if launchTiming > 32:
+            launchTiming = 32
+        if gatherSplit > 24:
+            gatherSplit = 24
 
         if launchTiming < gatherSplit:
             if not bypass:

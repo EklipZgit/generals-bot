@@ -397,7 +397,7 @@ class BotGatherOps:
         return None
 
     @staticmethod
-    def get_capture_first_tree_move_prio_func(bot) -> typing.Callable[[Tile, typing.Any], typing.Any]:
+    def get_capture_first_tree_move_prio_func(bot: EklipZBot) -> typing.Callable[[Tile, typing.Any], typing.Any]:
         def capture_first_value_func(curTile: Tile, currentPriorityObject):
             lastTile = None
             if currentPriorityObject:
@@ -687,7 +687,7 @@ class BotGatherOps:
         return None, -1, -1, None
 
     @staticmethod
-    def get_gather_tiebreak_matrix(bot) -> MapMatrixInterface[float]:
+    def get_gather_tiebreak_matrix(bot: EklipZBot) -> MapMatrixInterface[float]:
         matrix = MapMatrix(bot._map, 0.0)
 
         desertPenalty = 0.25
@@ -879,7 +879,7 @@ class BotGatherOps:
         return thisNodeFoundCity, count
 
     @staticmethod
-    def get_tree_move_default_value_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+    def get_tree_move_default_value_func(bot: EklipZBot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
         frPlayers = bot._map.get_teammates(bot.player.index)
         def default_value_func(currentTile, currentPriorityObject):
             negCityCount = army = unfriendlyTileCount = 0
@@ -908,7 +908,7 @@ class BotGatherOps:
         return default_value_func
 
     @staticmethod
-    def get_tree_move_most_army_value_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+    def get_tree_move_most_army_value_func(bot: EklipZBot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
         frPlayers = bot._map.get_teammates(bot.player.index)
         def default_value_func(currentTile, currentPriorityObject):
             negCityCount = army = 0
@@ -938,7 +938,7 @@ class BotGatherOps:
         return default_value_func
 
     @staticmethod
-    def get_tree_move_most_army_value_distance_factored_func(bot, delayCities: bool = False) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+    def get_tree_move_most_army_value_distance_factored_func(bot: EklipZBot, delayCities: bool = False) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
         frPlayers = bot._map.get_teammates(bot.player.index)
         def default_value_func(currentTile, currentPriorityObject):
             negCityCount = army = 0
@@ -980,7 +980,7 @@ class BotGatherOps:
         return default_value_func
 
     @staticmethod
-    def get_tree_move_biggest_tile_value_func(bot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
+    def get_tree_move_biggest_tile_value_func(bot: EklipZBot) -> typing.Callable[[Tile, typing.Tuple], typing.Tuple | None]:
         def default_value_func(currentTile, currentPriorityObject):
             if currentPriorityObject is not None:
                 (army, negDistFromPlayArea) = currentPriorityObject

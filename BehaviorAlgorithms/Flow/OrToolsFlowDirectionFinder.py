@@ -562,22 +562,22 @@ class DirectOrToolsGraphBuilder(object):
 
                 borders_target = any(b.team == target_team for b in island.border_islands)
                 borders_friendly = any(b.team == team for b in island.border_islands)
-                if self.log_debug:
-                    if (
-                        island is target_general_island
-                        or island is fr_general_island
-                        or island.team == team and borders_target
-                        or island.team == target_team and borders_friendly
-                    ):
-                        flow_diag_islands.add(island.unique_id)
-                        for border_island in island.border_islands:
-                            if border_island.team == team or border_island.team == target_team:
-                                flow_diag_islands.add(border_island.unique_id)
-                if self.log_debug and island.unique_id in flow_diag_islands:
-                    logbook.warning(
-                        f'FLOW_DIAG_PHASE1 use_neutral_flow={use_neutral_flow} '
-                        f'{self._format_island_for_flow_diag(island, demand, node_supply_map[island.unique_id])}'
-                    )
+                # if self.log_debug:
+                #     if (
+                #         island is target_general_island
+                #         or island is fr_general_island
+                #         or island.team == team and borders_target
+                #         or island.team == target_team and borders_friendly
+                #     ):
+                #         flow_diag_islands.add(island.unique_id)
+                #         for border_island in island.border_islands:
+                #             if border_island.team == team or border_island.team == target_team:
+                #                 flow_diag_islands.add(border_island.unique_id)
+                # if self.log_debug and island.unique_id in flow_diag_islands:
+                #     logbook.warning(
+                #         f'FLOW_DIAG_PHASE1 use_neutral_flow={use_neutral_flow} '
+                #         f'{self._format_island_for_flow_diag(island, demand, node_supply_map[island.unique_id])}'
+                #     )
 
                 all_node_ids.add(island.unique_id)
                 all_node_ids.add(-island.unique_id)

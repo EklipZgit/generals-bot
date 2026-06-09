@@ -30,7 +30,7 @@ if typing.TYPE_CHECKING:
 
 class BotTargeting:
     @staticmethod
-    def get_afk_players(bot) -> typing.List:
+    def get_afk_players(bot: EklipZBot) -> typing.List:
         if bot._afk_players is None:
             bot._afk_players = []
             minTilesToNotBeAfk = math.sqrt(bot._map.turn)
@@ -44,7 +44,7 @@ class BotTargeting:
         return bot._afk_players
 
     @staticmethod
-    def check_target_player_just_took_city(bot):
+    def check_target_player_just_took_city(bot: EklipZBot):
         if bot.targetPlayerObj is not None and bot.targetPlayer != -1:
             teamData = bot.opponent_tracker.get_current_team_scores_by_player(bot.targetPlayer)
             numLivingPlayers = len(teamData.livingPlayers)
@@ -145,7 +145,7 @@ class BotTargeting:
         return dist
 
     @staticmethod
-    def get_safe_per_tile_bfs_depth(bot):
+    def get_safe_per_tile_bfs_depth(bot: EklipZBot):
         depth = 9
         if bot._map.rows * bot._map.cols > 4000:
             depth = 1
@@ -275,14 +275,14 @@ class BotTargeting:
         return furthests, SearchUtils.build_distance_map_matrix(bot._map, furthests)
 
     @staticmethod
-    def is_ffa_situation(bot) -> bool:
+    def is_ffa_situation(bot: EklipZBot) -> bool:
         if bot._is_ffa_situation is None:
             bot._is_ffa_situation = not bot._map.is_walled_city_game and BotTargeting.are_more_teams_alive_than(bot, 2)
 
         return bot._is_ffa_situation
 
     @staticmethod
-    def find_fog_bisection_targets(bot) -> typing.Set[Tile]:
+    def find_fog_bisection_targets(bot: EklipZBot) -> typing.Set[Tile]:
         bisects = set()
         if bot.targetPlayer == -1:
             return bisects
@@ -532,7 +532,7 @@ class BotTargeting:
         return maxTile
 
     @staticmethod
-    def target_player_flank_path(bot):
+    def target_player_flank_path(bot: EklipZBot):
         if bot.targetPlayer == -1:
             return None
 
@@ -556,7 +556,7 @@ class BotTargeting:
         return None
 
     @staticmethod
-    def calculate_target_player(bot) -> int:
+    def calculate_target_player(bot: EklipZBot) -> int:
         targetPlayer = -1
         playerScore = 0
 

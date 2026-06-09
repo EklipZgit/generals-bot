@@ -70,7 +70,7 @@ class BotComms:
         bot._tile_ping_queue.put(pingTile)
 
     @staticmethod
-    def get_queued_tile_pings(bot) -> typing.List[Tile]:
+    def get_queued_tile_pings(bot: EklipZBot) -> typing.List[Tile]:
         outbound = []
         while bot._tile_ping_queue.qsize() > 0:
             outbound.append(bot._tile_ping_queue.get())
@@ -78,7 +78,7 @@ class BotComms:
         return outbound
 
     @staticmethod
-    def get_queued_teammate_messages(bot) -> typing.List[str]:
+    def get_queued_teammate_messages(bot: EklipZBot) -> typing.List[str]:
         outbound = []
         while bot._outbound_team_chat.qsize() > 0:
             outbound.append(bot._outbound_team_chat.get())
@@ -86,7 +86,7 @@ class BotComms:
         return outbound
 
     @staticmethod
-    def get_queued_all_chat_messages(bot) -> typing.List[str]:
+    def get_queued_all_chat_messages(bot: EklipZBot) -> typing.List[str]:
         outbound = []
         while bot._outbound_all_chat.qsize() > 0:
             outbound.append(bot._outbound_all_chat.get())

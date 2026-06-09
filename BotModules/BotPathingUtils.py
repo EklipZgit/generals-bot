@@ -256,7 +256,7 @@ class BotPathingUtils:
         return launchPath
 
     @staticmethod
-    def check_cur_path(bot):
+    def check_cur_path(bot: EklipZBot):
         if bot.curPath is None:
             return
         if bot.curPath.length == 0:
@@ -309,7 +309,7 @@ class BotPathingUtils:
                 return
 
     @staticmethod
-    def clean_up_path_before_evaluating(bot):
+    def clean_up_path_before_evaluating(bot: EklipZBot):
         if not bot.curPath:
             return
 

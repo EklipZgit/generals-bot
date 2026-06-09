@@ -640,14 +640,16 @@ function Start-WindowsTerminalAltBots {
     $windowName = 'AltBots'
 
     # starts a windows terminal that runs the FFA bots and a second instance of Sora AI that joins 1v1s
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-Blob -game ffa'
     # time for the terminal window to open
     start-sleep -seconds 3
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game 1v1, ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game 1v1, ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game 1v1,ffa,1v1'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-Path -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-Path -game 1v1 -SleepMax 60'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-Blob -game 1v1 -SleepMax 60'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-SoraAI -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-SoraAI -game 1v1 -SleepMax 60'
+    
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command ". .\run-bot.ps1; run-bot -game ffa, 1v1, 1v1, 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
 }
 
 

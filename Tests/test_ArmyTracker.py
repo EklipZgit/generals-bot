@@ -6,6 +6,7 @@ import logbook
 
 import Gather
 import SearchUtils
+from Army import Army
 from ArmyTracker import ArmyTracker
 from Algorithms import MapSpanningUtils
 from BehaviorAlgorithms import FlowExpansion
@@ -30,6 +31,38 @@ class ArmyTrackerTests(TestBase):
         bot.armyTracker.log_debug = True
 
         return bot
+
+    def test_should_skip_stale_fog_revert_player_change_after_general_prediction_corrected(self):
+        rawMap = """|  |  |  |
+aG1      
+   bG1   
+         
+|  |  |  |
+aTiles=1
+bTiles=1
+"""
+        map, general = self.load_map_and_general_from_string(rawMap, turn=200, player_index=0)
+        tracker = ArmyTracker(map)
+        staleGeneralTile = map.At(2, 2)
+        staleGeneralTile.visible = False
+        staleGeneralTile.discovered = False
+        staleGeneralTile.army = 0
+        staleGeneralTile.player = -1
+        staleGeneralTile.isTempFogPrediction = False
+
+        staleArmy = Army(staleGeneralTile)
+        staleArmy.record_fog_tile_revert(staleGeneralTile)
+
+        staleGeneralTile.isGeneral = True
+        staleGeneralTile.player = 0
+        staleGeneralTile.army = 0
+        map.generals[0] = staleGeneralTile
+
+        tracker.scrap_army(staleArmy)
+
+        self.assertEqual(0, staleGeneralTile.player)
+        self.assertTrue(staleGeneralTile.isGeneral)
+        self.assertEqual({}, staleArmy.fogTileReverts)
 
     @staticmethod
     def strip_serialized_army_paths_for_test(rawMapStr: str) -> str:

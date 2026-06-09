@@ -6,7 +6,7 @@ import logbook
 
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
-from Behavior.ArmyInterceptor import TARGET_CAP_VALUE
+from Behavior.ArmyInterceptor import InterceptionOptionInfo, TARGET_CAP_VALUE
 from BotModules import BotDefense
 from BotModules.imports import BotCombatOps
 from DangerAnalyzer import ThreatObj, ThreatType
@@ -14,6 +14,7 @@ from Models import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
+from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 from base.client.map import MapBase
 
@@ -90,6 +91,33 @@ class ArmyInterceptionUnitTests(TestBase):
         ]
 
         self.assertEqual(7, interceptor._get_max_interception_search_depth(threats))
+
+    def test_should_prefer_intercept_option_closer_to_enemy_threat_position_when_other_values_tie(self):
+        map, general, enemyGeneral = self.load_map_and_generals('GameContinuationEntries/should_see_city_as_forward_from_central_point___HgAyaVTVa---1--307.txtmap', 307, fill_out_tiles=True)
+        interceptor = self.get_interceptor(map, general, enemyGeneral)
+        interception = self.get_interception_plan(map, general, enemyGeneral, useDebugLogging=False)
+        self.assertIsNotNone(interception)
+
+        fartherPath = Path()
+        fartherPath.add_next(general)
+        fartherPath.add_next(map.At(4, 10))
+
+        closerPath = Path()
+        closerPath.add_next(general)
+        closerPath.add_next(map.At(6, 10))
+
+        equalValue = 10.0
+        equalTurns = 4
+        existing = InterceptionOptionInfo(fartherPath, equalValue, equalTurns, equalValue, 0, equalTurns, equalTurns, 0, 0, 10)
+        candidate = InterceptionOptionInfo(closerPath, equalValue, equalTurns, equalValue, 0, equalTurns, equalTurns, 0, 0, 10)
+        existing.intercept = interception
+        candidate.intercept = interception
+
+        targetMap = map.distance_mapper.get_tile_dist_matrix(interception.target_tile)
+        self.assertLess(
+            targetMap.raw[candidate.path.tail.tile.tile_index],
+            targetMap.raw[existing.path.tail.tile.tile_index])
+        self.assertTrue(interceptor._should_replace_best_intercept_option(interception, existing, candidate))
 
     def _create_intercept_depth_test_threat(
             self,
@@ -958,7 +986,8 @@ class ArmyInterceptionUnitTests(TestBase):
         bestOptAmt = 0
         gatherDepth = 20
         option = plan.intercept_options[3]
-        val, path = option
+        val = option.econValue
+        path = option.path
         if path.length < gatherDepth and val > bestOptAmt:
             logbook.info(f'NEW BEST INTERCEPT OPT {val:.2f} -- {str(path)}')
             bestOpt = path
@@ -2063,3 +2092,164 @@ player_index=0
     # 57f, 44p, 0s  Idk before fixing off by ones and stuff
     # 55f, 52p, 0s  After partial off-by-one fixups, incomplete
     # 52f, 55p, 0s  After allowing intercepts from tiles that are in the path-direct positive tile sets based on how much army they intercepted with. Which is wrong now that I think about it.
+
+    def test_should_correctly_evaluate_intercept_value_through_large_tile_dist_4_or_5(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_correctly_evaluate_intercept_value_through_large_tile_dist_4_or_5___5vkV_-LbW---1--75.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 75, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=75)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_correctly_evaluate_intercept_value_through_large_tile_dist_4_or_5")
+
+    def test_should_correctly_evaluate_intercept_value_through_large_tile_dist_2_or_3(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_correctly_evaluate_intercept_value_through_large_tile_dist_2_or_3___5vkV_-LbW---1--76.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 76, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=76)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_correctly_evaluate_intercept_value_through_large_tile_dist_2_or_3")
+
+    def test_should_correctly_evaluate_intercept_value_through_large_tile_dist_2_or_3__diagonal(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_correctly_evaluate_intercept_value_through_large_tile_dist_2_or_3__diagonal___5vkV_-LbW---1--77.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 77, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=77)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_correctly_evaluate_intercept_value_through_large_tile_dist_2_or_3__diagonal")
+
+    def test_should_recognize_that_intercepting_downward_from_general_is_better(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_that_intercepting_downward_from_general_is_better___bOViElTJh---0--235.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 235, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=235)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_recognize_that_intercepting_downward_from_general_is_better")
+
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    # TODO
+    def test_game_engine_validation_of_direct_collision_intercept_values_vs_predicted(self):
+        """
+        In this scenario, friendly army and enemy army have an odd distance between them (so they land on the same tile).
+        They must land on the same tile as opposed to having two options (eg the armies are diagonal to each other touching corners and so need to delay a move to see which way opp goes - not the case here).
+        Generates all possible variations of a given basic intercept scenario (army amounts) and then validates that actually running the moves through game sim produces the same results as the ArmyInterceptor.py valuations.
+        """
+        data = """
+    |    |    |    |    |    |
+    b1   b1   b1   b1   b1   bG1
+    b1   M    M    M    b10  M    
+    b1   M              M      
+    b1   M                    
+    b1   a10  M                    
+    aG1  M                     
+    |    |    |    |    |    |
+    player_index=0
+    """
+        permutations = []
+        for numFrTilesOnPath in [0, 2, 4, 6, 7, 8, 10]:
+            for extraEnArmyOnEnTile1 in [0, 1, 2, 3, 4, 5]:
+                for extraEnArmyOnEnTile2 in [0, 1, 2, 3, 4, 5]:
+                    for extraFrArmyOnFrTile1 in [0, 1, 2, 3, 4, 5]:
+                        for extraFrArmyOnFrTile2 in [0, 1, 2, 3, 4, 5]:
+                            for startingEnArmy in [8, 9, 10, 12, 15, 18, 32]:
+                                for startingFrArmy in [8, 9, 10, 12, 15, 18, 32]:
+                                    permutation = (numFrTilesOnPath, extraEnArmyOnEnTile1, extraEnArmyOnEnTile2, extraFrArmyOnFrTile1, extraFrArmyOnFrTile2, startingEnArmy, startingFrArmy)
+                                    permutations.append(permutation)
+
+        for perm in permutations:
+            (numFrTilesOnPath, extraEnArmyOnEnTile1, extraEnArmyOnEnTile2, extraFrArmyOnFrTile1, extraFrArmyOnFrTile2, startingEnArmy, startingFrArmy) = perm
+            with self.subTest(numFrTilesOnPath=numFrTilesOnPath, extraEnArmyOnEnTile1=extraEnArmyOnEnTile1, extraEnArmyOnEnTile2=extraEnArmyOnEnTile2, extraFrArmyOnFrTile1=extraFrArmyOnFrTile1, extraFrArmyOnFrTile2=extraFrArmyOnFrTile2,
+                              startingEnArmy=startingEnArmy, startingFrArmy=startingFrArmy):
+                # a10 is 1,4  b10 is 4,1
+                self.stop_capturing_logging()
+                map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 50)
+
+                potentialFrTiles = [
+                    map.At(0, 4),
+                    map.At(0, 3),
+                    # map.At(0, 2),
+                    # map.At(0, 1),
+                    map.At(0, 0),
+                    # map.At(1, 0),
+                    # map.At(2, 0),
+                    map.At(3, 0),
+                    map.At(4, 0),
+                ]
+
+                frTile = map.At(1, 4)
+                enTile = map.At(4, 1)
+
+                enTile.army = startingEnArmy
+                frTile.army = startingFrArmy
+
+                for i in range(numFrTilesOnPath):
+                    potentialFrTiles[i].player = frTile.player
+
+                map.update()
+
+                self.begin_capturing_logging()
+                # Get interception plan with a longer threat path to avoid filtering
+                plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['1,4->0,4->0,0->5,0'], turnsLeftInCycle=10, useDebugLogging=True)

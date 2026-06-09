@@ -13,7 +13,7 @@ if typing.TYPE_CHECKING:
 
 class BotStateQueries:
     @staticmethod
-    def is_all_in(bot):
+    def is_all_in(bot: EklipZBot):
         return bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind
 
     @staticmethod
@@ -22,7 +22,7 @@ class BotStateQueries:
         return tile is not None and tile.player != -1 and tile.player != bot.general.player and bot._map.is_tile_enemy(tile)
 
     @staticmethod
-    def is_still_ffa_and_non_dominant(bot) -> bool:
+    def is_still_ffa_and_non_dominant(bot: EklipZBot) -> bool:
         isFfa = False
         if bot._map.remainingPlayers > 2 and not bot._map.is_2v2:
             isFfa = True
@@ -50,7 +50,7 @@ class BotStateQueries:
         return True
 
     @staticmethod
-    def get_intergeneral_analysis(bot):
+    def get_intergeneral_analysis(bot: EklipZBot):
         return bot.board_analysis.intergeneral_analysis
 
     @staticmethod

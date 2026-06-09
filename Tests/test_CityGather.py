@@ -1184,6 +1184,10 @@ class CityGatherTests(TestBase):
                 simHost.queue_player_moves_str(enemyGeneral.player, '3,5->4,5->5,5->5,4')
                 if keepsMoving:
                     simHost.queue_player_moves_str(enemyGeneral.player, '5,4->5,5->4,5->4,4->5,4->5,5->4,5->4,4->5,4->5,5->4,5->4,4->5,4->5,5->4,5->4,4')
+
+                # #proof
+                # simHost.queue_player_moves_str(general.player, '8,3->7,3->7,2->4,2->4,4->5,4->5,5')
+
                 bot = self.get_debug_render_bot(simHost, general.player)
                 playerMap = simHost.get_player_map(general.player)
 
@@ -1844,10 +1848,9 @@ class CityGatherTests(TestBase):
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
-
-        self.skipTest("TODO add asserts for should_be_able_to_capture_city")
+        self.assertOwnedXY(12, 15)
 
     def test_should_take_city_when_close_to_general_and_allowed_and_clearly_up_and_contesting_enemy(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2013,3 +2016,22 @@ class CityGatherTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(-1, playerMap.At(2, 6), 'shouldnt take city when clearly will immediately die')
+
+    def test_should_fucking_equalize_on_cities_instead_of_all_in(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_fucking_equalize_on_cities_instead_of_all_in___HdSd0lgbA---0--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=133)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(4, 15)

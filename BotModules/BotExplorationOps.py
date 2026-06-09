@@ -105,7 +105,7 @@ class BotExplorationOps:
         return bestRevealedPath
 
     @staticmethod
-    def get_move_if_afk_player_situation(bot):
+    def get_move_if_afk_player_situation(bot: EklipZBot):
         afkPlayers = BotTargeting.get_afk_players(bot)
         allOtherPlayersAfk = len(afkPlayers) + 1 == bot._map.remainingPlayers
         numTilesVisible = 0

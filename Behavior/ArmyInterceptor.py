@@ -244,14 +244,19 @@ class InterceptionOptionInfo(TilePlanInterface):
         return self.path.pop_first_move()
 
     def __str__(self):
-        # if self.path is not None and self.path.start is not None:
+        return f'int {self.str_start()}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), {self.str_details()}'
+
+    def str_start(self):
         tgTile = 'NONE'
         if self.intercept is not None:
             tgTile = str(self.intercept.target_tile)
-        fm = self.path.get_first_move()
-        return f'int {fm}..{self.path.tail.tile}@{tgTile}..{self.path.tail.tile}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), re {self.recapture_turns}, dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, wct {self.worst_case_intercept_moves}, del{self.requiredDelay}'
-        # else:
-        #     return f'int ?@{self.intercept.target_tile}->?: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt) dBlk {self.damage_blocked:.2f}, eRem {self.intercepting_army_remaining}, bct {self.best_case_intercept_moves}, del{self.requiredDelay}'
+        return f'{self.path.tileList[0]}>{self.path.tileList[1]}..{self.path.tail.tile}@{tgTile}'
+
+    def str_details(self):
+        return f'del{self.requiredDelay}, rc{self.recapture_turns}, blk{self.damage_blocked:.1f}, ear{self.intercepting_army_remaining}, bct{self.best_case_intercept_moves}, wct{self.worst_case_intercept_moves}'
+
+    def str_no_vals(self):
+        return f'{self.str_start()}: {self.str_details()}'
 
     def __repr__(self):
         return f'{str(self)}, path {self.path}'

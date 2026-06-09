@@ -79,7 +79,7 @@ class BotExpansionOps:
 
     @staticmethod
     def _log_intercept_option_info(bot: EklipZBot, option: InterceptionOptionInfo, useBotInfo: bool) -> None:
-        optionInfo = f'intOpt {option.econValue / max(option.length, 1):.2f} ({option.econValue:.1f}e/{option.length}t) {str(option)}'
+        optionInfo = f'opt int {option.econValue / max(option.length, 1):.2f} ({option.econValue:.1f}e/{option.length}t) {option.str_no_vals()}'
         logbook.info(optionInfo)
         if useBotInfo:
             bot.info(optionInfo)
@@ -356,7 +356,18 @@ class BotExpansionOps:
         expansionNegatives = defenseCriticalTileSet.copy()
         logbook.info(f'DEFENSE_NEG_COPY context=try_find_expansion_move source=defenseCriticalTileSet copiedTiles={[str(t) for t in expansionNegatives]}')
         splitTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
-        if (not forceBypassLaunch and splitTurn < bot.timings.launchTiming and bot._map.turn > 50) or (bot.target_player_gather_path is not None and bot.target_player_gather_path.start.tile in expansionNegatives):
+        if (
+            # (
+            #     not forceBypassLaunch 
+            #     and splitTurn < bot.timings.launchTiming 
+            #     and bot._map.turn > 50
+            # ) 
+            # or 
+            (
+                bot.target_player_gather_path is not None 
+                and bot.target_player_gather_path.start.tile in expansionNegatives
+            )
+        ):
             bot.viewInfo.add_info_line(
                 f"splitTurn {splitTurn} < launchTiming {bot.timings.launchTiming}...?")
             for tile in bot.target_player_gather_targets:
@@ -550,20 +561,20 @@ class BotExpansionOps:
                 BotExpansionOps._log_intercept_option_info(bot, option, option in botInfoInterceptOptions)
             if bot.city_capture_plan_option is not None:
                 addlOptions.append(bot.city_capture_plan_option)
-                bot.info(f'cityOpt {bot.city_capture_plan_option.econValue / max(bot.city_capture_plan_option.length, 1):.2f} ({bot.city_capture_plan_option.econValue:.1f}e/{bot.city_capture_plan_option.length}t) {str(bot.city_capture_plan_option)}')
-            contestCityPlanOption = getattr(bot, 'contest_city_plan_option', None)
+                bot.info(f'opt ntCity {bot.city_capture_plan_option.econValue / max(bot.city_capture_plan_option.length, 1):.2f} ({bot.city_capture_plan_option.econValue:.1f}e/{bot.city_capture_plan_option.length}t) {str(bot.city_capture_plan_option)}')
+            contestCityPlanOption = bot.contest_city_plan_option
             if contestCityPlanOption is not None:
                 addlOptions.append(contestCityPlanOption)
-                bot.info(f'contestCityOpt {contestCityPlanOption.econValue / max(contestCityPlanOption.length, 1):.2f} ({contestCityPlanOption.econValue:.1f}e/{contestCityPlanOption.length}t) {str(contestCityPlanOption)}')
+                bot.info(f'opt enCity {contestCityPlanOption.econValue / max(contestCityPlanOption.length, 1):.2f} ({contestCityPlanOption.econValue:.1f}e/{contestCityPlanOption.length}t) {str(contestCityPlanOption)}')
             if bot.quick_kill_city_plan_option is not None:
                 opt = bot.quick_kill_city_plan_option
                 if bot.quick_kill_city_plan_option.length > bot._map.remainingCycleTurns:
                     shortOpt = BotPathingUtils.get_truncated_expansion_option(bot.quick_kill_city_plan_option, bot._map.remainingCycleTurns)
                     addlOptions.append(shortOpt)
-                    bot.info(f'quickKillCityOpt SHORTENED {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) -> {shortOpt.econValue / max(shortOpt.length, 1):.2f} ({shortOpt.econValue:.1f}e/{shortOpt.length}t)')
+                    bot.info(f'opt quickKillCityShort {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) -> {shortOpt.econValue / max(shortOpt.length, 1):.2f} ({shortOpt.econValue:.1f}e/{shortOpt.length}t)')
                 else:
                     addlOptions.append(opt)
-                    bot.info(f'quickKillCityOpt {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) {str(bot.quick_kill_city_plan_option)}')
+                    bot.info(f'opt quickKillCity {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) {str(bot.quick_kill_city_plan_option)}')
 
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
@@ -652,6 +663,9 @@ class BotExpansionOps:
                                 leafPath.econValue = ITERATIVE_EXPANSION_EN_CAP_VAL if leafMove.dest.player != -1 else 1.0
                                 leafPath.econValue += bonusCapturePointMatrix.raw[leafMove.dest.tile_index]
                                 additionalOptionsToInclude.append(leafPath)
+                        enemyAttackPathTiles = None
+                        if bot.enemy_attack_path is not None:
+                            enemyAttackPathTiles = bot.enemy_attack_path.tileSet
                         optCollection = flowExpander.get_expansion_options(
                             islands=bot.tileIslandBuilder,
                             asPlayer=bot.player.index,
@@ -665,6 +679,7 @@ class BotExpansionOps:
                             additional_options=additionalOptionsToInclude,
                             army_override_matrix=armyOverrideMatrix,
                             threatBlockingTiles=bot.blocking_tile_info,
+                            enemyAttackPathTiles=enemyAttackPathTiles,
                         )
                         cumulative = 0.0
                         cumulativeTurns = 0
@@ -1158,7 +1173,7 @@ class BotExpansionOps:
         return vals
 
     @staticmethod
-    def timing_expand(bot):
+    def timing_expand(bot: EklipZBot):
         turnOffset = bot._map.turn + bot.timings.offsetTurns
         turnCycleOffset = turnOffset % bot.timings.cycleTurns
         if turnCycleOffset >= bot.timings.splitTurns:
@@ -1522,7 +1537,7 @@ class BotExpansionOps:
         return None
 
     @staticmethod
-    def check_army_out_of_play_ratio(bot) -> bool:
+    def check_army_out_of_play_ratio(bot: EklipZBot) -> bool:
         """
         0.0 means all army is in the core play area
         1.0 means all army is outside the core play area.
@@ -1618,7 +1633,7 @@ class BotExpansionOps:
         return aboveOutOfPlay
 
     @staticmethod
-    def _should_use_iterative_negative_expand(bot) -> bool:
+    def _should_use_iterative_negative_expand(bot: EklipZBot) -> bool:
         if bot._map.turn < 150:
             return False
         return bot.expansion_use_iterative_negative_tiles
@@ -1771,7 +1786,7 @@ class BotExpansionOps:
         return bot._expansion_value_matrix
 
     @staticmethod
-    def look_for_ffa_turtle_move(bot) -> Move | None:
+    def look_for_ffa_turtle_move(bot: EklipZBot) -> Move | None:
         """
 
         @return:
@@ -1918,7 +1933,7 @@ class BotExpansionOps:
         return move
 
     @staticmethod
-    def _get_avoid_other_players_expansion_matrix(bot) -> MapMatrixInterface[float]:
+    def _get_avoid_other_players_expansion_matrix(bot: EklipZBot) -> MapMatrixInterface[float]:
         matrix = MapMatrix(bot._map, 0.0)
         for tile in bot._map.get_all_tiles():
             if bot.targetPlayer != -1 and (tile.player == bot.targetPlayer or bot.territories.territoryMap[tile] == bot.targetPlayer):
@@ -1942,7 +1957,7 @@ class BotExpansionOps:
         return matrix
 
     @staticmethod
-    def get_unexpandable_ratio(bot) -> float:
+    def get_unexpandable_ratio(bot: EklipZBot) -> float:
         fromTiles = bot._map.players[bot.general.player].tiles
         distance = 8
 
@@ -1982,7 +1997,7 @@ class BotExpansionOps:
         return ratioBad
 
     @staticmethod
-    def _get_standard_expansion_capture_weight_matrix(bot) -> MapMatrixInterface[float]:
+    def _get_standard_expansion_capture_weight_matrix(bot: EklipZBot) -> MapMatrixInterface[float]:
         matrix = MapMatrix(bot._map, 0.0)
 
         innerChokes = bot.board_analysis.innerChokes
@@ -1997,10 +2012,10 @@ class BotExpansionOps:
         if bot.targetPlayer != -1 and not bot.armyTracker.seen_player_lookup[bot.targetPlayer]:
             searchingForFirstContact = True
 
-        discoveredTargetTileCount = 0
+        emergenceCount = 0
         if bot.targetPlayerObj is not None:
-            discoveredTargetTileCount = len(bot.targetPlayerObj.tiles)
-        searchingForEnemyLand = bot.targetPlayer != -1 and discoveredTargetTileCount < max(10, bot.player.tileCount // 5)
+            emergenceCount = len(bot.armyTracker.uneliminated_emergence_events[bot.targetPlayer])
+        searchingForEnemyLand = bot.targetPlayer != -1 and emergenceCount < 2
 
         if numEnGenPos > 5:
             bot.info(f'filtering down valid general set')
@@ -2089,7 +2104,7 @@ class BotExpansionOps:
                     matrix.raw[tile.tile_index] += 0.25
 
         for tile in bot._map.get_all_tiles():
-            bonus = 0.0
+            bonus = matrix.raw[tile.tile_index]
             if innerChokes.raw[tile.tile_index]:
                 bonus += 0.002
 
@@ -2140,13 +2155,16 @@ class BotExpansionOps:
             if searchingForEnemyLand and (isNeutral or isTarget):
                 fogContactBonus = 0.0
                 if not tile.discovered:
-                    fogContactBonus += 0.12
+                    fogContactBonus += 0.05
                 if bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer].raw[tile.tile_index]:
                     fogContactBonus += 0.18
+
                 if enDist < genDist:
-                    fogContactBonus += min(0.25, (genDist - enDist) / max(10, bot.board_analysis.inter_general_distance))
+                    fogContactEnDistBonus = 0.2 * (genDist - enDist) / bot.board_analysis.inter_general_distance
+                    # bot.viewInfo.midLeftGridText.raw[tile.tile_index] = f'{fogContactEnDistBonus:.2f}'.lstrip('0')
+                    fogContactBonus += min(0.25, fogContactEnDistBonus)
                 if anyFlankVis:
-                    fogContactBonus += 0.08
+                    fogContactBonus += 0.05
                 bonus += fogContactBonus
 
             if tile.isCity:
@@ -2210,7 +2228,7 @@ class BotExpansionOps:
                     bonus -= 0.05
                 matrix.raw[tile.tile_index] = min(bonus, 0.0)
             else:
-                matrix.raw[tile.tile_index] += bonus
+                matrix.raw[tile.tile_index] = bonus
 
             if bot.info_render_expansion_matrix_values:
                 bot.viewInfo.bottomLeftGridText[tile] = f'{"x" if matrix.raw[tile.tile_index] >= 0.0 else ""}{matrix.raw[tile.tile_index]:0.2f}'

@@ -1763,10 +1763,11 @@ player_index=0
         MapBase.DO_NOT_RANDOMIZE = True
 
         self.begin_capturing_logging()
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=37, debugMode=debugMode, renderThresh=700, tileIslandSize=3, shouldRender=True, method=method)
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=17, debugMode=debugMode, renderThresh=700, tileIslandSize=3, shouldRender=True, method=method)
 
         self.assertGreater(len(opts), 2)
         self.assertNoDuplicateTileUse(opts)
+        
         # if debugMode:
         #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
         #     simHost.queue_player_moves_str(general.player, expectedPath)
@@ -1774,13 +1775,18 @@ player_index=0
         #     self.begin_capturing_logging()
         #     winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=min(10, turns))
 
-        # self.assertEqual(planCount, len(opts), 'should not find invalid options')
-        # if planCount > 0:
-        #     longestOpt = max(opts, key=lambda opt: opt.length)
-        #
-        #     # 7 en caps, 10 moves, should be our best case scenario.
-        #     self.assertEqual(round(bestEcon, 5), round(longestOpt.econValue, 5))
-        #     self.assertEqual(bestTurns, longestOpt.length)
+    def test_should_flowexpand_properly_into_enemy_fog__long_dupes_check(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flowexpand_properly_into_enemy_fog___Vbdk6Ojkl---1--133.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 133, fill_out_tiles=False)
+        MapBase.DO_NOT_RANDOMIZE = True
+
+        self.begin_capturing_logging()
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=37, debugMode=debugMode, renderThresh=700, tileIslandSize=3, shouldRender=True, method=method)
+
+        self.assertGreater(len(opts), 2)
+        self.assertNoDuplicateTileUse(opts)
+        self.assertEqual(37, sum(opt.length for opt in opts))
 
     def test_should_create_a_plan_which_does_not_have_a_strange_22t_no_cap_thing_in_it(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2116,15 +2122,57 @@ player_index=0
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        #proof
+        # simHost.queue_player_moves_str(general.player, '7,10->7,11->2,11')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
-        self.skipTest("TODO add asserts for should_find_a_way_to_flow_the_11_down_and_left")
+        self.assertOwnedXY(7, 11)
+        self.assertOwnedXY(6, 11)
+
+    def test_should_find_a_way_to_flow_the_11_down_and_left__definitely(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_find_a_way_to_flow_the_11_down_and_left___UOzQeTP3I---1--81.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 94, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=94)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        #proof
+        # simHost.queue_player_moves_str(general.player, '7,10->7,11->2,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(22, simHost, 'should flow and cap effectively. So, theres this interesting thing going on where because opp hasnt attacked yet, we think army is about to come out of the fog. So we cap down into the cubby instead of into the purple. Not really sure how to combat that effectively.')
+
+    def test_should_find_a_way_to_flow_the_11_down_and_left__definitely_unittest(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_find_a_way_to_flow_the_11_down_and_left___UOzQeTP3I---1--81.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 94, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=94)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        #proof
+        # simHost.queue_player_moves_str(general.player, '7,10->7,11->2,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertEqual(6, bot.expansion_plan.selected_option.length, 'should immediately know to go down and left and cap enemy land.')
 
     def test_should_not_bypass_enemy_land_flow_with_fake_general_flow(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2166,6 +2214,7 @@ player_index=0
 
         self.assertOwned(10, 10)
         self.assertGreater(playerMap.At(10, 10).army, 10)
+
     def test_should_be_able_to_use_general_for_better_cap_than_neuts_when_gen_has_3_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_be_able_to_use_general_for_better_cap_than_neuts_when_gen_has_3_army___ERyMALJ2o---0--148.txtmap'
@@ -2507,7 +2556,6 @@ player_index=0
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
 
-
     def test_should_flow_all_army_together_into_core_choke_area(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_flow_all_army_together_into_core_choke_area___ves6WmvLS---0--228.txtmap'
@@ -2527,3 +2575,82 @@ player_index=0
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
         self.assertNoFriendliesKilled(map, general)
         self.assertGreater(playerMap.At(15,6).army, 110)
+
+    def test_should_use_all_of_your_fucking_army_what_the_actual_fucking_fuck(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_use_all_of_your_fucking_army_what_the_actual_fucking_fuck___fjsd8Ttie---1--126.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 126, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=126)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=3)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertGreater(playerMap.At(13, 3).army, 40)
+
+    def test_should_use_all_of_your_fucking_army_round_2_electric_boogaloo(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_use_all_of_your_fucking_army_round_2_electric_boogaloo___AKbuZXaBX---1--63.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 63, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=63)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=False)
+        simHost.queue_player_leafmoves(enemyGeneral.player)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(14, 16)
+        self.assertOwnedXY(13, 17)
+        self.assertOwnedXY(13, 18)
+
+    # 51f, 72p, 5 skipped as of cleaning up all the hyperverbose logs. Still in the middle of figuring out why flow expand routes like dogshit
+
+    def test_should_use_all_of_your_fucking_army_round_2_electric_boogaloo_2_electric_boogaloo(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_use_all_of_your_fucking_army_round_2_electric_boogaloo_2_electric_boogaloo___AKbuZXaBX---1--76.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 76, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=76)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_use_all_of_your_fucking_army_round_2_electric_boogaloo_2_electric_boogaloo")
+
+    def test_should_use_all_of_your_fucking_army_round_2_electric_boogaloo_2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_use_all_of_your_fucking_army_round_2_electric_boogaloo_2___LGQTx5g61---1--72.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 72, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=72)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_use_all_of_your_fucking_army_round_2_electric_boogaloo_2")

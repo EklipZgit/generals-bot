@@ -9,7 +9,7 @@ if typing.TYPE_CHECKING:
 
 class BotLifecycle:
     @staticmethod
-    def initialize_logging(bot):
+    def initialize_logging(bot: EklipZBot):
         bot.logDirectory = BotLogging.get_file_logging_directory(bot._map.usernames[bot._map.player_index], bot._map.replay_id)
         fileSafeUserName = BotLogging.get_file_safe_username(bot._map.usernames[bot._map.player_index])
 

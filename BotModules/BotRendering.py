@@ -57,7 +57,7 @@ class BotRendering:
                 for tile in bot._map.reachable_tiles:
                     val = bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile]
                     if val != 0:
-                        textVal = f"e{val:.0f}"
+                        textVal = f"e{val:.1f}"
                         bot.viewInfo.bottomMidRightGridText[tile] = textVal
 
             for tile in bot.armyTracker.dropped_fog_tiles_this_turn:
@@ -379,7 +379,7 @@ class BotRendering:
                 logbook.info(f'intercept plan opt {plan.target_tile} dist {dist}: {str(opt)}')
 
     @staticmethod
-    def dump_turn_data_to_string(bot):
+    def dump_turn_data_to_string(bot: EklipZBot):
         charMap = PLAYER_CHAR_BY_INDEX
 
         data = []

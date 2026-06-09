@@ -202,17 +202,17 @@ aG1  a5   b1   bG1
                     f'gathered={enriched.gather_entry.gathered_army} vs required={enriched.capture_entry.required_army}'
                 )
                 self.assertEqual(
-                    enriched.combined_turn_cost,
+                    enriched.turns,
                     enriched.capture_entry.turns + enriched.gather_entry.turns,
                     'Combined turn cost should equal sum of capture and gather turns'
                 )
-                if enriched.combined_turn_cost > 0:
-                    expected_density = enriched.capture_entry.econ_value / enriched.combined_turn_cost
+                if enriched.turns > 0:
+                    expected_density = enriched.capture_entry.econ_value / enriched.turns
                     self.assertAlmostEqual(
                         enriched.combined_value_density,
                         expected_density,
                         places=5,
-                        msg='Combined value density should equal econ_value / combined_turn_cost'
+                        msg='Combined value density should equal econ_value / turns'
                     )
 
     def test_postprocess__zero_army_required__pairs_with_turn_zero_gather(self):
@@ -250,7 +250,7 @@ aG1  a5   b1   bG1
             if enriched_with_zero:
                 enriched = enriched_with_zero[0]
                 self.assertEqual(0, enriched.gather_entry.turns, 'Turn 0 capture should pair with turn 0 gather')
-                self.assertEqual(0, enriched.combined_turn_cost, 'Combined turn cost should be 0')
+                self.assertEqual(0, enriched.turns, 'Combined turn cost should be 0')
 
     def test_postprocess__multiple_captures__each_paired_with_minimum_gather(self):
         """
@@ -425,7 +425,7 @@ aG1  a4   a1   a1   a1   a4   bC3  bG1
         self.assertEqual(1, len(delayed_city_entries), 'The a4 fixture should keep exactly one delayed city-capture entry after city growth is charged.')
 
         enriched = delayed_city_entries[0]
-        self.assertEqual(5, enriched.combined_turn_cost, 'The feasible delayed city capture should still cost four gather turns plus one capture turn.')
+        self.assertEqual(5, enriched.turns, 'The feasible delayed city capture should still cost four gather turns plus one capture turn.')
         self.assertEqual(4, enriched.capture_entry.required_army, 'The raw single-tile bC3 capture still requires four arriving army.')
 
     def test_postprocess__partial_capture_plus_partial_gather__comprehensive(self):
@@ -610,8 +610,8 @@ a3   b2
         - capture_entry: FlowTurnsEntry for capturing b3
         - gather_entry: FlowTurnsEntry for gathering a10
         - gather_index: turn index of gather entry
-        - combined_turn_cost: capture.turns + gather.turns
-        - combined_value_density: capture.econ_value / combined_turn_cost
+        - turns: capture.turns + gather.turns
+        - combined_value_density: capture.econ_value / turns
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -632,7 +632,7 @@ aG1  a10  b3   bG1
                 self.assertIsNotNone(enriched.capture_entry, 'capture_entry should be populated')
                 self.assertIsNotNone(enriched.gather_entry, 'gather_entry should be populated')
                 self.assertIsInstance(enriched.gather_index, int, 'gather_index should be an integer')
-                self.assertIsInstance(enriched.combined_turn_cost, int, 'combined_turn_cost should be an integer')
+                self.assertIsInstance(enriched.turns, int, 'turns should be an integer')
                 self.assertIsInstance(enriched.combined_value_density, float, 'combined_value_density should be a float')
 
                 self.assertEqual(
@@ -642,18 +642,18 @@ aG1  a10  b3   bG1
                 )
 
                 self.assertEqual(
-                    enriched.combined_turn_cost,
+                    enriched.turns,
                     enriched.capture_entry.turns + enriched.gather_entry.turns,
-                    'combined_turn_cost should be sum of capture and gather turns'
+                    'turns should be sum of capture and gather turns'
                 )
 
-                if enriched.combined_turn_cost > 0:
-                    expected_density = enriched.capture_entry.econ_value / enriched.combined_turn_cost
+                if enriched.turns > 0:
+                    expected_density = enriched.capture_entry.econ_value / enriched.turns
                     self.assertAlmostEqual(
                         enriched.combined_value_density,
                         expected_density,
                         places=5,
-                        msg='combined_value_density should be econ_value / combined_turn_cost'
+                        msg='combined_value_density should be econ_value / turns'
                     )
 
     def test_enriched_entry__combined_value_density__monotonic_preference(self):
@@ -666,7 +666,7 @@ aG1  a10  b3   bG1
 
         Expected:
         - Different capture/gather combinations should produce different densities
-        - Density should reflect econ_value / combined_turn_cost
+        - Density should reflect econ_value / turns
         """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -684,8 +684,8 @@ aG1  a2   a8   b1   b5   bG1
             enriched_entries = lookup_table.enriched_capture_entries
 
             for enriched in enriched_entries:
-                if enriched.combined_turn_cost > 0:
-                    manual_density = enriched.capture_entry.econ_value / enriched.combined_turn_cost
+                if enriched.turns > 0:
+                    manual_density = enriched.capture_entry.econ_value / enriched.turns
                     self.assertAlmostEqual(
                         enriched.combined_value_density,
                         manual_density,
@@ -871,7 +871,7 @@ aG1  a2   a3   a5   b1   b2   b4   bG1
 
                 if enriched.capture_entry.turns > 0:
                     self.assertGreater(
-                        enriched.combined_turn_cost, 0,
+                        enriched.turns, 0,
                         'Combined turn cost should be positive for non-trivial captures'
                     )
 

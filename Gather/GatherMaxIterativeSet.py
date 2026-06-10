@@ -1489,6 +1489,12 @@ def _reconnect_steiner_subprune(
                 reachableFromTerminals.update(nx.single_source_shortest_path_length(steinerGraph, idx).keys())
         if reachableFromTerminals:
             steinerGraph = steinerGraph.subgraph(reachableFromTerminals).copy()
+
+    # Guard against empty terminal nodes - NetworkX Steiner tree requires at least one terminal
+    if not toReconnectInGraph:
+        logbook.warn(f'_reconnect_steiner_subprune: No valid terminal nodes after filtering, skipping Steiner tree.')
+        return 0, 0, set()
+
     reconnectedSubset = GatherSteiner.build_network_x_steiner_tree_from_arbitrary_nx_graph(map, steinerGraph, requiredTiles=toReconnectInGraph)
     reconnectionTiles = []
     gathVal = 0

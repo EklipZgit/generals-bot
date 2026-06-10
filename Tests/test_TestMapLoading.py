@@ -92,15 +92,21 @@ bScore=22
         self.assertEqual(22, map.players[enemyGeneral.player].score)
 
     def test_fill_out_tiles_preserves_player_score_from_txtmap(self):
-        """Repro for issue where fill_out_tiles causes player 1 score to not match txtmap.
+        """Repro for issue where fill_out_tiles crashed because player 1's score didn't match txtmap.
 
         Error was: load_map_and_generals fill_out_tiles player 1 player.score 440 != txtmap bScore 438
+
+        This txtmap is internally inconsistent: the friendly player's VISIBLE tiles (untouchable ground
+        truth - fill_out_tiles may never modify visible tiles) genuinely sum to 440 army on the board,
+        while the scoreboard data says bScore=438 (scoreboard lagged the board by a move at save time).
+        When the visible board contradicts the scoreboard, THE BOARD WINS: the load must succeed and
+        keep the actual visible army values rather than corrupting visible tiles to chase the scoreboard.
         """
         mapFile = 'GameContinuationEntries/should_be_able_to_complete_city_capture_against_non_moving_threat___SejdBT5Vp---1--392.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 392, fill_out_tiles=True)
 
-        # player_index=1 is 'b' player (us), bScore=438 in txtmap
-        self.assertEqual(438, map.players[general.player].score)
+        # player_index=1 is 'b' player (us); the visible board sums to 440 even though bScore=438
+        self.assertEqual(440, map.players[general.player].score)
         self.assertEqual(100, map.players[general.player].tileCount)
 
     def test_fill_out_tiles_preserves_enemy_score_from_txtmap(self):
@@ -190,15 +196,23 @@ bScore=22
         self.assertEqual(319, map.players[general.player].score)
 
     def test_fill_out_tiles_handles_extra_ally_tiles_2v2(self):
-        """Repro for 2v2 case where ally has more tiles than txtmap says.
+        """Repro for 2v2 case where an enemy has more tiles on the board than the txtmap scoreboard says.
 
         Error was: load_map_and_generals fill_out_tiles player 2 len(player.tiles) 41 != txtmap cTiles 34
+
+        teams=1,1,2,2 with player_index=0, so the ALLY is player 1 ('b', bTiles=23) and players 2/3
+        ('c'/'d') are the enemy team. Player 2's board tiles (41, mostly fog guesses) exceed cTiles=34,
+        so 7 fog tiles must be dropped - without ever touching tiles visible to the friendly team.
         """
         mapFile = 'GameContinuationEntries/should_defend_ally_in_2v2___brs1WYHiG---0--132.txtmap'
         map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, 132, fill_out_tiles=True)
 
-        # player_index=0 is 'a' player (us), player 2 ('c') is ally, cTiles=34
-        self.assertEqual(34, map.players[allyGen.player].tileCount)
+        # ally is player 1 ('b'), bTiles=23 in the txtmap
+        self.assertEqual(1, allyGen.player)
+        self.assertEqual(23, map.players[allyGen.player].tileCount)
+        # enemy team: cTiles=34 and dTiles=45 must be reconciled from fog only
+        self.assertEqual(34, map.players[2].tileCount)
+        self.assertEqual(45, map.players[3].tileCount)
 
     def test_fill_out_tiles_all_living_players_have_generals_2v2(self):
         """Verify all living 2v2 players have non-null generals after fill_out_tiles.

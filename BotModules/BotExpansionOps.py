@@ -2262,12 +2262,13 @@ class BotExpansionOps:
                 if outsideExtendedPlay and not (tile in bot.board_analysis.flank_danger_play_area_matrix and SearchUtils.any_where(pathway.tiles, lambda t: not t.visible and t in bot.board_analysis.flankable_fog_area_matrix)):
                     isEnTile = bot._map.is_player_on_team_with(bot.targetPlayer, tile.player)
                     if isEnTile:
-                        factor = 0.5
+                        factor = 0.25
                         if not tile.discovered:
-                            factor = 0.2
+                            factor = 0.15
                         bonus -= factor / max(4, 15 - extendedDist)
                     else:
-                        bonus -= 1.0 / max(4, 15 - extendedDist)
+                        factor = 0.4
+                        bonus -= factor / max(4, 15 - extendedDist)
             else:
                 bonus -= 10
 

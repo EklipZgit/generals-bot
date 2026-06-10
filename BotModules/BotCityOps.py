@@ -1277,7 +1277,8 @@ class BotCityOps:
                         moveList.append(nextMove)
                         nextMove = BotGatherOps.get_tree_move_default(bot, prunedNodes, pop=True)
                     if len(moveList) > 0:
-                        moveList.extend(cityGatherPath.convert_to_move_list())
+                        if cityGatherPath is not None:
+                            moveList.extend(cityGatherPath.convert_to_move_list())
                         moveListPath = MoveListPath(moveList)
                         path = moveListPath
                         bot.curPath = path

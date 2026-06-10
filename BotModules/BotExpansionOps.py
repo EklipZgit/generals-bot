@@ -471,6 +471,14 @@ class BotExpansionOps:
         allPaths = bot.expansion_plan.all_paths
 
         expansionNegStr = " | ".join([str(t) for t in expansionNegatives])
+
+        # Check if we have delayed intercepts waiting - if so, don't execute the plan's selected_option
+        # because it needs to be delayed. The intercept is queued in intercept_waiting and will be
+        # handled separately by the defense/threat handling code.
+        if bot.expansion_plan.intercept_waiting:
+            bot.info(f"Skipping expansion move because intercept_waiting has {len(bot.expansion_plan.intercept_waiting)} delayed intercepts")
+            return None
+
         if path:
             pathMove = path.get_first_move()
             if bot.last_flow_expander is not None and bot.last_flow_expander.log_debug:
@@ -586,6 +594,10 @@ class BotExpansionOps:
             interceptOptionsToLog: typing.List[InterceptionOptionInfo] = []
             for threatTile, interceptPlan in bot.intercept_plans.items():
                 for turns, option in interceptPlan.intercept_options.items():
+                    if option.turns + option.requiredDelay > remainingCycleTurns:
+                        continue
+                    option = option.clone()
+                    # TODO this is a hack lol. See if we can split instead? or something?
                     if option.path.start.tile in bot.cityAnalyzer.owned_contested_cities:
                         option.econValue -= 20
                     addlOptions.append(option)
@@ -860,6 +872,9 @@ class BotExpansionOps:
         )
 
         anyIntercept = isinstance(plan.selected_option, InterceptionOptionInfo)
+        # Track whether we found a non-delayed intercept that can be executed immediately.
+        # This is separate from anyIntercept which just tracks if flow expansion selected an intercept.
+        foundNonDelayedIntercept = False
         interceptVtCutoff = 1.99
         if remainingCycleTurns > 35:
             interceptVtCutoff = 2.6
@@ -888,6 +903,7 @@ class BotExpansionOps:
                                 else:
                                     plan.includes_intercept = True
                                     anyIntercept = True
+                                    foundNonDelayedIntercept = True
                                     plan.selected_option = otherPath
                                     break
 
@@ -929,11 +945,15 @@ class BotExpansionOps:
                                 plan.includes_intercept = True
                                 bot.viewInfo.add_info_line(f'   REPLACING WITH {bestReplacementOption} ({bestReplacementOption.path})')
                                 anyIntercept = True
+                                foundNonDelayedIntercept = True
                                 plan.selected_option = bestReplacementOption
                                 plan.all_paths[plan.all_paths.index(otherPath)] = bestReplacementOption
 
-                        if anyIntercept:
-                            plan.includes_intercept = True
+                        # Only set includes_intercept = True and break here if we actually found a non-delayed
+                        # intercept in the processing above (foundNonDelayedIntercept is True).
+                        # If we only found delayed intercepts, they were queued in intercept_waiting instead
+                        # and we should NOT set includes_intercept = True here.
+                        if foundNonDelayedIntercept:
                             break
 
                         i += 1

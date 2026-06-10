@@ -2287,22 +2287,6 @@ class ArmyInterceptionTests(TestBase):
                 self.assertOwnedXY(13, 17)
 
 
-# 22-12 with everything bad
-# 11f 19p - hacked defense intercept
-# 10-20 with defense -1 instead of -2
-# 17f 18p - initial intercept/expand impl
-# 43f 38p
-# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20
-# 70f 59p 4s after "new" expansion revamp (RoundPlan)
-# 86f 55p 4s after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
-        # DO NOT COMMIT UNTIL SPLITTING FIXED, SEE
-            # test_should_split_when_necessary_to_defend_multiple_targets
-            # test_should_split_or_delay_when_appropriate
-            # test_should_split_to_avoid_repetition_behind_on_tiles
-# 87f 69p 4s, after adding a bunch of new tests and NOT fixing splitting above (lol).
-# 83f 75p 4s, after VERY FIRST attempt at pruning intercept points based on distance to average tile position...? No way that stuff is even right
-# 100f 77p 3s, after hacking some stuff? In 3min 4sec. With limit 3 dist common tile search
-# 101f 76p 3s, 3 min 7s, in 3 min 7 s (with greater limit common tile search space
     def test_should_not_continually_dance_away_from_sitting_army(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_continually_dance_away_from_sitting_army___MZHNOW6MN---1--85.txtmap'
@@ -2852,3 +2836,21 @@ setting bestInterceptTable[dist 1]:
         self.assertNoFriendliesKilled(map, general)
 
         self.assertTileDifferentialGreaterThan(1, simHost, 'fucking, do the thing')
+
+# 22-12 with everything bad
+# 11f 19p - hacked defense intercept
+# 10-20 with defense -1 instead of -2
+# 17f 18p - initial intercept/expand impl
+# 43f 38p
+# 56f 63p 1s, lots are only failing by 1-2 econ dropped, too, instead of 10-20
+# 70f 59p 4s after "new" expansion revamp (RoundPlan)
+# 86f 55p 4s after reworking a bunch of stuff and better unit testing. Prior to fixing other tests that may be asserting incorrectly. Broke splitting and started disregarding tile-blocking, for now.
+        # DO NOT COMMIT UNTIL SPLITTING FIXED, SEE
+            # test_should_split_when_necessary_to_defend_multiple_targets
+            # test_should_split_or_delay_when_appropriate
+            # test_should_split_to_avoid_repetition_behind_on_tiles
+# 87f 69p 4s, after adding a bunch of new tests and NOT fixing splitting above (lol).
+# 83f 75p 4s, after VERY FIRST attempt at pruning intercept points based on distance to average tile position...? No way that stuff is even right
+# 100f 77p 3s, after hacking some stuff? In 3min 4sec. With limit 3 dist common tile search
+# 101f 76p 3s, 3 min 7s, in 3 min 7 s (with greater limit common tile search space (11-24-2024)
+# 88f 131p 6s, 5 min 24s - with the claude fable 5 tweak to the something cone of allowedSearchRegion or whatever

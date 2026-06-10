@@ -735,6 +735,15 @@ class EklipZBot(object):
                     if self.targetPlayerExpectedGeneralLocation != maxTile and maxTile is not None:
                         self.targetPlayerExpectedGeneralLocation = maxTile
                         self.recalculate_player_paths(force=True)
+                elif self.targetPlayer != -1 and not self.armyTracker.valid_general_positions_by_player[self.targetPlayer][self.targetPlayerExpectedGeneralLocation]:
+                    # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_update_general_prediction_when_emergence_invalidates_it
+                    # Current prediction is no longer valid (eliminated by emergence events), recalculate
+                    logbook.info(f'targetPlayerExpectedGeneralLocation {self.targetPlayerExpectedGeneralLocation} is no longer valid due to emergence, recalculating...')
+                    maxTile: Tile = BotTargeting.get_predicted_target_player_general_location(self)
+                    logbook.info(f'DEBUG: en tile {maxTile} get_predicted_target_player_general_location (invalidated)')
+                    if maxTile is not None:
+                        self.targetPlayerExpectedGeneralLocation = maxTile
+                        self.recalculate_player_paths(force=True)
                 elif self.shortest_path_to_target_player is None:
                     # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army:
                     # Resume data can restore an existing predicted enemy general while path caches are empty. Rebuild paths to that prediction instead of treating the empty cache as permission to replace it with a fresh density guess.

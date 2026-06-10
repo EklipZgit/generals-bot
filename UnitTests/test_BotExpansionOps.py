@@ -28,6 +28,7 @@ class _PlanTile:
             isGeneral: bool = False,
             army: int = 1,
             isNeutral: bool = False):
+        self.coords = (0, 0)
         self.visible = visible
         self.player = player
         self.discovered = discovered
@@ -39,11 +40,19 @@ class _PlanTile:
 
 
 class _PlanOption:
-    def __init__(self, name: str, value: float, length: int = 1, tile_list: list | None = None):
+    def __init__(self, name: str, value: float, length: int = 1, tile_list: list | None = None, required_delay: int = 0):
         self.name = name
         self._econValue = value
         self._length = length
         self._tileList = tile_list if tile_list is not None else []
+        self._requiredDelay = required_delay
+        self.path = self
+        if len(self._tileList) > 0:
+            self.start = SimpleNamespace(tile=self._tileList[0])
+            self.tail = SimpleNamespace(tile=self._tileList[-1])
+        else:
+            self.start = SimpleNamespace(tile=None)
+            self.tail = SimpleNamespace(tile=None)
 
     @property
     def length(self) -> int:
@@ -51,7 +60,7 @@ class _PlanOption:
 
     @property
     def requiredDelay(self) -> int:
-        return 0
+        return self._requiredDelay
 
     @property
     def econValue(self) -> float:
@@ -79,10 +88,13 @@ class _PlanOption:
         return None
 
     def clone(self):
-        return _PlanOption(self.name, self._econValue, self._length, self._tileList)
+        return _PlanOption(self.name, self._econValue, self._length, self._tileList, self._requiredDelay)
 
     def get_move_list(self):
         return []
+
+    def str_no_vals(self) -> str:
+        return str(self)
 
     def __str__(self) -> str:
         return self.name
@@ -138,7 +150,7 @@ class BotExpansionOpsUnitTests(unittest.TestCase):
 
     def test_iterative_flow_only_passes_flow_outputs_to_expandutils_selector(self):
         _FakeFlowExpander.instances.clear()
-        raw_intercept = _InterceptPlan("raw_intercept", -0.4)
+        raw_intercept = _InterceptPlan("raw_intercept", -0.4, tile_list=[_PlanTile(), _PlanTile()])
         captured_additional_options = []
 
         def get_round_plan_with_expansion(map, **kwargs):
@@ -159,9 +171,12 @@ class BotExpansionOpsUnitTests(unittest.TestCase):
             perf_timer=_PerfTimer(),
             teammate_general=None,
             intercept_plans={object(): SimpleNamespace(intercept_options={4: raw_intercept})},
+            cityAnalyzer=SimpleNamespace(owned_contested_cities=set()),
             city_capture_plan_option=None,
+            contest_city_plan_option=None,
             quick_kill_city_plan_option=None,
             expansion_use_iterative_flow=True,
+            flow_expander=None,
             expansion_use_legacy=False,
             targetPlayerExpectedGeneralLocation=None,
             expansion_allow_leaf_moves=False,
@@ -263,9 +278,12 @@ class BotExpansionOpsUnitTests(unittest.TestCase):
             perf_timer=_PerfTimer(),
             teammate_general=None,
             intercept_plans={},
+            cityAnalyzer=SimpleNamespace(owned_contested_cities=set()),
             city_capture_plan_option=None,
+            contest_city_plan_option=None,
             quick_kill_city_plan_option=None,
             expansion_use_iterative_flow=True,
+            flow_expander=None,
             expansion_use_legacy=False,
             targetPlayerExpectedGeneralLocation=None,
             expansion_allow_leaf_moves=False,
@@ -276,6 +294,7 @@ class BotExpansionOpsUnitTests(unittest.TestCase):
             target_player_gather_path=SimpleNamespace(),
             shortest_path_to_target_player=SimpleNamespace(tileList=[]),
             opponent_tracker=opponent_tracker,
+            enemy_attack_path=None,
             board_analysis=None,
             expansion_use_leaf_moves_first=False,
             viewInfo=SimpleNamespace(
@@ -311,6 +330,87 @@ class BotExpansionOpsUnitTests(unittest.TestCase):
                 pathColor=(50, 30, 255))
 
         self.assertIs(self.flow_plan, plan.selected_option)
+
+    def test_build_expansion_plan_does_not_leave_delayed_intercept_as_selected_option(self):
+        _FakeFlowExpander.instances.clear()
+        source_tile = _PlanTile(player=0, army=39)
+        dest_tile = _PlanTile(player=0, army=1)
+        delayed_intercept = _InterceptPlan(
+            "delayed_intercept",
+            20.21,
+            length=5,
+            tile_list=[source_tile, dest_tile],
+            required_delay=1)
+
+        def get_round_plan_with_expansion(map, **kwargs):
+            return BotExpansionOpsModule.ExpandUtils.RoundPlan(
+                0,
+                0,
+                delayed_intercept,
+                [delayed_intercept],
+                map.turn)
+
+        intercept_plan = SimpleNamespace(
+            intercept_options={5: delayed_intercept},
+            get_intercept_option_by_path=lambda path: delayed_intercept if path is delayed_intercept else None,
+            threats=[])
+
+        bot = SimpleNamespace(
+            territories=SimpleNamespace(territoryMap=None),
+            general=SimpleNamespace(movable=[], army=1),
+            _map=SimpleNamespace(turn=238, is_tile_enemy=lambda tile: False, team_ids_by_player_index=[0, 1]),
+            timings=SimpleNamespace(cycleTurns=50, get_turn_in_cycle=lambda turn: 38),
+            cityAnalyzer=SimpleNamespace(owned_contested_cities=set()),
+            city_expand_plan=None,
+            perf_timer=_PerfTimer(),
+            teammate_general=None,
+            intercept_plans={object(): intercept_plan},
+            city_capture_plan_option=None,
+            contest_city_plan_option=None,
+            quick_kill_city_plan_option=None,
+            expansion_use_iterative_flow=False,
+            expansion_use_legacy=False,
+            targetPlayerExpectedGeneralLocation=None,
+            expansion_allow_leaf_moves=False,
+            captureLeafMoves=[],
+            tileIslandBuilder=None,
+            player=SimpleNamespace(index=0),
+            targetPlayer=1,
+            target_player_gather_path=None,
+            shortest_path_to_target_player=None,
+            opponent_tracker=SimpleNamespace(did_player_already_attack_this_round=lambda player: False),
+            board_analysis=None,
+            expansion_use_leaf_moves_first=False,
+            viewInfo=SimpleNamespace(add_stats_line=lambda value: None, add_info_line=lambda value: None),
+            expansion_single_iteration_time_cap=0.03,
+            expansion_force_no_global_visited=True,
+            expansion_force_global_visited_stage_1=False,
+            expansion_allow_gather_plan_extension=False,
+            expansion_always_include_non_terminating_leafmoves_in_iteration=False,
+            expansion_length_weight_offset=-0.3,
+            expansion_use_cutoff=True,
+            blocking_tile_info={},
+            expansion_small_tile_time_ratio=1.0,
+            last_flow_expander=None,
+            last_flow_opt_collection=None,
+            info=lambda value: None)
+
+        with patch.object(BotExpansionOpsModule, "InterceptionOptionInfo", _InterceptPlan), \
+                patch.object(BotExpansionOpsModule.BotExpansionOps, "get_expansion_weight_matrix", return_value=SimpleNamespace(raw=[])), \
+                patch.object(BotExpansionOpsModule, "get_tile_army_mapmatrix", return_value=SimpleNamespace(raw=[])), \
+                patch.object(BotExpansionOpsModule.BotTimings, "get_remaining_move_time", return_value=1.0), \
+                patch.object(BotExpansionOpsModule.ExpandUtils, "get_round_plan_with_expansion", side_effect=get_round_plan_with_expansion), \
+                patch.object(BotExpansionOpsModule.BotExpansionOps, "_should_use_iterative_negative_expand", return_value=False), \
+                patch.object(BotExpansionOpsModule.BotExpansionOps, "check_launch_against_expansion_plan", side_effect=lambda bot_arg, plan, expansion_negatives: plan):
+            plan = BotExpansionOpsModule.BotExpansionOps.build_expansion_plan(
+                bot,
+                timeLimit=0.1,
+                expansionNegatives=set(),
+                pathColor=(50, 30, 255))
+
+        self.assertIsNone(plan.selected_option)
+        self.assertFalse(plan.includes_intercept)
+        self.assertEqual([delayed_intercept], plan.intercept_waiting)
 
 
 if __name__ == '__main__':

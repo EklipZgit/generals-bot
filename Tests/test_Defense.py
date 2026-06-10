@@ -3,6 +3,7 @@ import logbook
 import DebugHelper
 import Gather
 from Behavior.ArmyInterceptor import ArmyInterception
+from BotModules.BotCombatOps import BotCombatOps
 from BotModules.BotPathingUtils import BotPathingUtils
 from Gather import GatherDebug
 from MapMatrix import MapMatrixSet, MapMatrix
@@ -1783,7 +1784,7 @@ class DefenseTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
         self.assertIsNone(winner)
 
-        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles(bot.shortest_path_to_target_player.tileList, distance=0, player=general.player), 37)
+        self.assertGreater(BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot, bot.shortest_path_to_target_player.tileList, distance=0, player=general.player), 37)
 
     def test_should_consider_long_attack_a_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2998,6 +2999,7 @@ class DefenseTests(TestBase):
 # 98f 74p threatDist and depthDist swapped
 # 87f 84p realDist moved first
 # 84f 124p 4ig nextTileDepthDist + bMap[nextTile] as priority heuristic for defense, plus some choke tweaks
+# 83f 146p 4ig idk been a million changes since then. New priority? Idfk.
 
     def test_should_hit_threat_tile_not_parallel(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True

@@ -1763,10 +1763,11 @@ player_index=0
         MapBase.DO_NOT_RANDOMIZE = True
 
         self.begin_capturing_logging()
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=17, debugMode=debugMode, renderThresh=700, tileIslandSize=3, shouldRender=True, method=method)
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=17, debugMode=debugMode, renderThresh=700, tileIslandSize=3, shouldRender=False, method=method)
 
-        self.assertGreater(len(opts), 2)
+        self.assertEqual(1, len(opts))
         self.assertNoDuplicateTileUse(opts)
+        self.assertEqual(17, sum(1 for t in opts[0].tileSet if t.player == enemyGeneral.player))
         
         # if debugMode:
         #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)

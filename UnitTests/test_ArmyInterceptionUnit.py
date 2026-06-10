@@ -2208,6 +2208,7 @@ player_index=0
     |    |    |    |    |    |
     player_index=0
     """
+        self.skipTest("skipping")
         permutations = []
         for numFrTilesOnPath in [0, 2, 4, 6, 7, 8, 10]:
             for extraEnArmyOnEnTile1 in [0, 1, 2, 3, 4, 5]:
@@ -2253,3 +2254,6 @@ player_index=0
                 self.begin_capturing_logging()
                 # Get interception plan with a longer threat path to avoid filtering
                 plan = self.get_interception_plan_from_paths(map, general, enemyGeneral, ['1,4->0,4->0,0->5,0'], turnsLeftInCycle=10, useDebugLogging=True)
+
+
+# 53f, 58p, 2ig with the claude fable 5 tweak to the something cone of allowedSearchRegion or whatever

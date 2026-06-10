@@ -196,8 +196,16 @@ class BotDefense:
                             bot.info(f'defense anyLeafIsSameDistAsThreat {anyLeafIsSameDistAsThreat}')
                             for leaf in leavesGreaterThanDistance:
                                 if leaf.toTile == threat.path.start.tile and len(leaf.children) == 0:
-                                    bot.info(f'Defense directly targeting threat tile {leaf.tile}->{leaf.toTile}')
-                                    return Move(leaf.tile, leaf.toTile, False), None
+                                    threatTileArmy = threat.path.start.tile.army
+                                    leafSpareArmy = leaf.tile.army - 1
+                                    # test_BotBehavior: only directly target the threat tile if the leaf
+                                    # contributes at least 20% of the threat's army, otherwise the
+                                    # defense gather from behind is more important and this wastes a move.
+                                    if threatTileArmy > 0 and leafSpareArmy / threatTileArmy >= 0.20:
+                                        bot.info(f'Defense directly targeting threat tile {leaf.tile}->{leaf.toTile} (leafArmy {leafSpareArmy} vs threatArmy {threatTileArmy}, ratio {leafSpareArmy / threatTileArmy:.2f})')
+                                        return Move(leaf.tile, leaf.toTile, False), None
+                                    else:
+                                        bot.info(f'Defense SKIPPING direct target {leaf.tile}->{leaf.toTile}, leafArmy {leafSpareArmy} too small vs threatArmy {threatTileArmy} (ratio {leafSpareArmy / threatTileArmy:.2f} < 0.20)')
 
                         move_closest_value_func = BotDefense.get_defense_tree_move_prio_func(bot, threat, anyLeafIsSameDistAsThreat, printDebug=DebugHelper.IS_DEBUGGING)
                         move = BotGatherOps.get_tree_move_default(bot, gatherNodes, move_closest_value_func)

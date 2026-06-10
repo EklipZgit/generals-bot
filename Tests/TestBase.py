@@ -428,20 +428,27 @@ class TestBase(unittest.TestCase):
                 entangledTiles = entangledEnemyTilesByPlayer.get(player.index, set())
 
                 while map.players[player.index].tileCount > targetTiles:
+                    # Only drop from fog tiles (in protectedFileVisibleTiles), never visible tiles
+                    # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_preserves_enemy_tile_count
                     dropCandidates = SearchUtils.where(
                         map.pathable_tiles,
-                        lambda t: t not in protectedFileVisibleTiles and t.player == player.index and not t.isGeneral and not t.isCity and (t in entangledTiles or t.isTempFogPrediction or not t.discovered))
+                        lambda t: t in protectedFileVisibleTiles and t.player == player.index and not t.isGeneral and not t.isCity and (t in entangledTiles or t.isTempFogPrediction))
                     if len(dropCandidates) == 0:
                         break
                     dropCandidates.sort(key=lambda t: (0 if t in entangledTiles else 1, 0 if t.isTempFogPrediction else 1, -t.army))
-                    map.reset_wrong_undiscovered_fog_guess(dropCandidates[0])
+                    tileToDrop = dropCandidates[0]
+                    oldArmy = tileToDrop.army
+                    map.reset_wrong_undiscovered_fog_guess(tileToDrop)
+                    player.score -= oldArmy
                     recalc_player_stats()
 
                 scoreOverflow = map.players[player.index].score - targetScore
                 if scoreOverflow > 0:
+                    # Only trim from fog tiles (in protectedFileVisibleTiles), never visible tiles
+                    # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_preserves_enemy_score_from_txtmap
                     trimCandidates = SearchUtils.where(
                         map.pathable_tiles,
-                        lambda t: t not in protectedFileVisibleTiles and t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
+                        lambda t: t in protectedFileVisibleTiles and t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
                     trimCandidates.sort(key=lambda t: (0 if t in entangledTiles else 1, 0 if t.isTempFogPrediction else 1, -t.army))
                     for tile in trimCandidates:
                         if scoreOverflow <= 0:
@@ -450,14 +457,148 @@ class TestBase(unittest.TestCase):
                         tile.army -= reduceBy
                         scoreOverflow -= reduceBy
 
-                    if scoreOverflow > 0 and player.general is not None and player.general not in protectedFileVisibleTiles and player.general.army > 1:
-                        reduceBy = min(player.general.army - 1, scoreOverflow)
-                        player.general.army -= reduceBy
-                        scoreOverflow -= reduceBy
-
                     if scoreOverflow > 0 and len(protectedFileVisibleTiles) == 0:
                         raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: Unable to trim enemy player {player.index} score overflow {scoreOverflow} to match target score {targetScore}')
 
+                    recalc_player_stats()
+
+            # Drop tiles when teammates/allies have too many (2v2)
+            # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_handles_extra_friendly_tiles
+            for player in map.players:
+                if player.dead or player.index == general.player:
+                    continue  # Skip general player (handled separately)
+                if player.index not in map.teammates:
+                    continue  # Skip enemies and non-teammates (1v1 enemies handled above)
+                playerChar, _ = chars[player.index]
+                if f'{playerChar}Tiles' not in gameData:
+                    continue
+                targetTiles = int(gameData[f'{playerChar}Tiles'])
+                while player.tileCount > targetTiles:
+                    # Only drop from fog tiles (in protectedFileVisibleTiles), never visible tiles
+                    dropCandidates = SearchUtils.where(
+                        map.pathable_tiles,
+                        lambda t: t in protectedFileVisibleTiles and t.player == player.index and not t.isGeneral and not t.isCity)
+                    if len(dropCandidates) == 0:
+                        break
+                    dropCandidates.sort(key=lambda t: (0 if t.isTempFogPrediction else 1, -t.army))
+                    tileToDrop = dropCandidates[0]
+                    map.reset_wrong_undiscovered_fog_guess(tileToDrop)
+                    recalc_player_stats()
+
+            # Adjust scores for teammates/allies to match target (2v2)
+            # After dropping tiles, score may be too low - need to add army
+            # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_handles_extra_friendly_tiles
+            for player in map.players:
+                if player.dead or player.index == general.player:
+                    continue  # Skip general player
+                if player.index not in map.teammates:
+                    continue  # Skip enemies and non-teammates
+                playerChar, _ = chars[player.index]
+                if f'{playerChar}Score' not in gameData:
+                    continue
+                targetScore = int(gameData[f'{playerChar}Score'])
+                scoreDiff = player.score - targetScore
+                logbook.info(f"DEBUG score adjust: player {player.index}, score={player.score}, target={targetScore}, diff={scoreDiff}")
+                if scoreDiff > 0:
+                    # Score too high - trim from fog tiles
+                    trimCandidates = SearchUtils.where(
+                        map.pathable_tiles,
+                        lambda t: t in protectedFileVisibleTiles and t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
+                    logbook.info(f"DEBUG trim candidates: {len(trimCandidates)}")
+                    for tile in trimCandidates:
+                        if scoreDiff <= 0:
+                            break
+                        reduceBy = min(tile.army - 1, scoreDiff)
+                        tile.army -= reduceBy
+                        scoreDiff -= reduceBy
+                    recalc_player_stats()
+                    logbook.info(f"DEBUG after trim: score={player.score}")
+                elif scoreDiff < 0:
+                    # Score too low - add army to tiles (prefer fog, then visible)
+                    added = 0
+                    while scoreDiff < 0:
+                        # Try fog tiles first
+                        addCandidates = SearchUtils.where(
+                            map.pathable_tiles,
+                            lambda t: t in protectedFileVisibleTiles and t.player == player.index and not t.isGeneral and not t.isCity)
+                        if len(addCandidates) == 0:
+                            # Then try visible tiles
+                            addCandidates = SearchUtils.where(
+                                map.pathable_tiles,
+                                lambda t: t not in protectedFileVisibleTiles and t.player == player.index and not t.isGeneral and not t.isCity)
+                        if len(addCandidates) == 0:
+                            break
+                        for tile in addCandidates:
+                            if scoreDiff >= 0:
+                                break
+                            tile.army += 1
+                            scoreDiff += 1
+                            added += 1
+                    recalc_player_stats()
+                    logbook.info(f"DEBUG after add: added={added}, score={player.score}")
+
+            # Add tiles when there are too few for any player (not just enemies)
+            # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_adds_missing_enemy_tiles
+            for player in map.players:
+                if player.dead:
+                    continue
+                playerChar, _ = chars[player.index]
+                if f'{playerChar}Tiles' not in gameData:
+                    continue
+                targetTiles = int(gameData[f'{playerChar}Tiles'])
+                logbook.info(f"DEBUG tile add: player {player.index}, tileCount={player.tileCount}, target={targetTiles}")
+                while player.tileCount < targetTiles:
+                    # Find fog tiles adjacent to player's existing tiles
+                    addCandidates = SearchUtils.where(
+                        map.pathable_tiles,
+                        lambda t: t in protectedFileVisibleTiles and t.player == -1 and not t.isCity and SearchUtils.any_where(t.adjacents, lambda adj: adj.player == player.index))
+                    logbook.info(f"DEBUG adjacent candidates: {len(addCandidates)}")
+                    if len(addCandidates) == 0:
+                        # Fallback: any fog tile
+                        addCandidates = SearchUtils.where(
+                            map.pathable_tiles,
+                            lambda t: t in protectedFileVisibleTiles and t.player == -1 and not t.isCity)
+                        logbook.info(f"DEBUG fallback candidates: {len(addCandidates)}")
+                    if len(addCandidates) == 0:
+                        logbook.info(f"DEBUG no candidates, breaking")
+                        break
+                    # Sort by distance from general (furthest first to spread out)
+                    if player.general:
+                        addCandidates.sort(key=lambda t: 0 - map.distance_mapper.get_distance_between(player.general, t))
+                    tile = addCandidates[0]
+                    logbook.info(f"DEBUG adding tile {tile} to player {player.index}")
+                    tile.player = player.index
+                    tile.army = 1
+                    player.tiles.append(tile)
+                    player.tileCount += 1
+                    player.score += 1
+                    recalc_player_stats()
+                logbook.info(f"DEBUG after tile add loop: player {player.index}, tileCount={player.tileCount}, target={targetTiles}")
+
+            # Final recalc to ensure player.tiles and player.tileCount are consistent
+            recalc_player_stats()
+
+            # Trim scores for all players if they exceed target (can happen after adding tiles)
+            # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_adds_missing_enemy_tiles
+            for player in map.players:
+                if player.dead:
+                    continue
+                playerChar, _ = chars[player.index]
+                if f'{playerChar}Score' not in gameData:
+                    continue
+                targetScore = int(gameData[f'{playerChar}Score'])
+                scoreOverflow = player.score - targetScore
+                if scoreOverflow > 0:
+                    # Trim from fog tiles only (in protectedFileVisibleTiles)
+                    trimCandidates = SearchUtils.where(
+                        map.pathable_tiles,
+                        lambda t: t in protectedFileVisibleTiles and t.player == player.index and t.army > 1 and not t.isGeneral and not t.isCity)
+                    for tile in trimCandidates:
+                        if scoreOverflow <= 0:
+                            break
+                        reduceBy = min(tile.army - 1, scoreOverflow)
+                        tile.army -= reduceBy
+                        scoreOverflow -= reduceBy
                     recalc_player_stats()
 
             for player in map.players:
@@ -468,7 +609,7 @@ class TestBase(unittest.TestCase):
                         raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: load_map_and_generals fill_out_tiles player {player.index} len(player.tiles) {len(player.tiles)} != txtmap {playerChar}Tiles {expectedTiles}')
                     if player.tileCount != expectedTiles:
                         raise AssertionError(f'Clone the test that produced this error into test_TestMapLoading.py and add assertions. Error: load_map_and_generals fill_out_tiles player {player.index} player.tileCount {player.tileCount} != txtmap {playerChar}Tiles {expectedTiles}')
-                if f'{playerChar}CityCount' in gameData:
+                if f'{playerChar}CityCount' in gameData and not player.dead:
                     expectedCityCount = int(gameData[f'{playerChar}CityCount'])
                     expectedCitiesLen = expectedCityCount
                     if player.general is not None:
@@ -1562,6 +1703,22 @@ class TestBase(unittest.TestCase):
                         break
                     reset_enemy_fog_tile(tile)
 
+        # Handle general player tile count overflow - only drop fog tiles, never visible tiles
+        # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_preserves_enemy_tile_count
+        if generalTileCount is not None and generalTileCount >= 0 and countTilesGeneral.value > generalTileCount and not respectPlayerVision:
+            # Drop from fog tiles only (tiles in protectedFileVisibleTiles)
+            generalFogCandidates = SearchUtils.where(
+                map.get_all_tiles(),
+                lambda t: t in protectedFileVisibleTiles and t.player == general.player and not t.isGeneral and not t.isCity)
+            generalFogCandidates.sort(key=lambda t: (0 if t.isTempFogPrediction else 1, -genDistMap[t], -t.army))
+            for tile in generalFogCandidates:
+                if countTilesGeneral.value <= generalTileCount:
+                    break
+                oldArmy = tile.army
+                map.reset_wrong_undiscovered_fog_guess(tile)
+                countTilesGeneral.add(-1)
+                countScoreGeneral.add(-oldArmy)
+
         if enemyGeneralTargetScore is not None and enemyGeneralTargetScore >= 0 and not respectPlayerVision:
             actualEnemyTiles = SearchUtils.where(map.pathable_tiles, lambda t: t.player == enemyGeneral.player)
             actualEnemyScore = sum(t.army for t in actualEnemyTiles)
@@ -1703,6 +1860,45 @@ class TestBase(unittest.TestCase):
                     raise AssertionError(f"Enemy General {enemyGeneral.player} final score overflow {scoreOverflow} after full tile reconciliation to target score {enemyGeneralTargetScore}")
 
             countScoreEnemy.value = sum(t.army for t in map.pathable_tiles if t.player == enemyGeneral.player)
+
+        # Handle score overflow for friendly player (general) - similar to enemy handling above
+        # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_preserves_player_score_from_txtmap
+        if generalTargetScore is not None and generalTargetScore >= 0 and not respectPlayerVision:
+            actualFriendlyTiles = SearchUtils.where(map.pathable_tiles, lambda t: t.player == general.player)
+            actualFriendlyScore = sum(t.army for t in actualFriendlyTiles)
+            scoreOverflow = actualFriendlyScore - generalTargetScore
+            if scoreOverflow > 0:
+                # Only trim from fog tiles (in protectedFileVisibleTiles), never visible tiles
+                # Note: protectedFileVisibleTiles actually contains FOG tiles (undiscovered),
+                # so we select tiles that ARE in this set to trim from fog tiles.
+                # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_preserves_player_score_from_txtmap
+                if protectedFileVisibleTiles:
+                    trimCandidates = SearchUtils.where(
+                        actualFriendlyTiles,
+                        lambda t: t in protectedFileVisibleTiles and t.army > 1 and not t.isGeneral and not t.isCity)
+                    trimCandidates.sort(key=lambda t: (0 if t.isTempFogPrediction else 1, -t.army))
+                    for tile in trimCandidates:
+                        if scoreOverflow <= 0:
+                            break
+                        reducible = tile.army - 1
+                        if reducible <= 0:
+                            continue
+                        reduceBy = min(reducible, scoreOverflow)
+                        tile.army -= reduceBy
+                        scoreOverflow -= reduceBy
+
+                # If still overflow, try reducing general army
+                if scoreOverflow > 0 and general.army > 1:
+                    reduceBy = min(general.army - 1, scoreOverflow)
+                    general.army -= reduceBy
+                    scoreOverflow -= reduceBy
+
+                # Note: If there's still overflow, we couldn't reconcile. This can happen in
+                # test scenarios where the map is intentionally unbalanced. The validation
+                # code at lines 480-483 will catch this if it's a real problem.
+                # Tests/test_EnsurePlayerTilesAndScores.py relies on this being non-fatal.
+
+            countScoreGeneral.value = sum(t.army for t in map.pathable_tiles if t.player == general.player)
 
         scores = map.scores
         scores[general.player] = Score(general.player, countScoreGeneral.value, countTilesGeneral.value, dead=False)

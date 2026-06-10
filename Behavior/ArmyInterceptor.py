@@ -503,6 +503,9 @@ class ArmyInterceptor(object):
             intDistMat = threat.armyAnalysis.interceptDistances
             # withinOneAdditionalChecks.clear()
 
+            if self.log_debug:
+                logbook.info(f'Processing threat {threat.path.start.tile}->{threat.path.tail.tile}, shortest path tiles: {[str(t) for t in threat.armyAnalysis.shortestPathWay.tiles]}')
+
             def foreachFunc(tile):
                 interceptMoves = intChokes.raw[tile.tile_index]
                 if interceptMoves is None:
@@ -543,19 +546,37 @@ class ArmyInterceptor(object):
         validChokeOptCount = 0
         validThresh = min(len(threats) - 1, 1)
         skips = {t.tile_index for t in itertools.chain.from_iterable(mv.movable for mv in threats[0].threat.path.start.tile.movable)}
+        
+        if self.log_debug:
+            logbook.info(f'Common chokes found: {[(str(tile), count) for tile, count in commonChokesCounts.items()]}')
+            logbook.info(f'Skip tiles (threat start neighbors): {skips}')
+            logbook.info(f'Valid threshold: {validThresh}')
+        
         for tile, num in commonChokesCounts.items():
             if tile.tile_index in skips:
                 # we dont consider the start tile or its immediate neighbors a shared choke from a 'find max shared count' perspective
                 # TODO change if we start intercepting agnostic of the maximal shared chokes..?
+                if self.log_debug:
+                    logbook.info(f'  Skipping tile {str(tile)} (threat start neighbor)')
                 continue
             if num > validThresh:
                 validChokeOptCount += 1
             if num > sharedThreshold:
                 sharedThreshold = num
+                
+        if self.log_debug:
+            logbook.info(f'Shared threshold: {sharedThreshold}, valid choke options: {validChokeOptCount}')
 
         countMaxShared = 0
         minChokesThresh = validChokeOptCount // 3
+        
+        if self.log_debug:
+            logbook.info(f'Min chokes threshold: {minChokesThresh}')
+            
         while True:
+            if self.log_debug:
+                logbook.info(f'Testing shared threshold {sharedThreshold}')
+                
             for tile, num in commonChokesCounts.items():
                 if tile.tile_index in skips:
                     # we dont consider the start tile or its immediate neighbors a shared choke from a 'find max shared count' perspective
@@ -563,6 +584,12 @@ class ArmyInterceptor(object):
                     continue
                 if num >= sharedThreshold:
                     countMaxShared += 1
+                    if self.log_debug:
+                        logbook.info(f'  Tile {str(tile)} qualifies with count {num} >= {sharedThreshold}')
+                        
+            if self.log_debug:
+                logbook.info(f'  CountMaxShared: {countMaxShared}, minChokesThresh: {minChokesThresh}')
+                
             if countMaxShared > minChokesThresh:
                 break
 
@@ -574,17 +601,31 @@ class ArmyInterceptor(object):
             countMaxShared = 0
 
         middlestInterceptTiles = self._get_middlest_intercept_tiles_for_threat_values(threats)
+        
+        if self.log_debug:
+            logbook.info(f'Middlest intercept tiles: {[str(tile) for tile in middlestInterceptTiles]}')
+            
         potentialSharedChokes = set()
         for tile in middlestInterceptTiles:
             if tile not in commonMinDelayTurns or tile not in commonMaxExtraMoves:
+                if self.log_debug:
+                    missing = []
+                    if tile not in commonMinDelayTurns:
+                        missing.append('commonMinDelayTurns')
+                    if tile not in commonMaxExtraMoves:
+                        missing.append('commonMaxExtraMoves')
+                    logbook.info(f'  Excluding tile {str(tile)} - missing {missing}')
                 continue
 
             potentialSharedChokes.add(tile)
+            if self.log_debug:
+                logbook.info(f'  Including tile {str(tile)} in potential shared chokes')
 
         if self.log_debug:
             # for tile, chokeVal in sorted(commonChokesCombinedTurnOffsets.items()):
             #     logbook.info(f'chokeVals: {str(tile)} = count {commonChokesCounts[tile]} - chokeVal {chokeVal}')
 
+            logbook.info(f'potentialSharedChokes contains {len(potentialSharedChokes)} tiles')
             for tile in potentialSharedChokes:
                 dist = commonMinDelayTurns[tile]
                 logbook.info(f'potential middlest intercept: {str(tile)} = dist {dist}')
@@ -595,9 +636,10 @@ class ArmyInterceptor(object):
             commonMinDelayTurns,
             threats)
 
-        # if self.log_debug:
-        #     for tile, dist in sorted(sharedChokes.items()):
-        #         logbook.info(f'potential shared: {str(tile)} = dist {dist}')
+        if self.log_debug:
+            logbook.info(f'Final shared chokes ({len(sharedChokes)} tiles):')
+            for tile, info in sharedChokes.items():
+                logbook.info(f'  {str(tile)}: maxDelayTurns={info.max_delay_turns}, maxExtraMoves={info.max_extra_moves_to_capture}')
 
         indexesToKeepIfBad = 1
         if len(sharedChokes) == 1 and len(threats) > indexesToKeepIfBad and threats[0].threat.path.start.tile in sharedChokes:
@@ -731,9 +773,14 @@ class ArmyInterceptor(object):
             if not tiles:
                 continue
 
+            if self.log_debug:
+                logbook.info(f'Distance {dist}: tiles {[str(t) for t in tiles]}')
+
             if len(tiles) == 1:
                 # Always include single tiles (threat start, target, etc.)
                 middlest_tiles.update(tiles)
+                if self.log_debug:
+                    logbook.info(f'  Single tile at distance {dist}: {[str(t) for t in tiles]}')
             else:
                 # Compute average position (centroid) of all tiles at this distance
                 avg_x = sum(t.x for t in tiles) / len(tiles)
@@ -748,6 +795,8 @@ class ArmyInterceptor(object):
                         best_dist = tile_dist
                         best_tile = tile
 
+                if self.log_debug:
+                    logbook.info(f'  Multiple tiles at distance {dist}: centroid ({avg_x:.1f},{avg_y:.1f}), selected {str(best_tile)} (dist {best_dist})')
                 middlest_tiles.add(best_tile)
 
         return middlest_tiles
@@ -1091,6 +1140,23 @@ class ArmyInterceptor(object):
         threatDistFromCommon = interception.furthest_common_intercept_distances.raw[interception.target_tile.tile_index]
         maxDepth = self._get_max_interception_search_depth(interception.threats)
 
+        # Tests/test_BotBehavior.py test_should_not_play_requiredDelay_interception_move_without_the_delay_part:
+        # When multiple divergent threats share an interception (eg a kill threat toward our general plus an econ
+        # threat heading the opposite direction), the single furthest-back common intercept choke used to bound the
+        # army-pull search region gets hijacked by the most distant threat's chokes. Every tile near the OTHER
+        # threats' intercept points then falls outside the allowed region and all expansions get silently pruned
+        # (eg the 37-army 2,2 launch tile next to our general returned 0 paths). Instead, build the allowed search
+        # region as the union of each common intercept choke's funnel: tiles within that choke's own
+        # distance-to-threat + 1 of the choke. With a single threat this matches the old behavior, since the
+        # furthest-back choke's funnel covers the nearer chokes' funnels along the same path.
+        allowedSearchRegion = bytearray(len(interception.furthest_common_intercept_distances.raw))
+        for chokeTile in interception.common_intercept_chokes.keys():
+            chokeDistances = self.map.distance_mapper.get_tile_dist_matrix(chokeTile)
+            chokeFunnelRadius = chokeDistances.raw[interception.target_tile.tile_index] + 1
+            for tileIndex, distFromChoke in enumerate(chokeDistances.raw):
+                if distFromChoke is not None and distFromChoke <= chokeFunnelRadius:
+                    allowedSearchRegion[tileIndex] = 1
+
         averageEnemyPositionByTurn: typing.List[typing.Tuple[float, float] | None] = [None] * max(interception.kill_enemy_threat.threat.path.length + 1, maxDepth)
         for i in range(0, interception.kill_enemy_threat.threat.path.length):
             numThreatsAtThisDist = 0
@@ -1180,6 +1246,7 @@ class ArmyInterceptor(object):
                 threatDistFromCommon=threatDistFromCommon,
                 searchingPlayer=self.map.player_index,
                 positionsByTurn=averageEnemyPositionByTurn,
+                allowedSearchRegion=allowedSearchRegion,
                 otherThreatsBlockingTiles=otherThreatsBlockingTiles,
             )
 
@@ -1510,6 +1577,7 @@ class ArmyInterceptor(object):
             threatDistFromCommon: int,
             searchingPlayer: int,
             positionsByTurn: typing.List[typing.Tuple[float, float]],
+            allowedSearchRegion: bytearray,
             otherThreatsBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None
     ) -> typing.Dict[int, Path]:
         # negs = set()
@@ -1530,9 +1598,9 @@ class ArmyInterceptor(object):
                 negArmy,
                 fromTile
             ) = prioObj
-            in_bounding_box = (6 <= curTile.x <= 7) and (5 <= curTile.y <= 7)
-            if in_bounding_box and self.log_debug:
-                logbook.info(f'POPPED {curTile} with dist={dist}, euclidIntDist={euclidIntDist}, negTileCapPoints={negTileCapPoints}, negArmy={negArmy}, fromTile={fromTile}')
+            # in_bounding_box = (6 <= curTile.x <= 7) and (5 <= curTile.y <= 7)
+            # if in_bounding_box and self.log_debug:
+            #     logbook.info(f'POPPED {curTile} with dist={dist}, euclidIntDist={euclidIntDist}, negTileCapPoints={negTileCapPoints}, negArmy={negArmy}, fromTile={fromTile}')
 
             if curTile.player != searchingPlayer:
                 return None
@@ -1576,20 +1644,22 @@ class ArmyInterceptor(object):
             fromEuclidCur = 100
 
             # UnitTests/test_ArmyInterceptionUnit/ArmyInterceptionUnitTests/test_should_correctly_value_intercept_from_general - logging to understand why path selection doesn't pick tile closest to enemy threat average position
-            in_bounding_box = (6 <= nextTile.x <= 7) and (5 <= nextTile.y <= 7)
+            # in_bounding_box = (6 <= nextTile.x <= 7) and (5 <= nextTile.y <= 7)
 
-            if interception.furthest_common_intercept_distances.raw[nextTile.tile_index] > threatDistFromCommon + 1:
-                if in_bounding_box and self.log_debug:
-                    logbook.info(f'BOUNDING BOX: {nextTile} skipped due to furthest_common_intercept_distances')
-                if in_bounding_box and self.log_debug:
-                    logbook.info(f'BOUNDING BOX EVAL: {nextTile}->{toTile} SKIP furthest_common_intercept_distances')
+            # Tests/test_BotBehavior.py test_should_not_play_requiredDelay_interception_move_without_the_delay_part:
+            # this used to check distance from the single furthest-back common intercept choke, which gets hijacked
+            # by divergent econ threats and silently pruned all expansions near the kill threat's intercept area.
+            # allowedSearchRegion is the union of all common intercept chokes' funnels instead.
+            if not allowedSearchRegion[nextTile.tile_index]:
+                if self.log_debug:
+                    logbook.info(f'skipping {nextTile}->{toTile} because {nextTile} is outside the allowed intercept search region')
                 return None
 
             if nextTile.isCity and nextTile.isNeutral:
-                if in_bounding_box and self.log_debug:
-                    logbook.info(f'BOUNDING BOX: {nextTile} skipped due to neutral city')
-                if in_bounding_box and self.log_debug:
-                    logbook.info(f'BOUNDING BOX EVAL: {nextTile}->{toTile} SKIP neutral city')
+                # if in_bounding_box and self.log_debug:
+                #     logbook.info(f'BOUNDING BOX: {nextTile} skipped due to neutral city')
+                # if in_bounding_box and self.log_debug:
+                #     logbook.info(f'BOUNDING BOX EVAL: {nextTile}->{toTile} SKIP neutral city')
                 return None
 
             if self.map.is_tile_on_team_with(nextTile, searchingPlayer):
@@ -1613,9 +1683,9 @@ class ArmyInterceptor(object):
             if nextDistTuple:
                 approxPosX, approxPosY = nextDistTuple
                 fromEuclidCur = self.map.euclidDist(approxPosX, approxPosY, nextTile.x, nextTile.y)
-                if in_bounding_box and self.log_debug:
-                    logbook.info(
-                        f'EVAL FOR: {nextTile}->{toTile} Euclid {nextTile}<->{approxPosX:.2f},{approxPosY:.2f}={fromEuclidCur:.3f}')
+                # if in_bounding_box and self.log_debug:
+                #     logbook.info(
+                #         f'EVAL FOR: {nextTile}->{toTile} Euclid {nextTile}<->{approxPosX:.2f},{approxPosY:.2f}={fromEuclidCur:.3f}')
 
                 if toDistTuple:
                     lastApproxPosX, lastApproxPosY = toDistTuple
@@ -1647,15 +1717,15 @@ class ArmyInterceptor(object):
                             # if toEuclid > euclidIntDistRecalcFromLast + 0.8 and toEuclid >= 1:  # this fails when trying to intercept threats that could go either way around a mountain.
                             if fromEuclidCur < toLastEuclid + 0.5: # and toEuclid >= 1
                                 # we're moving away from the intercept... we were closer last move.
-                                if in_bounding_box and self.log_debug:
-                                    logbook.info(f'BOUNDING BOX SKIP: {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat} fromEuclidCur={fromEuclidCur:.3f} toLastEuclid={toLastEuclid:.3f} toEuclid={toEuclid:.3f} approxPos=({approxPosX:.2f},{approxPosY:.2f}) lastApproxPos=({lastApproxPosX:.2f},{lastApproxPosY:.2f})')
-                                elif self.log_debug:
+                                # if in_bounding_box and self.log_debug:
+                                #     logbook.info(f'BOUNDING BOX SKIP: {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat} fromEuclidCur={fromEuclidCur:.3f} toLastEuclid={toLastEuclid:.3f} toEuclid={toEuclid:.3f} approxPos=({approxPosX:.2f},{approxPosY:.2f}) lastApproxPos=({lastApproxPosX:.2f},{lastApproxPosY:.2f})')
+                                if self.log_debug:
                                     logbook.info(f'skipping {nextTile}->{toTile} because fromEuclidCur {fromEuclidCur:.3f} < toLastEuclid {toLastEuclid:.3f} + 0.5  :  (toEuclid {toEuclid:.3f}, toEuclidLast {toEuclidLast:.3f}) (approxX {approxPosX:.2f}, approxY {approxPosY:.2f}), (lastApproxX {lastApproxPosX:.2f}, lastApproxY {lastApproxPosY:.2f})')
                                 return None
                             else:
-                                if in_bounding_box and self.log_debug:
-                                    logbook.info(f'BOUNDING BOX ALLOW: {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat} fromEuclidCur={fromEuclidCur:.3f} toLastEuclid={toLastEuclid:.3f} toEuclid={toEuclid:.3f} approxPos=({approxPosX:.2f},{approxPosY:.2f}) lastApproxPos=({lastApproxPosX:.2f},{lastApproxPosY:.2f})')
-                                elif self.log_debug:
+                                # if in_bounding_box and self.log_debug:
+                                #     logbook.info(f'BOUNDING BOX ALLOW: {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat} fromEuclidCur={fromEuclidCur:.3f} toLastEuclid={toLastEuclid:.3f} toEuclid={toEuclid:.3f} approxPos=({approxPosX:.2f},{approxPosY:.2f}) lastApproxPos=({lastApproxPosX:.2f},{lastApproxPosY:.2f})')
+                                if self.log_debug:
                                     logbook.info(f'ALLOWING {nextTile}->{toTile} because fromEuclidCur {fromEuclidCur:.3f} > toLastEuclid {toLastEuclid:.3f} + 0.5  :  (toEuclid {toEuclid:.3f}, toEuclidLast {toEuclidLast:.3f}) (approxX {approxPosX:.2f}, approxY {approxPosY:.2f}), (lastApproxX {lastApproxPosX:.2f}, lastApproxY {lastApproxPosY:.2f})')
 
                 #
@@ -1669,23 +1739,24 @@ class ArmyInterceptor(object):
             else:
                 if toTileDistToThreat > nextTileDistToThreat:
                     # we're moving away from the intercept... we were closer last move.
-                    if in_bounding_box and self.log_debug:
-                        logbook.info(f'BOUNDING BOX SKIP (no pos): {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} > nextTileDistToThreat={nextTileDistToThreat}')
-                    elif self.log_debug:
+                    # if in_bounding_box and self.log_debug:
+                    #     logbook.info(f'BOUNDING BOX SKIP (no pos): {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} > nextTileDistToThreat={nextTileDistToThreat}')
+                    if self.log_debug:
                         logbook.info(
                             f'(no pos) skipping {nextTile}->{toTile} because toTileDistToThreat {toTileDistToThreat} > nextTileDistToThreat {nextTileDistToThreat}')
                     return None
                 else:
-                    if in_bounding_box and self.log_debug:
-                        logbook.info(f'BOUNDING BOX EVAL (no pos, toTileDistToThreat <= nextTileDistToThreat): {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat}')
+                    # if in_bounding_box and self.log_debug:
+                    #     logbook.info(f'BOUNDING BOX EVAL (no pos, toTileDistToThreat <= nextTileDistToThreat): {nextTile}->{toTile} toTileDistToThreat={toTileDistToThreat} nextTileDistToThreat={nextTileDistToThreat}')
+                    pass
                 # happens when we intercept further than the threat length eg defending a city (?)
                 pass
                 #euclidIntDistRecalcFromLast = 100
                 # raise Exception(f'This shouldnt be possible {nextTile}  <-  {toTile}  dist {dist}')
 
-            if in_bounding_box and self.log_debug:
-                threatPosAtDist = f'({approxPosX:.2f},{approxPosY:.2f})' if nextDistTuple else 'None'
-                logbook.info(f'BOUNDING BOX EVAL: {nextTile}->{toTile} RETURN prio=(dist={dist}, fromEuclidCur={fromEuclidCur:.3f}, negTileCapPoints={negTileCapPoints}, negArmy={negArmy}) threatPosAtDist{nextTileDistToThreat}={threatPosAtDist}')
+            # if in_bounding_box and self.log_debug:
+            #     threatPosAtDist = f'({approxPosX:.2f},{approxPosY:.2f})' if nextDistTuple else 'None'
+            #     logbook.info(f'BOUNDING BOX EVAL: {nextTile}->{toTile} RETURN prio=(dist={dist}, fromEuclidCur={fromEuclidCur:.3f}, negTileCapPoints={negTileCapPoints}, negArmy={negArmy}) threatPosAtDist{nextTileDistToThreat}={threatPosAtDist}')
 
             return (
                 dist,

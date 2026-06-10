@@ -3815,3 +3815,24 @@ whoever has less extra troops will always get ahead
                 self.assertNoFriendliesKilled(map, general)
 
                 self.assertTileDifferentialGreaterThan(6, simHost, 'fuckin, no reason to lose anything here')
+
+    def test_should_not_gather_2_across_sea_of_1s_just_because_likely_kill_push(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_gather_2_across_sea_of_1s_just_because_likely_kill_push___YgHeqJR46---1--216.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 216, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=216)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        def all1sRemain1s():
+            self.assertEqual(1, playerMap.At(17, 10).army)
+        simHost.run_between_turns(lambda: all1sRemain1s())
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+

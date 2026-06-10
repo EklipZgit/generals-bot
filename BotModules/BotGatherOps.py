@@ -490,11 +490,12 @@ class BotGatherOps:
             else:
                 depth = bot.timings.splitTurns - turnCycleOffset
 
+                if depth < 0:
+                    depth += bot.timings.cycleTurns // 2
+                    pruneToValuePerTurn = True
+
                 if pruneToValuePerTurn and depth < 10:
                     depth = 10
-
-                if depth <= 0:
-                    depth += bot.timings.cycleTurns
 
             if depth > GATHER_SWITCH_POINT:
                 with bot.perf_timer.begin_move_event(f"USING OLD MST GATH depth {depth}"):

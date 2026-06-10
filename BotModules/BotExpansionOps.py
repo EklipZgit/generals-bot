@@ -2198,7 +2198,8 @@ class BotExpansionOps:
                     fogContactBonus += 0.18
 
                 if enDist < genDist:
-                    fogContactEnDistBonus = 0.2 * (genDist - enDist) / bot.board_analysis.inter_general_distance
+                    # UnitTests.test_BotExpansionOps.BotExpansionOpsUnitTests.test_standard_expansion_matrix_handles_zero_intergeneral_distance: when the target expected general resolves to our general tile, inter_general_distance is zero and this proximity bonus must not crash expansion.
+                    fogContactEnDistBonus = 0.2 * (genDist - enDist) / max(1, bot.board_analysis.inter_general_distance)
                     # bot.viewInfo.midLeftGridText.raw[tile.tile_index] = f'{fogContactEnDistBonus:.2f}'.lstrip('0')
                     fogContactBonus += min(0.25, fogContactEnDistBonus)
                 if anyFlankVis:

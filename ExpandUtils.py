@@ -2824,9 +2824,12 @@ def _get_uncertainty_capture_rating(friendlyPlayers: typing.List[int], path: Til
     @return: A float rating representing the capture potential
     """
     # rating = max(0, path.value) ** 0.5
-    if isinstance(path, InterceptionOptionInfo) and path.requiredDelay <= 0:
-        # intercepts are high priority no matter what, and always more important than other intercepts of smaller tile amounts.
-        return path.intercept.target_tile.army
+    if isinstance(path, InterceptionOptionInfo):
+        if path.requiredDelay <= 0:
+            # intercepts with no delay are high priority no matter what, and always more important than other intercepts of smaller tile amounts.
+            return 200 - path.length
+        # intercepts with delay MUST not be played this turn.
+        return -200 + path.length
 
     # ok actually, we want to play in this order:
     #   stuff with lots of army remaining?

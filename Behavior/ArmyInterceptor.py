@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import typing
+from collections import deque
 from dataclasses import dataclass
 
 import logbook
@@ -1149,13 +1150,43 @@ class ArmyInterceptor(object):
         # region as the union of each common intercept choke's funnel: tiles within that choke's own
         # distance-to-threat + 1 of the choke. With a single threat this matches the old behavior, since the
         # furthest-back choke's funnel covers the nearer chokes' funnels along the same path.
+        # Implemented as a single multi-source offset BFS: each choke's radius is bMap[choke] + 1 (bMap is the
+        # BFS distance map from target_tile, which is the army analysis B tile). Seeding choke c at
+        # offset maxRadius - radius_c and accepting tiles popped at dist <= maxRadius is equivalent to
+        # "exists choke c with dist(c, tile) <= radius_c", without scanning the full map once per choke.
+        bMapRaw = interception.threats[0].armyAnalysis.bMap.raw
         allowedSearchRegion = bytearray(len(interception.furthest_common_intercept_distances.raw))
+        bfsDist = [-1] * len(allowedSearchRegion)
+        maxRadius = 0
+        seeds = []
         for chokeTile in interception.common_intercept_chokes.keys():
-            chokeDistances = self.map.distance_mapper.get_tile_dist_matrix(chokeTile)
-            chokeFunnelRadius = chokeDistances.raw[interception.target_tile.tile_index] + 1
-            for tileIndex, distFromChoke in enumerate(chokeDistances.raw):
-                if distFromChoke is not None and distFromChoke <= chokeFunnelRadius:
-                    allowedSearchRegion[tileIndex] = 1
+            chokeFunnelRadius = bMapRaw[chokeTile.tile_index] + 1
+            seeds.append((chokeTile, chokeFunnelRadius))
+            if chokeFunnelRadius > maxRadius:
+                maxRadius = chokeFunnelRadius
+
+        frontier = deque()
+        # sort descending by radius so seeds enter the BFS in ascending offset order, keeping the deque monotonic
+        for chokeTile, chokeFunnelRadius in sorted(seeds, key=lambda s: -s[1]):
+            offset = maxRadius - chokeFunnelRadius
+            if bfsDist[chokeTile.tile_index] == -1:
+                bfsDist[chokeTile.tile_index] = offset
+                allowedSearchRegion[chokeTile.tile_index] = 1
+                frontier.append((chokeTile, offset))
+
+        while frontier:
+            curTile, dist = frontier.popleft()
+            if dist >= maxRadius:
+                continue
+            newDist = dist + 1
+            for n in curTile.movable:
+                if bfsDist[n.tile_index] != -1:
+                    continue
+                bfsDist[n.tile_index] = newDist
+                allowedSearchRegion[n.tile_index] = 1
+                if n.isObstacle:
+                    continue
+                frontier.append((n, newDist))
 
         averageEnemyPositionByTurn: typing.List[typing.Tuple[float, float] | None] = [None] * max(interception.kill_enemy_threat.threat.path.length + 1, maxDepth)
         for i in range(0, interception.kill_enemy_threat.threat.path.length):

@@ -537,11 +537,14 @@ class TestBase(unittest.TestCase):
                     recalc_player_stats()
                     logbook.info(f"DEBUG after add: added={added}, score={player.score}")
 
-            # Add tiles when there are too few for any player (not just enemies)
+            # Add tiles when general player or teammates have too few
+            # Do NOT add tiles to enemies - enemy tile adding is handled in ensure_player_tiles_and_scores
             # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_adds_missing_enemy_tiles
             for player in map.players:
                 if player.dead:
                     continue
+                if player.index != general.player and player.index not in map.teammates:
+                    continue  # Skip enemies
                 playerChar, _ = chars[player.index]
                 if f'{playerChar}Tiles' not in gameData:
                     continue
@@ -599,6 +602,30 @@ class TestBase(unittest.TestCase):
                         reduceBy = min(tile.army - 1, scoreOverflow)
                         tile.army -= reduceBy
                         scoreOverflow -= reduceBy
+                    recalc_player_stats()
+
+            # Adjust city counts for all players
+            # Tests/test_TestMapLoading.py::TestMapLoadingTests.test_fill_out_tiles_preserves_enemy_city_count
+            for player in map.players:
+                if player.dead:
+                    continue
+                playerChar, _ = chars[player.index]
+                if f'{playerChar}CityCount' not in gameData:
+                    continue
+                targetCityCount = int(gameData[f'{playerChar}CityCount'])
+                # Reduce cities if too many (only from fog tiles)
+                while player.cityCount > targetCityCount:
+                    cityCandidates = SearchUtils.where(
+                        map.pathable_tiles,
+                        lambda t: t in protectedFileVisibleTiles and t.player == player.index and t.isCity and not t.isGeneral)
+                    if len(cityCandidates) == 0:
+                        break
+                    # Sort by army (highest first) to remove cities with most army
+                    cityCandidates.sort(key=lambda t: -t.army)
+                    tileToRemove = cityCandidates[0]
+                    oldArmy = tileToRemove.army
+                    map.reset_wrong_undiscovered_fog_guess(tileToRemove)
+                    player.score -= oldArmy
                     recalc_player_stats()
 
             for player in map.players:

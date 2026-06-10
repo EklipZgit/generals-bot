@@ -212,3 +212,14 @@ bScore=22
         for player in map.players:
             if not player.dead:
                 self.assertIsNotNone(player.general, f"Player {player.index} should have a general")
+
+    def test_fill_out_tiles_preserves_enemy_city_count(self):
+        """Repro for enemy city count mismatch.
+
+        Error was: load_map_and_generals fill_out_tiles player 1 player.cityCount 3 != txtmap bCityCount 2
+        """
+        mapFile = 'GameContinuationEntries/should_intercept_before_split_choke___wCipq_zxN---0--339.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 339, fill_out_tiles=True)
+
+        # player_index=0 is 'a' player (us), 'b' is enemy player 1, bCityCount=2
+        self.assertEqual(2, map.players[enemyGeneral.player].cityCount)

@@ -52,12 +52,16 @@ class BotTimings:
     @staticmethod
     def calculate_greedy_turns_available(bot: EklipZBot) -> int:
         if bot.targetPlayer == -1 or bot.target_player_gather_path is None:
+            bot.viewInfo.add_stats_line(f'Approx greedT: 5 early targetPath? target={bot.targetPlayer} path={bot.target_player_gather_path is not None}')
             return 5
 
-        if BotTargeting.is_player_spawn_cramped(bot, spawnDist=bot.shortest_path_to_target_player.length):
-            return 0
+        # if BotTargeting.is_player_spawn_cramped(bot, spawnDist=bot.shortest_path_to_target_player.length):
+        #     bot.viewInfo.add_stats_line(f'Approx greedT: 0 cramped spawnDist={bot.shortest_path_to_target_player.length}')
+        #     bot.info(f'GREED=0 cramped spawnDist={bot.shortest_path_to_target_player.length}')
+        #     return 0
 
         if bot.defend_economy:
+            bot.viewInfo.add_stats_line(f'Approx greedT: 0 defend_economy')
             return 0
 
         defensiveTiles = set(bot.target_player_gather_path.tileList)

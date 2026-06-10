@@ -1160,7 +1160,7 @@ function Start-WindowsTerminalBotServerLiveBots {
     <#
     public ek 14
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
 
     # <#
     # 1v1 ffa cycler

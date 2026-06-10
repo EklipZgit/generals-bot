@@ -3767,3 +3767,20 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
         self.assertEconDifferentialGreaterThan(20, simHost, 'should just fucking attack and cap bro')
+
+    def test_should_never_wastefully_gather_inbound_enemy_lines_that_could_expand_or_tank_inbound_attacks__should_not_gather_wastefully_when_should_expand_safely(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_never_wastefully_gather_inbound_enemy_lines_that_could_expand_or_tank_inbound_attacks___tFqrbzJf9---1--115.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 115, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=115)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
+        self.assertNoFriendliesKilled(map, general)

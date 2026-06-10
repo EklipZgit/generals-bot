@@ -530,6 +530,23 @@ class BotPathingUtils:
         if maxObstacleCost is None and bot.is_weird_custom:
             maxObstacleCost = bot._map.walled_city_base_value
 
+        # prefer routing through tiles that cannot be expanded to neutral or enemy tiles already
+        avoidExpandables = {}
+
+        teams = bot._map.team_ids_by_player_index
+        frTeam = bot.player.team
+        enTeam = teams[bot.targetPlayer]
+
+        for mv in bot.leafMoves:
+            if mv.source.army - 1 <= mv.dest.army:
+                continue
+            refs = avoidExpandables.get(mv.source.tile_index, 0)
+            avoidExpandables[mv.source.tile_index] = refs + 1
+            refs = avoidExpandables.get(mv.dest.tile_index, 0)
+            avoidExpandables[mv.dest.tile_index] = refs + 1
+
+        isFfaSit = BM.BotTargeting.BotTargeting.is_ffa_situation(bot)
+
         def path_to_targets_priority_func(
                 nextTile: Tile,
                 currentPriorityObject):
@@ -543,20 +560,23 @@ class BotPathingUtils:
                 if nextTile.player == -1 and maxObstacleCost is not None and nextTile.army >= maxObstacleCost:
                     return None
 
+            if nextTile.army <= 1 and teams[nextTile.player] == frTeam:
+                negEnemyTiles += 2
+                negArmySum += 2
+
             if preferEnemy and not BotStateQueries.is_all_in(bot):
                 if bot._map.is_tile_on_team_with(nextTile, bot.targetPlayer):
                     negEnemyTiles -= 1
                     if nextTile.isCity:
                         negCityCount -= 1
 
-                # local import to avoid circular dependency
-                if not BM.BotTargeting.BotTargeting.is_ffa_situation(bot):
+                if not isFfaSit:
                     if not nextTile.visible:
-                        negEnemyTiles -= 1
+                        negEnemyTiles -= 0.2
                     if not nextTile.discovered:
-                        negEnemyTiles -= 1
+                        negEnemyTiles -= 0.2
 
-                negEnemyTiles -= int(bot.armyTracker.emergenceLocationMap[bot.targetPlayer][nextTile] ** 0.25)
+                # negEnemyTiles -= int(bot.armyTracker.emergenceLocationMap[bot.targetPlayer][nextTile] ** 0.25)
 
             if negativeTiles is None or nextTile not in negativeTiles:
                 if nextTile.isNeutral:
@@ -572,8 +592,15 @@ class BotPathingUtils:
                     negArmySum -= nextTile.army
                 else:
                     negArmySum += nextTile.army
-            negArmySum += 1
-            negArmySum -= goalIncrement
+
+            refs = avoidExpandables.get(nextTile.tile_index, 0)
+            if refs > 0:
+                # this makes us much more likely to leave behind 2's that have multiple expansion options (so while we might then consume one with the next tile, the 2 we didn't consume still has extra space).
+                negArmySum += 0.5 * refs
+                negEnemyTiles += 1.0 * refs
+
+            negArmySum += 1 - goalIncrement
+            # negArmySum -= goalIncrement
             return dist, negEnemyTiles, negCityCount, negArmySum, goalIncrement
 
         startPriorityObject = (0, 0, 0, 0, 0.5)

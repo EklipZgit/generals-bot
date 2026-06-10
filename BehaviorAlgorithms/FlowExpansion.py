@@ -1582,7 +1582,7 @@ class ArmyFlowExpanderV2:
                 army_per_tile = float('inf')
 
             # Lower army_per_tile is better (invert for sorting)
-            cost_score = 1.0 / (1.0 + army_per_tile)
+            cost_score = 1.0 / max(0.1, army_per_tile)  # army_per_tile + 1.0 is how it was before max(0.1, ...)? why?
 
             # Use the same econ capture values as the rest of the codebase:
             #   enemy tile cap = ITERATIVE_EXPANSION_EN_CAP_VAL (2.2)

@@ -1749,6 +1749,34 @@ class TestBase(unittest.TestCase):
 
         return pTiles - enTiles
 
+    def get_city_differential(self, simHost: GameSimulatorHost, player: int = -1, otherPlayer: int = -1) -> int:
+        """
+        Returns the current tile differential, positive means player has more, negative means opp has more. Only works for 2 player games (not FFA with only 2 players left).
+
+        @param simHost:
+        @param player:
+        @param otherPlayer:
+        @return:
+        """
+        if player == -1:
+            player = simHost.sim.sim_map.player_index
+
+        if otherPlayer == -1:
+            if simHost.sim.sim_map.remainingPlayers > 2:
+                raise AssertionError("Must explicitly pass otherPlayer when remainingPlayers > 2")
+
+            for playerObj in simHost.sim.sim_map.players:
+                if playerObj.index == player:
+                    continue
+                if not playerObj.dead:
+                    otherPlayer = playerObj.index
+
+        pMap = simHost.get_player_map(player)
+        pCities = pMap.players[player].cityCount
+        enCities = pMap.players[otherPlayer].cityCount
+
+        return pCities - enCities
+
     def assertTileDifferentialGreaterThan(self, minimum: int, simHost: GameSimulatorHost, reason: str | None = None):
         tileDiff = self.get_tile_differential(simHost)
         if reason is not None:
@@ -1757,6 +1785,18 @@ class TestBase(unittest.TestCase):
             reason = ''
         self.assertGreater(tileDiff, minimum, f'expected tile differential to be greater than {minimum}, instead found {tileDiff}. {reason}')
         logbook.info(f'tile differential was {tileDiff} (> {minimum})')
+
+    def assertEconDifferentialGreaterThan(self, minimum: int, simHost: GameSimulatorHost, reason: str | None = None, cityFactor: int = 25):
+        tileDiff = self.get_tile_differential(simHost)
+        cityDiff = self.get_city_differential(simHost)
+        totalDiff = tileDiff + cityDiff * cityFactor
+
+        if reason is not None:
+            reason = f' {reason}'
+        else:
+            reason = ''
+        self.assertGreater(totalDiff, minimum, f'expected econ differential to be greater than {minimum}, instead found {totalDiff}. {reason}')
+        logbook.info(f'total econ differential was {tileDiff} (> {minimum}) (tileDiff {tileDiff}, cityDiff {cityDiff} * 25)')
 
     def assertTileDifferentialLessThan(self, maximum: int, simHost: GameSimulatorHost, reason: str | None = None):
         tileDiff = self.get_tile_differential(simHost)

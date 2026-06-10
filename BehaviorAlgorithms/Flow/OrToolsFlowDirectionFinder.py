@@ -1376,7 +1376,7 @@ class DirectOrToolsGraphBuilder(object):
             # ->, cap=demand). If maxflow < total supply the graph is INFEASIBLE; we then log the min-cut
             # (super-source side) so the exact saturated bottleneck arcs/islands are visible. This is the
             # final verification that the connectivity/overflow/directed repairs above did their job.
-            if global_net_supply == 0:
+            if self.log_debug and global_net_supply == 0:
                 super_source = -987654321
                 super_sink = -987654322
                 residual: typing.Dict[int, typing.Dict[int, int]] = defaultdict(dict)

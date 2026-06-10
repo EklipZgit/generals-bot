@@ -2136,7 +2136,7 @@ class BotDefense:
 
         halfDist = bot.shortest_path_to_target_player.length - bot.shortest_path_to_target_player.length // 2
 
-        oppArmy = bot.opponent_tracker.get_approximate_fog_army_risk(bot.targetPlayer)
+        oppArmy = bot.opponent_tracker.get_approximate_fog_army_risk(bot.targetPlayer, logContext='check_should_def_eco_on_cycle_behav')
         enGathered = 0
         enData = bot.opponent_tracker.get_current_cycle_stats_by_player(bot.targetPlayer)
         if enData:
@@ -2151,8 +2151,9 @@ class BotDefense:
             enPath = bot.enemy_attack_path.get_subsegment(halfDist + 2, end=True)
 
             threatPath = bot.enemy_attack_path
-            enemyAttackPathVal = sum([t.army - 1 for t in enPath.tileList if bot._map.is_tile_on_team_with(t, bot.targetPlayer) and (t.visible or t.army < 8)])
+            enemyAttackPathVal = sum([t.army - 1 for t in enPath.tileList if bot._map.is_tile_on_team_with(t, bot.targetPlayer) and (t.visible)])
 
+            # TODO wtf is this shit supposed to be doing? Just looking for if they left a high value path straight at us meaning they intend to use it?
             enemyAttackPathEnOrFogTiles = sum([1.25 for t in enPath.tileList if (bot._map.is_tile_on_team_with(t, bot.targetPlayer) or not t.visible) and t.army > 2])
             enemyAttackPathEnOrFogTiles += sum([0.95 for t in enPath.tileList if (bot._map.is_tile_on_team_with(t, bot.targetPlayer) or not t.visible) and t.army == 2])
             enemyAttackPathEnOrFogTiles += sum([0.55 for t in enPath.tileList if (bot._map.is_tile_on_team_with(t, bot.targetPlayer) or not t.visible) and t.army <= 1])
@@ -2163,18 +2164,32 @@ class BotDefense:
 
             if enemyAttackPathEnOrFogTiles > halfDist // 2:
                 bot.viewInfo.add_info_line(f'likely_kill_push: danger enTileCount weighted {enemyAttackPathEnOrFogTiles:.1f}>halfDist/2 {halfDist//2}, triggering defensive play.')
+                bot.info(f'LKP=T pathTileEvidence={enemyAttackPathEnOrFogTiles:.1f}>{halfDist//2}(halfDist//2) opp={oppArmy} pathArmy={enemyAttackPathVal} path={bot.enemy_attack_path}')
                 bot.likely_kill_push = True
 
         sketchDist = bot.board_analysis.within_flank_danger_play_area_threshold
         if bot.sketchiest_potential_inbound_flank_path is not None:
             sketchDist = bot._map.get_distance_between(bot.general, bot.sketchiest_potential_inbound_flank_path.tail.tile)
 
-        if not bot.opponent_tracker.winning_on_economy(byRatio=1.0, offset=0 - bot.shortest_path_to_target_player.length) and not bot.likely_kill_push:
-            return False
+        allowDefendKillPushWhileBehind = bot.likely_kill_push and bot.opponent_tracker.get_current_cycle_stats_by_player(bot.general.player).moves_spent_gathering_visible_tiles < 25 and bot._map.remainingCycleTurns > 10
+
+        if not bot.opponent_tracker.winning_on_economy(byRatio=1.01, offset=0 - bot.shortest_path_to_target_player.length):
+            if not allowDefendKillPushWhileBehind:
+                if bot.likely_kill_push:
+                    bot.info(f'LKP bypass def behind turnsLeft={bot.timings.get_turns_left_in_cycle(bot._map.turn)} min={max(halfDist, sketchDist)}')
+                    # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army:
+                    # If kill-push defense is bypassed while behind, downstream gather targeting should not still treat the non-defended path as an active kill push.
+                    bot.likely_kill_push = False
+                return False
+            bot.info(f'LKP BEHIND bypassing on turns turnsLeft={bot.timings.get_turns_left_in_cycle(bot._map.turn)} min={max(halfDist, sketchDist)}')
 
         if bot.timings.get_turns_left_in_cycle(bot._map.turn) <= max(halfDist, sketchDist):
             if bot.likely_kill_push:
                 bot.viewInfo.add_info_line(f'bypassing likely_kill_push defense due to near end-of-round')
+                bot.info(f'LKP bypass endRound turnsLeft={bot.timings.get_turns_left_in_cycle(bot._map.turn)} min={max(halfDist, sketchDist)}')
+                # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army:
+                # If the cycle is too close to ending to defend the predicted path, this is not an actionable kill-push state for downstream gather targeting.
+                bot.likely_kill_push = False
             return False
 
         cycleDifferential = bot.opponent_tracker.check_gather_move_differential(bot.general.player, bot.targetPlayer)
@@ -2199,14 +2214,20 @@ class BotDefense:
                         defenseCriticalTileSet.add(tile)
                     bot.viewInfo.add_targeted_tile(tile, TargetStyle.YELLOW)
 
-            bot.viewInfo.add_info_line(f'updated defenseCriticals with gather path due to oppArmy {oppArmy} - gathPathSum {gathPathSum} > 0: {str(defenseCriticalTileSet)}')
+            bot.viewInfo.add_info_line(f'added gpath to defCrit bc oppArmy {oppArmy} - gathPathSum {gathPathSum} > 0: {str(defenseCriticalTileSet)}')
 
         if oppArmy + 10 - halfDist <= playerArmy:
-            if oppArmy + 10 - halfDist >= playerArmy - 50 and bot.likely_kill_push:
-                BotCityCaptureControl.block_neutral_captures(bot, "likely_kill_push says capping a city would put us under safe army for the push")
+            if bot.likely_kill_push:
+                # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army:
+                # A likely enemy attack path is not a kill push when the already-positioned friendly army can cover the OpponentTracker fog army risk.
+                bot.viewInfo.add_info_line(f'clearing likely_kill_push because oppArmy {oppArmy} + 10 - halfDist {halfDist} <= playerArmy {playerArmy}')
+                bot.info(f'LKP=F +defense opp={oppArmy}+10-{halfDist} <= our={playerArmy} gpath={gathPathSum}')
+                bot.likely_kill_push = False
             if cycleDifferential < -halfDist:
                 bot.viewInfo.add_info_line(f'OT oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}, but gathered enough that we dont care?')
             return False
+        else:
+            bot.info(f'LKP=? -defense opp={oppArmy}+10-halfDist{halfDist} > our={playerArmy} (gpath={gathPathSum})')
 
         if cycleDifferential < -halfDist and oppArmy >= playerArmy:
             bot.viewInfo.add_info_line(f'DEFENDING! OT gathCyc oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}')

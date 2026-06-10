@@ -3766,4 +3766,4 @@ whoever has less extra troops will always get ahead
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=29)
         self.assertNoFriendliesKilled(map, general)
 
-        self.assertTileDifferentialGreaterThan(20, simHost, 'should just fucking attack and cap bro')
+        self.assertEconDifferentialGreaterThan(20, simHost, 'should just fucking attack and cap bro')

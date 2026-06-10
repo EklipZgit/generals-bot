@@ -269,6 +269,7 @@ class EklipZBot(object):
         """The probable enemy attack path."""
 
         self.likely_kill_push: bool = False
+        """True ONLY when the enemy is likely to push AND the enemy has enough to kill us. If we could already defend the kill push in spite of the likely kill push path, it will be false (even though the push path will be populated)"""
 
         self.viewInfo: ViewInfo | None = None
 
@@ -1417,7 +1418,7 @@ class EklipZBot(object):
         # if ahead on economy, but not %30 ahead on army we should play defensively
         self.defend_economy = BotDefense.should_defend_economy(self, defenseCriticalTileSet)
 
-        self.approximate_greedy_turns_avail = BotTimings._get_approximate_greedy_turns_available(self)
+        self.approximate_greedy_turns_avail = BotTimings.calculate_greedy_turns_available(self)
 
         if WinCondition.DefendContestedFriendlyCity in self.win_condition_analyzer.viable_win_conditions:
             with self.perf_timer.begin_move_event(f'Getting city preemptive defense {str(self.win_condition_analyzer.defend_cities)}'):

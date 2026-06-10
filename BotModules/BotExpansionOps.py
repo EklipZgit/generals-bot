@@ -332,7 +332,7 @@ class BotExpansionOps:
                 and bot.expansion_plan.en_tiles_captured > bot.expansion_plan.neut_tiles_captured // 3
                 and bot.expansion_plan.en_tiles_captured * 2 + bot.expansion_plan.neut_tiles_captured > turnsLeft - 2
                 and value > utilizationCutoff
-                and BotTimings._get_approximate_greedy_turns_available(bot, ) > 0
+                and BotTimings.calculate_greedy_turns_available(bot, ) > 0
         ):
             haveFullExpPlanAlready = True
 

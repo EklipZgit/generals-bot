@@ -50,7 +50,7 @@ class BotTimings:
         return bot.opponent_tracker.get_current_cycle_stats_by_player(bot.targetPlayer)
 
     @staticmethod
-    def _get_approximate_greedy_turns_available(bot: EklipZBot) -> int:
+    def calculate_greedy_turns_available(bot: EklipZBot) -> int:
         if bot.targetPlayer == -1 or bot.target_player_gather_path is None:
             return 5
 
@@ -60,24 +60,31 @@ class BotTimings:
         if bot.defend_economy:
             return 0
 
-        defensiveTiles = list(bot.target_player_gather_path.tileList)
-        defensiveTiles.extend([c for c in bot.player.cities if bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix[c] is not None and bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix[
-            c].distance < bot.board_analysis.intergeneral_analysis.shortestPathWay.distance + 3])
+        defensiveTiles = set(bot.target_player_gather_path.tileList)
+
+        defensiveTiles.update(bot.defensive_spanning_tree)
+
+        # We also need to include our largest attacking tile if it is close to the enemy general
+        for largeTile in bot.largePlayerTiles:
+            if largeTile not in defensiveTiles:
+                # TODO only if in a position to base race...?
+                defensiveTiles.add(largeTile)
+                break
 
         frArmy = BotCombatQueries.sum_friendly_army_near_or_on_tiles(bot, defensiveTiles, distance=0, player=bot.general.player)
         enArmyOffset = 0
         if bot.enemy_attack_path:
-            enArmyOffset = BotCombatQueries.sum_friendly_army_near_or_on_tiles(bot, [t for t in bot.enemy_attack_path.tileList if t.visible], distance=0, player=bot.targetPlayer)
+            # enArmyOffset = BotCombatQueries.sum_friendly_army_near_or_on_tiles(bot, [t for t in bot.enemy_attack_path.tileList if t.visible], distance=0, player=bot.targetPlayer)
+            enArmyOffset = sum(t.army - 1 for t in bot.enemy_attack_path.tileList if t.visible and bot._map.is_tile_on_team_with(t, bot.targetPlayer))
 
+        prevGreed = bot.approximate_greedy_turns_avail
         approxGreedyTurnsAvail = bot.opponent_tracker.get_approximate_greedy_turns_available(
             bot.targetPlayer,
             ourArmyNonIncrement=frArmy + bot.shortest_path_to_target_player.length // 2,
-            cityLimit=None,
             opponentArmyOffset=enArmyOffset
         )
 
         finalGreedTurnsAvail = approxGreedyTurnsAvail
-        prevGreed = bot.approximate_greedy_turns_avail
         if approxGreedyTurnsAvail == prevGreed:
             bot.viewInfo.add_info_line(f'greed stayed same, decrementing by 1 from {approxGreedyTurnsAvail} to {finalGreedTurnsAvail}')
             finalGreedTurnsAvail -= 1

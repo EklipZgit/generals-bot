@@ -3442,10 +3442,13 @@ def breadth_first_foreach(
                 logbook.info(f"    skipTiles contained {tile}")
             globalVisited.add(tile.tile_index)
 
+    first = None
     for tile in startTiles:
         if tile.isMountain:
             # logbook.info("BFS DEST SKIPPING MOUNTAIN {},{}".format(goal.x, goal.y))
             continue
+        if first is None:
+            first = tile
         frontier.appendleft((tile, 0))
         globalVisited.add(tile.tile_index)
 
@@ -3477,7 +3480,7 @@ def breadth_first_foreach(
                 frontier.append((nextTile, newDist))
     if not noLog:
         logbook.info(
-            f"Completed breadth_first_foreach. startTiles[0] {startTiles[0].x},{startTiles[0].y}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
+            f"Completed breadth_first_foreach. startTiles[0] {first}: ITERATIONS {iter}, DURATION {time.perf_counter() - start:.3f}, DEPTH {dist}")
 
 
 def breadth_first_foreach_with_state(

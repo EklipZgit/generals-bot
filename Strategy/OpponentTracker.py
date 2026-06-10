@@ -1739,7 +1739,7 @@ class OpponentTracker(object):
 
         return playerTurnsSpentGathering - otherPlayerTurnsSpentGathering
 
-    def get_approximate_greedy_turns_available(self, againstPlayer: int, ourArmyNonIncrement: int, cityLimit: int | None = None, opponentArmyOffset: int = 0) -> int:
+    def get_approximate_greedy_turns_available(self, againstPlayer: int, ourArmyNonIncrement: int, opponentArmyOffset: int = 0) -> int:
         stats = self.get_current_cycle_stats_by_player(againstPlayer)
         ourStats = self.get_current_cycle_stats_by_player(self.map.player_index)
         ourScores = self.get_current_team_scores_by_player(self.map.player_index)
@@ -1749,34 +1749,54 @@ class OpponentTracker(object):
         if stats is None:
             return 20
 
+        # NOTE WE DONT USE self.get_approximate_fog_army_risk because we need to iterate per turn to find the crossover sketchy point
         armyRisk = stats.approximate_fog_army_available_total + opponentArmyOffset
 
         inTurns = self.map.remainingCycleTurns
-        if cityLimit is None:
-            enScores = self.get_current_team_scores_by_player(againstPlayer)
-            cityLimit = int(inTurns * enScores.tileCount / max(1, enScores.cityCount)) + 1
+        cityLimitByNow = self.estimate_fog_city_usage_count_by_cycle_behavior(againstPlayer, inTurns=0)
 
-        cityTotal = self.get_next_fog_city_amounts(againstPlayer, cityLimit=cityLimit)
+        cityLimitByEnd = self.estimate_fog_city_usage_count_by_cycle_behavior(againstPlayer, inTurns=inTurns)
 
-        armyRisk += cityTotal
+        cityTotalArmyStart = self.get_next_fog_city_amounts(againstPlayer, cityLimit=cityLimitByNow)
+        cityTotalArmyEnd = self.get_next_fog_city_amounts(againstPlayer, cityLimit=cityLimitByEnd)
+
+        perMissingCityArmyDiff = 0
+        if cityLimitByEnd != cityLimitByNow:
+            perMissingCityArmyDiff = (cityTotalArmyEnd - cityTotalArmyStart) / (cityLimitByEnd - cityLimitByNow)
+
+        armyRisk += cityTotalArmyStart
 
         gatherOffset = 0
 
         turn = self.map.turn
+        logbook.info(f'get_approximate_greedy_turns_available: initial armyRisk {armyRisk} at turn {turn} ')
+        logbook.info(f'    based on {stats.approximate_fog_city_army} fog city army factored by {cityLimitByNow}/{stats.fog_city_count} now-cities + approxFogArmy {stats.approximate_fog_army_available_total} + opponentArmyOffset {opponentArmyOffset}')
         remainingCycleTime = self.map.remainingCycleTurns
         enScores = self.get_current_team_scores_by_player(againstPlayer)
         queueLists = [self._gather_queues_new_by_player[p].as_tile_list() for p in stats.players]
 
-        logEntries = [f'Running get_approximate_greedy_turns_available againstPlayer {againstPlayer}, ourArmyNonIncrement {ourArmyNonIncrement}, cityLimit {cityLimit}, opponentArmyOffset {opponentArmyOffset}. Opponent starting army risk: {armyRisk}, initial city total {cityTotal}']
+        logEntries = [f'Running get_approximate_greedy_turns_available\r\n    againstPlayer {againstPlayer}, ourArmyNonIncrement {ourArmyNonIncrement}, cityTotalStart {cityTotalArmyStart}, cityTotalEnd {cityTotalArmyEnd}, opponentArmyOffset {opponentArmyOffset}. Opponent starting army risk: {armyRisk}, city total {cityTotalArmyStart}->{cityTotalArmyEnd}']
         i = 0
+        # so lets see, if we assume players waited to gather cities till near the end we still can only increase cities
+        # curCityIncrement
+        addlCityTurn = self.map.turn % self.approximate_per_city_gather_distance
+        enCurrentCitiesUsed = cityLimitByNow
         while turn < self.map.turn + 100:
+            # we count up
             if turn & 1 == 0:
-                armyRisk += min(cityLimit, enScores.cityCount)
+                armyRisk += enCurrentCitiesUsed
+                # TODO probably should just be our cities in play + general?
                 ourArmyNonIncrement += ourCities
 
+            if addlCityTurn >= self.approximate_per_city_gather_distance:
+                addlCityTurn -= self.approximate_per_city_gather_distance
+                if enCurrentCitiesUsed < cityLimitByEnd:
+                    enCurrentCitiesUsed += 1
+                    armyRisk += perMissingCityArmyDiff
+                    logEntries.append(f't{turn}, usArmy {ourArmyNonIncrement}, theirArmy {armyRisk} (added another fog city for {perMissingCityArmyDiff:.0f} addl army)')
+
             if remainingCycleTime == 0:
-                armyRisk += 4
-                armyRisk += cityTotal
+                # armyRisk += cityTotal
                 gatherOffset += 1
                 remainingCycleTime = 50
 
@@ -1794,9 +1814,13 @@ class OpponentTracker(object):
 
             i += 1
             turn += 1
+            addlCityTurn += 1
 
         if ourStats is not None:
-            i -= self._estimate_neutral_city_capture_gather_turns(ourStats)
+            turnsWeSpentCappingCities = self._estimate_neutral_city_capture_gather_turns(ourStats)
+            if turnsWeSpentCappingCities != 0:
+                logEntries.append(f'reducing greed turns {i} by turnsWeSpentCappingCities {turnsWeSpentCappingCities}')
+                i -= turnsWeSpentCappingCities
         if i < 0:
             i = 0
 
@@ -1854,14 +1878,14 @@ class OpponentTracker(object):
 
         if logContext is not None:
             logbook.info(
-                f'FOG_ARMY_RISK context={logContext} player={player} inTurns={inTurns} '
-                f'requestedCityLimit={requestedCityLimit} derivedCityLimit={cityLimit} '
+                f'FOG_ARMY_RISK player={player} inTurns={inTurns} result={armyRisk} context={logContext}'
+                f'\r\n    requestedCityLimit={requestedCityLimit} derivedCityLimit={cityLimit} '
                 f'fogCityCount={stats.fog_city_count} approximatePerCityGatherDistance={self.approximate_per_city_gather_distance} '
-                f'movesSpentGatheringFogTiles={stats.moves_spent_gathering_fog_tiles} '
+                f'\r\n    movesSpentGatheringFogTiles={stats.moves_spent_gathering_fog_tiles} '
                 f'startingFogArmy={startingArmyRisk} fogCityArmyTotal={stats.approximate_fog_city_army} '
-                f'fogCityContribution={cityTotal} futureCityIncome={cityIncomeTotal} '
+                f'\r\n    fogCityContribution={cityTotal} futureCityIncome={cityIncomeTotal} '
                 f'gatherQueueContribution={gatherQueueTotal} playerQueueCount={len(pTileQueueLists)} '
-                f'queueLengths={[len(q) for q in pTileQueueLists]} result={armyRisk}'
+                f'queueLengths={[len(q) for q in pTileQueueLists]}'
             )
 
         return armyRisk
@@ -1933,7 +1957,7 @@ class OpponentTracker(object):
 
         return ourStats.cityCount - byNumber >= enStats.cityCount
 
-    def winning_on_economy(self, byRatio: float = 1.0, cityValue: int = 35, againstPlayer: int = -2, offset: int = 0) -> bool:
+    def winning_on_economy(self, byRatio: float = 1.0, cityValue: int = 30, againstPlayer: int = -2, offset: int = 0) -> bool:
         """
 
         @param byRatio:

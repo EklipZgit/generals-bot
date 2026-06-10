@@ -65,7 +65,7 @@ class BotCombatQueries:
         return armies
 
     @staticmethod
-    def sum_friendly_army_near_or_on_tiles(bot: EklipZBot, tiles: typing.List[Tile], distance: int = 2, player: int | None = None) -> int:
+    def sum_friendly_army_near_or_on_tiles(bot: EklipZBot, tiles: typing.Iterable[Tile], distance: int = 2, player: int | None = None) -> int:
         if player is None:
             player = bot._map.player_index
         armyNear = SearchUtils.Counter(0)

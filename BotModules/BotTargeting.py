@@ -168,7 +168,8 @@ class BotTargeting:
             player: int = -2,
             cutoffEmergenceRatio: float = 0.333,
             includeCities: bool = False,
-            limitNearbyTileRange: int = -1
+            limitNearbyTileRange: int = -1,
+            requirePredictedFogTeamTile: bool = False
     ) -> typing.List[Tile]:
         """
 
@@ -187,6 +188,11 @@ class BotTargeting:
         if bot._map.players[player].general is not None:
             return [bot._map.players[player].general]
 
+        def can_consider_tile(tile: Tile) -> bool:
+            if requirePredictedFogTeamTile:
+                return tile.isTempFogPrediction and not tile.discovered and bot._map.is_player_on_team_with(tile.player, player)
+            return True
+
         emergenceVal = 0
         if player == bot.targetPlayer:
             emergenceVal = bot.armyTracker.emergenceLocationMap[player][bot.targetPlayerExpectedGeneralLocation]
@@ -200,6 +206,8 @@ class BotTargeting:
         emergenceVals = []
         for tile in bot._map.get_all_tiles():
             if not tile.discovered:
+                if not can_consider_tile(tile):
+                    continue
                 emergenceAmt = bot.armyTracker.get_tile_emergence_for_player(tile, player)
                 if not tile.isObstacle and bot.armyTracker.valid_general_positions_by_player[player][tile]:
                     if emergenceAmt > emergenceCutoff:
@@ -210,6 +218,8 @@ class BotTargeting:
 
         if len(emergenceVals) == 0 and bot.undiscovered_priorities is not None:
             for tile in bot._map.get_all_tiles():
+                if not can_consider_tile(tile):
+                    continue
                 if not tile.discovered and not tile.isObstacle and bot.armyTracker.valid_general_positions_by_player[player][tile]:
                     emergenceAmt = bot.undiscovered_priorities.raw[tile.tile_index]
                     emergenceAmt -= BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.35) * 0.1
@@ -218,7 +228,7 @@ class BotTargeting:
                     emergenceVals.append((emergenceAmt, tile))
 
         tilesSorted = [tile for val, tile in sorted(emergenceVals, reverse=True) if tile != bot.targetPlayerExpectedGeneralLocation]
-        if player == bot.targetPlayer and bot.targetPlayerExpectedGeneralLocation is not None and bot.armyTracker.valid_general_positions_by_player[player].raw[bot.targetPlayerExpectedGeneralLocation.tile_index]:
+        if player == bot.targetPlayer and bot.targetPlayerExpectedGeneralLocation is not None and bot.armyTracker.valid_general_positions_by_player[player].raw[bot.targetPlayerExpectedGeneralLocation.tile_index] and can_consider_tile(bot.targetPlayerExpectedGeneralLocation):
             tilesSorted.insert(0, bot.targetPlayerExpectedGeneralLocation)
 
         elimSet = set()

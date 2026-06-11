@@ -38,6 +38,8 @@ def build_networkX_graph_no_obstacles_no_weights(
         right = map.GetTile(tile.x + 1, tile.y)
         down = map.GetTile(tile.x, tile.y + 1)
         tileIndex = tile.tile_index
+        # UnitTests.test_Gather_Bulk.GatherBulkTests.test_prune_set_by_articulation_points_handles_isolated_valid_tiles covers gather plans where reconnect pruning leaves isolated candidate tiles; NetworkX only creates edge endpoints implicitly, so isolated tiles must be explicit nodes before pruning can remove them.
+        g.add_node(tileIndex)
         if right and right in validTiles:
             if not right.isObstacle and (not bannedTiles or right not in bannedTiles):
                 g.add_edge(tileIndex, right.tile_index)

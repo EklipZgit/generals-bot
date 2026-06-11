@@ -1294,7 +1294,7 @@ class BotExpansionOps:
         if includeCities is None:
             includeCities = not bot.armyTracker.has_perfect_information_of_player_cities(bot.targetPlayer) and WinCondition.ContestEnemyCity in bot.win_condition_analyzer.viable_win_conditions
 
-        toReveal = BM.BotTargeting.BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=emergenceRatio, includeCities=includeCities)
+        toReveal = BM.BotTargeting.BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=emergenceRatio, includeCities=includeCities, requirePredictedFogTeamTile=True)
         targetArmyLevel = BotDefenseQueries.determine_fog_defense_amount_available_for_tiles(bot, toReveal, bot.targetPlayer)
 
         for t in toReveal:

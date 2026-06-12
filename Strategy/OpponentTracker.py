@@ -7,6 +7,7 @@ import typing
 import Path
 import SearchUtils
 from ArmyTracker import Army
+from MapMatrix import MapMatrix
 from StrategyModels import CycleStatsData, PlayerMoveCategory, UnresolvedEmergenceData
 from ViewInfo import ViewInfo, TargetStyle
 from base.client.map import MapBase, TeamStats, Tile, Player, PLAYER_CHAR_BY_INDEX
@@ -593,6 +594,10 @@ class OpponentTracker(object):
         if tile.player >= 0:
             logbook.info(f'OppTrack NV-: queued {repr(tile)}')
             self._vision_losses.add(tile)
+
+    def notify_tile_flipped_for_player(self, tile: Tile):
+        # self._tile_flips.add(tile)
+        pass # for now
 
     def dump_to_string_data(self) -> str:
         data = []

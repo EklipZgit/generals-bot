@@ -2911,9 +2911,10 @@ def find_optimal_expansion_path_to_move_first(
     for path in maxPaths:
         sumTurns += path.length
 
-    deferringCityGen = False
-    if sumTurns < remainingTurns - 1:
-        deferringCityGen = True
+    deferringCityGen = True
+    # TODO figure out when to re-enable this, because this if statement was VERY wrong, completely fucking us early game.
+    # if sumTurns < remainingTurns - 1:
+    #     deferringCityGen = True
 
     waitingPaths = set()
     pathVals: typing.Dict[TilePlanInterface, float] = {}

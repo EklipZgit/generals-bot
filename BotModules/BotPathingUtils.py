@@ -441,7 +441,9 @@ class BotPathingUtils:
             preferNeutral=True,
             fromTile=None,
             preferEnemy=False,
-            maxObstacleCost: int | None = None
+            maxObstacleCost: int | None = None,
+            avoidEnemyVision: bool = False,
+            avoidUsingExpandables: bool = True,
     ) -> Path | None:
         targets = set()
         targets.add(target)
@@ -455,7 +457,10 @@ class BotPathingUtils:
             preferNeutral,
             fromTile,
             preferEnemy=preferEnemy,
-            maxObstacleCost=maxObstacleCost)
+            maxObstacleCost=maxObstacleCost,
+            avoidEnemyVision=avoidEnemyVision,
+            avoidUsingExpandables=avoidUsingExpandables,
+        )
 
     @staticmethod
     def is_move_towards_enemy(bot: EklipZBot, move) -> bool:
@@ -517,13 +522,18 @@ class BotPathingUtils:
             preferNeutral=True,
             fromTile=None,
             preferEnemy=True,
-            maxObstacleCost: int | None = None
+            maxObstacleCost: int | None = None,
+            negativeTiles: typing.Set[Tile] | None = None,
+            avoidEnemyVision: bool = False,
+            avoidUsingExpandables: bool = True,
     ) -> Path | None:
         if fromTile is None:
             fromTile = bot.general
-        negativeTiles = None
+        if negativeTiles is not None:
+            negativeTiles = negativeTiles.copy()
         if skipEnemyCities:
-            negativeTiles = set()
+            if negativeTiles is None:
+                negativeTiles = set()
             for enemyCity in bot.enemyCities:
                 negativeTiles.add(enemyCity)
 
@@ -537,13 +547,18 @@ class BotPathingUtils:
         frTeam = bot.player.team
         enTeam = teams[bot.targetPlayer]
 
-        for mv in bot.leafMoves:
-            if mv.source.army - 1 <= mv.dest.army:
-                continue
-            refs = avoidExpandables.get(mv.source.tile_index, 0)
-            avoidExpandables[mv.source.tile_index] = refs + 1
-            refs = avoidExpandables.get(mv.dest.tile_index, 0)
-            avoidExpandables[mv.dest.tile_index] = refs + 1
+        if avoidUsingExpandables:
+            for mv in bot.leafMoves:
+                if mv.source.army - 1 <= mv.dest.army:
+                    continue
+                refs = avoidExpandables.get(mv.source.tile_index, 0)
+                avoidExpandables[mv.source.tile_index] = refs + 1
+                refs = avoidExpandables.get(mv.dest.tile_index, 0)
+                avoidExpandables[mv.dest.tile_index] = refs + 1
+
+        if avoidEnemyVision and bot.targetPlayer != -1:
+            for t in bot.armyTracker.visible_tiles_by_player[bot.targetPlayer]:
+                avoidExpandables[t.tile_index] = 1
 
         isFfaSit = BM.BotTargeting.BotTargeting.is_ffa_situation(bot)
 

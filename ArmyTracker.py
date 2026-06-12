@@ -72,6 +72,17 @@ class ArmyTracker(object):
         self.tiles_ever_owned_by_player: typing.List[typing.Set[Tile]] = [set([t for t in player.tiles if t.visible or t.discovered]) for player in self.map.players]
         """The set of tiles that we've ever seen owned by a player. TODO exclude tiles from player captures...?"""
 
+        self.seen_tiles_by_player: typing.List[MapMatrixSet] = [MapMatrixSet(self.map) for _ in self.map.players]
+        self.visible_tiles_by_player: typing.List[MapMatrixSet] = [MapMatrixSet(self.map) for _ in self.map.players]
+        self.seen_tiles_by_player.append(MapMatrixSet(self.map))  # neutral cant see anything
+        self.visible_tiles_by_player.append(MapMatrixSet(self.map))  # neutral cant see anything
+        for t in self.map.tiles_by_index:
+            for v in t.visibleTo:
+                if v.player >= 0:
+                    self.visible_tiles_by_player[v.player].raw[t.tile_index] = True
+                    if v.visible:
+                        self.seen_tiles_by_player[v.player].raw[t.tile_index] = True
+
         self.uneliminated_emergence_events: typing.List[typing.Dict[Tile, int]] = [{} for player in self.map.players]
         """The set of emergence events that have resulted in general location restrictions in the past and have not been dropped in favor of more restrictive restrictions."""
 
@@ -3124,10 +3135,27 @@ class ArmyTracker(object):
     def _pre_army_track_handle_flipped_tiles(self):
         """To be called every time a tile is flipped from one owner to another owner by the map updates themselves."""
 
+        recalcVis = set()
         for tile in self._flipped_tiles:
-            if tile.player != -1:  #  and (tile.delta.oldOwner == -1 or not self.map.players[tile.delta.oldOwner].dead)  # not sure why this logic was here...?
-                self.tiles_ever_owned_by_player[tile.player].add(tile)
+            recalcVis.add(tile)
+            for v in tile.adjacents:
+                recalcVis.add(v)
 
+            if tile.player == -1:
+                continue  #  and (tile.delta.oldOwner == -1 or not self.map.players[tile.delta.oldOwner].dead)  # not sure why this logic was here...?
+            
+            self.tiles_ever_owned_by_player[tile.player].add(tile)
+            if self.opponent_tracker is not None:
+                self.opponent_tracker.notify_tile_flipped_for_player(tile)
+
+        for tile in recalcVis:
+            for v in tile.visibleTo:
+                if v.player >= 0:
+                    self.visible_tiles_by_player[v.player].raw[tile.tile_index] = True
+                    # we do now-visible by guessing, but seen requires verification
+                    if v.visible:
+                        self.seen_tiles_by_player[v.player].raw[tile.tile_index] = True
+        
         self._handle_flipped_discovered_as_neutrals()
 
         if self.map.has_misty_veil and self.map.has_watchtower:

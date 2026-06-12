@@ -2838,3 +2838,54 @@ a1   b1   b1   bG1
         # 56-72
         # 58-74
         # 55-77 May 29th commit, before fixing test_should_not_duplicate_army_out_of_fog
+        
+    def test_should_track_seen_tiles_for_player_when_discovered_tile_flips(self):
+        mapFile = 'GameContinuationEntries/should_load_map_data___P0YO4V4u8---0--111.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
+        opponentTracker = OpponentTracker(map)
+        flippedTile = map.GetTile(2, 2)
+        flippedTile.player = enemyGeneral.player
+        flippedTile.discovered = True
+
+        opponentTracker.notify_tile_flipped_for_player(flippedTile)
+
+        self.assertTrue(opponentTracker.seen_tiles_by_player[enemyGeneral.player][flippedTile])
+        for adj in flippedTile.adjacents:
+            self.assertTrue(opponentTracker.seen_tiles_by_player[enemyGeneral.player][adj])
+
+    def test_should_not_track_seen_tiles_for_player_when_undiscovered_tile_flips(self):
+        mapFile = 'GameContinuationEntries/should_load_map_data___P0YO4V4u8---0--111.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
+        opponentTracker = OpponentTracker(map)
+        flippedTile = map.GetTile(2, 2)
+        flippedTile.player = enemyGeneral.player
+        flippedTile.discovered = False
+
+        opponentTracker.notify_tile_flipped_for_player(flippedTile)
+
+        self.assertFalse(opponentTracker.seen_tiles_by_player[enemyGeneral.player][flippedTile])
+        for adj in flippedTile.adjacents:
+            self.assertFalse(opponentTracker.seen_tiles_by_player[enemyGeneral.player][adj])
+
+    def test_should_round_trip_opponent_tracker_seen_tiles(self):
+        mapFile = 'GameContinuationEntries/should_load_map_data___P0YO4V4u8---0--111.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
+        bot = type('SerializationTestBot', (), {})()
+        bot._map = map
+        bot.opponent_tracker = OpponentTracker(map)
+        seenTile = map.GetTile(2, 2)
+        seenAdj = seenTile.adjacents[0]
+        bot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][seenTile] = True
+        bot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][seenAdj] = True
+        data = {}
+        for line in BotSerialization.convert_opponent_tracker_seen_tiles_to_string(bot).split('\n'):
+            key, value = line.split('=', 1)
+            data[key] = value
+
+        loadedBot = type('SerializationTestBot', (), {})()
+        loadedBot._map = map
+        loadedBot.opponent_tracker = OpponentTracker(map)
+        BotSerialization.load_opponent_tracker_seen_tiles(loadedBot, data)
+
+        self.assertTrue(loadedBot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][seenTile])
+        self.assertTrue(loadedBot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][seenAdj])

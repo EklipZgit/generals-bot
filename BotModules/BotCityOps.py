@@ -30,7 +30,7 @@ from Strategy.WinConditionAnalyzer import WinCondition
 from StrategyModels import ExpansionPotential
 from ViewInfo import TargetStyle, PathColorer
 from Models.Move import Move
-from base.client.map import Player, Tile, MapBase
+from base.client.map import Player, Tile, MapBase, MODIFIER_CRYSTAL_CLEAR
 import typing
 
 
@@ -417,9 +417,35 @@ class BotCityOps:
             targetCity: Tile,
     ):
         remainingTurnsInCycle = bot.timings.get_turns_left_in_cycle(bot._map.turn)
-        cityValue = int(((remainingTurnsInCycle - (planOption.length * 1.5)) // 2) * 1.5) + 6
+        # where the fuck was I getting these numbers?
+        # cityValue = int(((remainingTurnsInCycle - (planOption.length * 1.5)) // 2) * 1.5) + 6
+
+        # the actual, raw value the city will provide us this round.
+        cityArmyEconThisRound = max(0, remainingTurnsInCycle - planOption.length) // 2
+
+        # if we dont take the city this round, we will lose more for the extra turns next round, and we can safely assume it will take no less turns to capture next round than this round:
+        probUnusedStandingArmy = bot.player.standingArmy - sum(t.army - 1 for t in bot.largePlayerTiles[0:2])
+        probStandingArmyNextRound = probUnusedStandingArmy + bot.player.tileCount + (bot.player.cityCount * remainingTurnsInCycle) // 2
+        timeToCity = 45 * bot.player.tileCount / probStandingArmyNextRound
+        cityArmyEconLossByDelayingAfterStartOfNextRound = max(6, timeToCity) // 2
+
+        cityValue = cityArmyEconThisRound + cityArmyEconLossByDelayingAfterStartOfNextRound
+
+        baseCityBonus = 6
+        # having cities gives us more moves, lets say its worth around 6 tiles at least in extra econ value.
+        cityCatchupBonus = 0
         if not bot.opponent_tracker.even_or_up_on_cities(bot.targetPlayer):
-            cityValue += 6
+            cityCatchupBonus = max(0, remainingTurnsInCycle - planOption.length) // 2
+
+        # problem here is that taking enemy land looks too good, without taking into account that the enemy will recapture a lot of the land grab we make.
+        # If we don't see that we can fill the rest of the round after taking the city
+        # (EG because the army we were gathering to the city blocks a choke that other attacks would have moved through)
+        # then we just see the city as preventing us from like 45 econ capping enemy tiles the rest of the round. How do we account for that without over-boosting end of round value?
+
+        cityValue += baseCityBonus
+        cityValue += cityCatchupBonus
+
+        bot.info(f'ntE {cityValue:.1f}e (round {cityArmyEconThisRound}e + next {cityArmyEconLossByDelayingAfterStartOfNextRound}e (unused {probUnusedStandingArmy}a > next {probStandingArmyNextRound}a > ttCity {timeToCity}) + catchup {cityCatchupBonus} + base {baseCityBonus}')
 
         if targetCity.player != -1:
             cityValue += 2
@@ -433,6 +459,7 @@ class BotCityOps:
                 continue
             if tile.player not in friendlyPlayers:
                 pathCaptureValue += bonusCapturePointMatrix.raw[tile.tile_index]
+
         planOption.econValue = max(0.0, float(cityValue) + pathCaptureValue)
         planOption.gather_target = targetCity
 
@@ -560,7 +587,10 @@ class BotCityOps:
                     maxDepth=BotPathingUtils.distance_from_general(bot, city) + 5,
                     skipNeutralCities=False,
                     preferNeutral=False,
-                    preferEnemy=False)
+                    preferEnemy=False,
+                    avoidEnemyVision=True,
+                    avoidUsingExpandables=False,
+                )
                 if path is not None:
                     maxScore = score
                     targetCity = city
@@ -1175,21 +1205,39 @@ class BotCityOps:
             if targetCity.player >= 0 and (cityGatherPath is not None and targetCity not in cityGatherPath.tileSet):
                 addlIncrementing += 1
 
-            move, gatherValue, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
-                bot,
-                targets,
-                0.03,
-                gatherDist,
-                negativeSet=negativeTiles,
-                targetArmy=targetGatherArmy,
-                useTrueValueGathered=True,
-                additionalIncrement=addlIncrementing,
-            )
-            logbook.info(
-                f"CITY_CAPTURE_ARMY_ACCOUNT context=after_gather_call target={targetCity} "
-                f"move={move} gatherValue={gatherValue} gatherTurns={gatherTurns} targetGatherArmy={targetGatherArmy} "
-                f"armyAlreadyPrepped={armyAlreadyPrepped} gatherNodeCount={len(gatherNodes) if gatherNodes is not None else 0}"
-            )
+            # attempt skipping vision first
+            toSkip = set()
+            if not bot._map.modifiers_by_id[MODIFIER_CRYSTAL_CLEAR] and bot.targetPlayer != -1 and not bot.armyTracker.visible_tiles_by_player[bot.targetPlayer].raw[targets[0].tile_index]:
+                visRaw = bot.armyTracker.visible_tiles_by_player[bot.targetPlayer].raw
+                def foreach(tile: Tile, dist: int):
+                    if visRaw[tile.tile_index] and (tile.player != bot.player.index or bot.opponent_tracker.assumed_player_average_tile_values[bot.player.index] + 4 > tile.army):
+                        toSkip.add(tile)
+                        if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                            logbook.info(f"CITY SKIP EN VIS {tile}")
+
+                SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(bot._map, targets, maxDepth=8, foreachFunc=foreach)
+            move, gatherValue, gatherTurns, gatherNodes = None, None, None, None
+            while True:
+                move, gatherValue, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
+                    bot,
+                    targets,
+                    0.03,
+                    gatherDist,
+                    negativeSet=negativeTiles,
+                    targetArmy=targetGatherArmy,
+                    useTrueValueGathered=True,
+                    additionalIncrement=addlIncrementing,
+                    skipTiles=toSkip,
+                )
+                logbook.info(
+                    f"CITY_CAPTURE_ARMY_ACCOUNT skips={len(toSkip)} context=after_gather_call target={targetCity} "
+                    f"move={move} gatherValue={gatherValue} gatherTurns={gatherTurns} targetGatherArmy={targetGatherArmy} "
+                    f"armyAlreadyPrepped={armyAlreadyPrepped} gatherNodeCount={len(gatherNodes) if gatherNodes is not None else 0}"
+                )
+
+                if move is not None or len(toSkip) == 0:
+                    break
+                toSkip.clear()
 
             if move is not None:
                 preferPrune = None

@@ -16,6 +16,7 @@ from ViewInfo import ViewInfo
 
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
 from BotModules.BotSerialization import BotSerialization
+from base.client.tile import Tile
 
 if typing.TYPE_CHECKING:
     import EklipZBot
@@ -23,27 +24,29 @@ if typing.TYPE_CHECKING:
 class BotRendering:
     @staticmethod
     def prep_view_info_for_render(bot: EklipZBot, move=None):
-        bot.viewInfo.board_analysis = bot.board_analysis
-        bot.viewInfo.targetingArmy = bot.targetingArmy
-        bot.viewInfo.armyTracker = bot.armyTracker
-        bot.viewInfo.dangerAnalyzer = bot.dangerAnalyzer
-        bot.viewInfo.currentPath = bot.curPath
-        bot.viewInfo.gatherNodes = bot.gatherNodes
-        bot.viewInfo.redGatherNodes = bot.redGatherTreeNodes
-        bot.viewInfo.territories = bot.territories
-        bot.viewInfo.allIn = bot.is_all_in_losing
-        bot.viewInfo.timings = bot.timings
-        bot.viewInfo.allInCounter = bot.all_in_losing_counter
-        bot.viewInfo.givingUpCounter = bot.giving_up_counter
-        bot.viewInfo.targetPlayer = bot.targetPlayer
-        bot.viewInfo.generalApproximations = bot.generalApproximations
-        bot.viewInfo.playerTargetScores = bot.playerTargetScores
+        viewInfo = bot.viewInfo
+        map: MapBase = bot._map
+        viewInfo.board_analysis = bot.board_analysis
+        viewInfo.targetingArmy = bot.targetingArmy
+        viewInfo.armyTracker = bot.armyTracker
+        viewInfo.dangerAnalyzer = bot.dangerAnalyzer
+        viewInfo.currentPath = bot.curPath
+        viewInfo.gatherNodes = bot.gatherNodes
+        viewInfo.redGatherNodes = bot.redGatherTreeNodes
+        viewInfo.territories = bot.territories
+        viewInfo.allIn = bot.is_all_in_losing
+        viewInfo.timings = bot.timings
+        viewInfo.allInCounter = bot.all_in_losing_counter
+        viewInfo.givingUpCounter = bot.giving_up_counter
+        viewInfo.targetPlayer = bot.targetPlayer
+        viewInfo.generalApproximations = bot.generalApproximations
+        viewInfo.playerTargetScores = bot.playerTargetScores
 
         movePath = Path()
         if move is not None:
             movePath.add_next(move.source)
             movePath.add_next(move.dest)
-            bot.viewInfo.color_path(
+            viewInfo.color_path(
                 PathColorer(
                     movePath,
                     254, 254, 254,
@@ -54,68 +57,68 @@ class BotRendering:
 
         if bot.armyTracker is not None:
             if bot.info_render_army_emergence_values:
-                for tile in bot._map.reachable_tiles:
+                for tile in map.reachable_tiles:
                     val = bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile]
                     if val != 0:
                         textVal = f"e{val:.1f}"
-                        bot.viewInfo.bottomMidRightGridText[tile] = textVal
+                        viewInfo.bottomMidRightGridText[tile] = textVal
 
             for tile in bot.armyTracker.dropped_fog_tiles_this_turn:
-                bot.viewInfo.add_targeted_tile(tile, TargetStyle.RED)
+                viewInfo.add_targeted_tile(tile, TargetStyle.RED)
 
             for tile in bot.armyTracker.decremented_fog_tiles_this_turn:
-                bot.viewInfo.add_targeted_tile(tile, TargetStyle.GREEN)
+                viewInfo.add_targeted_tile(tile, TargetStyle.GREEN)
 
         if bot.info_render_gather_locality_values and bot.gatherAnalyzer is not None:
-            for tile in bot._map.pathable_tiles:
+            for tile in map.pathable_tiles:
                 if tile.player == bot.general.player:
-                    bot.viewInfo.bottomMidRightGridText[tile] = f'l{bot.gatherAnalyzer.gather_locality_map[tile]}'
+                    viewInfo.bottomMidRightGridText[tile] = f'l{bot.gatherAnalyzer.gather_locality_map[tile]}'
 
         if bot.info_render_tile_deltas:
-            BotRendering.render_tile_deltas_in_view_info(bot.viewInfo, bot._map)
+            BotRendering.render_tile_deltas_in_view_info(bot.viewInfo, map)
         if bot.info_render_tile_states:
-            BotRendering.render_tile_state_in_view_info(bot.viewInfo, bot._map)
+            BotRendering.render_tile_state_in_view_info(bot.viewInfo, map)
 
         if bot.target_player_gather_path is not None:
             alpha = 140
             minAlpha = 100
             alphaDec = 5
-            bot.viewInfo.color_path(PathColorer(bot.target_player_gather_path, 60, 50, 0, alpha, alphaDec, minAlpha))
+            viewInfo.color_path(PathColorer(bot.target_player_gather_path, 60, 50, 0, alpha, alphaDec, minAlpha))
 
         if bot.board_analysis.intergeneral_analysis is not None:
-            nonZoneMatrix = MapMatrixSet(bot._map)
-            for tile in bot._map.get_all_tiles():
+            nonZoneMatrix = MapMatrixSet(map)
+            for tile in map.get_all_tiles():
                 if tile not in bot.board_analysis.core_play_area_matrix:
                     nonZoneMatrix.add(tile)
-            bot.viewInfo.add_map_zone(nonZoneMatrix, (100, 100, 50), alpha=35)
+            viewInfo.add_map_zone(nonZoneMatrix, (100, 100, 50), alpha=35)
 
             if bot.info_render_board_analysis_zones:
-                bot.viewInfo.add_map_division(bot.board_analysis.core_play_area_matrix, (10, 230, 0), alpha=150)
-                bot.viewInfo.add_map_division(bot.board_analysis.extended_play_area_matrix, (255, 230, 0), alpha=150)
-                bot.viewInfo.add_map_division(bot.board_analysis.flank_danger_play_area_matrix, (205, 80, 40), alpha=255)
-                bot.viewInfo.add_map_division(bot.board_analysis.flankable_fog_area_matrix, (0, 0, 0), alpha=255)
-                bot.viewInfo.add_map_zone(bot.board_analysis.flankable_fog_area_matrix, (255, 255, 255), alpha=40)
-                bot.viewInfo.add_map_zone(bot.board_analysis.backwards_tiles, (50, 100, 50), 75)
+                viewInfo.add_map_division(bot.board_analysis.core_play_area_matrix, (10, 230, 0), alpha=150)
+                viewInfo.add_map_division(bot.board_analysis.extended_play_area_matrix, (255, 230, 0), alpha=150)
+                viewInfo.add_map_division(bot.board_analysis.flank_danger_play_area_matrix, (205, 80, 40), alpha=255)
+                viewInfo.add_map_division(bot.board_analysis.flankable_fog_area_matrix, (0, 0, 0), alpha=255)
+                viewInfo.add_map_zone(bot.board_analysis.flankable_fog_area_matrix, (255, 255, 255), alpha=40)
+                viewInfo.add_map_zone(bot.board_analysis.backwards_tiles, (50, 100, 50), 75)
 
-        bot.viewInfo.team_cycle_stats = bot.opponent_tracker.current_team_cycle_stats
-        bot.viewInfo.team_last_cycle_stats = bot.opponent_tracker.get_last_cycle_stats_per_team()
-        bot.viewInfo.player_fog_tile_counts = bot.opponent_tracker.get_all_player_fog_tile_count_dict()
-        bot.viewInfo.player_fog_risks = [bot.opponent_tracker.get_approximate_fog_army_risk(p) for p in range(len(bot._map.players))]
+        viewInfo.team_cycle_stats = bot.opponent_tracker.current_team_cycle_stats
+        viewInfo.team_last_cycle_stats = bot.opponent_tracker.get_last_cycle_stats_per_team()
+        viewInfo.player_fog_tile_counts = bot.opponent_tracker.get_all_player_fog_tile_count_dict()
+        viewInfo.player_fog_risks = [bot.opponent_tracker.get_approximate_fog_army_risk(p) for p in range(len(map.players))]
 
         if bot.info_render_centrality_distances:
-            for tile in bot._map.get_all_tiles():
-                bot.viewInfo.bottomLeftGridText[tile] = f'cen{bot.board_analysis.defense_centrality_sums[tile]}'
+            for tile in map.get_all_tiles():
+                viewInfo.bottomLeftGridText[tile] = f'cen{bot.board_analysis.defense_centrality_sums[tile]}'
 
         if bot.info_render_pathway_distances:
-            for tile in bot._map.get_all_tiles():
+            for tile in map.get_all_tiles():
                 pw = bot.board_analysis.intergeneral_analysis.pathWayLookupMatrix.raw[tile.tile_index]
                 if pw is None:
-                    bot.viewInfo.bottomLeftGridText[tile] = f'pwN'
+                    viewInfo.bottomLeftGridText[tile] = f'pwN'
                 else:
-                    bot.viewInfo.bottomLeftGridText[tile] = f'pw{pw.distance}'
+                    viewInfo.bottomLeftGridText[tile] = f'pw{pw.distance}'
 
         if bot.enemy_attack_path is not None:
-            bot.viewInfo.color_path(PathColorer(
+            viewInfo.color_path(PathColorer(
                 bot.enemy_attack_path,
                 255, 185, 75,
                 alpha=255,
@@ -124,26 +127,26 @@ class BotRendering:
 
         if bot.targetPlayer >= 0 and not bot.targetPlayerExpectedGeneralLocation.isGeneral:
             for t in bot.alt_en_gen_positions[bot.targetPlayer]:
-                bot.viewInfo.add_targeted_tile(t, TargetStyle.YELLOW, radiusReduction=3)
+                viewInfo.add_targeted_tile(t, TargetStyle.YELLOW, radiusReduction=3)
 
         if bot.info_render_board_analysis_choke_widths and bot.board_analysis.intergeneral_analysis:
-            for tile in bot._map.get_all_tiles():
+            for tile in map.get_all_tiles():
                 w = ''
                 if tile in bot.board_analysis.intergeneral_analysis.chokeWidths:
                     w = str(bot.board_analysis.intergeneral_analysis.chokeWidths[tile])
-                bot.viewInfo.topRightGridText[tile] = f'cw{w}'
+                viewInfo.topRightGridText[tile] = f'cw{w}'
 
         for p in bot.armyTracker.unconnectable_tiles:
             for t in p:
-                bot.viewInfo.add_targeted_tile(t, targetStyle=TargetStyle.RED, radiusReduction=-5)
+                viewInfo.add_targeted_tile(t, targetStyle=TargetStyle.RED, radiusReduction=-5)
         for p, matrix in enumerate(bot.armyTracker.player_connected_tiles):
-            if not bot._map.is_player_on_team_with(bot.player.index, p) and not bot._map.players[p].dead:
+            if not map.is_player_on_team_with(bot.player.index, p) and not map.players[p].dead:
                 scaledColor = Utils.rescale_color(0.55, 0, 1.0, Colors.PLAYER_COLORS[p], Colors.GRAY_DARK)
-                bot.viewInfo.add_map_division(matrix, scaledColor, alpha=150)
-                bot.viewInfo.add_map_zone(matrix, scaledColor, alpha=65)
+                viewInfo.add_map_division(matrix, scaledColor, alpha=150)
+                viewInfo.add_map_zone(matrix, scaledColor, alpha=65)
 
         if move is not None:
-            bot.viewInfo.color_path(PathColorer(
+            viewInfo.color_path(PathColorer(
                 movePath,
                 254, 254, 254,
                 alpha=135,
@@ -151,23 +154,23 @@ class BotRendering:
             ))
 
         if bot.info_render_defense_spanning_tree and bot.defensive_spanning_tree:
-            bot.viewInfo.add_map_division(bot.defensive_spanning_tree, Colors.WHITE, alpha=200, thickness=4)
-            bot.viewInfo.add_map_zone(bot.defensive_spanning_tree, Colors.P_MAROON, alpha=100)
+            viewInfo.add_map_division(bot.defensive_spanning_tree, Colors.WHITE, alpha=200, thickness=4)
+            viewInfo.add_map_zone(bot.defensive_spanning_tree, Colors.P_MAROON, alpha=100)
 
         if bot.win_condition_analyzer.defend_cities:
-            bot.viewInfo.add_targeted_tiles_with_legend(bot.win_condition_analyzer.defend_cities, 'DEFEND CITIES', TargetStyle.PURPLE, radiusReduction=3)
+            viewInfo.add_targeted_tiles_with_legend(bot.win_condition_analyzer.defend_cities, 'DEFEND CITIES', TargetStyle.PURPLE, radiusReduction=3)
 
         if bot.info_render_friendly_city_spanning_tree and bot.friendly_city_spanning_tree:
-            bot.viewInfo.add_map_zone(bot.friendly_city_spanning_tree, Colors.GOLD, alpha=50)
+            viewInfo.add_map_zone(bot.friendly_city_spanning_tree, Colors.GOLD, alpha=50)
 
         if bot.info_render_tile_islands:
             for island in sorted(bot.tileIslandBuilder.all_tile_islands, key=lambda i: (i.team, str(i.name))):
                 if island.name:
                     for tile in island.tile_set:
-                        if bot.viewInfo.topRightGridText[tile]:
-                            bot.viewInfo.midRightGridText[tile] = island.name
+                        if viewInfo.topRightGridText[tile]:
+                            viewInfo.midRightGridText[tile] = island.name
                         else:
-                            bot.viewInfo.topRightGridText[tile] = island.name
+                            viewInfo.topRightGridText[tile] = island.name
 
         if bot.last_flow_expander is not None and bot.last_flow_opt_collection is not None:
             if bot.info_render_flow_expand:
@@ -175,6 +178,14 @@ class BotRendering:
             else:
                 if bot.last_flow_expander.log_debug:
                     logbook.warning('FLOW_RENDER_SKIPPED info_render_flow_expand=False')
+
+        if bot.info_render_enemy_vision_data and bot.targetPlayer != -1 and bot.armyTracker is not None:
+            visRaw = bot.armyTracker.visible_tiles_by_player[bot.targetPlayer].raw
+            for tile in map.tiles_by_index:
+                viewInfo.midLeftGridText.raw[tile.tile_index] = f'+' if visRaw[tile.tile_index] else '-'
+            seenRaw = bot.armyTracker.seen_tiles_by_player[bot.targetPlayer].raw
+            for tile in map.tiles_by_index:
+                viewInfo.midRightGridText.raw[tile.tile_index] = f'+' if seenRaw[tile.tile_index] else '-'
 
     @staticmethod
     def render_flow_expand_in_view_info(bot: EklipZBot, dontLogOpts: bool = False):
@@ -487,6 +498,7 @@ class BotRendering:
         data.append(f'Armies={TextMapLoader.dump_armies(bot._map, bot.armyTracker.armies)}')
 
         data.append(bot.opponent_tracker.dump_to_string_data())
+        data.append(BotSerialization.convert_army_tracker_seen_tiles_to_string(bot))
 
         # Serialize island_ids if tileIslandBuilder exists
         if bot.tileIslandBuilder is not None:

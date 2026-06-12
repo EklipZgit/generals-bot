@@ -2655,3 +2655,138 @@ player_index=0
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_use_all_of_your_fucking_army_round_2_electric_boogaloo_2")
+
+    def test_should_handle_expanding_behind_choke_effectively_rather_than_crossing_choke_boundary_into_obvious_recap__shorter_should_leafmove(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_handle_expanding_behind_choke_effectively_rather_than_crossing_choke_boundary_into_obvious_recap___J09nXVIEh---1--121.txtmap'
+
+        for enQueuesExpansions in [False, True]:
+            with self.subTest(enQueuesExpansions=enQueuesExpansions):
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 121, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=121)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                if enQueuesExpansions:
+                    simHost.queue_player_leafmoves(enemyGeneral.player)
+
+                # theory crafting, the opponent should either be taking neutrals behind the choke, or be attacking through the choke near end of round.
+                #  So we'd want to meet at the choke no more than 8 moves before end of round probably?
+                #  In this short scenario FOR SURE we just expand and move to the choke super late, so shouldn't move off general within 10 moves at all
+                #proof
+                # simHost.queue_player_moves_str(general.player, '10,15->11,15  10,16->11,16  11,18->12,18  12,17->12,16  10,20->11,20  11,19->12,19  13,16->13,17->15,17  8,17->5,17  11,17->9,17  8,19->9,19->9,14->11,14')
+
+                bot = self.get_debug_render_bot(simHost, general.player)
+                bot.info_render_gather_values = True
+                bot.info_render_enemy_vision_data = False
+                bot.info_render_flow_expand = False
+                bot.info_render_tile_islands = False
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertTileDifferentialGreaterThan(-1, simHost, 'should try to catch up to enemy leaf expansion')
+
+                if not enQueuesExpansions:
+                    self.assertTileDifferentialGreaterThan(3, simHost, 'should make a bunch of leaf moves to catch up and get ahead on land before considering launching down the main launch')
+
+                self.assertGreater(general.army, 28, 'should not move off the general yet, probably not on a normal map and DEFINITELY not through a forced choke')
+
+                self.assertOwned(enemyGeneral.player, playerMap.At(11, 12), 'Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
+                self.assertOwned(enemyGeneral.player, playerMap.At(11, 13), 'Lesser - Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
+
+    def test_should_handle_expanding_behind_choke_effectively_rather_than_crossing_choke_boundary_into_obvious_recap__mid_length_should_not_cap_en_tiles_yet(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_handle_expanding_behind_choke_effectively_rather_than_crossing_choke_boundary_into_obvious_recap___J09nXVIEh---1--121.txtmap'
+
+        for enQueuesExpansions in [True, False]:
+            with self.subTest(enQueuesExpansions=enQueuesExpansions):
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 121, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=121)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=not enQueuesExpansions)
+                if enQueuesExpansions:
+                    simHost.queue_player_leafmoves(enemyGeneral.player)
+
+                # proof
+                # simHost.queue_player_moves_str(general.player, '10,15->11,15  10,16->11,16  11,18->12,18  12,17->12,16  10,20->11,20  11,19->12,19  13,16->13,17->15,17  8,17->5,17  11,17->9,17  8,19->9,19->9,14->11,14')
+
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+                # theory crafting, the opponent should either be taking neutrals behind the choke, or be attacking through the choke near end of round.
+                #  So we'd want to meet at the choke no more than 8 moves before end of round probably?
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=18)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertOwned(enemyGeneral.player, playerMap.At(11, 12), 'Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
+                self.assertOwned(enemyGeneral.player, playerMap.At(11, 13), 'Lesser - Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
+
+    def test_should_handle_expanding_behind_choke_effectively_rather_than_crossing_choke_boundary_into_obvious_recap__longer_should_reach_enemy_tiles_but_not_breach_choke(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_handle_expanding_behind_choke_effectively_rather_than_crossing_choke_boundary_into_obvious_recap___J09nXVIEh---1--121.txtmap'
+
+        for enQueuesExpansions in [True, False]:
+            with self.subTest(enQueuesExpansions=enQueuesExpansions):
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 121, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=121)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=not enQueuesExpansions)
+                if enQueuesExpansions:
+                    simHost.queue_player_leafmoves(enemyGeneral.player)
+
+                # proof
+                # simHost.queue_player_moves_str(general.player, '10,15->11,15  10,16->11,16  11,18->12,18  12,17->12,16  10,20->11,20  11,19->12,19  13,16->13,17->15,17  8,17->5,17  11,17->9,17  8,19->9,19->9,14->11,14')
+
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+                # theory crafting, the opponent should either be taking neutrals behind the choke, or be attacking through the choke near end of round.
+                #  So we'd want to meet at the choke no more than 8 moves before end of round probably?
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=23)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertOwned(general.player, playerMap.At(9, 14), 'Should have captured these by this point, though')
+                self.assertOwned(general.player, playerMap.At(10, 14), 'Should have captured these by this point, though')
+
+                self.assertOwned(enemyGeneral.player, playerMap.At(11, 12), 'Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
+                self.assertOwned(enemyGeneral.player, playerMap.At(11, 13), 'Lesser - Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
+
+    def test_should_handle_expanding_behind_choke_effectively_rather_than_crossing_choke_boundary_into_obvious_recap__full_round_should_breach_choke_at_end(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_handle_expanding_behind_choke_effectively_rather_than_crossing_choke_boundary_into_obvious_recap___J09nXVIEh---1--121.txtmap'
+
+        for enQueuesExpansions in [True, False]:
+            with self.subTest(enQueuesExpansions=enQueuesExpansions):
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 121, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=121)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=not enQueuesExpansions)
+                if enQueuesExpansions:
+                    simHost.queue_player_leafmoves(enemyGeneral.player)
+
+                # proof
+                # simHost.queue_player_moves_str(general.player, '10,15->11,15  10,16->11,16  11,18->12,18  12,17->12,16  10,20->11,20  11,19->12,19  13,16->13,17->15,17  8,17->5,17  11,17->9,17  8,19->9,19->9,14->11,14')
+
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+                # theory crafting, the opponent should either be taking neutrals behind the choke, or be attacking through the choke near end of round.
+                #  So we'd want to meet at the choke no more than 8 moves before end of round probably?
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=27) # 2 moves before end of round, should move through choke by then
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertOwned(general.player, playerMap.At(11, 12), 'Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
+                self.assertOwned(general.player, playerMap.At(11, 13), 'Lesser - Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')

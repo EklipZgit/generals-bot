@@ -299,6 +299,7 @@ class GatherCapturePlan(TilePlanInterface):
         cloneNodes: bool = False,
         tilesToHalf: TileSet | None = None,
         intergeneral_analysis: ArmyAnalyzer | None = None,
+        overrideArmyCostsFromMatrix: MapMatrixInterface[float] | None = None,
     ) -> GatherCapturePlan:
         """
         Returns the plan. The root nodes must be connected to all their children, but do not need the correct army / econ values (will be recalculated).
@@ -314,6 +315,7 @@ class GatherCapturePlan(TilePlanInterface):
         @param captures: a set of tiles to include as approximate captures in this gather capture plan
         @param viewInfo:
         @param cloneNodes: if True, the original root nodes will not be modified and will be cloned instead. Default is false.
+        @param overrideArmyCostsFromMatrix: if included, the gather army amounts summed on the nodes will come from here instead of from the raw army on the tiles.
         @return:
         """
         if cloneNodes:
@@ -345,6 +347,7 @@ class GatherCapturePlan(TilePlanInterface):
                 priorityMatrix,
                 includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
                 includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+                overrideArmyCostsFromMatrix=overrideArmyCostsFromMatrix,
                 tilesToHalf=tilesToHalf,
             )
 
@@ -426,8 +429,24 @@ class GatherCapturePlan(TilePlanInterface):
             priorityMatrix: MapMatrixInterface[float] | None = None,
             includeGatherPriorityAsEconValues: bool = False,
             includeCapturePriorityAsEconValues: bool = True,
+            overrideArmyCostsFromMatrix: MapMatrixInterface[float] | None = None,
             tilesToHalf: TileSet | None = None,
     ):
+        """
+
+        :param plan:
+        :param currentNode:
+        :param negativeTiles:
+        :param searchingPlayer:
+        :param frPlayers:
+        :param onlyCalculateFriendlyArmy:
+        :param priorityMatrix:
+        :param includeGatherPriorityAsEconValues:
+        :param includeCapturePriorityAsEconValues:
+        :param overrideArmyCostsFromMatrix: if included, the gather army amounts summed on the nodes will come from here instead of from the raw army on the tiles. This is expected to be the gatherable amount on the tile (so, 1 for an allied 2 tile, or -3 for an enemy 2 tile).
+        :param tilesToHalf:
+        :return:
+        """
         if GatherDebug.USE_DEBUG_LOGGING:
             logbook.info(f'RECALCING currentNode {currentNode}')
 
@@ -455,17 +474,17 @@ class GatherCapturePlan(TilePlanInterface):
             if isTileFriendly:
                 if not isStartNode:
                     if tilesToHalf is None or currentTile not in tilesToHalf:
-                        sumArmy += currentTile.army
+                        sumArmy += currentTile.army if overrideArmyCostsFromMatrix is None else overrideArmyCostsFromMatrix.raw[currentTile.tile_index] + 1
                     else:
-                        sumArmy += currentTile.army // 2
+                        sumArmy += currentTile.army if overrideArmyCostsFromMatrix is None else (overrideArmyCostsFromMatrix.raw[currentTile.tile_index] + 1) // 2
                         currentNode.half = True
-                        # sumPoints += currentTile.army
+                        # sumPoints += currentTile.army if overrideArmyCostsFromMatrix is None else overrideArmyCostsFromMatrix.raw[currentTile.tile_index] + 1
                     if currentTile.isCity:
                         plan.friendly_city_count += 1
             else:
                 if not onlyCalculateFriendlyArmy and not isStartNode:
-                    sumArmy -= currentTile.army
-                    # sumPoints -= currentTile.army
+                    sumArmy -= currentTile.army if overrideArmyCostsFromMatrix is None else overrideArmyCostsFromMatrix.raw[currentTile.tile_index] + 1
+                    # sumPoints -= currentTile.army if overrideArmyCostsFromMatrix is None else overrideArmyCostsFromMatrix.raw[currentTile.tile_index] + 1
                 if currentTile.player >= 0:
                     econValue += 2.05
                     if currentTile.isCity:
@@ -487,7 +506,7 @@ class GatherCapturePlan(TilePlanInterface):
             elif not isTileFriendly and includeCapturePriorityAsEconValues:
                 econValue += prioVal
             # if USE_DEBUG_ASSERTS:
-            #     logbook.info(f'appending {currentTile}  {currentTile.army}a  matrix {priorityMatrix[currentTile]:.3f} -> {sumArmy:.3f}')
+            #     logbook.info(f'appending {currentTile}  {currentTile.army if overrideArmyCostsFromMatrix is None else overrideArmyCostsFromMatrix.raw[currentTile.tile_index] + 1}a  matrix {priorityMatrix[currentTile]:.3f} -> {sumArmy:.3f}')
 
         # we do econValue BEFORE the children because the children will sum their own econ value
         sumPoints += sumArmy
@@ -507,7 +526,8 @@ class GatherCapturePlan(TilePlanInterface):
                 onlyCalculateFriendlyArmy,
                 priorityMatrix,
                 includeGatherPriorityAsEconValues,
-                includeCapturePriorityAsEconValues)
+                includeCapturePriorityAsEconValues,
+                overrideArmyCostsFromMatrix)
             sumArmy += child.value
             sumPoints += child.points
             turns += child.gatherTurns

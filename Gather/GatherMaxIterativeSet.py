@@ -564,7 +564,7 @@ def _knapsack_max_set_gather_iterative_prune(
         slowMode: bool = False,
         renderLive: bool = True,
         maximizeValuePerTurn: bool = False,
-) -> typing.Tuple[int, typing.Set[Tile]]:
+) -> typing.Tuple[float, typing.Set[Tile]]:
     """
 
     @param itr:
@@ -591,7 +591,7 @@ def _knapsack_max_set_gather_iterative_prune(
     @param fastMode: run much faster, but less accurate version of the algo.
     @param slowMode: run much slower, but in theory more accurate version of the algo?
 
-    @return: (valGathered, rootNodes)
+    @return: (valGathered, rootNodes), where valGathered includes the sum of the rewardMatrix.
     """
     origStartTilesDict = startTilesDict.copy()
     rootTiles = {t for t in startTilesDict.keys()}
@@ -878,6 +878,7 @@ def _knapsack_max_set_gather_iterative_prune(
                 overpruneCutoff=overpruneCutoff,
                 liveRenderer=liveRenderer,
                 pruneReconnectCountMatrix=pruneReconnectCountMatrix,
+                skipTiles=skipTiles,
                 # This WAS here to update the start dist
                 # parentPruneFunc=lambda t, prunedNode: _start_tiles_prune_helper(startTilesDict, t, prunedNode)
             )
@@ -2409,13 +2410,14 @@ def gather_max_set_iterative_plan(
             gathSet,
             searchingPlayer=searchingPlayer,
             priorityMatrix=valueMatrix,
+            negativeTiles=negativeTiles,
             useTrueValueGathered=useTrueValueGathered,
-            # valueMatrix=valueMatrix,  # TODO do econ value from value matrix, maybe? or something?
+            override_army_cost_matrix=armyCostMatrix,
         )
 
         logbook.info(
-            f"Concluded gather_max_set_iterative_with_values with {itr.value} iterations. Gather turns {gcp.length}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
+            f"Concluded gather_max_set_iterative_plan with {itr.value} iterations. Gather turns {gcp.length}, value {totalValue}. Duration: {time.perf_counter() - startTime:.4f}")
     else:
         logbook.info(
-            f"Concluded gather_max_set_iterative_with_values with {itr.value} iterations. NO GCP FOUND! Duration: {time.perf_counter() - startTime:.4f}")
+            f"Concluded gather_max_set_iterative_plan with {itr.value} iterations. NO GCP FOUND! Duration: {time.perf_counter() - startTime:.4f}")
     return gcp

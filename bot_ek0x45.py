@@ -442,6 +442,7 @@ class EklipZBot(object):
         self.info_render_defense_spanning_tree: bool = True
         self.info_render_friendly_city_spanning_tree: bool = False
         self.info_render_flow_expand: bool = True
+        self.info_render_enemy_vision_data: bool = True
 
     # STEP2: Stay in EklipZBotV2.py. Tiny object-display helper with no domain logic; keep on the outer bot shell unchanged.
     def __repr__(self):

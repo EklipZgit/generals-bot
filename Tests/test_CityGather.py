@@ -3,9 +3,11 @@ import time
 import typing
 
 import Gather
+from BotModules.BotCityOps import BotCityOps
 from BehaviorAlgorithms import FlowExpansion
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
+from Strategy.OpponentTracker import OpponentTracker
 from TestBase import TestBase
 from bot_ek0x45 import EklipZBot
 
@@ -22,6 +24,45 @@ class CityGatherTests(TestBase):
         FlowExpansion.OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
 
         return bot
+
+    def test_should_build_opponent_seen_neutral_city_pathing_negatives_when_enemy_does_not_own_visible_source(self):
+        mapFile = 'GameContinuationEntries/should_find_neutral_city_path___sPHQbQG0c---1--200.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 200, fill_out_tiles=True)
+        bot = type('CityPathingNegativeTestBot', (), {})()
+        bot._map = map
+        bot.targetPlayer = enemyGeneral.player
+        bot.opponent_tracker = OpponentTracker(map)
+        neutralCity = map.GetTile(6, 15)
+        nearbySeenTile = map.GetTile(6, 12)
+        farSeenTile = map.GetTile(0, 0)
+        bot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][nearbySeenTile] = True
+        bot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][farSeenTile] = True
+
+        negatives = BotCityOps._get_opponent_seen_neutral_city_pathing_negatives(bot, neutralCity)
+
+        self.assertIn(nearbySeenTile, negatives)
+        self.assertNotIn(farSeenTile, negatives)
+        self.assertNotIn(neutralCity, negatives)
+        for cityApproachTile in neutralCity.movable:
+            self.assertNotIn(cityApproachTile, negatives)
+
+    def test_should_not_build_opponent_seen_neutral_city_pathing_negatives_when_enemy_owns_real_visible_source(self):
+        mapFile = 'GameContinuationEntries/should_find_neutral_city_path___sPHQbQG0c---1--200.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 200, fill_out_tiles=True)
+        bot = type('CityPathingNegativeTestBot', (), {})()
+        bot._map = map
+        bot.targetPlayer = enemyGeneral.player
+        bot.opponent_tracker = OpponentTracker(map)
+        neutralCity = map.GetTile(6, 15)
+        visibleSource = neutralCity.visibleTo[0]
+        visibleSource.player = enemyGeneral.player
+        visibleSource.isTempFogPrediction = False
+        nearbySeenTile = map.GetTile(6, 12)
+        bot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][nearbySeenTile] = True
+
+        negatives = BotCityOps._get_opponent_seen_neutral_city_pathing_negatives(bot, neutralCity)
+
+        self.assertEqual(set(), negatives)
 
     def test_should_capture_nearby_neutral_city_quickly(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2053,3 +2094,23 @@ class CityGatherTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwnedXY(1, 19)
+
+    def test_should_immediately_take_city_to_equalize(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_immediately_take_city_to_equalize___gBye2e4TL---1--300.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 300, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=300)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        bot.info_render_enemy_vision_data = True
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(7, 6)

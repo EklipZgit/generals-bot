@@ -558,6 +558,7 @@ def convert_contiguous_tile_tree_to_gather_capture_plan(
         includeGatherPriorityAsEconValues: bool = False,
         includeCapturePriorityAsEconValues: bool = True,
         tilesToHalf: TileSet | None = None,
+        override_army_cost_matrix: MapMatrixInterface[float] | None = None,
         viewInfo=None,
 ) -> GatherCapturePlan:
     """
@@ -572,6 +573,7 @@ def convert_contiguous_tile_tree_to_gather_capture_plan(
     @param useTrueValueGathered: if True, the gathered_value will be the RAW army that ends up on the target tile(s) rather than just the sum of friendly army gathered, excluding army lost traversing enemy tiles.
     @param includeGatherPriorityAsEconValues: if True, the priority matrix values of gathered nodes will be included in the econValue of the plan for gatherNodes.
     @param includeCapturePriorityAsEconValues: if True, the priority matrix values of CAPTURED nodes will be included in the econValue of the plan for enemy tiles in the plan.
+    @param override_army_cost_matrix: if included, the gather army amounts summed on the nodes will come from here instead of from the raw army on the tiles.
     @param viewInfo: if included, gather values will be written the viewInfo debug output
     @return:
     """
@@ -587,6 +589,7 @@ def convert_contiguous_tile_tree_to_gather_capture_plan(
         priorityMatrix=priorityMatrix,
         includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
         includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+        overrideArmyCostsFromMatrix=override_army_cost_matrix,
         viewInfo=viewInfo,
         cloneNodes=False,
         tilesToHalf=tilesToHalf,

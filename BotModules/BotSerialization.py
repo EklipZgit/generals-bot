@@ -216,6 +216,7 @@ class BotSerialization:
             f'targetPlayer={bot.targetPlayer} '
             f'teamStatsNoneByTeam={teamStatsNoneByTeam}'
         )
+        BotSerialization.load_army_tracker_seen_tiles(bot, resume_data)
         if bot.targetPlayer >= 0:
             bot._lastTargetPlayerCityCount = bot.opponent_tracker.get_current_team_scores_by_player(bot.targetPlayer).cityCount
 
@@ -270,6 +271,22 @@ class BotSerialization:
     @staticmethod
     def convert_bool_map_matrix_to_string(bot: EklipZBot, mapMatrix: MapMatrixInterface[bool] | MapMatrixSet) -> str:
         return ''.join(["1" if mapMatrix[tile] else "0" for tile in bot._map.get_all_tiles()])
+
+    @staticmethod
+    def convert_army_tracker_seen_tiles_to_string(bot: EklipZBot) -> str:
+        data = []
+        for player in bot._map.players:
+            playerChar = PLAYER_CHAR_BY_INDEX[player.index]
+            seenTiles = bot.armyTracker.seen_tiles_by_player[player.index]
+            data.append(f'seen_tiles_{playerChar}={BotSerialization.convert_bool_map_matrix_to_string(bot, seenTiles)}')
+        return '\n'.join(data)
+
+    @staticmethod
+    def load_army_tracker_seen_tiles(bot: EklipZBot, resume_data: typing.Dict[str, str]):
+        for player in bot._map.players:
+            key = f'seen_tiles_{PLAYER_CHAR_BY_INDEX[player.index]}'
+            if key in resume_data:
+                bot.armyTracker.seen_tiles_by_player[player.index] = BotSerialization.convert_string_to_bool_map_matrix(bot, resume_data[key])
 
     @staticmethod
     def convert_tile_set_to_string(bot: EklipZBot, tiles: typing.Set[Tile]) -> str:

@@ -2990,17 +2990,6 @@ class DefenseTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
         self.assertNoFriendliesKilled(map, general)
 
-
-# 78f 92p with the flipThingy - 0 instead of - 1, hybrid int, new defense move prio (with root dist base)
-# 76f 94p ^ but with flipThingy = 1
-# 82f 88p ^ with intercept def hybrid fixed so it actually triggers
-# 85f 85p ^ but flipthingy 0 again
-# 82f 88p ^ reverted
-# 98f 74p threatDist and depthDist swapped
-# 87f 84p realDist moved first
-# 84f 124p 4ig nextTileDepthDist + bMap[nextTile] as priority heuristic for defense, plus some choke tweaks
-# 83f 146p 4ig idk been a million changes since then. New priority? Idfk.
-
     def test_should_hit_threat_tile_not_parallel(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_hit_threat_tile_not_parallel___IODJNqzum---0--294.txtmap'
@@ -3282,3 +3271,14 @@ class DefenseTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertLess(playerMap.At(12,15).army, 15)
+
+# 78f 92p with the flipThingy - 0 instead of - 1, hybrid int, new defense move prio (with root dist base)
+# 76f 94p ^ but with flipThingy = 1
+# 82f 88p ^ with intercept def hybrid fixed so it actually triggers
+# 85f 85p ^ but flipthingy 0 again
+# 82f 88p ^ reverted
+# 98f 74p threatDist and depthDist swapped
+# 87f 84p realDist moved first
+# 84f 124p 4ig nextTileDepthDist + bMap[nextTile] as priority heuristic for defense, plus some choke tweaks
+# 83f 146p 4ig idk been a million changes since then. New priority? Idfk.
+# 77f 151p 5ig idk still, probably just fixed map loader issues.

@@ -123,6 +123,7 @@ class BotKillTiming:
             preferNeutral=False,
             fromTile=bot.general,
             preferEnemy=False,
+            avoidEnemyVision=True,
         )
 
     @staticmethod

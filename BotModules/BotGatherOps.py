@@ -146,7 +146,7 @@ class BotGatherOps:
         gathStartTime = time.perf_counter()
         gatherTargets = bot.target_player_gather_targets.copy()
         gatherTargets = bot.defensive_spanning_tree.copy()
-        path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing)
+        path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing, avoidEnemyVision=True, avoidUsingExpandables=True)
         gatherTargets.update(path.tileList)
         if bot.likely_kill_push and bot.enemy_attack_path is not None:
             gatherTargets = bot.enemy_attack_path.tileSet.copy()
@@ -328,7 +328,7 @@ class BotGatherOps:
                 useTrueValueGathered = True
 
                 gatherTargets = bot.defensive_spanning_tree.copy()
-                path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing)
+                path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing, avoidUsingExpandables=False)
                 gatherTargets.update(path.tileList)
                 if bot.likely_kill_push and bot.enemy_attack_path is not None:
                     gatherTargets = bot.enemy_attack_path.tileSet.copy()
@@ -526,6 +526,9 @@ class BotGatherOps:
 
                 if distancePriorities is None:
                     distancePriorities = bot.board_analysis.intergeneral_analysis.bMap
+                # priorityMatrix = priorityMatrix.copy()
+                # priorityMatrix.negate_in_place()
+
                 move, value, turnsUsed, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
                     bot,
                     startTiles,
@@ -539,6 +542,7 @@ class BotGatherOps:
                     leafMoveSelectionValueFunc=gatherNodeMoveSelectorFunc,
                     priorityMatrix=priorityMatrix,
                     shouldLog=logStuff,
+                    # maximizeArmyGatheredPerTurn=pruneToValuePerTurn,
                 )
 
                 if gatherNodes is None:
@@ -596,9 +600,9 @@ class BotGatherOps:
 
                 if bot.info_render_gather_values and priorityMatrix:
                     for t in bot._map.reachable_tiles:
-                        val = priorityMatrix[t]
+                        val = priorityMatrix.raw[t.tile_index]
                         if val:
-                            bot.viewInfo.topRightGridText[t] = f'g{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
+                            bot.viewInfo.topRightGridText.raw[t.tile_index] = f'g{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
                 move = BotGatherOps.get_tree_move_default(bot, bot.gatherNodes, gatherNodeMoveSelectorFunc)
                 if move is not None:
                     bot.curPath = None
@@ -888,6 +892,10 @@ class BotGatherOps:
             if currentPriorityObject is not None:
                 (_, nextIsNotEnemyCity, negCityCount, unfriendlyTileCount, negDistFromPlayArea, army, isNotEnemyCity) = currentPriorityObject
                 army -= 1
+            elif currentTile.player in frPlayers:
+                army -= currentTile.army  # we don't count the root tile in army calculations. We want to prioritize what we gather, not where it ends up.
+            else:
+                army += currentTile.army
             nextIsNotEnemyCity = isNotEnemyCity
             isNotEnemyCity = True
             if currentTile.player in frPlayers:
@@ -917,6 +925,10 @@ class BotGatherOps:
             if currentPriorityObject is not None:
                 (army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity) = currentPriorityObject
                 army -= 1
+            elif currentTile.player in frPlayers:
+                army -= currentTile.army  # we don't count the root tile in army calculations. We want to prioritize what we gather, not where it ends up.
+            else:
+                army += currentTile.army
             nextIsNotEnemyCity = isNotEnemyCity
             isNotEnemyCity = True
             if currentTile.player in frPlayers:
@@ -950,6 +962,10 @@ class BotGatherOps:
                 else:
                     (prioVal, army, nextIsNotEnemyCity, negDistFromPlayArea, isNotEnemyCity) = currentPriorityObject
                 army -= 1
+            elif currentTile.player in frPlayers:
+                army -= currentTile.army  # we don't count the root tile in army calculations. We want to prioritize what we gather, not where it ends up.
+            else:
+                army += currentTile.army
             nextIsNotEnemyCity = isNotEnemyCity
             isNotEnemyCity = True
             if currentTile.player in frPlayers:
@@ -967,8 +983,8 @@ class BotGatherOps:
             else:
                 army -= currentTile.army
             prioVal = army - 5 * negDistFromPlayArea
-            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
-                logbook.info(f'prio at {currentTile} = {prioVal} (dist={-negDistFromPlayArea}, army={army})')
+            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE and currentTile.coords in [(9,12), (2,15), (2, 14), (9,11), (2,8)]:
+                logbook.info(f'prio at {currentTile} = {prioVal} (dist={-negDistFromPlayArea}, army={army}), {currentPriorityObject}')
 
             if delayCities:
                 # When delayCities is True, set isntDelayableCity to False for cities/generals (making them lower priority)
@@ -1132,6 +1148,7 @@ class BotGatherOps:
             if bot.gather_use_max_set and not isinstance(targets, dict):
                 with bot.perf_timer.begin_move_event(f'gath_max_set {gatherTurns}t'):
                     gatherMatrix = BotGatherOps.get_gather_tiebreak_matrix(bot)
+                    # gatherMatrix = BotGatherOps.get_gather_tiebreak_matrix(bot) if priorityMatrix is None else priorityMatrix
                     captureMatrix = BM.BotExpansionOps.BotExpansionOps.get_expansion_weight_matrix(bot)
                     valueMatrix = Gather.build_gather_capture_pure_value_matrix(
                         bot._map,
@@ -1149,6 +1166,14 @@ class BotGatherOps:
                         captureMatrix=captureMatrix,
                         useTrueValueGathered=True,
                         prioritizeCaptureHighArmyTiles=False)
+                    if bot.info_render_gather_values:
+                        for t in bot._map.reachable_tiles:
+                            val = valueMatrix.raw[t.tile_index]
+                            if val:
+                                bot.viewInfo.midRightGridText.raw[t.tile_index] = f'v{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
+                            val = armyCostMatrix.raw[t.tile_index]
+                            if val:
+                                bot.viewInfo.bottomMidRightGridText.raw[t.tile_index] = f'a{str(round(val, 3)).lstrip("0").replace("-0", "-")}'
                     plan = Gather.gather_max_set_iterative_plan(
                         bot._map,
                         targets,
@@ -1161,7 +1186,8 @@ class BotGatherOps:
                         fastMode=True,
                         maximizeValuePerTurn=maximizeArmyGatheredPerTurn,
                         useTrueValueGathered=useTrueValueGathered,
-                        cutoffTime=time.perf_counter() + maxTime
+                        cutoffTime=time.perf_counter() + maxTime,
+                        skipTiles=skipTiles,
                     )
                     gatherNodes = []
                     if plan and plan.root_nodes:
@@ -1183,7 +1209,8 @@ class BotGatherOps:
                         priorityMatrix=priorityMatrix,
                         cutoffTime=time.perf_counter() + maxTime,
                         shouldLog=shouldLog,
-                        fastMode=fastMode)
+                        fastMode=fastMode,
+                        skipTiles=skipTiles)
 
             if maximizeArmyGatheredPerTurn:
                 turns, value, gatherNodes = Gather.prune_mst_to_max_army_per_turn_with_values(

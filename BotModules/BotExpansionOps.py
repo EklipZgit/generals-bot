@@ -105,13 +105,7 @@ class BotExpansionOps:
                 condensedOptions.append(longestOption)
                 seenOptions.add(longestOption)
 
-        if len(condensedOptions) > 10:
-            condensedOptions = [
-                option for option in condensedOptions
-                if option.econValue / max(option.length, 1) >= 0.8
-            ]
-
-        return condensedOptions
+        return sorted(condensedOptions, key=lambda option: option.econValue / option.length, reverse=True)
 
     @staticmethod
     def _log_intercept_option_info(bot: EklipZBot, option: InterceptionOptionInfo, useBotInfo: bool) -> None:
@@ -605,8 +599,10 @@ class BotExpansionOps:
                     interceptOptionsToLog.append(option)
 
             botInfoInterceptOptions = set(BotExpansionOps._get_condensed_intercept_options_for_info(interceptOptionsToLog))
+            i = 0
             for option in interceptOptionsToLog:
-                BotExpansionOps._log_intercept_option_info(bot, option, option in botInfoInterceptOptions)
+                i += 1
+                BotExpansionOps._log_intercept_option_info(bot, option, option in botInfoInterceptOptions and i < 9)
             if bot.city_capture_plan_option is not None:
                 addlOptions.append(bot.city_capture_plan_option)
                 bot.info(f'opt ntCity {bot.city_capture_plan_option.econValue / max(bot.city_capture_plan_option.length, 1):.2f} ({bot.city_capture_plan_option.econValue:.1f}e/{bot.city_capture_plan_option.length}t) {str(bot.city_capture_plan_option)}')

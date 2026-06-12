@@ -99,6 +99,7 @@ def get_gather_plan_set_prune(
         useTrueValueGathered=useTrueValueGathered,
         includeGatherPriorityAsEconValues=includeGatherPriorityAsEconValues,
         includeCapturePriorityAsEconValues=includeCapturePriorityAsEconValues,
+        # override_army_cost_matrix=valueMatrix,  #??????
         # viewInfo=viewInfo,
     )
 

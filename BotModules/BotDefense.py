@@ -2232,13 +2232,13 @@ class BotDefense:
                 bot.info(f'LKP=F +defense opp={oppArmy}+10-{halfDist} <= our={playerArmy} gpath={gathPathSum}')
                 bot.likely_kill_push = False
             if cycleDifferential < -halfDist:
-                bot.viewInfo.add_info_line(f'OT oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}, but gathered enough that we dont care?')
+                bot.viewInfo.add_info_line(f'OT opp{oppArmy}a vs {playerArmy}a - cycDif {cycleDifferential}, but gathered enough that we dont care?')
             return False
         else:
             bot.info(f'LKP=? -defense opp={oppArmy}+10-halfDist{halfDist} > our={playerArmy} (gpath={gathPathSum})')
 
         if cycleDifferential < -halfDist and oppArmy >= playerArmy:
-            bot.viewInfo.add_info_line(f'DEFENDING! OT gathCyc oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}')
+            bot.viewInfo.add_info_line(f'DEF! OT gathCyc opp{oppArmy}a vs {playerArmy}a - cycDif {cycleDifferential} < -halfDist {halfDist}')
             bot.defend_economy = True
             return True
 
@@ -2248,7 +2248,7 @@ class BotDefense:
             return bot.defend_economy
 
         if oppArmy >= (playerArmy + 10) * 1.1 and cycleDifferential < 5 and minimallyWinningOnEcon:
-            bot.viewInfo.add_info_line(f'DEFENDING! OT army oppArmy {oppArmy} vs {playerArmy} - gathMoveDiff {cycleDifferential}')
+            bot.viewInfo.add_info_line(f'DEF! OT army opp{oppArmy}a vs {playerArmy}a - cycDif {cycleDifferential}')
             return True
 
         return bot.defend_economy

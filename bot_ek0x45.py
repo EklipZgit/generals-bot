@@ -766,7 +766,7 @@ class EklipZBot(object):
                             limitNearbyTileRange = -1
                             if len(self._map.players) > 4:
                                 limitNearbyTileRange = 12
-                            altEnGenPositions = BotTargeting.get_target_player_possible_general_location_tiles_sorted(self, elimNearbyRange=2, player=player.index, cutoffEmergenceRatio=0.3, limitNearbyTileRange=limitNearbyTileRange)
+                            altEnGenPositions = BotTargeting.get_target_player_possible_general_location_tiles_sorted(self, elimNearbyRange=2, player=player.index, cutoffEmergenceRatio=0.3, limitNearbyTileRange=limitNearbyTileRange, requirePredictedFogTeamTile=True)
                             self.alt_en_gen_positions[player.index] = altEnGenPositions
                             self._alt_en_gen_position_distances[player.index] = None
 

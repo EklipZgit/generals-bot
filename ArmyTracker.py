@@ -3422,6 +3422,9 @@ class ArmyTracker(object):
             self.re_limit_player_gen_locations(p, playerElims)
 
     def re_limit_player_gen_locations(self, player: int, playerElimEvents: typing.Dict[Tile, int]):
+        # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_move_our_own_general_around_the_board_randomly - replayed emergence limits are enemy fog predictions and must not relimit authoritative friendly generals.
+        if player == self.map.player_index or player in self.map.teammates:
+            return
         for prevElimTile, prevElimDist in playerElimEvents.items():
             cityPerfectInfo = prevElimTile in self.uneliminated_emergence_event_city_perfect_info[player]
             logbook.info(f'RE-eliminating p{player} t{prevElimTile} d{prevElimDist}, perfectCity{cityPerfectInfo}')
@@ -4627,6 +4630,16 @@ class ArmyTracker(object):
             return
         if self.map.players[player].dead:
             return
+        if player == self.map.player_index:
+            logbook.warning(f'Attempted _check_over_elimination for self {player} who is always visible...?')
+            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                raise AssertionError(f'Attempted _check_over_elimination for self {player} who is always visible...?')
+            return
+        if player in self.map.teammates:
+            logbook.warning(f'Attempted _check_over_elimination for teammate {player} who is always visible...?')
+            if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
+                raise AssertionError(f'Attempted _check_over_elimination for teammate {player} who is always visible...?')
+            return
 
         validGenPos = self.valid_general_positions_by_player[player]
         numValid = 0
@@ -4679,7 +4692,8 @@ class ArmyTracker(object):
             playerEvents = self.uneliminated_emergence_events[player]
             for tile, distance in list(playerEvents.items()):
                 playerEvents[tile] = distance + 2
-            # self.re_limit_player_gen_locations(player, playerEvents)
+            # TODO why was this commented out?
+            self.re_limit_player_gen_locations(player, playerEvents)
 
     @classmethod
     def get_expected_enemy_expansion_path(

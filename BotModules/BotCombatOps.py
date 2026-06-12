@@ -215,7 +215,7 @@ class BotCombatOps:
                             with bot.perf_timer.begin_move_event(f'QK WRP {startTile} tgA {cutoffKillArmy}'):
                                 maxTime = 0.020
 
-                                toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=cutoffEmergence, includeCities=False)
+                                toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=cutoffEmergence, includeCities=False, requirePredictedFogTeamTile=True)
 
                                 wrpPath = WatchmanRouteUtils.get_watchman_path(
                                     bot._map,
@@ -467,7 +467,7 @@ class BotCombatOps:
         if againstPlayer is None:
             againstPlayer = bot.targetPlayer
 
-        toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=againstPlayer, cutoffEmergenceRatio=enGenProbabilityCutoff, includeCities=False)
+        toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=againstPlayer, cutoffEmergenceRatio=enGenProbabilityCutoff, includeCities=False, requirePredictedFogTeamTile=True)
         if not toReveal:
             return 0.0
         for t in toReveal:

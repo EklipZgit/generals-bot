@@ -48,8 +48,13 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$LogFilePath,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
+    [Alias("Scope")]
     [string]$ScopeName,
+
+    [Parameter(Mandatory=$false)]
+    [Alias("IncludeTurnTimingsSummary")]
+    [switch]$IncludeTurnTimings,
 
     [Parameter(ValueFromPipeline=$true)]
     [string[]]$PipedInput
@@ -81,18 +86,75 @@ if ($pipedLines.Count -gt 0) {
     exit 1
 }
 
+if (-not $ScopeName -and -not $IncludeTurnTimings) {
+    Write-Error "Provide -ScopeName, -IncludeTurnTimings, or both."
+    exit 1
+}
+
+function Get-TurnTimingsSummary {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$TurnContent,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TurnNumber
+    )
+
+    $timingsMatch = [regex]::Match($TurnContent, "(?m)^\s*\d{2}:\d{2}\.\d+:\s*MOVE $([regex]::Escape($TurnNumber)) TIMINGS:\s*$")
+    if (-not $timingsMatch.Success) {
+        return $null
+    }
+
+    $summaryStartIndex = $timingsMatch.Index
+    $prefixContent = $TurnContent.Substring(0, $timingsMatch.Index)
+    $lastEndMarkerMatch = $null
+    foreach ($endMarkerMatch in [regex]::Matches($prefixContent, $endPattern)) {
+        $lastEndMarkerMatch = $endMarkerMatch
+    }
+
+    if ($lastEndMarkerMatch -ne $null) {
+        $summaryStartIndex = $lastEndMarkerMatch.Index
+    }
+
+    $afterTimings = $TurnContent.Substring($timingsMatch.Index)
+    $mainThreadMatch = [regex]::Match($afterTimings, "(?m)^\s*\d{2}:\d{2}\.\d+:\s*$\r?\n\s*vvv--------------vvv\s*$\r?\n\s*Beginning\s+t$([regex]::Escape($TurnNumber)):\s*Main thread check for pygame exit")
+    $moveCompleteMatch = [regex]::Match($afterTimings, "(?m)^\s*(?:\d{2}:\d{2}\.\d+:\s*)?MOVE Complete:\s*$([regex]::Escape($TurnNumber))\b")
+
+    $summaryEndIndex = $TurnContent.Length
+    if ($mainThreadMatch.Success) {
+        $summaryEndIndex = $timingsMatch.Index + $mainThreadMatch.Index
+    }
+    if ($moveCompleteMatch.Success) {
+        $moveCompleteIndex = $timingsMatch.Index + $moveCompleteMatch.Index
+        if ($moveCompleteIndex -lt $summaryEndIndex) {
+            $summaryEndIndex = $moveCompleteIndex
+        }
+    }
+
+    return $TurnContent.Substring($summaryStartIndex, $summaryEndIndex - $summaryStartIndex).Trim()
+}
+
 # Regex patterns
 $turnPattern = '(?m)^\s*~~~\s*Turn (\d+)\s+\(([\d.]+)\)\s*~~~\s*$'
-$beginPattern = '(?m)^\s*Beginning:\s*([^\(]+)\s*\(([^\)]+)\)'
-$completePattern = '(?m)^\s*Complete:\s*\(([^\)]+)\)\s*([^\s]+)'
+$beginPattern = '(?m)^\s*Beginning t\d+:\s([^\(]+)\s*\(([^\)]+)\)'
+$completePattern = '(?m)^\s*Complete t\d+:\s\(([^\)]+)\)\s*([^\s]+)'
 $vvvPattern = '(?m)^\s*vvv--------------vvv\s*$'
 $endPattern = '(?m)^\s*\^\^\^--------------\^\^\^\s*$'
 
 # Find all turns
 $turnMatches = [regex]::Matches($logContent, $turnPattern)
 $turns = @($turnMatches)  # Convert to array for IndexOf method
+$scopeRegexPattern = $null
+if ($ScopeName) {
+    $scopeRegexParts = $ScopeName -split "\|" | ForEach-Object { [regex]::Escape($_) }
+    $scopeRegexPattern = $scopeRegexParts -join "|"
+}
 
-Write-Host "Extracting logs for scope: $ScopeName"
+if ($ScopeName) {
+    Write-Host "Extracting logs for scope: $ScopeName"
+} else {
+    Write-Host "Extracting turn timings summaries"
+}
 Write-Host "Found $($turns.Count) turns in log file"
 
 for ($turnIndex = 0; $turnIndex -lt $turns.Count; $turnIndex++) {
@@ -113,11 +175,17 @@ for ($turnIndex = 0; $turnIndex -lt $turns.Count; $turnIndex++) {
         $turnContent = $logContent.Substring($turnStartIndex, $nextTurnIndex - $turnStartIndex)
     }
 
-    # Find the target scope within this turn
-    $scopeBeginPattern = "Beginning:\s*([^\(]*$([regex]::Escape($ScopeName))[^\(]*)\s*\(([^\)]+)\)"
-    $scopeBeginMatch = [regex]::Match($turnContent, $scopeBeginPattern)
+    $wroteTurnOutput = $false
 
-    if ($scopeBeginMatch.Success) {
+    if ($ScopeName) {
+        $scopeBeginPattern = "(?m)^\s*(?:\d{2}:\d{2}\.\d+:\s*)?Beginning(?:\s+t\d+)?:\s*([^\(]*(?:$scopeRegexPattern)[^\(]*)\s*\(([^\)]+)\)"
+        $scopeBeginMatches = [regex]::Matches($turnContent, $scopeBeginPattern)
+    } else {
+        $scopeBeginMatches = @()
+    }
+
+    foreach ($scopeBeginMatch in $scopeBeginMatches) {
+        $matchedScopeName = $scopeBeginMatch.Groups[1].Value.Trim()
         $scopeStartIndex = $scopeBeginMatch.Index
 
         # Find the first Complete statement that contains our scope name
@@ -128,7 +196,7 @@ for ($turnIndex = 0; $turnIndex -lt $turns.Count; $turnIndex++) {
         $currentPos = 0
 
         foreach ($line in $lines) {
-            if ($line -match "Complete:\s*\([^\)]+\)\s+$([regex]::Escape($ScopeName))") {
+            if ($line -match "^\s*(?:\d{2}:\d{2}\.\d+:\s*)?Complete(?:\s+t\d+)?:\s*\([^\)]+\)\s+$([regex]::Escape($matchedScopeName))\s*$") {
                 $scopeEndIndex = $scopeStartIndex + $currentPos + $line.Length
                 break
             }
@@ -142,6 +210,7 @@ for ($turnIndex = 0; $turnIndex -lt $turns.Count; $turnIndex++) {
             Write-Output "       Turn $turnNumber   ($turnTiming)"
             Write-Output "       ~~~"
             Write-Output $scopeContent.Trim()
+            $wroteTurnOutput = $true
 
             # Extract any AssertionError / Traceback that follows in the same turn block.
             # In piped pytest output, the full traceback arrives as a single long line with
@@ -168,6 +237,22 @@ for ($turnIndex = 0; $turnIndex -lt $turns.Count; $turnIndex++) {
         } else {
             Write-Host "WARNING: Could not find Complete statement for scope in turn $turnNumber"
             Write-Host $scopeBeginMatch.Value
+        }
+    }
+
+    if ($IncludeTurnTimings) {
+        $turnTimingsSummary = Get-TurnTimingsSummary -TurnContent $turnContent -TurnNumber $turnNumber
+        if ($turnTimingsSummary) {
+            if (-not $wroteTurnOutput) {
+                Write-Output "       ~~~"
+                Write-Output "       Turn $turnNumber   ($turnTiming)"
+                Write-Output "       ~~~"
+            } else {
+                Write-Output "--- TURN TIMINGS SUMMARY ---"
+            }
+            Write-Output $turnTimingsSummary
+            Write-Output ""
+            Write-Output ""
         }
     }
 }

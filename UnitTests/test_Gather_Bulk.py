@@ -10,6 +10,7 @@ import DebugHelper
 import Gather
 from BenchmarkTools import GatherBenchmarker, GatherSort
 from Gather import GatherCapturePlan, GatherDebug
+from MapMatrix import MapMatrix
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Sim.TextMapLoader import TextMapLoader
@@ -29,6 +30,40 @@ class GatherBulkTests(TestBase):
         DebugHelper.IS_DEBUGGING = True
 
         return bot
+
+    def test_prune_set_by_articulation_points_handles_isolated_valid_tiles(self):
+        testData = """
+|    |    |
+aG1  a1   a1
+a1   a1   a1
+a1   a1   bG1
+|    |    |
+player_index=0
+        """
+        map, _, _ = self.load_map_and_generals_from_string(testData, 100)
+        firstIsolatedTile = map.GetTile(0, 0)
+        secondIsolatedTile = map.GetTile(2, 2)
+        toPrune = {firstIsolatedTile, secondIsolatedTile}
+        valueMatrix = MapMatrix(map, 1.0)
+        armyCostMatrix = MapMatrix(map, 1.0)
+        pruneReconnectCountMatrix = MapMatrix(map, 0)
+
+        currentGathVal, currentArmySum, pruned = Gather.prune_set_by_articulation_points(
+            map,
+            set(),
+            toPrune,
+            1,
+            valueMatrix,
+            armyCostMatrix,
+            pruneReconnectCountMatrix,
+            2.0,
+            2.0,
+            None)
+
+        self.assertEqual(1, len(pruned))
+        self.assertEqual(1, len(toPrune))
+        self.assertEqual(1.0, currentGathVal)
+        self.assertEqual(1.0, currentArmySum)
 
     def run_adversarial_gather_test_all_algorithms(
             self,

@@ -193,6 +193,65 @@ bScore=1
         self.assertEqual(0, ownedTile.player)
         self.assertFalse(ownedTile.isGeneral)
 
+    def test_check_over_elimination_does_not_move_our_authoritative_general(self):
+        testData = """
+|    |    |    |    |    |
+aG1       bG1
+
+                    a1
+|    |    |    |    |    |
+player_index=0
+aTiles=2
+aScore=2
+bTiles=1
+bScore=1
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 209, fill_out_tiles=False, player_index=0)
+        tracker = ArmyTracker(map)
+        wrongPredictionTile = map.GetTile(4, 2)
+        validPositions = tracker.valid_general_positions_by_player[0]
+        for tile in map.get_all_tiles():
+            validPositions.raw[tile.tile_index] = False
+        validPositions.raw[wrongPredictionTile.tile_index] = True
+
+        with self.assertRaises(AssertionError):
+            tracker._check_over_elimination(0)
+
+        self.assertEqual(general, map.generals[0])
+        self.assertTrue(general.isGeneral)
+        self.assertEqual(0, general.player)
+        self.assertFalse(wrongPredictionTile.isGeneral)
+        self.assertEqual(0, wrongPredictionTile.player)
+
+    def test_re_limit_player_gen_locations_does_not_replay_limits_for_our_authoritative_general(self):
+        testData = """
+|    |    |    |    |    |
+aG1       bG1
+
+                    a1
+|    |    |    |    |    |
+player_index=0
+aTiles=2
+aScore=2
+bTiles=1
+bScore=1
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 209, fill_out_tiles=False, player_index=0)
+        tracker = ArmyTracker(map)
+        wrongPredictionTile = map.GetTile(4, 2)
+        validPositions = tracker.valid_general_positions_by_player[0]
+        for tile in map.get_all_tiles():
+            validPositions.raw[tile.tile_index] = False
+        validPositions.raw[wrongPredictionTile.tile_index] = True
+
+        tracker.re_limit_player_gen_locations(0, {wrongPredictionTile: 89})
+
+        self.assertEqual(general, map.generals[0])
+        self.assertTrue(general.isGeneral)
+        self.assertEqual(0, general.player)
+        self.assertFalse(wrongPredictionTile.isGeneral)
+        self.assertEqual(0, wrongPredictionTile.player)
+
     def run_generated_adj_test(self, aArmy, aMove, bArmy, bMove, data, debugMode):
         map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 97, fill_out_tiles=False, player_index=0)
         aTile = map.GetTile(1, 1)

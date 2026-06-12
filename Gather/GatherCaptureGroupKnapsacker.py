@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import enum
+import typing
 from contextlib import nullcontext
 from dataclasses import dataclass
+
+from ortools.linear_solver import pywraplp
+from ortools.sat.python.cp_model import CpModel
 
 import KnapsackUtils
 import logbook
 from Algorithms.FastDisjointSet import FastDisjointSet
 from PerformanceTimer import PerformanceTimer
+from base.client.tile import Tile
+from ortools.sat.python import cp_model
 
 
 @dataclass(slots=True)
@@ -84,6 +91,356 @@ class GroupedKnapsackGroupState:
     frontier_by_input_group: dict[int, list[tuple[int, float, int]]]
     max_econ_value: float
     max_turns: int
+
+
+class TilePlanOptionProtocol(typing.Protocol):
+    length: int
+    """The weight of this item in the knapsack."""
+
+    tileSet: set[Tile]
+    """Set of all used tiles that are used by this option."""
+
+    econValue: float
+    """Converted to integer at value_multiple and used as the value to maximize."""
+
+
+@dataclass(slots=True)
+class GenericTilePlanOption:
+    item: typing.Any
+    """The original item that the solver result returns."""
+
+    length: int
+    """The weight of this item in the knapsack."""
+
+    tileSet: set[Tile]
+    """Set of all used tiles that are used by this option."""
+
+    econValue: float
+    """Converted to integer at value_multiple and used as the value to maximize."""
+
+
+@dataclass(slots=True)
+class TilePlanOptionConflictConstraints:
+    tile_to_option_indices: dict[int, list[int]]
+    mutually_exclusive_option_indices_by_tile: list[list[int]]
+
+
+@dataclass(slots=True)
+class TilePlanOptionKnapsackResult:
+    max_value: int
+    chosen_indices: list[int]
+    chosen_weight: int
+    chosen_items: list[typing.Any]
+    solver_status: int
+
+
+class PlanSolver(enum.Enum):
+    MkcpPlusGreedyConflictResolution = enum.auto()
+    CpSat = enum.auto()
+    MpCbc = enum.auto()
+    MpScip = enum.auto()
+
+
+def build_tile_plan_option_conflict_constraints(
+        options: list[TilePlanOptionProtocol]
+) -> TilePlanOptionConflictConstraints:
+    """
+    Build the tile ownership constraints for exact tile-plan option knapsack solving.
+
+    Each returned mutually-exclusive group represents all option indices that use one tile;
+    a solver should constrain the sum of that group's selected booleans to be at most one.
+    """
+    tile_to_option_indices: dict[int, list[int]] = {}
+    for option_index, option in enumerate(options):
+        for tile in option.tileSet:
+            optionIndexes = tile_to_option_indices.get(tile.tile_index, None)
+            if not optionIndexes:
+                optionIndexes = []
+                tile_to_option_indices[tile.tile_index] = optionIndexes
+            optionIndexes.append(option_index)
+
+    mutually_exclusive_option_indices_by_tile = [
+        option_indices
+        for option_indices in tile_to_option_indices.values()
+        if len(option_indices) > 1
+    ]
+    return TilePlanOptionConflictConstraints(
+        tile_to_option_indices=tile_to_option_indices,
+        mutually_exclusive_option_indices_by_tile=mutually_exclusive_option_indices_by_tile)
+
+
+def solve_tile_plan_options(
+        options: list[TilePlanOptionProtocol],
+        turn_budget: int,
+        solver: PlanSolver,
+        value_multiple: int = 10000,
+) -> TilePlanOptionKnapsackResult:
+    """
+    Dispatch protocol-based tile-plan option solving to a selected backend.
+    """
+    if solver == PlanSolver.CpSat:
+        return solve_tile_plan_options_with_cp_sat(options, turn_budget, value_multiple)
+    if solver == PlanSolver.MpCbc:
+        return solve_tile_plan_options_with_mp_cbc(options, turn_budget, value_multiple)
+    if solver == PlanSolver.MpScip:
+        return solve_tile_plan_options_with_mp_scip(options, turn_budget, value_multiple)
+    if solver == PlanSolver.MkcpPlusGreedyConflictResolution:
+        raise NotImplementedError('PlanSolver.MkcpPlusGreedyConflictResolution will be wired after grouped MKCP input is abstracted.')
+    raise ValueError(f'Unsupported plan solver {solver!r}')
+
+
+def solve_tile_plan_options_with_cp_sat(
+        options: list[TilePlanOptionProtocol],
+        turn_budget: int,
+        value_multiple: int = 10000,
+) -> TilePlanOptionKnapsackResult:
+    """
+    Solve an exact 0/1 knapsack with tile-conflict constraints using OR-Tools CP-SAT.
+
+    Returns the original option items when options are GenericTilePlanOption instances;
+    otherwise returns the option objects themselves.
+    """
+    constraints = build_tile_plan_option_conflict_constraints(options)
+    values = _get_tile_plan_option_integer_values(options, value_multiple)
+    chosen_indices, max_value, solver_status = _solve_tile_plan_option_arrays_with_cp_sat(
+        turn_budget=turn_budget,
+        weights=[option.length for option in options],
+        values=values,
+        mutually_exclusive_option_indices_by_tile=constraints.mutually_exclusive_option_indices_by_tile)
+    return _build_tile_plan_option_result(options, values, chosen_indices, max_value, solver_status)
+
+
+def solve_tile_plan_options_with_existing_knapsack_solver(
+        options: list[TilePlanOptionProtocol],
+        turn_budget: int,
+        value_multiple: int = 10000,
+) -> TilePlanOptionKnapsackResult:
+    """
+    Solve the protocol-based tile-plan option knapsack through the current KnapsackUtils solver.
+
+    This wrapper exposes the same input and result shape as solve_tile_plan_options_with_cp_sat so callers can swap solver
+    function names easily. It does not enforce tile-conflict constraints because the current KnapsackUtils 0/1 solver only
+    supports capacity and value arrays.
+    """
+    values = _get_tile_plan_option_integer_values(options, value_multiple)
+    max_value, chosen_indices = KnapsackUtils.solve_knapsack(
+        items=list(range(len(options))),
+        capacity=turn_budget,
+        weights=[option.length for option in options],
+        values=values)
+    return _build_tile_plan_option_result(options, values, chosen_indices, max_value, cp_model.OPTIMAL)
+
+
+def solve_tile_plan_options_with_mp_cbc(
+        options: list[TilePlanOptionProtocol],
+        turn_budget: int,
+        value_multiple: int = 10000,
+) -> TilePlanOptionKnapsackResult:
+    """
+    Solve an exact 0/1 tile-plan knapsack with OR-Tools MPSolver using CBC.
+    """
+    return _solve_tile_plan_options_with_mp_solver_backend(
+        options=options,
+        turn_budget=turn_budget,
+        value_multiple=value_multiple,
+        backend_name='CBC')
+
+
+def solve_tile_plan_options_with_mp_scip(
+        options: list[TilePlanOptionProtocol],
+        turn_budget: int,
+        value_multiple: int = 10000,
+) -> TilePlanOptionKnapsackResult:
+    """
+    Solve an exact 0/1 tile-plan knapsack with OR-Tools MPSolver using SCIP.
+    """
+    return _solve_tile_plan_options_with_mp_solver_backend(
+        options=options,
+        turn_budget=turn_budget,
+        value_multiple=value_multiple,
+        backend_name='SCIP')
+
+
+def _solve_tile_plan_options_with_mp_solver_backend(
+        options: list[TilePlanOptionProtocol],
+        turn_budget: int,
+        value_multiple: int,
+        backend_name: str,
+) -> TilePlanOptionKnapsackResult:
+    """
+    Convert protocol options to integer arrays and solve with the requested MPSolver backend.
+    """
+    constraints = build_tile_plan_option_conflict_constraints(options)
+    values = _get_tile_plan_option_integer_values(options, value_multiple)
+    chosen_indices, max_value, solver_status = _solve_tile_plan_option_arrays_with_mp_solver(
+        turn_budget=turn_budget,
+        weights=[option.length for option in options],
+        values=values,
+        mutually_exclusive_option_indices_by_tile=constraints.mutually_exclusive_option_indices_by_tile,
+        backend_name=backend_name)
+    return _build_tile_plan_option_result(options, values, chosen_indices, max_value, solver_status)
+
+
+def _solve_tile_plan_option_arrays_with_cp_sat(
+        turn_budget: int,
+        weights: list[int],
+        values: list[int],
+        mutually_exclusive_option_indices_by_tile: list[list[int]],
+) -> tuple[list[int], int, int]:
+    """
+    Solve an exact 0/1 integer-array knapsack with optional tile-conflict constraints using OR-Tools CP-SAT.
+    """
+    model: CpModel = cp_model.CpModel()
+    selected_vars = [
+        model.new_bool_var(f'tile_plan_option_{option_index}')
+        for option_index in range(len(weights))
+    ]
+    model.add(sum(weights[option_index] * selected_vars[option_index] for option_index in range(len(weights))) <= turn_budget)
+    for mutually_exclusive_option_indices in mutually_exclusive_option_indices_by_tile:
+        model.add(sum(selected_vars[option_index] for option_index in mutually_exclusive_option_indices) <= 1)
+
+    model.maximize(sum(values[option_index] * selected_vars[option_index] for option_index in range(len(weights))))
+
+    solver = cp_model.CpSolver()
+    status = solver.solve(model)
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return [], 0, status
+
+    chosen_indices = [
+        option_index
+        for option_index, selected_var in enumerate(selected_vars)
+        if solver.value(selected_var) == 1
+    ]
+    return chosen_indices, sum(values[option_index] for option_index in chosen_indices), status
+
+
+def _solve_tile_plan_option_arrays_with_mp_solver(
+        turn_budget: int,
+        weights: list[int],
+        values: list[int],
+        mutually_exclusive_option_indices_by_tile: list[list[int]],
+        backend_name: str,
+) -> tuple[list[int], int, int]:
+    """
+    Solve an exact 0/1 integer-array knapsack with optional tile-conflict constraints using OR-Tools MPSolver.
+    """
+    solver = pywraplp.Solver.CreateSolver(backend_name)
+    if solver is None:
+        raise RuntimeError(f'OR-Tools MPSolver backend {backend_name!r} is not available in this environment.')
+
+    selected_vars = [
+        solver.BoolVar(f'tile_plan_option_{option_index}')
+        for option_index in range(len(weights))
+    ]
+    solver.Add(sum(weights[option_index] * selected_vars[option_index] for option_index in range(len(weights))) <= turn_budget)
+    for mutually_exclusive_option_indices in mutually_exclusive_option_indices_by_tile:
+        solver.Add(sum(selected_vars[option_index] for option_index in mutually_exclusive_option_indices) <= 1)
+
+    objective = solver.Objective()
+    for option_index, selected_var in enumerate(selected_vars):
+        objective.SetCoefficient(selected_var, values[option_index])
+    objective.SetMaximization()
+
+    status = solver.Solve()
+    if status not in (pywraplp.Solver.OPTIMAL, pywraplp.Solver.FEASIBLE):
+        return [], 0, status
+
+    chosen_indices = [
+        option_index
+        for option_index, selected_var in enumerate(selected_vars)
+        if selected_var.solution_value() > 0.5
+    ]
+    return chosen_indices, sum(values[option_index] for option_index in chosen_indices), status
+
+
+def _get_tile_plan_option_integer_values(
+        options: list[TilePlanOptionProtocol],
+        value_multiple: int
+) -> list[int]:
+    """
+    Convert protocol econ values to integer objective coefficients for integer-only solvers.
+    """
+    return [
+        int(round(option.econValue * value_multiple))
+        for option in options
+    ]
+
+
+def _build_tile_plan_option_result(
+        options: list[TilePlanOptionProtocol],
+        values: list[int],
+        chosen_indices: list[int],
+        max_value: int,
+        solver_status: int
+) -> TilePlanOptionKnapsackResult:
+    """
+    Convert chosen option indices into the shared protocol-based tile-plan knapsack result shape.
+    """
+    chosen_items = [
+        _get_tile_plan_option_return_item(options[option_index])
+        for option_index in chosen_indices
+    ]
+    return TilePlanOptionKnapsackResult(
+        max_value=max_value,
+        chosen_indices=chosen_indices,
+        chosen_weight=sum(options[option_index].length for option_index in chosen_indices),
+        chosen_items=chosen_items,
+        solver_status=solver_status)
+
+
+def _get_tile_plan_option_return_item(option: TilePlanOptionProtocol) -> typing.Any:
+    """
+    Return the wrapped source item for GenericTilePlanOption objects, or the option itself.
+    """
+    if isinstance(option, GenericTilePlanOption):
+        return option.item
+    return option
+
+
+def adapt_grouped_knapsack_input_to_tile_plan_options(
+        input_data: GroupedKnapsackInput
+) -> list[GenericTilePlanOption]:
+    """
+    Convert legacy grouped-knapsack arrays into the shared tile-plan option protocol shape.
+    """
+    return [
+        GenericTilePlanOption(
+            item=option_index,
+            length=input_data.weights[option_index],
+            tileSet={
+                Tile(tile_id, 0, tileIndex=tile_id)
+                for tile_id in input_data.item_tile_sets[option_index]
+            },
+            econValue=input_data.econ_values[option_index])
+        for option_index in range(len(input_data.weights))
+    ]
+
+
+def _build_grouped_knapsack_input_from_tile_plan_options(
+        options: list[TilePlanOptionProtocol],
+        turn_budget: int,
+        groups: list[int],
+        values: list[int],
+        is_external_item: dict[int, bool],
+        max_iterations: int,
+) -> GroupedKnapsackInput:
+    """
+    Rebuild the legacy grouped-knapsack structure from shared tile-plan options and grouped metadata.
+    """
+    return GroupedKnapsackInput(
+        turn_budget=turn_budget,
+        groups=groups,
+        weights=[option.length for option in options],
+        values=values,
+        econ_values=[option.econValue for option in options],
+        friendly_island_sets=[[] for _ in options],
+        target_island_sets=[[] for _ in options],
+        item_tile_sets=[
+            sorted(tile.tile_index for tile in option.tileSet)
+            for option in options
+        ],
+        is_external_item=is_external_item,
+        max_iterations=max_iterations)
 
 
 def _get_option_value_per_turn(input_data: GroupedKnapsackInput, index: int) -> float:
@@ -291,15 +648,51 @@ def solve_grouped_knapsack_input(
         noLogVerbose: bool = True,
         perfTimer: PerformanceTimer | None = None
 ) -> GroupedKnapsackResult:
-    turn_budget = input_data.turn_budget
+    """
+    Solve legacy grouped-knapsack input after adapting its option arrays to the shared tile-plan option interface.
+    """
+    options = adapt_grouped_knapsack_input_to_tile_plan_options(input_data)
+    return _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
+        options=options,
+        turn_budget=input_data.turn_budget,
+        groups=input_data.groups,
+        values=input_data.values,
+        is_external_item=input_data.is_external_item,
+        max_iterations=input_data.max_iterations,
+        noLog=noLog,
+        noLogVerbose=noLogVerbose,
+        perfTimer=perfTimer)
+
+
+def _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
+        options: list[TilePlanOptionProtocol],
+        turn_budget: int,
+        groups: list[int],
+        values: list[int],
+        is_external_item: dict[int, bool],
+        max_iterations: int,
+        noLog: bool = True,
+        noLogVerbose: bool = True,
+        perfTimer: PerformanceTimer | None = None
+) -> GroupedKnapsackResult:
+    """
+    Solve shared tile-plan options with the legacy MKCP grouping plus greedy tile-conflict repair flow.
+    """
+    input_data = _build_grouped_knapsack_input_from_tile_plan_options(
+        options=options,
+        turn_budget=turn_budget,
+        groups=groups,
+        values=values,
+        is_external_item=is_external_item,
+        max_iterations=max_iterations)
     weights = input_data.weights
-    values = input_data.values
     grouping = prune_and_get_groups_for_knapsack(input_data, noLog=noLog, noLogVerbose=noLogVerbose)
 
     active_idx = sorted(grouping.active_indices, key=lambda i: (grouping.groups_by_index[i], i))
     a_groups = [grouping.groups_by_index[i] for i in active_idx]
     a_weights = [weights[i] for i in active_idx]
     a_values = [values[i] for i in active_idx]
+
     max_value, chosen_orig_idx = KnapsackUtils.solve_multiple_choice_knapsack(
         active_idx, turn_budget, a_weights, a_values, a_groups, noLog=noLog, longRuntimeThreshold=10.0)
 
@@ -307,9 +700,9 @@ def solve_grouped_knapsack_input(
         grouping.groups_by_index[index]: index
         for index in chosen_orig_idx
     }
-    chosen_set = set(chosen_orig_idx)
-    chosen_weight = sum(weights[i] for i in chosen_set)
-    chosen_value = sum(values[i] for i in chosen_set)
+    chosen_set: set[int] = set(chosen_orig_idx)
+    chosen_weight: int = sum(weights[i] for i in chosen_set)
+    chosen_value: int = sum(values[i] for i in chosen_set)
 
     if chosen_weight < turn_budget - 3:
         for maybe in grouping.maybe_options:
@@ -399,7 +792,7 @@ def solve_grouped_knapsack_input(
                     f'replaced={_describe_grouped_knapsack_option(input_data, replaced_idx)} '
                     f'chosen_weight={chosen_weight}, chosen_value={chosen_value}')
 
-        considered_chosen_indices = sorted(
+        considered_chosen_indices: list[int] = sorted(
             chosen_set,
             key=lambda idx: (_get_option_value_per_turn(input_data, idx), values[idx], -weights[idx], idx))[:max(1, min(len(chosen_set), 8))]
         repair_capacity = sum(weights[idx] for idx in considered_chosen_indices)
@@ -462,6 +855,8 @@ def solve_grouped_knapsack_input(
             repair_groups = [repair_grouping.groups_by_index[i] for i in repair_active_idx]
             repair_weights = [repair_input.weights[i] for i in repair_active_idx]
             repair_values = [repair_input.values[i] for i in repair_active_idx]
+
+            repair_chosen_local_indices: list[int]
             repair_max_value, repair_chosen_local_indices = KnapsackUtils.solve_multiple_choice_knapsack(
                 repair_active_idx, repair_capacity, repair_weights, repair_values, repair_groups, noLog=noLog, longRuntimeThreshold=10.0)
         repair_chosen_original_indices = {

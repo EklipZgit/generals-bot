@@ -11,7 +11,7 @@ import logbook
 import time
 
 from PerformanceTimer import PerformanceTimer
-import PyMaxflowLocal as maxflow
+# import PyMaxflowLocal as maxflow
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
 from BehaviorAlgorithms.Flow.NxFlowGraphData import NxFlowGraphData

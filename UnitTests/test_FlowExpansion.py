@@ -2680,7 +2680,7 @@ player_index=0
                 bot = self.get_debug_render_bot(simHost, general.player)
                 bot.info_render_gather_values = True
                 bot.info_render_enemy_vision_data = False
-                bot.info_render_flow_expand = False
+                bot.info_render_flow_expand = True
                 bot.info_render_tile_islands = False
                 playerMap = simHost.get_player_map(general.player)
 
@@ -2826,3 +2826,64 @@ player_index=0
         self.assertNoFriendliesKilled(map, general)
 
         self.skipTest("TODO add asserts for should_flow_expand_and_not_sit_there_failing_timing_gather")
+
+    def test_should_do_sane_things_to_finish_out_the_round(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_do_sane_things_to_finish_out_the_round___5EMSUmCyV---0--294.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 294, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=294)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,4->9,4->9,2')
+
+        #proof
+        # simHost.queue_player_moves_str(general.player, '1,12->1,11->2,11->2,9')
+
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(21, simHost, 'because fucking duh?')
+
+    def test_should_not_loop_gathering_the_same_city_instead_of_pulling_left_side_to_right_line(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_loop_gathering_the_same_city_instead_of_pulling_left_side_to_right_line___5EMSUmCyV---0--261.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 261, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=261)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_not_loop_gathering_the_same_city_instead_of_pulling_left_side_to_right_line")
+
+    def test_should_produce_round_plan_from_pure_flow_expansion_that_utilizes_all_tiles_when_all_tiles_utilizeable(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_produce_round_plan_from_pure_flow_expansion_that_utilizes_all_tiles_when_all_tiles_utilizeable___mnFX5JutF---0--50.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 50, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=50)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertGreater(bot.last_flow_opt_collection)

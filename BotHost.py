@@ -102,6 +102,7 @@ class BotHostBase(object):
         # self.eklipz_bot._map = currentMap
 
         with timer.begin_move(currentMap.turn) as moveTimer:
+            self._log_turn_start_map_identity_state(currentMap)
             gap = timer.get_elapsed_since_update(currentMap.turn)
             quickTurn = gap > 0.05
             move: Move | None = None
@@ -181,6 +182,7 @@ class BotHostBase(object):
         # self.eklipz_bot._map = currentMap
 
         with timer.begin_move(currentMap.turn) as moveTimer:
+            self._log_turn_start_map_identity_state(currentMap)
             try:
                 with moveTimer.begin_event(f'Init turn {currentMap.turn} - no move chance / dropped move'):
                     self.eklipz_bot.init_turn()
@@ -219,6 +221,31 @@ class BotHostBase(object):
         # Skip gc.collect during tests (no viewer) to avoid 50ms delays between turns
         if self.has_viewer:
             gc.collect()
+
+    def _log_turn_start_map_identity_state(self, currentMap: MapBase):
+        """
+        Logs player/general identity state at the beginning of a turn to diagnose map/player index corruption.
+        """
+        logbook.info(f'TURN_START_IDENTITY turn={currentMap.turn} map.player_index={currentMap.player_index}')
+        for generalIndex, generalTile in enumerate(currentMap.generals):
+            if generalTile is None:
+                logbook.info(f'TURN_START_IDENTITY gIdx {generalIndex} = None')
+            else:
+                logbook.info(f'TURN_START_IDENTITY gIdx {generalIndex} = {generalTile.x},{generalTile.y} p{generalTile.player}')
+
+        logbook.info(f'TURN_START_IDENTITY player_index_by_color={currentMap._player_index_by_color}')
+        for player in currentMap.players:
+            score = currentMap.scores[player.index]
+            playerGeneral = player.general
+            if playerGeneral is None:
+                playerGeneralText = 'None'
+            else:
+                playerGeneralText = f'{playerGeneral.x},{playerGeneral.y} p{playerGeneral.player}'
+            logbook.info(
+                f'TURN_START_IDENTITY player {player.index} team={player.team} dead={player.dead} '
+                f'scoreTotal={score.total} scoreTiles={score.tiles} scoreDead={score.dead} '
+                f'general={playerGeneralText}'
+            )
 
     def save_txtmap(self, map: MapBase):
         if self.noLog and DebugHelper.IS_RUNNING_UNIT_TESTS:

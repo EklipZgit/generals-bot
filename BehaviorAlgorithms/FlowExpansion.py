@@ -7,15 +7,12 @@ from dataclasses import dataclass
 
 import logbook
 
-import Algorithms
 import DebugHelper
 import Gather
-import KnapsackUtils
 from Gather.GatherCaptureGroupKnapsacker import (
     GroupedKnapsackInput,
     GroupedKnapsackPreGroupInput,
     GroupedKnapsackPreGroupItem,
-    GroupedKnapsackResult,
     format_pre_group_input_for_test,
     solve_grouped_knapsack_pre_group_input,
     solve_grouped_knapsack_input,
@@ -23,7 +20,7 @@ from Gather.GatherCaptureGroupKnapsacker import (
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.FlowGraphModels import FlowGraphMethod, IslandFlowNode, IslandMaxFlowGraph
 from BehaviorAlgorithms.Flow.NetworkXFlowDirectionFinder import NetworkXFlowDirectionFinder
-# from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionFinder
+from BehaviorAlgorithms.Flow.PyMaxFlowDirectionFinder import PyMaxFlowDirectionFinder
 from BehaviorAlgorithms.Flow.OrToolsFlowDirectionFinder import OrToolsFlowDirectionFinder
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpanderLastRun, FlowExpansionPlanOptionCollection, ITERATIVE_EXPANSION_EN_CAP_VAL
 from Interfaces import MapMatrixInterface, TilePlanInterface
@@ -513,9 +510,9 @@ class ArmyFlowExpanderV2:
                     f"FE_RETURN_OPTION idx={idx} type={type(plan).__name__} "
                     f"first={self._format_plan_first_move_for_log(plan)} "
                     f"len={plan.length} delay={plan.requiredDelay} econ={plan.econValue:.2f} "
-                    f"pathTiles={self._format_plan_tile_sequence_for_log(plan.tileList, friendly_players, target_players)} "
-                    f"tileSet={self._format_plan_tile_sequence_for_log(sorted(plan.tileSet, key=lambda t: (t.y, t.x)), friendly_players, target_players)} "
-                    f"plan={plan}"
+                    f"\r\n pathTiles={self._format_plan_tile_sequence_for_log(plan.tileList, friendly_players, target_players)} "
+                    f"\r\n tileSet={self._format_plan_tile_sequence_for_log(sorted(plan.tileSet, key=lambda t: (t.y, t.x)), friendly_players, target_players)} "
+                    f"\r\n plan={plan}"
                 )
         result.total_turns = total_turns
         result.total_econ = total_econ
@@ -527,14 +524,15 @@ class ArmyFlowExpanderV2:
         result.total_gathered = total_gathered
         result.true_total_gathered = true_total_gathered
         result.total_en_army_capped = total_en_army_capped
+        result.expansion_options = plans
 
-        if total_turns > turns:
-            plan_details = '\r\n    '.join(
+        if total_turns > turns or self.log_debug:
+            plan_details = f'{result}\r\n    ' + '\r\n    '.join(
                 f"{opt}: {'|'.join(f'{t.x},{t.y}' for t in sorted(opt.tiles, key=lambda t2: self.island_builder.intergeneral_analysis.aMap.raw[t2.tile_index]))}"
                 for opt in plans
             )
-            raise AssertionError(f'Requested {turns} but received {total_turns} turns worth of plans.\r\n  {plan_details}')
-        result.expansion_options = plans
+            if total_turns > turns:
+                raise AssertionError(f'Requested {turns} but received {total_turns} turns worth of plans.\r\n  {plan_details}')
         return result
 
     def _get_players_for_team(self, team: int) -> list[int]:
@@ -1809,8 +1807,8 @@ class ArmyFlowExpanderV2:
             return self._diag_border_pair_anchor(border_pair) in DIAG_BORDER_PAIR_ANCHORS
         if DIAG_BORDER_PAIR_TILE_COORDS and self.island_builder is not None:
             # Use tile_island_lookup for O(1) lookup instead of scanning all islands
-            friendly_island = self.island_builder.tile_island_lookup.raw.get(border_pair.friendly_island_id)
-            target_island = self.island_builder.tile_island_lookup.raw.get(border_pair.target_island_id)
+            friendly_island = self.island_builder.tile_islands_by_unique_id.get(border_pair.friendly_island_id)
+            target_island = self.island_builder.tile_islands_by_unique_id.get(border_pair.target_island_id)
             if friendly_island is None or target_island is None:
                 return False
             for friendly_tile in friendly_island.tile_set:

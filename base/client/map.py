@@ -271,6 +271,7 @@ class MapBase(object):
         self.cycleTurn: int = 0
         self.distance_mapper: DistanceMapper = DistanceMapper()
         self.last_player_index_submitted_move: typing.Tuple[Tile, Tile, bool] | None = None
+        self._player_index_by_color: dict[int, int] = {}
         self.player_index: int = player_index  # Integer Player Index
         # TODO TEAMMATE
         self.is_2v2: bool = False

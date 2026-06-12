@@ -1864,16 +1864,66 @@ class EklipZBot(object):
 
         self.generalApproximations = generalApproximations
 
+        # UnitTests/test_TargetPlayerRetargeting.py::TargetPlayerRetargetingTests covers dead-target retargeting and all-in reset here because stale all-in state must not survive changing from a killed FFA target to their living teammate or a newly calculated target.
         oldTgPlayer = self.targetPlayer
-        self.targetPlayer = BotTargeting.calculate_target_player(self)
+        self.targetPlayer = self._calculate_target_player_considering_dead_current_target()
         self.opponent_tracker.targetPlayer = self.targetPlayer
 
         self.targetPlayerObj = self._map.players[self.targetPlayer]
 
         if self.targetPlayer != oldTgPlayer:
+            if oldTgPlayer != -1:
+                self._reset_all_in_state_after_target_player_change(oldTgPlayer, self.targetPlayer)
             self._lastTargetPlayerCityCount = 0
             if self.targetPlayer >= 0:
                 self._lastTargetPlayerCityCount = self.opponent_tracker.get_current_team_scores_by_player(self.targetPlayer).cityCount
+
+    def _calculate_target_player_considering_dead_current_target(self) -> int:
+        """Return the next target player, preferring the current dead target's living teammate before normal targeting."""
+        if self.targetPlayer != -1 and self._map.players[self.targetPlayer].dead:
+            livingTeammate = self._get_living_teammate_for_dead_target_player(self.targetPlayer)
+            if livingTeammate != -1:
+                return livingTeammate
+
+        return BotTargeting.calculate_target_player(self)
+
+    def _get_living_teammate_for_dead_target_player(self, deadTargetPlayer: int) -> int:
+        """Return a living enemy teammate for a dead target player, or -1 when none is available."""
+        targetTeam = self._map.team_ids_by_player_index[deadTargetPlayer]
+        for player in self._map.players:
+            if player.index == deadTargetPlayer:
+                continue
+            if player.index == self.general.player or player.index in self._map.teammates:
+                continue
+            if player.dead:
+                continue
+            if self._map.team_ids_by_player_index[player.index] == targetTeam:
+                return player.index
+
+        return -1
+
+    def _reset_all_in_state_after_target_player_change(self, oldTargetPlayer: int, newTargetPlayer: int) -> None:
+        """Clear target-specific all-in state after moving from one target player to another."""
+        logbook.info(
+            f'ALL_IN_TARGET_RESET turn={self._map.turn} '
+            f'oldTargetPlayer={oldTargetPlayer} newTargetPlayer={newTargetPlayer} '
+            f'oldTargetDead={self._map.players[oldTargetPlayer].dead} '
+            f'is_all_in_losing={self.is_all_in_losing} '
+            f'is_all_in_army_advantage={self.is_all_in_army_advantage} '
+            f'all_in_city_behind={self.all_in_city_behind} '
+            f'projected_loss_all_in_active={self.win_condition_analyzer.projected_loss_all_in_active}'
+        )
+        self.is_all_in_losing = False
+        self.all_in_losing_counter = 0
+        self.is_all_in_army_advantage = False
+        self.all_in_army_advantage_counter = 0
+        self.all_in_city_behind = False
+        self.win_condition_analyzer.projected_loss_all_in_active = False
+        self.win_condition_analyzer.projected_loss_all_in_target = None
+        self.win_condition_analyzer.all_in_plan = None
+        self.shortest_path_to_target_player = None
+        self.target_player_gather_path = None
+        self.target_player_gather_targets = None
 
 
     # STEP2: Stay in EklipZBotV2.py or move to a dedicated resume/debug module late. This restores broad bot/runtime state across trackers, timings, paths, and debug serialization.

@@ -3149,6 +3149,10 @@ class ArmyTracker(object):
                 self.opponent_tracker.notify_tile_flipped_for_player(tile)
 
         for tile in recalcVis:
+            for p in self.map.players:
+                self.visible_tiles_by_player[p.index].raw[tile.tile_index] = False
+            if tile.player >= 0:
+                self.visible_tiles_by_player[tile.player].raw[tile.tile_index] = True
             for v in tile.visibleTo:
                 if v.player >= 0:
                     self.visible_tiles_by_player[v.player].raw[tile.tile_index] = True

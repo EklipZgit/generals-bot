@@ -2790,3 +2790,39 @@ player_index=0
 
                 self.assertOwned(general.player, playerMap.At(11, 12), 'Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
                 self.assertOwned(general.player, playerMap.At(11, 13), 'Lesser - Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
+
+    def test_should_flow_expand_and_not_sit_there_failing_timing_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flow_expand_and_not_sit_there_failing_timing_gather___iHG82keVa---1--125.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 125, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=125)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+    def test_should_flow_expand_and_not_sit_there_failing_timing_gather__2(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_flow_expand_and_not_sit_there_failing_timing_gather___iHG82keVa---1--100.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 100, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=100)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,13->5,12')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.skipTest("TODO add asserts for should_flow_expand_and_not_sit_there_failing_timing_gather")

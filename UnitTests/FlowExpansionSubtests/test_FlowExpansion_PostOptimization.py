@@ -98,7 +98,7 @@ aG1  a3   b1   bG1
         )
 
         self.assertIsInstance(result, FlowExpansionPlanOptionCollection, 'Should return FlowExpansionPlanOptionCollection')
-        self.assertIsInstance(result.flow_plans, list, 'Should contain a list of flow plans')
+        self.assertIsInstance(result.expansion_options, list, 'Should contain a list of flow plans')
 
 
     def test_build_flow_expand_plan__should_produce_valid_only__pull_through_friendly(self):
@@ -120,7 +120,7 @@ aG1  a3   a1   b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'only one option')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -150,7 +150,7 @@ aG1  a4        b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'taking the neut, and taking the neut + enemy 1')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -180,7 +180,7 @@ aG1  a4   b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'Only one option')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -210,7 +210,7 @@ aG1  a4   a1   b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'only one option')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -240,7 +240,7 @@ aG1  a5        b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'taking the neut, and taking the neut + enemy 1')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -270,7 +270,7 @@ aG2  a2   b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'Only one option')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -300,7 +300,7 @@ aG2  a2   a1   b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'only one option')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -330,7 +330,7 @@ aG2  a3        b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'taking the neut, and taking the neut + enemy 1')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -360,7 +360,7 @@ aG3  a3   b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'Shorter and longer options')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -390,7 +390,7 @@ aG3  a5   b1   bG3
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'Shorter and longer options')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -420,7 +420,7 @@ aG3  a3   a1   b1   bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         self.assertEqual(1, len(opts), 'shorter and longer option')
         longestOpt = self.get_longest_flow_expansion_option(opts)
@@ -450,7 +450,7 @@ aG2  a5   b1        bG1
         flowExpander = ArmyFlowExpanderV2(map)
         flowExpander.method = method
         flowResult = flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
-        opts = flowResult.flow_plans
+        opts = flowResult.expansion_options
 
         # if debugMode:
         #     self.render_flow_expansion_debug(flowExpander, flowResult, renderAll=False)

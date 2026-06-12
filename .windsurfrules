@@ -31,6 +31,9 @@ cmd /c "... > D:\2019_reformat_Backup\cascade-debug-output\generals-bot\raw_test
 13. Whenever adding code to fix a test, include a comment above that code referenceing the test file and test name that that code is there to combat, and explain the code. Comments are extremely important in this complex codebase.
 14. We strongly type all objects. NEVER use getattr, hasattr etc in code. EVER. use __slots__ for all data classes.
 15. When reading logs from live games or test output, it is important to pay attention to which game turns things happen at. The perftimer logs Beginning t{turnNumber}: {description} and Complete t{turnNumber}: {description} logs give you constant clues throughout test output about which turns are relevant to which events in game. Sometimes you will care about logs from previous turns before the turn a bad behavior happened, but usually you will not. Bear this in mind as you debug tests and game logs.
+16. We use slotted classes, @dataclass(slots=True) or explicit __slots__ = ... for all classes.
+17. We strongly type all parameter and return definitions in function signatures, including the generics to dict[A, B] and list[A] etc, as well as including docstrings for function definitions. We keep the function documentation up to date with changes inside the function or to its parameter list or parameter usage.
+18. We don't allow multiple types that dont fit the same interface in the same variable (besides A | None). solution: dict[FlowBorderPairKey | str, EnrichedFlowTurnsEntry | ExternalPlanOption] is a huge violation of this. Create an interface (via typing.Protocol, see @InterfaceSample.py) that they duck type against instead.
 
 --- RunUnittestBaseline.py ---
 1. Use RunUnittestBaseline.py from the repo root to create stable unittest pass/fail baselines before risky changes.

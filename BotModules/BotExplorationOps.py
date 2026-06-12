@@ -48,7 +48,7 @@ class BotExplorationOps:
         requiredTiles = set(startTiles.keys())
         bestOption = None
         bestValuePerTurn = 0.0
-        for flowOption in bot.last_flow_opt_collection.flow_plans:
+        for flowOption in bot.last_flow_opt_collection.expansion_options:
             if flowOption.requiredDelay > 0 or flowOption.length > turns:
                 continue
             if len(requiredTiles.intersection(flowOption.tileSet)) == 0:

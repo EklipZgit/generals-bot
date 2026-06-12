@@ -730,7 +730,7 @@ class BotExpansionOps:
                         largestGath = 0
                         enCapped = 0
                         neutCapped = 0
-                        for opt in optCollection.flow_plans:
+                        for opt in optCollection.expansion_options:
                             cumulative += opt.econValue
                             cumulativeTurns += opt.length
                             if isinstance(opt, GatherCapturePlan):
@@ -738,9 +738,9 @@ class BotExpansionOps:
                             enCapped += sum(1 if t.player == bot.targetPlayer else 0 for t in opt.tileList)
                             neutCapped += sum(1 if t.player == -1 else 0 for t in opt.tileList)
 
-                        bot.info(f'FE turns: {cumulativeTurns}/{remainingCycleTurns}, econ {cumulative:.3f}, enCaps: {enCapped}, neutCaps: {neutCapped}, optCount: {len(optCollection.flow_plans)}, largestGath: {largestGath}')
+                        bot.info(f'FE turns: {cumulativeTurns}/{remainingCycleTurns}, econ {cumulative:.3f}, enCaps: {enCapped}, neutCaps: {neutCapped}, optCount: {len(optCollection.expansion_options)}, largestGath: {largestGath}')
 
-                        for opt in optCollection.flow_plans:
+                        for opt in optCollection.expansion_options:
                             sorted_tiles_text = '|'.join(
                                 f'{t.x},{t.y}'
                                 for t in sorted(
@@ -750,7 +750,7 @@ class BotExpansionOps:
                             )
                             bot.info(f'FE: {opt.econValue / opt.length:.2f} ({opt.econValue:.1f}e/{opt.length}t) {opt}  {sorted_tiles_text}')
 
-                        addlOptions = list(optCollection.flow_plans)
+                        addlOptions = list(optCollection.expansion_options)
                         bot.last_flow_expander = flowExpander
                         bot.last_flow_opt_collection = optCollection
                     except Exception as flowEx:

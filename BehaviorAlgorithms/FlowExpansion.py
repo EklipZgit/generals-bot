@@ -67,14 +67,22 @@ if typing.TYPE_CHECKING:
     from ViewInfo import ViewInfo
 
 
-@dataclass
 class FlowBorderPairKey:
     """Key for identifying a specific friendly-target border pair"""
-    friendly_island_id: int
-    target_island_id: int
+    __slots__ = (
+        "friendly_island_id",
+        "target_island_id",
+        "_hash"
+    )
+
+    def __init__(self, friendly_island_id: int, target_island_id: int):
+        self.friendly_island_id: int = friendly_island_id
+        self.target_island_id: int = target_island_id
+        # hash of ints are ints so dont construct tuples. Multiply by primes for good xor shit
+        self._hash: int = (7 * self.friendly_island_id) ^ (37 * self.target_island_id)
 
     def __hash__(self) -> int:
-        return hash((self.friendly_island_id, self.target_island_id))
+        return self._hash
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, FlowBorderPairKey):
@@ -83,7 +91,7 @@ class FlowBorderPairKey:
                 self.target_island_id == other.target_island_id)
 
 
-@dataclass
+@dataclass(slots=True)
 class FlowStreamIslandContribution:
     """Lightweight metadata about one flow node's contribution to a stream"""
     island_id: int
@@ -136,7 +144,7 @@ class TargetStreamNodePotential:
     captured_downstream_econ_value: float = 0.0
 
 
-@dataclass
+@dataclass(slots=True)
 class FlowTurnsEntry:
     """Represents a specific turn-based flow expansion option"""
     turns: int
@@ -152,7 +160,20 @@ class FlowTurnsEntry:
     incomplete_target_tile_count: int
 
 
-@dataclass
+@dataclass(slots=True)
+class ExternalPlanOption:
+    """
+    Wrapper for external plan options (intercepts, etc.) to participate in MKCP.
+    These are not flow-based but need to be considered alongside flow options.
+    """
+    plan: TilePlanInterface  # TilePlanInterface (InterceptionOptionInfo, etc.)
+    turns: int
+    econ_value: float
+    tile_set: frozenset[Tile]  # Set of tiles for conflict detection
+    group_id: int  # Unique group ID for MKCP (mutually exclusive with other externals)
+
+
+@dataclass(slots=True)
 class EnrichedFlowTurnsEntry:
     """Represents a capture entry enriched with its minimum gather support"""
     capture_entry: FlowTurnsEntry
@@ -162,7 +183,7 @@ class EnrichedFlowTurnsEntry:
     combined_value_density: float
 
 
-@dataclass
+@dataclass(slots=True)
 class FlowArmyTurnsLookupTable:
     """Per border pair lookup table"""
     border_pair: FlowBorderPairKey
@@ -171,10 +192,9 @@ class FlowArmyTurnsLookupTable:
     best_capture_entries_prefix: list[FlowTurnsEntry | None]
     best_gather_entries_prefix: list[FlowTurnsEntry | None]
     enriched_capture_entries: list[EnrichedFlowTurnsEntry]
-    metadata: dict  # Contains max_flow_across_border, friendly_stream_tile_count, etc.
 
 
-@dataclass
+@dataclass(slots=True)
 class FlowExpansionV2DebugSnapshot:
     """Optional debug snapshot for tests/debug"""
     graph_stats: dict
@@ -182,19 +202,6 @@ class FlowExpansionV2DebugSnapshot:
     entries_generated_per_border_pair: dict
     overlap_warnings: list[str]
     pruned_vs_kept_choices: dict
-
-
-@dataclass
-class ExternalPlanOption:
-    """
-    Wrapper for external plan options (intercepts, etc.) to participate in MKCP.
-    These are not flow-based but need to be considered alongside flow options.
-    """
-    plan: typing.Any  # TilePlanInterface (InterceptionOptionInfo, etc.)
-    turns: int
-    econ_value: float
-    tile_set: frozenset  # Set of tiles for conflict detection
-    group_id: int  # Unique group ID for MKCP (mutually exclusive with other externals)
 
 
 def get_tile_army_mapmatrix(map: MapBase) -> MapMatrix:
@@ -457,12 +464,47 @@ class ArmyFlowExpanderV2:
 
         # Phase 5: Convert chosen entries into GatherCapturePlan objects
         with self.perf_timer.begin_move_event('V2 phase5 _materialize_plans'):
-            plans = self._materialize_plans(solution, lookup_tables, external_options)
+            plans = self._materialize_plans(solution)
 
+        result = self.build_plan_collection_with_calculated_stats(plans, turns)
+        return result
+
+    def build_plan_collection_with_calculated_stats(self, plans: list[TilePlanInterface], turns: int) -> FlowExpansionPlanOptionCollection:
         result = FlowExpansionPlanOptionCollection()
-        total = 0
+        total_econ = 0
+        total_en_caps = 0
+        total_neut_caps = 0
+        total_en_city_caps = 0
+        total_neut_city_caps = 0
+        total_gather_tiles = 0
+        total_gathered = 0
+        true_total_gathered = 0
+        total_en_army_capped = 0
+        total_turns = 0
+        teams = self.map.team_ids_by_player_index
+        targetTeam = self.target_team
+        frTeam = self.team
         for plan in plans:
-            total += plan.length
+            total_turns += plan.length
+            total_econ += plan.econValue
+            for t in plan.tileSet:
+                tTeam = teams[t.player]
+                if tTeam == frTeam:
+                    total_gather_tiles += 1
+                    total_gathered += t.army - 1
+                    true_total_gathered += t.army - 1
+                else:
+                    true_total_gathered -= t.army + 1
+                    if tTeam == targetTeam:
+                        total_en_caps += 1
+                        if t.isCity:
+                            total_en_city_caps += 1
+                        total_en_army_capped += t.army
+                    elif tTeam == -1:
+                        total_neut_caps += 1
+                        if t.isCity:
+                            total_neut_city_caps += 1
+
         if self.log_debug:
             friendly_players = self._get_players_for_team(self.team)
             target_players = self._get_players_for_team(self.target_team)
@@ -475,13 +517,24 @@ class ArmyFlowExpanderV2:
                     f"tileSet={self._format_plan_tile_sequence_for_log(sorted(plan.tileSet, key=lambda t: (t.y, t.x)), friendly_players, target_players)} "
                     f"plan={plan}"
                 )
-        if total > turns:
+        result.total_turns = total_turns
+        result.total_econ = total_econ
+        result.total_en_caps = total_en_caps
+        result.total_neut_caps = total_neut_caps
+        result.total_en_city_caps = total_en_city_caps
+        result.total_neut_city_caps = total_neut_city_caps
+        result.total_gather_tiles = total_gather_tiles
+        result.total_gathered = total_gathered
+        result.true_total_gathered = true_total_gathered
+        result.total_en_army_capped = total_en_army_capped
+
+        if total_turns > turns:
             plan_details = '\r\n    '.join(
                 f"{opt}: {'|'.join(f'{t.x},{t.y}' for t in sorted(opt.tiles, key=lambda t2: self.island_builder.intergeneral_analysis.aMap.raw[t2.tile_index]))}"
                 for opt in plans
             )
-            raise AssertionError(f'Requested {turns} but received {total} turns worth of plans.\r\n  {plan_details}')
-        result.flow_plans = plans
+            raise AssertionError(f'Requested {turns} but received {total_turns} turns worth of plans.\r\n  {plan_details}')
+        result.expansion_options = plans
         return result
 
     def _get_players_for_team(self, team: int) -> list[int]:
@@ -1716,14 +1769,6 @@ class ArmyFlowExpanderV2:
                 best_capture_prefix = self._build_prefix_table(capture_lookup)
                 best_gather_prefix = self._build_prefix_table(gather_lookup)
 
-                # Create metadata
-                metadata = {
-                    'max_flow_across_border': self._calculate_max_flow_across_border(border_pair, flow_graph),
-                    'friendly_stream_tile_count': sum(c.tile_count for c in friendly_contribs),
-                    'target_stream_tile_count': sum(c.tile_count for c in target_contribs),
-                    'border_pair': border_pair
-                }
-
                 lookup_table = FlowArmyTurnsLookupTable(
                     border_pair=border_pair,
                     capture_entries_by_turn=capture_lookup,
@@ -1731,7 +1776,6 @@ class ArmyFlowExpanderV2:
                     best_capture_entries_prefix=best_capture_prefix,
                     best_gather_entries_prefix=best_gather_prefix,
                     enriched_capture_entries=[],  # Will be filled in Phase 3
-                    metadata=metadata
                 )
 
                 lookup_tables.append(lookup_table)
@@ -2888,9 +2932,6 @@ class ArmyFlowExpanderV2:
                 # f"\r\n        self.assertEqual({pre_group_expected.iteration_summaries}, result.iteration_summaries)"
                 "\r\nFE_KNAPSACK_REPRO_END")
 
-        def _get_item_weight(item):
-            return item.turns
-
         def _describe_mkcp_item(item) -> str:
             if isinstance(item, ExternalPlanOption):
                 return (
@@ -2921,7 +2962,7 @@ class ArmyFlowExpanderV2:
         max_value = grouped_result.max_value
 
         if self.log_debug:
-            total_weight = sum(_get_item_weight(it) for it in chosen_items)
+            total_weight = sum(it.turns for it in chosen_items)
             logbook.info(f"Grouped knapsack: budget={turn_budget}, best_weight={total_weight}, best_value={max_value}, "
                          f"chosen_groups={len(chosen_items)}, chosen_indices={grouped_result.chosen_indices}")
             for chosen_index in grouped_result.chosen_indices:
@@ -2989,9 +3030,7 @@ class ArmyFlowExpanderV2:
     def _materialize_plans(
         self,
         solution: dict,
-        lookup_tables: list[FlowArmyTurnsLookupTable],
-        external_options: list[ExternalPlanOption] | None = None
-    ) -> list:
+    ) -> list[TilePlanInterface]:
         """
         Phase 5: Convert chosen lookup entries into GatherCapturePlan objects.
 
@@ -3031,7 +3070,7 @@ class ArmyFlowExpanderV2:
                 continue
 
             # Handle flow-based entries
-            enriched = item
+            enriched: EnrichedFlowTurnsEntry = item
             border_pair = key
             capture_entry = enriched.capture_entry
             gather_entry = enriched.gather_entry

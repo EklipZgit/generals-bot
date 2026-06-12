@@ -92,10 +92,38 @@ def _deep_copy_flow_node(rootNode: IslandFlowNode, cloneScopeLookup: typing.Dict
 
 
 class FlowExpansionPlanOptionCollection(object):
+    __slots__ = (
+        'expansion_options',
+        'total_turns',
+        'total_econ',
+        'total_en_caps',
+        'total_neut_caps',
+        'total_en_city_caps',
+        'total_neut_city_caps',
+        'total_gather_tiles',
+        'total_gathered',
+        'true_total_gathered',
+        'total_en_army_capped',
+    )
+
     def __init__(self):
-        self.flow_plans: typing.List[FlowExpansionPlanOption] = []
-        self.best_plans_by_tile: MapMatrixInterface[FlowExpansionPlanOption] = None
-        self.superset_flow_plans: typing.List[FlowExpansionPlanOption] = []
+        self.expansion_options: typing.List[TilePlanInterface] = []
+        self.total_turns: int = 0
+        self.total_econ: float = 0.0
+        self.total_en_caps: int = 0
+        self.total_neut_caps: int = 0
+        self.total_en_city_caps: int = 0
+        self.total_neut_city_caps: int = 0
+        self.total_gather_tiles: int = 0
+        self.total_gathered: int = 0
+        self.true_total_gathered: int = 0
+        self.total_en_army_capped: int = 0
+
+    def __str__(self):
+        return f'turns={self.total_turns}, econ={self.total_econ} ({self.total_econ / max(1, self.total_turns):.2f}vt), enCaps={self.total_en_caps}, neutCaps={self.total_neut_caps}, enCityCaps={self.total_en_city_caps}, neutCityCaps={self.total_neut_city_caps}, gatherTiles={self.total_gather_tiles}, gathered={self.total_gathered}, trueGathered={self.true_total_gathered}, enArmyCapped={self.total_en_army_capped}'
+
+    def __repr__(self):
+        return str(self)
 
 
 class FlowGraphDebugStats(object):
@@ -305,7 +333,7 @@ class ArmyFlowExpander(object):
 
         superSetPlans = []
         planContainer = FlowExpansionPlanOptionCollection()
-        planContainer.flow_plans = finalPlans
+        planContainer.expansion_options = finalPlans
         for planSet in planSets:
             planSet.plans.sort(key=lambda p: (p.length, p.econValue), reverse=True)
 
@@ -328,7 +356,6 @@ class ArmyFlowExpander(object):
         logbook.info(f'filter_plans_by_common_supersets_and_sort sorted and supersetted in {time.perf_counter() - start:.5f}s')
 
         planContainer.best_plans_by_tile = bestPlanByTile
-        planContainer.superset_flow_plans = superSetPlans
 
         return planContainer
 

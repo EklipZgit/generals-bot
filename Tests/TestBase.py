@@ -2190,7 +2190,7 @@ class TestBase(unittest.TestCase):
             timeLimit,
             method,
         )
-        return expander, optCollection.flow_plans
+        return expander, optCollection.expansion_options
 
     def run_army_flow_expansion_and_get_expander_and_collection(
             self,
@@ -2248,7 +2248,7 @@ class TestBase(unittest.TestCase):
             cutoffTime=cutoffTime,
         )
 
-        self.assertNoDuplicateTileUse(optCollection.flow_plans)
+        self.assertNoDuplicateTileUse(optCollection.expansion_options)
 
         logbook.info(f'full islands + expand completed in {time.perf_counter() - start:.5f}s in total.')
 
@@ -2281,7 +2281,7 @@ class TestBase(unittest.TestCase):
         vi = self.get_renderable_view_info(map)
         enemyGeneral = expander.enemyGeneral
         general = expander.friendlyGeneral
-        opts = optCollection.flow_plans
+        opts = optCollection.expansion_options
 
         # expander.ensure_flow_graph_exists(builder)
 
@@ -2303,8 +2303,9 @@ class TestBase(unittest.TestCase):
             logbook.info(f'best opt {bestOpt}')
             bestOpts = [bestOpt]
         else:
-            for supersetPlan in optCollection.superset_flow_plans:
-                bestOpts.append(supersetPlan)
+            pass
+            # for supersetPlan in optCollection.superset_flow_plans:
+            #     bestOpts.append(supersetPlan)
             # visited = set()
             # for tile in map.get_all_tiles():
             #     plan = optCollection.flow_plan_supersets_by_tile.raw[tile.tile_index]
@@ -2318,7 +2319,7 @@ class TestBase(unittest.TestCase):
         largestGath = 0
         enCapped = 0
         neutCapped = 0
-        for opt in optCollection.flow_plans:
+        for opt in optCollection.expansion_options:
             cumulative += opt.econValue
             cumulativeTurns += opt.length
             largestGath = max(opt.gathered_army, largestGath)
@@ -2329,9 +2330,9 @@ class TestBase(unittest.TestCase):
             vi.add_info_line(str(bestOpt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in bestOpt.tileList))
             ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, bestOpt, general.player, targetPlayer, vi)
 
-        vi.add_info_line(f'-- turns: {cumulativeTurns}/{turnsLimit}, econ {cumulative:.3f}, enCaps: {enCapped}, neutCaps: {neutCapped}, optCount: {len(optCollection.flow_plans)}, largestGath: {largestGath} --')
+        vi.add_info_line(f'-- turns: {cumulativeTurns}/{turnsLimit}, econ {cumulative:.3f}, enCaps: {enCapped}, neutCaps: {neutCapped}, optCount: {len(optCollection.expansion_options)}, largestGath: {largestGath} --')
 
-        for opt in sorted(optCollection.flow_plans, key=lambda opt: (opt.econValue / opt.length, opt.length), reverse=True):
+        for opt in sorted(optCollection.expansion_options, key=lambda opt: (opt.econValue / opt.length, opt.length), reverse=True):
             vi.add_info_line(str(opt) + '   ' + '|'.join(f'{t.x},{t.y}' for t in opt.tileList))
             if enemyGeneral is not None:
                 ArmyFlowExpander.add_flow_expansion_option_to_view_info(map, opt, general.player, enemyGeneral.player, vi)

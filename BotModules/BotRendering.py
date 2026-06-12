@@ -194,7 +194,7 @@ class BotRendering:
         vi: ViewInfo = bot.viewInfo
         general = expander.friendlyGeneral
         enemyGeneral = expander.enemyGeneral
-        opts = optCollection.flow_plans
+        opts = optCollection.expansion_options
 
         optsSorted = sorted(opts, key=lambda opt: (opt.length, opt.econValue), reverse=True)
 

@@ -38,7 +38,7 @@ class GatherCapturePlanNoMovesTests(TestBase):
         logbook.info("FLOW EXPANSION DETAILS")
         logbook.info("="*70)
 
-        logbook.info(f"\nNumber of plans generated: {len(plans.flow_plans)}")
+        logbook.info(f"\nNumber of plans generated: {len(plans.expansion_options)}")
 
         # Log lookup tables if available
         if hasattr(expander, 'last_lookup_tables') and expander.last_lookup_tables:
@@ -53,7 +53,7 @@ class GatherCapturePlanNoMovesTests(TestBase):
                               f"gathered_army={entry.gathered_army}")
 
         # Log each plan
-        for i, plan in enumerate(plans.flow_plans):
+        for i, plan in enumerate(plans.expansion_options):
             logbook.info(f"\n  Plan {i}:")
             logbook.info(f"    Type: {type(plan).__name__}")
             logbook.info(f"    Length: {plan.length}")
@@ -491,8 +491,8 @@ bot_target_player=0
 
         # ASSERT: All plans must have valid first moves
         # This will FAIL until the bug is fixed
-        self.assertGreater(len(plans.flow_plans), 0, "Expected at least one plan to be generated")
-        for i, plan in enumerate(plans.flow_plans):
+        self.assertGreater(len(plans.expansion_options), 0, "Expected at least one plan to be generated")
+        for i, plan in enumerate(plans.expansion_options):
             first_move = plan.get_first_move()
             self.assertIsNotNone(
                 first_move,

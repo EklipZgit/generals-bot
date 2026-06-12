@@ -149,7 +149,7 @@ class FlowExpansionIslandSetConnectivityTests(TestBase):
             boardAnalysis=analysis,
             territoryMap=territory,
         )
-        plans = result.flow_plans
+        plans = result.expansion_options
 
         # Validate connectivity of each plan's tile sets
         for plan in plans:

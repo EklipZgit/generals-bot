@@ -2224,11 +2224,12 @@ class BotDefense:
 
             bot.viewInfo.add_info_line(f'added gpath to defCrit bc oppArmy {oppArmy} - gathPathSum {gathPathSum} > 0: {str(defenseCriticalTileSet)}')
 
-        if oppArmy + 10 - halfDist <= playerArmy:
+        oppArmyHackOffset = 0  # was 10 ????
+        if oppArmy + oppArmyHackOffset - halfDist <= playerArmy:
             if bot.likely_kill_push:
                 # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_not_gather_against_likely_kill_threat_when_must_attack_especially_when_up_on_gathered_army:
                 # A likely enemy attack path is not a kill push when the already-positioned friendly army can cover the OpponentTracker fog army risk.
-                bot.viewInfo.add_info_line(f'clearing likely_kill_push because oppArmy {oppArmy} + 10 - halfDist {halfDist} <= playerArmy {playerArmy}')
+                bot.viewInfo.add_info_line(f'clearing likely_kill_push because oppArmy {oppArmy} + {oppArmyHackOffset} - halfDist {halfDist} <= playerArmy {playerArmy}')
                 bot.info(f'LKP=F +defense opp={oppArmy}+10-{halfDist} <= our={playerArmy} gpath={gathPathSum}')
                 bot.likely_kill_push = False
             if cycleDifferential < -halfDist:

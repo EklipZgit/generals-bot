@@ -652,17 +652,40 @@ def solve_grouped_knapsack_input(
     Solve legacy grouped-knapsack input after adapting its option arrays to the shared tile-plan option interface.
     """
     options = adapt_grouped_knapsack_input_to_tile_plan_options(input_data)
-    return _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
-        options=options,
-        turn_budget=input_data.turn_budget,
-        groups=input_data.groups,
-        values=input_data.values,
-        is_external_item=input_data.is_external_item,
-        max_iterations=input_data.max_iterations,
-        noLog=noLog,
-        noLogVerbose=noLogVerbose,
-        perfTimer=perfTimer)
 
+    with perfTimer.begin_move_event('solve_grouped individual groups'):
+        groups = [i for i in range(len(input_data.groups))]
+        solutionNoGroups = _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
+            options=options,
+            turn_budget=input_data.turn_budget,
+            groups=groups,
+            values=input_data.values,
+            is_external_item=input_data.is_external_item,
+            max_iterations=input_data.max_iterations,
+            noLog=noLog,
+            noLogVerbose=noLogVerbose,
+            perfTimer=perfTimer)
+
+    with perfTimer.begin_move_event('solve_grouped original groups'):
+        solutionPreGrouped = _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
+            options=options,
+            turn_budget=input_data.turn_budget,
+            groups=input_data.groups,
+            values=input_data.values,
+            is_external_item=input_data.is_external_item,
+            max_iterations=input_data.max_iterations,
+            noLog=noLog,
+            noLogVerbose=noLogVerbose,
+            perfTimer=perfTimer)
+
+    if solutionNoGroups.max_value > solutionPreGrouped.max_value:
+        logbook.warn(f'YOOOOOOOOOOOO breaking groups apart produced a better result...?')
+        logbook.warn(f'{solutionNoGroups.max_value}e vs {solutionPreGrouped.max_value}e, {solutionNoGroups.chosen_weight}t vs {solutionPreGrouped.chosen_weight}t, {solutionNoGroups.chosen_indices} vs {solutionPreGrouped.chosen_indices}')
+        return solutionNoGroups
+    
+    logbook.info(f'NoGroup vs PreGroup: {solutionNoGroups.max_value}e vs {solutionPreGrouped.max_value}e, {solutionNoGroups.chosen_weight}t vs {solutionPreGrouped.chosen_weight}t, {solutionNoGroups.chosen_indices} vs {solutionPreGrouped.chosen_indices}')
+        
+    return solutionPreGrouped
 
 def _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
         options: list[TilePlanOptionProtocol],

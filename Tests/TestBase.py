@@ -2176,7 +2176,7 @@ class TestBase(unittest.TestCase):
             shouldRender: bool = True,
             timeLimit: float | None = None,
             method: FlowGraphMethod | None = None,
-    ) -> typing.Tuple[ArmyFlowExpander, typing.List[FlowExpansionPlanOption]]:
+    ) -> typing.Tuple[ArmyFlowExpanderV2, typing.List[FlowExpansionPlanOption]]:
         expander, optCollection = self.run_army_flow_expansion_and_get_expander_and_collection(
             map,
             general,

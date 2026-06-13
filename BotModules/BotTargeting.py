@@ -190,7 +190,7 @@ class BotTargeting:
 
         def can_consider_tile(tile: Tile) -> bool:
             if requirePredictedFogTeamTile:
-                return tile.isTempFogPrediction and not tile.discovered and bot._map.is_player_on_team_with(tile.player, player)
+                return not tile.discovered and bot._map.is_player_on_team_with(tile.player, player)  # and tile.isTempFogPrediction  <-- breaks heavily lmao, at least in tests.
             return True
 
         emergenceVal = 0

@@ -4697,6 +4697,7 @@ class ArmyTracker(object):
             for tile, distance in list(playerEvents.items()):
                 playerEvents[tile] = distance + 2
             # TODO why was this commented out?
+            logbook.info(f'mustResetAndIncrease RE LIMITING INLINE (was commented out..?) for player {player}')
             self.re_limit_player_gen_locations(player, playerEvents)
 
     @classmethod

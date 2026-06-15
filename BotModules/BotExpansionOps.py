@@ -1974,13 +1974,13 @@ class BotExpansionOps:
                 maxPath = path
                 maxScoreVt = scoreVt
 
-        if maxPath is not None and maxScoreVt > 1.0:
+        if maxPath is not None and maxScoreVt > 0.99:
             move = maxPath.get_first_move()
-            if bot.timings.in_gather_split(bot._map.turn) and bot.timings.splitTurns < bot.timings.launchTiming:
-                bot.timings.splitTurns += 1
-                bot.info(f'greedy exp move {move} (vt {maxScoreVt:.2f}), inc gather {bot.timings.splitTurns - 1}->{bot.timings.splitTurns}')
-            else:
-                bot.info(f'greedy exp move {move} (vt {maxScoreVt:.2f})')
+        #     if bot.timings.in_gather_split(bot._map.turn) and bot.timings.splitTurns < bot.timings.launchTiming:
+        #         bot.timings.splitTurns += 1
+        #         bot.info(f'greedy exp move {move} (vt {maxScoreVt:.2f}), inc gather {bot.timings.splitTurns - 1}->{bot.timings.splitTurns}')
+        #     else:
+        #         bot.info(f'greedy exp move {move} (vt {maxScoreVt:.2f})')
 
         return move
 

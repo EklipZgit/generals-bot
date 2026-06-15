@@ -239,7 +239,7 @@ class TileIslandBuilder(object):
 
         " -------------------------- ANYTHING YOU ADD TO THIS SECTION NEEDS TO BE COVERED IN reset_for_rebuild ---------------"
         self.tile_island_lookup: MapMatrixInterface[TileIsland] = MapMatrix(self.map, None)
-        self.all_tile_islands: typing.Set[TileIsland] = set()
+        self.all_tile_islands: OrderedTileIslandSet = OrderedTileIslandSet()
         """Does not include unreachable islands"""
         self.tile_islands_by_player: typing.List[typing.List[TileIsland]] = [[] for _ in self.map.players]
         self.tile_islands_by_player.append([])  # for -1 player

@@ -343,8 +343,8 @@ class BotTimings:
         countEnOnPath = 0
         countNeutOnPath = 0
 
-        launchTiming = 20
-        gatherSplit = 20
+        launchTiming = 16
+        gatherSplit = 16
         if BotStateQueries.is_still_ffa_and_non_dominant(bot) and bot.targetPlayer != -1:
             gatherSplit = 32
 

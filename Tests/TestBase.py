@@ -2029,6 +2029,23 @@ class TestBase(unittest.TestCase):
         self.assertLess(tileDiff, maximum, f'expected tile differential to be less than {maximum}, instead found {tileDiff}. {reason}')
         logbook.info(f'tile differential was {tileDiff} (> {maximum})')
 
+    def change_tile_to_mountain_xy(self, map: MapBase, x: int, y: int):
+        """
+        Does NOT preserve the players tile counts and army amounts (so does not move displaced army or tiles anywhere, simply drops the army on the tile and makes it a mountain).
+
+        :param map:
+        :param x:
+        :param y:
+        :return:
+        """
+        t = map.At(x, y)
+        t.army = 0
+        t.player = -1
+        t.isMountain = True
+        t.isObstacle = True
+        t.isPathable = False
+        t.isCity = False
+
     def move_enemy_general(
             self,
             map: MapBase,
@@ -2229,7 +2246,7 @@ class TestBase(unittest.TestCase):
         expander.debug_render_capture_count_threshold = renderThresh
         expander.log_debug = debugMode
         expander.use_debug_asserts = debugMode
-        expander.use_debug_asserts = False
+        # expander.use_debug_asserts = False
         # expander.log_debug = False
         # expander.use_min_cost_flow_edges_only = False
 

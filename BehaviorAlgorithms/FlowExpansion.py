@@ -10,12 +10,15 @@ import logbook
 import DebugHelper
 import Gather
 from Gather.GatherCaptureGroupKnapsacker import (
+    GenericTilePlanOption,
     GroupedKnapsackInput,
     GroupedKnapsackPreGroupInput,
     GroupedKnapsackPreGroupItem,
+    PlanSolver,
     format_pre_group_input_for_test,
     solve_grouped_knapsack_pre_group_input,
     solve_grouped_knapsack_input,
+    solve_tile_plan_options,
 )
 from BehaviorAlgorithms.Flow.FlowDirectionFinderABC import FlowDirectionFinderABC
 from BehaviorAlgorithms.Flow.FlowGraphModels import FlowGraphMethod, IslandFlowNode, IslandMaxFlowGraph
@@ -47,6 +50,24 @@ SHOULD_LOG_PLAN_MATERIALIZATION_POST_KNAPSACK = False
 """Use when debugging why the materialization of a good plan produced improper moves in the final move-set etc."""
 SHOULD_LOG_UPSTREAM_PRIORITY_QUEUE_INTERNALS = False
 """Copious amounts of logs, enable when debugging why specific friendly tiles were routed to specific streams first."""
+
+def set_all_debug_logging_on():
+    global SHOULD_LOG_DEBUG_BY_DEFAULT
+    global SHOULD_LOG_BORDER_PAIR_GATHER_SUPPORT
+    global SHOULD_LOG_BORDER_PAIR_STREAM_DATA_VERBOSE
+    global SHOULD_LOG_MKCP_ITEMS
+    global SHOULD_LOG_ALL_MKCP_ITEMS_SUPER_VERBOSE
+    global SHOULD_LOG_PLAN_MATERIALIZATION_POST_KNAPSACK
+    global SHOULD_LOG_UPSTREAM_PRIORITY_QUEUE_INTERNALS
+
+    SHOULD_LOG_DEBUG_BY_DEFAULT = True
+    SHOULD_LOG_BORDER_PAIR_GATHER_SUPPORT = True
+    SHOULD_LOG_BORDER_PAIR_STREAM_DATA_VERBOSE = True
+    SHOULD_LOG_MKCP_ITEMS = True
+    SHOULD_LOG_ALL_MKCP_ITEMS_SUPER_VERBOSE = True
+    SHOULD_LOG_PLAN_MATERIALIZATION_POST_KNAPSACK = True
+    SHOULD_LOG_UPSTREAM_PRIORITY_QUEUE_INTERNALS = True
+
 
 DIAG_BORDER_PAIR_ANCHORS: set[str] = set()
 DIAG_BORDER_PAIR_ISLAND_IDS: set[tuple[int, int]] = set()
@@ -181,6 +202,13 @@ class EnrichedFlowTurnsEntry:
 
 
 @dataclass(slots=True)
+class FlowRoutedSupportCandidate:
+    """Friendly source island with flow routed directly into a downstream capture-path island."""
+    source_node: IslandFlowNode
+    gathered_army: int
+
+
+@dataclass(slots=True)
 class FlowArmyTurnsLookupTable:
     """Per border pair lookup table"""
     border_pair: FlowBorderPairKey
@@ -241,6 +269,7 @@ class ArmyFlowExpanderV2:
         # Configuration options
         self.method: FlowGraphMethod = FlowGraphMethod.OrToolsSimpleMinCost
         self.use_simple_flow_stream_maximization: bool = True
+        self.plan_solver: PlanSolver = PlanSolver.CpSat
         self.log_debug: bool = SHOULD_LOG_DEBUG_BY_DEFAULT
         self.debug_render_capture_count_threshold: int = 10000
         """If there are more captures in any given plan option than this, then the option will be rendered inline as generated in a new debug viewer window."""
@@ -2955,15 +2984,39 @@ class ArmyFlowExpanderV2:
             is_external_item=is_external_item,
             max_iterations=32,
         )
-        grouped_result = solve_grouped_knapsack_input(grouped_input, noLog=not self.log_debug, noLogVerbose=not SHOULD_LOG_ALL_MKCP_ITEMS_SUPER_VERBOSE, perfTimer=self.perf_timer)
-        chosen_items = [items[index] for index in grouped_result.chosen_indices]
-        max_value = grouped_result.max_value
+        if self.plan_solver != PlanSolver.MkcpPlusGreedyConflictResolution:
+            with self.perf_timer.begin_move_event(f'solve_tile_plan_options ({self.plan_solver})'):
+                tile_plan_options = [
+                    GenericTilePlanOption(
+                        item=item,
+                        length=weights[index],
+                        tileSet={
+                            self.map.tiles_by_index[tile_index]
+                            for tile_index in item_tile_sets[index]
+                        },
+                        econValue=econ_values[index])
+                    for index, item in enumerate(items)
+                ]
+                tile_plan_result = solve_tile_plan_options(
+                    options=tile_plan_options,
+                    turn_budget=turn_budget,
+                    solver=self.plan_solver,
+                    value_multiple=ITERATIVE_EXPANSION_EN_CAP_VAL,
+                    perf_timer=self.perf_timer)
+                chosen_items = tile_plan_result.chosen_items
+                max_value = tile_plan_result.max_value
+                chosen_indices = tile_plan_result.chosen_indices
+        else:
+            grouped_result = solve_grouped_knapsack_input(grouped_input, noLog=not self.log_debug, noLogVerbose=not SHOULD_LOG_ALL_MKCP_ITEMS_SUPER_VERBOSE, perfTimer=self.perf_timer)
+            chosen_items = [items[index] for index in grouped_result.chosen_indices]
+            max_value = grouped_result.max_value
+            chosen_indices = grouped_result.chosen_indices
 
         if self.log_debug:
             total_weight = sum(it.turns for it in chosen_items)
             logbook.info(f"Grouped knapsack: budget={turn_budget}, best_weight={total_weight}, best_value={max_value}, "
-                         f"chosen_groups={len(chosen_items)}, chosen_indices={grouped_result.chosen_indices}")
-            for chosen_index in grouped_result.chosen_indices:
+                         f"chosen_groups={len(chosen_items)}, chosen_indices={chosen_indices}")
+            for chosen_index in chosen_indices:
                 logbook.info(
                     f"Grouped knapsack chosen idx={chosen_index}: {_describe_mkcp_item(items[chosen_index])}")
 

@@ -379,6 +379,7 @@ class BotGatherOps:
             if move.dest.player != bot.player.index and move.dest not in bot.target_player_gather_targets and not bot.flanking and needToKillTiles is not None and move.dest in needToKillTiles:
                 bot.timings.splitTurns += 1
                 bot.timings.launchTiming += 1
+                bot.info(f'INCREASED GATHER TIMES BECAUSE ATTACKING NEED TO KILL TILES. HOPEFULLY WE ARE DEFENSIVE ?')
 
             if move.source.isCity or move.source.isGeneral:
                 bot.cities_gathered_this_cycle.add(move.source)

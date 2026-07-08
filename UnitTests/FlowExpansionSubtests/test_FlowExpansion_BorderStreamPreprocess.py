@@ -23,7 +23,7 @@ from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionBorderStreamPreprocessTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -608,22 +608,33 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__border_stream_preprocess_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: border-pair stream preprocessing. Desired: the friendly gather stream for the
+        # x=2 corridor must include the corridor source (2,0) AND the two a2 tiles at (3,1)/(3,2)
+        # that flow sideways into the neutral crossing, and the target stream must reach the enemy.
         scenario = build_neutral_border_crossing_scenario(self)
 
-        self.assertEqual(0, len(scenario.target_crossable))
-        self.assertGreater(len(scenario.border_pairs), 0)
-        stream_data_count = 0
-        for border_pair in scenario.border_pairs:
-            stream_data = scenario.expander._build_border_pair_stream_data(
-                border_pair,
-                scenario.expander.flow_graph,
-                scenario.target_crossable,
-                5,
-            )
-            if stream_data is None:
-                continue
-            stream_data_count += 1
-            self.assertGreater(len(stream_data.friendly_stream), 0)
-            self.assertGreater(len(stream_data.target_stream), 0)
+        border_pair = find_crossing_border_pair(scenario)
+        stream_data = scenario.expander._build_border_pair_stream_data(
+            border_pair,
+            scenario.expander.flow_graph,
+            scenario.target_crossable,
+            5,
+        )
+        self.assertIsNotNone(stream_data)
 
-        self.assertGreater(stream_data_count, 0)
+        friendly_coords = set()
+        for node in stream_data.friendly_stream:
+            friendly_coords.update(tile_coords(node.island.tile_set))
+        target_coords = set()
+        for node in stream_data.target_stream:
+            target_coords.update(tile_coords(node.island.tile_set))
+
+        self.assertIn(CROSSING_SOURCE_TILE, friendly_coords)
+        for side_coord in CROSSING_SIDE_GATHER_TILES:
+            self.assertIn(
+                side_coord, friendly_coords,
+                f'Friendly gather stream must include side a2 tile {side_coord} feeding the corridor. '
+                f'friendly stream coords: {sorted(friendly_coords)}',
+            )
+        assert_captures_enemy_corridor(self, target_coords)

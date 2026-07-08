@@ -27,7 +27,7 @@ Grouped-knapsack repro workflow:
 """
 
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionGroupedKnapsackTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -2790,9 +2790,20 @@ aG1  a3   b1   bG1
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__grouped_knapsack_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: grouped knapsack selection. Desired: the solver selects an enriched entry that
+        # captures the enemy down the x=2 corridor.
         scenario = build_neutral_border_crossing_scenario(self)
-
         scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
         solution = scenario.expander._solve_grouped_knapsack(scenario.lookup_tables, 5)
         self.assertGreater(len(solution), 0)
-        self.assertTrue(any(selected.turns == 5 and selected.econ_value > 0.8 for selected in solution.values()))
+
+        enemy_selected = [
+            selected for selected in solution.values()
+            if isinstance(selected, EnrichedFlowTurnsEntry)
+            and CROSSING_ENEMY_TILES[0] in target_entry_coords(selected.capture_entry)
+        ]
+        self.assertGreater(
+            len(enemy_selected), 0,
+            'Expected the grouped knapsack to select a plan capturing the enemy down the x=2 corridor.',
+        )

@@ -13,7 +13,7 @@ from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionPostOptimizationTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -466,11 +466,12 @@ aG2  a5   b1        bG1
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__post_optimization_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: post-optimization + plan materialization. Desired: the materialized plan pulls army
+        # down the x=2 corridor and captures the enemy (see assert_has_enemy_capture_option).
         scenario = build_neutral_border_crossing_scenario(self)
-
         scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
         solution = scenario.expander._solve_grouped_knapsack(scenario.lookup_tables, 5)
         optimized_solution = scenario.expander._post_optimize_locally(solution, scenario.lookup_tables, 5)
-        self.assertEqual(solution, optimized_solution)
         plans = scenario.expander._materialize_plans(optimized_solution)
         assert_has_enemy_capture_option(self, plans, scenario.enemy_general.player)

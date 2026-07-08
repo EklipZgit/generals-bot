@@ -13,7 +13,7 @@ from base.client.map import MapBase
 from bot_ek0x45 import EklipZBot
 
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionLookupPostProcessingTests(TestBase):
     """
     Tests for Phase 3: Enriching capture entries with minimum gather support.
@@ -1439,12 +1439,22 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__lookup_postprocessing_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: _postprocess_flow_stream_gather_capture_lookup_pairs enrichment. Desired: at least
+        # one enriched entry within the 5-turn budget captures the enemy down the x=2 corridor
+        # (i.e. its capture was funded by sufficient gather support).
         scenario = build_neutral_border_crossing_scenario(self)
-
         scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
-        enriched_entries = [
-            enriched for lookup_table in scenario.lookup_tables
-            for enriched in lookup_table.enriched_capture_entries
+        border_pair = find_crossing_border_pair(scenario)
+        lookup_table = next(lt for lt in scenario.lookup_tables if lt.border_pair == border_pair)
+
+        enemy_enriched = [
+            enriched for enriched in lookup_table.enriched_capture_entries
+            if enriched.turns <= 5
+            and CROSSING_ENEMY_TILES[0] in target_entry_coords(enriched.capture_entry)
         ]
-        self.assertGreater(len(enriched_entries), 0)
-        self.assertTrue(any(enriched.turns <= 5 and enriched.econ_value > 0.8 for enriched in enriched_entries))
+        self.assertGreater(
+            len(enemy_enriched), 0,
+            'Expected an enriched capture entry (turns<=5) that captures the enemy down the x=2 '
+            'corridor. Enrichment currently drops these because gather support cannot fund reqArmy>=5.',
+        )

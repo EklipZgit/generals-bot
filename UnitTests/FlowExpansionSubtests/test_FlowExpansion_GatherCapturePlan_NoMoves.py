@@ -25,7 +25,7 @@ from Gather import GatherUtils
 from Sim.TextMapLoader import TextMapLoader
 
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class GatherCapturePlanNoMovesTests(TestBase):
     """Tests documenting GCP contract and army sufficiency requirements."""
 
@@ -567,13 +567,16 @@ bot_target_player=0
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__gather_capture_plan_moves_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: GatherCapturePlan move generation. Desired: the built plan pulls army down the x=2
+        # corridor and captures the enemy, and produces a non-empty move list.
         scenario = build_neutral_border_crossing_scenario(self)
-
         scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
         solution = scenario.expander._solve_grouped_knapsack(scenario.lookup_tables, 5)
         plans = scenario.expander._materialize_plans(solution)
         option = assert_has_enemy_capture_option(self, plans, scenario.enemy_general.player)
-        self.assertGreater(len(option.tileSet), 0)
+        self.assertGreater(len(option.get_move_list()), 0)
+
 if __name__ == '__main__':
     import unittest
     unittest.main()

@@ -12,7 +12,7 @@ from bot_ek0x45 import EklipZBot
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionTargetCrossableTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -828,7 +828,10 @@ a1   a1   a1   a1   b1   b1
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__target_crossable_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: target-crossable detection. Desired: no encircled outpost is flagged, and the
+        # x=2 corridor is seeded by a friendly (2,0) -> neutral (2,1) border pair.
         scenario = build_neutral_border_crossing_scenario(self)
 
         self.assertEqual(0, len(scenario.target_crossable))
-        self.assertGreater(len(scenario.border_pairs), 0)
+        find_crossing_border_pair(scenario)

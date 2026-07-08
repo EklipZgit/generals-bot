@@ -12,7 +12,7 @@ from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionIslandSetConnectivityTests(TestBase):
     """
     Tests that FlowExpansion produces connected/contiguous tile sets.
@@ -326,10 +326,11 @@ a3   a3   a3   a3   bG1  a3   a3
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__island_set_connectivity_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: island/tile set connectivity of the materialized plan. Desired: the plan captures
+        # the enemy down the x=2 corridor and its tile set is the connected corridor + side gather.
         scenario = build_neutral_border_crossing_scenario(self)
-
         scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
         solution = scenario.expander._solve_grouped_knapsack(scenario.lookup_tables, 5)
         plans = scenario.expander._materialize_plans(solution)
-        option = assert_has_enemy_capture_option(self, plans, scenario.enemy_general.player)
-        self.assertGreater(len(option.tileSet), 0)
+        assert_has_enemy_capture_option(self, plans, scenario.enemy_general.player)

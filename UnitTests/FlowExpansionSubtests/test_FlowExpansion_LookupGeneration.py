@@ -23,7 +23,7 @@ from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionLookupGenerationTests(TestBase):
     """
     Tests for Phase 2: Building per-border gather/capture lookup tables.
@@ -2742,11 +2742,19 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__lookup_generation_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: capture lookup generation. Desired: the x=2 corridor lookup table has a capture
+        # entry that reaches the enemy tiles with meaningful econ value.
         scenario = build_neutral_border_crossing_scenario(self)
+        border_pair = find_crossing_border_pair(scenario)
+        lookup_table = next(lt for lt in scenario.lookup_tables if lt.border_pair == border_pair)
 
-        self.assertGreater(len(scenario.lookup_tables), 0)
-        lookup_tables_with_capture = [
-            lookup_table for lookup_table in scenario.lookup_tables
-            if any(entry is not None and entry.econ_value > 0.8 for entry in lookup_table.capture_entries_by_turn)
+        enemy_capture_entries = [
+            entry for entry in lookup_table.capture_entries_by_turn
+            if entry is not None and entry.econ_value > 0.8
+            and CROSSING_ENEMY_TILES[0] in target_entry_coords(entry)
         ]
-        self.assertGreater(len(lookup_tables_with_capture), 0)
+        self.assertGreater(
+            len(enemy_capture_entries), 0,
+            'Expected a capture entry down the x=2 corridor reaching the enemy with econ > 0.8.',
+        )

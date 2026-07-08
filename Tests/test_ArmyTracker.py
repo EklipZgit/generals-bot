@@ -2892,7 +2892,34 @@ a1   b1   b1   bG1
         # 58-74
         # 55-77 May 29th commit, before fixing test_should_not_duplicate_army_out_of_fog
 
-    def test_should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence(self):
+    def test_should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence__natural(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence___xow-pf3Af---0--284.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 284, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=284)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,12->11,12->11,11')
+        simHost.queue_player_moves_str(general.player, '15,4->13,4')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertNoArmyOn(playerMap.At(9,12), bot)
+        self.assertNoArmyOn(playerMap.At(10,12), bot)
+        self.assertNoArmyOn(playerMap.At(11,12), bot)
+        self.assertNoArmyOn(playerMap.At(12,12), bot)
+        self.assertNoArmyOn(playerMap.At(9,13), bot)
+        self.assertNoArmyOn(playerMap.At(10,13), bot)
+        self.assertNoArmyOn(playerMap.At(11,13), bot)
+        self.assertNoArmyOn(playerMap.At(12,13), bot)
+
+    def test_should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence__colliding_with_1(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence___xow-pf3Af---0--284.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 284, fill_out_tiles=True)
@@ -2918,4 +2945,7 @@ a1   b1   b1   bG1
         self.assertNoArmyOn(playerMap.At(10,13), bot)
         self.assertNoArmyOn(playerMap.At(11,13), bot)
         self.assertNoArmyOn(playerMap.At(12,13), bot)
+
+        army = bot.armyTracker.armies.get(playerMap.At(10,12))
+        self.assertIsNone(army)
 

@@ -21,7 +21,7 @@ from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionProcessFlowIntoFlowArmyTurnsTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -1323,14 +1323,27 @@ aG1  a5        b1   bG1
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__process_flow_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: _process_flow_into_flow_army_turns lookup generation. Desired: capture entries for
+        # the x=2 corridor reach the enemy AND a gather entry of turns<=2 accumulates >=5 army (by
+        # pulling the side a2 tiles) so the reqArmy=5 turn-3 enemy capture can be funded within budget.
         scenario = build_neutral_border_crossing_scenario(self)
+        border_pair = find_crossing_border_pair(scenario)
+        lookup_table = next(lt for lt in scenario.lookup_tables if lt.border_pair == border_pair)
 
-        self.assertGreater(len(scenario.lookup_tables), 0)
-        self.assertTrue(any(
-            any(entry is not None and entry.turns <= 5 for entry in lookup_table.gather_entries_by_turn)
-            for lookup_table in scenario.lookup_tables
-        ))
-        self.assertTrue(any(
-            any(entry is not None and entry.turns <= 5 for entry in lookup_table.capture_entries_by_turn)
-            for lookup_table in scenario.lookup_tables
-        ))
+        capture_targets = set()
+        for entry in lookup_table.capture_entries_by_turn:
+            if entry is not None:
+                capture_targets.update(target_entry_coords(entry))
+        assert_captures_enemy_corridor(self, capture_targets)
+
+        funding_gathers = [
+            entry for entry in lookup_table.gather_entries_by_turn
+            if entry is not None and entry.turns <= 2 and entry.gathered_army >= 5
+        ]
+        self.assertGreater(
+            len(funding_gathers), 0,
+            'Expected a gather entry (turns<=2, army>=5) that pulls the side a2 tiles into the '
+            'corridor to fund the reqArmy=5 turn-3 enemy capture. '
+            f'gather entries: {[(e.turns, e.gathered_army) for e in lookup_table.gather_entries_by_turn if e is not None]}',
+        )

@@ -1436,6 +1436,32 @@ class DefenseTests(TestBase):
         city = playerMap.At(3, 7)
         self.assertEqual(general.player, city.player)
 
+    def test_should_not_abandon_late_city_defense_when_gather_exceeds_threat(self):
+        # test_Defense: test_should_not_abandon_late_city_defense_when_gather_exceeds_threat
+        # Repro of the 8gHw2idro t638 bug: enemy 158 army at 5,13 threatens our city 7,17 (22 army) in 6 turns
+        # (threatValue ~128). Our 181-army tile at 13,18 is +50 more than enough to defend/recapture, but it was
+        # being fully excluded from the city defense gather because it sits on a NON-lethal tentative general-threat
+        # path (blocking_tile_info), so the gather only found ~17 army and the bot abandoned the city and expanded
+        # far away instead. City defense should NOT be abandoned when we have far more than the threat value.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_abandon_late_city_defense_when_gather_exceeds_threat___8gHw2idro---0--638.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 638, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=638)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,13->6,13->6,14->6,15->6,16->7,16->7,17->8,17->9,17')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
+        self.assertIsNone(winner)
+
+        city = playerMap.At(7, 17)
+        self.assertEqual(general.player, city.player, 'should have defended / recaptured our city at 7,17 with the 13,18 army')
+
     def test_should_defend_self_and_forward_city_against_incoming_threat(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
 
@@ -3272,6 +3298,46 @@ class DefenseTests(TestBase):
 
         self.assertLess(playerMap.At(12,15).army, 15)
 
+    def test_FUCKING_DEFEND_THE_CITY_HOLY_SHIT(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/FUCKING_DEFEND_THE_CITY_HOLY_SHIT___8gHw2idro---0--637.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 637, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=637)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,13->6,13->6,17->7,17')
+        simHost.queue_player_moves_str(general.player, '13,17->13,18')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=9)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(7, 17)
+
+    def test_FUCKING_DEFEND_THE_CITY_HOLY_SHIT__short(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/FUCKING_DEFEND_THE_CITY_HOLY_SHIT___8gHw2idro---0--637.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 637, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=637)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '4,13->6,13->6,17->7,17')
+        simHost.queue_player_moves_str(general.player, '13,17->13,18')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertLess(170, playerMap.At(12, 18).army, 'should have moved the large army towards city still')
+
 # 78f 92p with the flipThingy - 0 instead of - 1, hybrid int, new defense move prio (with root dist base)
 # 76f 94p ^ but with flipThingy = 1
 # 82f 88p ^ with intercept def hybrid fixed so it actually triggers
@@ -3282,3 +3348,24 @@ class DefenseTests(TestBase):
 # 84f 124p 4ig nextTileDepthDist + bMap[nextTile] as priority heuristic for defense, plus some choke tweaks
 # 83f 146p 4ig idk been a million changes since then. New priority? Idfk.
 # 77f 151p 5ig idk still, probably just fixed map loader issues.
+# 81f 150p 5ig 26-07-07 idk
+    def test_should_gather_through_general_to_defend_general_and_city_and_intercept_and_expand(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_gather_through_general_to_defend_general_and_city_and_intercept_and_expand___8gHw2idro---0--931.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 931, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=931)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '3,13->3,15->4,15->4,17->7,17')
+        # # proof
+        # simHost.queue_player_moves_str(general.player, '17,15->17,16->14,16->14,17->13,17->13,18->9,18->9,17->7,17')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=16)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(7, 17)

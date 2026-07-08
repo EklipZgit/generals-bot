@@ -28,7 +28,7 @@ from Tests.TestBase import TestBase
 from base.client.map import MapBase, Tile
 
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, get_neutral_border_crossing_map_data
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class MockTilePlanOption(TilePlanInterface):
     """Mock external option for testing without requiring full InterceptionOptionInfo setup."""
 
@@ -395,6 +395,9 @@ b1   bG1
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__external_options_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: full end-to-end run through run_army_flow_expansion. Desired: exactly one option
+        # captures the enemy, is 5 turns, econ > 0.8, and pulls army down the x=2 corridor.
         map, general, enemy_general = self.load_map_and_generals_from_string(
             get_neutral_border_crossing_map_data(),
             102,
@@ -409,9 +412,9 @@ b1   bG1
             debugMode=False,
             renderThresh=700,
             tileIslandSize=5,
-            method=method,
         )
         assert_has_enemy_capture_option(self, opts, enemy_general.player)
+
 if __name__ == '__main__':
     unittest.main()
 

@@ -754,33 +754,37 @@ class ArmyTracker(object):
 
         with self.perf_timer.begin_move_event('ArmyTracker move respect'):
             if self.lastMove is not None:
-                playerMoveArmy = self.get_or_create_army_at(self.lastMove.source)
-                playerMoveArmy.player = self.map.player_index
-                playerMoveArmy.value = self.lastMove.source.delta.oldArmy - 1
-                self.try_track_own_move(playerMoveArmy, skip, trackingArmies)
+                with self.perf_timer.begin_move_event('ArmyTracker move respect own move'):
+                    playerMoveArmy = self.get_or_create_army_at(self.lastMove.source)
+                    playerMoveArmy.player = self.map.player_index
+                    playerMoveArmy.value = self.lastMove.source.delta.oldArmy - 1
+                    self.try_track_own_move(playerMoveArmy, skip, trackingArmies)
 
-            for player in self.map.players:
-                if player.index == self.map.player_index:
-                    continue
-                if player.last_move is not None:
-                    src: Tile
-                    dest: Tile
-                    src, dest, movedHalf = player.last_move
-
-                    try:
-                        armyAtSrc = self.armies[src]
-                    except KeyError:
+            with self.perf_timer.begin_move_event('ArmyTracker move respect other players'):
+                for player in self.map.players:
+                    if player.index == self.map.player_index:
                         continue
+                    if player.last_move is not None:
+                        src: Tile
+                        dest: Tile
+                        src, dest, movedHalf = player.last_move
 
-                    if armyAtSrc.player == player.index:
-                        logbook.info(f'RESPECTING MAP DETERMINED PLAYER MOVE {str(src)}->{str(dest)} BY p{player.index} FOR ARMY {str(armyAtSrc)}')
-                        self.army_moved(armyAtSrc, dest, trackingArmies, dontUpdateOldFogArmyTile=True)  # map already took care of this for us
-                        skip.add(src)
-                        # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_duplicate_army_out_of_fog covers a visible enemy move that the map already resolved from source to destination. Skipping only the source lets the later try_track_army pass reprocess the destination delta as if the same army moved again into adjacent fog, creating a duplicate tracker.
-                        skip.add(dest)
-                    else:
-                        logbook.info(f'ARMY {str(armyAtSrc)} AT SOURCE OF PLAYER {player.index} MOVE {str(src)}->{str(dest)} DID NOT MATCH THE PLAYER THE MAP DETECTED AS MOVER, SCRAPPING ARMY...')
-                        self.scrap_army(armyAtSrc, scrapEntangled=False)
+                        try:
+                            armyAtSrc = self.armies[src]
+                        except KeyError:
+                            continue
+
+                        if armyAtSrc.player == player.index:
+                            logbook.info(f'RESPECTING MAP DETERMINED PLAYER MOVE {str(src)}->{str(dest)} BY p{player.index} FOR ARMY {str(armyAtSrc)}')
+                            with self.perf_timer.begin_move_event('ArmyTracker move respect army_moved'):
+                                self.army_moved(armyAtSrc, dest, trackingArmies, dontUpdateOldFogArmyTile=True)  # map already took care of this for us
+                            skip.add(src)
+                            # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_duplicate_army_out_of_fog covers a visible enemy move that the map already resolved from source to destination. Skipping only the source lets the later try_track_army pass reprocess the destination delta as if the same army moved again into adjacent fog, creating a duplicate tracker.
+                            skip.add(dest)
+                        else:
+                            logbook.info(f'ARMY {str(armyAtSrc)} AT SOURCE OF PLAYER {player.index} MOVE {str(src)}->{str(dest)} DID NOT MATCH THE PLAYER THE MAP DETECTED AS MOVER, SCRAPPING ARMY...')
+                            with self.perf_timer.begin_move_event('ArmyTracker move respect scrap_army'):
+                                self.scrap_army(armyAtSrc, scrapEntangled=False)
 
         with self.perf_timer.begin_move_event('ArmyTracker emergence pathing'):
             self.unaccounted_tile_diffs: typing.Dict[Tile, int] = {}
@@ -876,10 +880,54 @@ class ArmyTracker(object):
                         logbook.error(msg)
                         continue
 
-                # if armyDetectedAsMove is not None:
-                armyDetectedAsMove = self.get_or_create_army_at(tile)
+                # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence__colliding_with_1
+                # When the map detects a move OUT of a fog tile that we have no tracked army on, the army that actually
+                # produced that move is deeper in the fog. Example: enemy moves 10,12->11,12->11,11 while we collide at
+                # 11,11 with a 1; the map detects 11,12->11,11 (so 11,12 has no unexplained delta and the emergence
+                # loop above is skipped), but our real tracked army is stranded back at 10,12. Blindly creating a fresh
+                # army at the fog source (11,12) here would duplicate that stranded army. Instead, first trace the move
+                # source back through the fog via the emergence path finder; if it resolves to an existing tracked army
+                # (the stranded 73 at 10,12), consume/advance that army forward instead of leaving a duplicate behind.
+                armyDetectedAsMove = None
+                sourcedFromFog = False
+                if not tile.visible and tile not in self.armies and tile.delta.armyDelta != 0 and tile not in self.skip_emergence_tile_pathings:
+                    # Only reuse a fog source that traces back to an EXISTING tracked army of this player (the stranded
+                    # army deeper in the fog, e.g. the 73 at 10,12). A normal enemy move out of the fog has no such
+                    # deeper tracked army; resolving a speculative fog path there (as full handle_unaccounted_delta
+                    # does, via use_fog_source_path_and_increase_emergence) corrupts fog predictions
+                    # (test_should_not_resolve_fog_path_for_normal_move). So we find the source path ourselves and only
+                    # resolve it when it consumes a real tracked army, skipping the emergence-increase side effects.
+                    fogSourceDelta = abs(tile.delta.armyDelta)
+                    fogSourceDepthLimit = self.get_emergence_max_depth_to_general_or_none(tile.player, tile, fogSourceDelta, useOpponentKnownFogTileArmy=False)
+                    sourceFogArmyPath = self.find_fog_source(tile.player, tile, fogSourceDelta, depthLimit=fogSourceDepthLimit)
+                    if sourceFogArmyPath is not None:
+                        leadsToTrackedArmy = False
+                        node = sourceFogArmyPath.start.next
+                        while node is not None:
+                            existing = self.armies.get(node.tile)
+                            if existing is not None and self.is_friendly_team(existing.player, tile.player):
+                                leadsToTrackedArmy = True
+                                break
+                            node = node.next
+                        if leadsToTrackedArmy:
+                            armyDetectedAsMove = self.resolve_fog_emergence(tile.player, sourceFogArmyPath, tile)
+                            if armyDetectedAsMove is not None:
+                                sourcedFromFog = True
+                                logbook.info(f'Map detected move out of fog {str(tile)}->{str(tile.delta.toTile)}; sourced from existing fog army {str(armyDetectedAsMove)} instead of creating a duplicate.')
+                if armyDetectedAsMove is None:
+                    armyDetectedAsMove = self.get_or_create_army_at(tile)
                 logbook.info(f'Map detected army move, honoring that: {str(tile)}->{str(tile.delta.toTile)}')
                 self.army_moved(armyDetectedAsMove, tile.delta.toTile, trackingArmies)
+                if sourcedFromFog:
+                    # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence__colliding_with_1
+                    # We just advanced a stranded fog army forward onto the (now visible) destination. The map leaves a
+                    # stale positive army delta on the fog source tile (its predicted pre-move army), which the later
+                    # try_track_army pass would otherwise re-interpret as the destination army "moving into fog" back
+                    # onto the source, recreating a duplicate there. Mark source and destination as handled (mirroring
+                    # the emergence loop above) so the sourced army is not reprocessed and no phantom is left behind.
+                    skip.add(tile)
+                    if tile.delta.toTile is not None:
+                        skip.add(tile.delta.toTile)
                 if tile.delta.toTile.isUndiscoveredObstacle:
                     # if map detected a move into an obstacle, then
                     toTile = self.map.tiles_by_index[tile.delta.toTile.tile_index]

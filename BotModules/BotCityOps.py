@@ -889,7 +889,11 @@ class BotCityOps:
                     additionalIncrement=addlIncrementing.value / 2,
                 )
             if killPath is not None:
-                bestDef = BotDefense.get_best_defense(bot, killPath.tail.tile, killPath.length - 1, list())
+                # Tests/test_CityContestation.py::test_should_not_route_around_enemy_army_when_recapturing_cities
+                # Exclude the tiles on our killpath from the enemy's defense search. Any enemy army we
+                # capture en route (e.g. an army sitting between us and the city) cannot also defend the
+                # city, so it must not be double-counted as a defender.
+                bestDef = BotDefense.get_best_defense(bot, killPath.tail.tile, killPath.length - 1, killPath.tileList)
                 if bestDef is not None and bestDef.value > killPath.value:
                     bot.viewInfo.color_path(PathColorer(
                         bestDef,
@@ -941,6 +945,17 @@ class BotCityOps:
 
             if isinstance(shortestKill, GatherCapturePlan):
                 return shortestKill
+
+            # Tests/test_CityContestation.py::test_should_not_route_around_enemy_army_when_recapturing_cities
+            # If the killpath already captures the city on its own (positive delivered army from existing
+            # tiles), execute it directly instead of re-planning it into a gather. Re-planning would add the
+            # enemy army guarding the city to negative tiles and route around it, wasting turns / failing the
+            # capture. Only fall through to the gather re-plan when the direct path can't capture unaided.
+            if shortestKill.value > 0:
+                bot.info(f'quick kill direct killpath @{tgCity}: {str(shortestKill)}')
+                BotCityOps._apply_city_capture_plan_value(bot, shortestKill, tgCity)
+                return shortestKill
+
             cityPath = shortestKill.get_subsegment(3, end=True)
             maxDur = int(bot.player.tileCount ** 0.32) + 1
             path, move, planOption = BotCityOps.plan_city_capture_with_plan_option(

@@ -1333,14 +1333,14 @@ class EklipZBot(object):
                     self.info(f'FFG fell back to general...? {targets}')
                 for t in targets:
                     self.viewInfo.add_targeted_tile(t, TargetStyle.ORANGE)
-                minTurns = roughTurns - 15
-                maxTurns = roughTurns + 15
+                minTurns = roughTurns - 10
+                maxTurns = roughTurns + 10
 
                 if isinstance(self.curPath, GatherCapturePlan):
                     firstMove = self.curPath.get_first_move()
 
                     if firstMove is not None and firstMove.source.isSwamp or maxTurns >= self.curPath.length >= minTurns:
-                        self.info(f'CONTINUING FFG plan')
+                        self.info(f'CONTINUING FFG ({self.force_far_gathers_turns}t) maxTurns {maxTurns} >= curPath.length {self.curPath.length} >= minTurns {minTurns}')
                         BotPathingUtils.clean_up_path_before_evaluating(self)
                         return self.curPath.get_first_move()
 

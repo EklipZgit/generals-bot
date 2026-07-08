@@ -23,13 +23,15 @@ from base.client.map import MapBase, Tile
 # TODO remove me once things fixed
 DEBUG_BYPASS_BAD_INTERCEPTIONS = True
 
-TARGET_CAP_VALUE = 2.055
+# Note this is increased by 0.05 over the baseline expansion target cap value in order to slightly prioritize making efficient move use.
+# Important for passing tests like test_should_intercept_early_game_near_collision_when_have_too_much_to_spend_rest_of_round_capping etc.
+TARGET_CAP_VALUE = 2.1
 OTHER_PARTY_CAP_VALUE = 0.5
 NEUTRAL_CAP_VALUE = 1.0
 GENERAL_CAP_VALUE = 8.0
 OWNED_CITY_CAP_VALUE_BONUS = 5
 # needs to be high enough to outperform normal expand, or normal expand will try to skip the intercept in favor of dodging the army for captures lmao
-RECAPTURE_VALUE = 2.055
+RECAPTURE_VALUE = 2.1
 
 
 class ThreatValueInfo(object):
@@ -295,6 +297,7 @@ class ArmyInterception(object):
         'distance_from_threat_to_contestable_en_city',
         'intercept_options',
         'positive_threat_subsegment_negative_tile_indexes',
+        'sparse_recapture_bonus',
     )
 
     def __init__(
@@ -312,6 +315,9 @@ class ArmyInterception(object):
         self.middlest_intercept_tiles: typing.Set[Tile] = set()
         self.furthest_common_intercept_distances: MapMatrixInterface[int] = None
         self.target_tile: Tile = threats[0].threat.path.start.tile
+
+        self.sparse_recapture_bonus: float = 1.0
+        """EG in early game intercepts in round 2 for example, not only are we blocking the opp from doing damage but we're forcing extra retraversals out of them from their general for at least 4+ bonus damage vs just trade-capturing, in many cases."""
 
         maxValPerTurn = -100000
         maxThreatInfo = None
@@ -913,11 +919,23 @@ class ArmyInterceptor(object):
         avgLen = 0
         avgEconPerTurn = 0.0
         maxEconPerTurn = 0.0
+        maxThreat = None
+        maxBalancedThreat = None
+        maxBalancedThreatHeur = -10
         for threat in threatValues:
             maxLen = max(threat.turns_used_by_enemy, maxLen)
             avgLen += threat.turns_used_by_enemy
             avgEconPerTurn += threat.econ_value_per_turn
-            maxEconPerTurn = max(maxEconPerTurn, threat.econ_value_per_turn)
+
+            if maxEconPerTurn < threat.econ_value_per_turn:
+                maxThreat = threat
+                maxEconPerTurn = threat.econ_value_per_turn
+
+            heurVal = threat.econ_value_per_turn - (threat.econ_value_per_turn / (threat.turns_used_by_enemy + 1))
+            if heurVal > maxBalancedThreatHeur:
+                maxBalancedThreat = threat
+                maxBalancedThreatHeur = heurVal
+
         avgLen = avgLen / len(threatValues)
         avgEconPerTurn = avgEconPerTurn / len(threatValues)
 
@@ -932,6 +950,7 @@ class ArmyInterceptor(object):
                 logbook.info(f'bypassing threat due to turns {threat.turns_used_by_enemy} vs cutoff {lenCutoffIfNotCompliant:.3f} based on average length {avgLen:.3f}. Cut {threat}')
                 ignoredThreats.append(threat.threat)
                 continue
+
             if not threat.threat.path.tail.tile.isGeneral and not threat.threat.path.tail.tile.isCity and threat.econ_value_per_turn <= econVtCutoff:
                 logbook.info(f'bypassing threat due to econVt {threat.econ_value_per_turn:.3f} vs cutoff {econVtCutoff:.3f}. Cut {threat}')
                 ignoredThreats.append(threat.threat)
@@ -939,6 +958,11 @@ class ArmyInterceptor(object):
 
             logbook.info(f'Kept threat with {threat.econ_value_per_turn:.3f}vt vs cutoff {econVtCutoff:.3f}vt: (threat {threat})')
             finalThreats.append(threat)
+
+        if len(finalThreats) == 0 and maxBalancedThreat is not None:
+            logbook.info(f'Kept MAX threat (due to pruning all...?) with {maxBalancedThreat.econ_value_per_turn:.3f}vt (heur {maxBalancedThreatHeur:.3f}, threat {maxBalancedThreat})')
+            finalThreats.append(maxBalancedThreat)
+            ignoredThreats.remove(maxBalancedThreat.threat)
 
         return finalThreats, ignoredThreats
 
@@ -996,7 +1020,7 @@ class ArmyInterceptor(object):
 
             threatValues.append(threatInfo)
 
-        logbook.info(f'best_enemy_threat was val {maxThreatInfo.econ_value:.2f} v/t {maxThreatInfo.econ_value_per_turn:.2f} - {str(maxThreatInfo)}')
+        logbook.info(f'_determine_threat_values max was val {maxThreatInfo.econ_value:.2f} v/t {maxThreatInfo.econ_value_per_turn:.2f} - {str(maxThreatInfo)}')
         return threatValues
 
     def _get_path_econ_values_for_player(
@@ -1398,8 +1422,15 @@ class ArmyInterceptor(object):
                 newValue += blockedDamage
 
                 baseLen = turnsUsedWithRecap - recapTurnsUsed
+                sparseBonus = 0.0
+                sparseLenCutoff = len(averageEnemyPositionByTurn) / 2
+                if addlTurnsToReachThreatWorstCase == 0 and worstCaseInterceptMoves < 5 and baseLen < sparseLenCutoff:
+                    sparseBonus = interception.sparse_recapture_bonus
+                    logbook.info(f'INCLUDING SPARSE BONUS OF {sparseBonus:.2f} DUE TO addlTurnsToReachThreatWorstCase {addlTurnsToReachThreatWorstCase}, worstCaseInterceptMoves {worstCaseInterceptMoves}, baseLen {baseLen} < sparseLenCutoff {sparseLenCutoff}')
+                    newValue += sparseBonus
+
                 if self.log_debug:
-                    logbook.info(f'baseLen:{baseLen}, recapTurns:{recapTurnsUsed}, interceptPointDist:{interceptPointDist}, addlTurnsToReachThreatWorstCase:{fullAddlTurnsToGuaranteedIntercept}, effectiveDist:{effectiveDist}, turnsUsedWithRecap:{turnsUsedWithRecap}, blockedAmount:{blockedDamage}, maxExtraMoves:{interceptInfo.max_extra_moves_to_capture}, worstCaseInterceptMoves:{worstCaseInterceptMoves}')
+                    logbook.info(f'baseLen:{baseLen}, recapTurns:{recapTurnsUsed}, interceptPointDist:{interceptPointDist}, addlTurnsToReachThreatWorstCase:{fullAddlTurnsToGuaranteedIntercept}, effectiveDist:{effectiveDist}, turnsUsedWithRecap:{turnsUsedWithRecap}, blockedAmount:{blockedDamage}, sparseBonus:{sparseBonus}, maxExtraMoves:{interceptInfo.max_extra_moves_to_capture}, worstCaseInterceptMoves:{worstCaseInterceptMoves}')
                     logbook.info(
                         f'DIAG_INTERCEPT_VAL path {path}, start {path.start.tile}, tail {path.tail.tile}, '
                         f'startIsGeneral {path.start.tile.isGeneral}, startArmy {path.start.tile.army}, pathLen {path.length}, '
@@ -1411,6 +1442,7 @@ class ArmyInterceptor(object):
 
                 # for curDist in range(path.length + addlTurnsToReachThreatWorstCase, turnsUsed + 1):
                 # baseLen = worstCaseInterceptMoves  # TODO this?
+
                 for curDist in range(baseLen, turnsUsedWithRecap + 1):
                     recapTurns = curDist - baseLen
                     # thisValue = max(rawValue, newValue - recaptureTurns * RECAPTURE_VALUE)

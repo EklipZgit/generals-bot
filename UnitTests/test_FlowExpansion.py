@@ -132,6 +132,44 @@ class FlowExpansionUnitTests(TestBase):
         total_neutral_tiles = sum(1 for tile in rawMap.tiles_by_index if tile.player == -1)
         self.assertLessEqual(sum(opt.length for opt in opts), total_neutral_tiles)
 
+    def test_should_not_recursion_error_building_flow_graph_on_large_neutral_ffa_board(self):
+        # BehaviorAlgorithms/Flow/OrToolsFlowDirectionFinder.py DirectOrToolsGraphBuilder.build phase3.6
+        # SCC repair used a recursive Tarjan (_strongconnect) that exceeded Python's default recursion
+        # limit (RecursionError: maximum recursion depth exceeded) on large, highly-connected boards.
+        # Reproduces the live FFA turn ~5 crash: a ~767 single-tile-neutral-island board produced a
+        # ~1000-deep DFS chain. A large all-neutral board with two generals recreates that topology.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
+        width = 32
+        height = 30
+        headerFooter = '|' + '    |' * (width - 1)  # count('|') == map width for TextMapLoader
+        mapRows = [headerFooter]
+        for y in range(height):
+            cells = []
+            for x in range(width):
+                if x == 0 and y == 0:
+                    cells.append('aG1'.ljust(5))
+                elif x == width - 1 and y == height - 1:
+                    cells.append('bG1'.ljust(5))
+                else:
+                    cells.append('     ')
+            mapRows.append(''.join(cells).rstrip())
+        mapRows.append(headerFooter)
+        mapData = '\n'.join(mapRows)
+
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 5, fill_out_tiles=True)
+
+        self.begin_capturing_logging()
+
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        flowExpander = ArmyFlowExpanderV2(map)
+        flowExpander.method = method
+        # Must not raise RecursionError while building the flow graph.
+        flowExpander.get_expansion_options(builder, general.player, enemyGeneral.player, turns=50, boardAnalysis=None, territoryMap=None, negativeTiles=None)
+
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
@@ -2708,7 +2746,6 @@ player_index=0
         self.assertOwnedXY(13, 17)
         self.assertOwnedXY(13, 18)
 
-    # 51f, 72p, 5 skipped as of cleaning up all the hyperverbose logs. Still in the middle of figuring out why flow expand routes like dogshit
 
     def test_should_use_all_of_your_fucking_army_round_2_electric_boogaloo_2_electric_boogaloo(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2992,3 +3029,45 @@ player_index=0
 
         self.assertAllNonOnePlayerTilesUsedInRoundPlan(bot, general, playerMap)
         self.assertGreater(bot.last_flow_opt_collection.total_econ, 22)
+
+# 51f, 72p, 5ig as of cleaning up all the hyperverbose logs. Still in the middle of figuring out why flow expand routes like dogshit
+# 58f, 83p, 6ig - 26-07-07 after tweaks for the test_builds_flow_plan_gathering_through_neutral_border_crossings stuff by claude
+    def test_should_not_keep_requeueing_from_general_when_have_other_options_later(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_keep_requeueing_from_general_when_have_other_options_later___XVjMU7Et9---0--73.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 73, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=73)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(10, 13)
+        self.assertLess(10, playerMap.At(10, 13).army)
+
+    def test_should_not_keep_requeueing_from_general_when_have_other_options_later__wtf(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_keep_requeueing_from_general_when_have_other_options_later__wtf___XVjMU7Et9---0--72.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 72, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=72)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '4,17->4,18')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(10, 13)
+        self.assertLess(10, playerMap.At(10, 13).army)

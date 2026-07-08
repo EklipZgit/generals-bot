@@ -34,6 +34,7 @@ cmd /c "... > D:\2019_reformat_Backup\cascade-debug-output\generals-bot\raw_test
 16. We use slotted classes, @dataclass(slots=True) or explicit __slots__ = ... for all classes.
 17. We strongly type all parameter and return definitions in function signatures, including the generics to dict[A, B] and list[A] etc, as well as including docstrings for function definitions. We keep the function documentation up to date with changes inside the function or to its parameter list or parameter usage.
 18. We don't allow multiple types that dont fit the same interface in the same variable (besides A | None). solution: dict[FlowBorderPairKey | str, EnrichedFlowTurnsEntry | ExternalPlanOption] is a huge violation of this. Create an interface (via typing.Protocol, see @InterfaceSample.py) that they duck type against instead.
+19. hasattr etc is fucking banned. Never ever is that shit acceptable. All classes we use always have all attributes, don't write retarded code. This is very performance oriented codebase and must never do dumb slow shit like that.
 
 --- RunUnittestBaseline.py ---
 1. Use RunUnittestBaseline.py from the repo root to create stable unittest pass/fail baselines before risky changes.

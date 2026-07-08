@@ -771,7 +771,7 @@ class CityGatherTests(TestBase):
         self.assertIsNone(winner)
 
         city = playerMap.GetTile(9, 2)
-        self.assertGreater(bot.sum_player_standing_army_near_or_on_tiles([playerMap.GetTile(9, 3)], distance=5, player=general.player), 50)
+        self.assertGreater(BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot, [playerMap.GetTile(9, 3)], distance=5, player=general.player), 50)
         self.assertEqual(-1, city.player)
 
     def test_should_not_explode(self):

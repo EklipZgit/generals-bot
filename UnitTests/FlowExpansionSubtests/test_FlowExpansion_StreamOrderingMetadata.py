@@ -14,7 +14,7 @@ from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 
 
-from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import (build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, assert_captures_enemy_corridor, find_crossing_border_pair, tile_coords, target_entry_coords, gather_entry_coords, get_neutral_border_crossing_map_data, CROSSING_SOURCE_TILE, CROSSING_SIDE_GATHER_TILES, CROSSING_ENEMY_TILES, CROSSING_CORRIDOR_TILES)
 class FlowExpansionStreamOrderingMetadataTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -886,10 +886,19 @@ a5   b1
 
 
     def test_builds_flow_plan_gathering_through_neutral_border_crossings__stream_ordering_metadata_level(self):
+        # Per-layer copy of test_builds_flow_plan_gathering_through_neutral_border_crossings.
+        # Layer: target stream ordering metadata. Desired: the ordered target stream for the x=2
+        # corridor border pair reaches the enemy tiles down column x=2.
         scenario = build_neutral_border_crossing_scenario(self)
-
-        self.assertGreater(len(scenario.lookup_tables), 0)
-        for lookup_table in scenario.lookup_tables:
-            self.assertIsNotNone(lookup_table.border_pair)
-            self.assertIsNotNone(lookup_table.gather_entries_by_turn)
-            self.assertIsNotNone(lookup_table.capture_entries_by_turn)
+        border_pair = find_crossing_border_pair(scenario)
+        stream_data = scenario.expander._build_border_pair_stream_data(
+            border_pair,
+            scenario.expander.flow_graph,
+            scenario.target_crossable,
+            5,
+        )
+        self.assertIsNotNone(stream_data)
+        target_coords = set()
+        for node in stream_data.target_stream:
+            target_coords.update(tile_coords(node.island.tile_set))
+        assert_captures_enemy_corridor(self, target_coords)

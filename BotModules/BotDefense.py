@@ -774,8 +774,21 @@ class BotDefense:
                     negatives.add(bot.general)
 
         if not threat.path.tail.tile.isGeneral:
+            # test_Defense: test_should_not_abandon_late_city_defense_when_gather_exceeds_threat
+            # blocking_tile_info reserves friendly tiles that we want to keep in place to block an enemy general
+            # kill-threat. We only need to withhold those tiles from a (non-general) city defense gather when
+            # there is an ACTUAL lethal general threat to preserve them for (dangerAnalyzer.fastestThreat / ally).
+            # When the block only exists because a tile sits on a tentative / non-lethal general threat path
+            # (fastestThreat is None, i.e. "no fastest threat found"), fully excluding that tile starves the city
+            # defense - e.g. an army that is +50 more than the city threat value gets dropped from the gather and
+            # the city is wrongly abandoned. Such a tile is free to move toward the (city) threat instead.
             # TODO maybe we need directional blocking to be supported instead of treating blocked tiles as fully negative.
-            negatives.update(bot.blocking_tile_info.keys())
+            hasLethalGeneralThreat = (
+                (bot.dangerAnalyzer.fastestThreat is not None and bot.dangerAnalyzer.fastestThreat.turns > -1)
+                or (bot.dangerAnalyzer.fastestAllyThreat is not None and bot.dangerAnalyzer.fastestAllyThreat.turns > -1)
+            )
+            if hasLethalGeneralThreat:
+                negatives.update(bot.blocking_tile_info.keys())
 
         if additionalNegatives is not None:
             negatives.update(additionalNegatives)

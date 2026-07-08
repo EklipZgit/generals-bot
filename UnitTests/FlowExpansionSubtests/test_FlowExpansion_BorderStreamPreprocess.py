@@ -23,6 +23,7 @@ from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionBorderStreamPreprocessTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -604,3 +605,25 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
 
         if debugMode:
             logbook.info(f"Validated spatial connectivity for {len(border_pairs)} border pairs")
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__border_stream_preprocess_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        self.assertEqual(0, len(scenario.target_crossable))
+        self.assertGreater(len(scenario.border_pairs), 0)
+        stream_data_count = 0
+        for border_pair in scenario.border_pairs:
+            stream_data = scenario.expander._build_border_pair_stream_data(
+                border_pair,
+                scenario.expander.flow_graph,
+                scenario.target_crossable,
+                5,
+            )
+            if stream_data is None:
+                continue
+            stream_data_count += 1
+            self.assertGreater(len(stream_data.friendly_stream), 0)
+            self.assertGreater(len(stream_data.target_stream), 0)
+
+        self.assertGreater(stream_data_count, 0)

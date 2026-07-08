@@ -12,6 +12,7 @@ from bot_ek0x45 import EklipZBot
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionTargetCrossableTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -824,3 +825,10 @@ a1   a1   a1   a1   b1   b1
                            'Test setup should have more outpost army than neighboring enemy army')
         self.assertNotIn(outpost_island.unique_id, target_crossable,
                          'Friendly outpost with more army than neighboring enemies must not be target-crossable')
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__target_crossable_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        self.assertEqual(0, len(scenario.target_crossable))
+        self.assertGreater(len(scenario.border_pairs), 0)

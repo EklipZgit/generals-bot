@@ -1,10 +1,3 @@
-import random
-import time
-import typing
-
-import logbook
-
-import Gather
 import SearchUtils
 from Army import Army
 from ArmyTracker import ArmyTracker
@@ -15,6 +8,7 @@ from Models import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from Sim.TextMapLoader import TextMapLoader
+from Strategy.OpponentTracker import OpponentTracker
 from TestBase import TestBase
 from base.client.tile import TILE_EMPTY, Tile
 from bot_ek0x45 import EklipZBot
@@ -2897,54 +2891,31 @@ a1   b1   b1   bG1
         # 56-72
         # 58-74
         # 55-77 May 29th commit, before fixing test_should_not_duplicate_army_out_of_fog
-        
-    def test_should_track_seen_tiles_for_player_when_discovered_tile_flips(self):
-        mapFile = 'GameContinuationEntries/should_load_map_data___P0YO4V4u8---0--111.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
-        opponentTracker = OpponentTracker(map)
-        flippedTile = map.GetTile(2, 2)
-        flippedTile.player = enemyGeneral.player
-        flippedTile.discovered = True
 
-        opponentTracker.notify_tile_flipped_for_player(flippedTile)
+    def test_should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_duplicate_army_by_leaving_fog_army_behind_on_fog_emergence___xow-pf3Af---0--284.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 284, fill_out_tiles=True)
 
-        self.assertTrue(opponentTracker.seen_tiles_by_player[enemyGeneral.player][flippedTile])
-        for adj in flippedTile.adjacents:
-            self.assertTrue(opponentTracker.seen_tiles_by_player[enemyGeneral.player][adj])
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=284)
 
-    def test_should_not_track_seen_tiles_for_player_when_undiscovered_tile_flips(self):
-        mapFile = 'GameContinuationEntries/should_load_map_data___P0YO4V4u8---0--111.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
-        opponentTracker = OpponentTracker(map)
-        flippedTile = map.GetTile(2, 2)
-        flippedTile.player = enemyGeneral.player
-        flippedTile.discovered = False
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,12->11,12->11,11')
+        simHost.queue_player_moves_str(general.player, '15,4->14,4  11,10->11,11')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
 
-        opponentTracker.notify_tile_flipped_for_player(flippedTile)
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
 
-        self.assertFalse(opponentTracker.seen_tiles_by_player[enemyGeneral.player][flippedTile])
-        for adj in flippedTile.adjacents:
-            self.assertFalse(opponentTracker.seen_tiles_by_player[enemyGeneral.player][adj])
+        self.assertNoArmyOn(playerMap.At(9,12), bot)
+        self.assertNoArmyOn(playerMap.At(10,12), bot)
+        self.assertNoArmyOn(playerMap.At(11,12), bot)
+        self.assertNoArmyOn(playerMap.At(12,12), bot)
+        self.assertNoArmyOn(playerMap.At(9,13), bot)
+        self.assertNoArmyOn(playerMap.At(10,13), bot)
+        self.assertNoArmyOn(playerMap.At(11,13), bot)
+        self.assertNoArmyOn(playerMap.At(12,13), bot)
 
-    def test_should_round_trip_opponent_tracker_seen_tiles(self):
-        mapFile = 'GameContinuationEntries/should_load_map_data___P0YO4V4u8---0--111.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 111, fill_out_tiles=True)
-        bot = type('SerializationTestBot', (), {})()
-        bot._map = map
-        bot.opponent_tracker = OpponentTracker(map)
-        seenTile = map.GetTile(2, 2)
-        seenAdj = seenTile.adjacents[0]
-        bot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][seenTile] = True
-        bot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][seenAdj] = True
-        data = {}
-        for line in BotSerialization.convert_opponent_tracker_seen_tiles_to_string(bot).split('\n'):
-            key, value = line.split('=', 1)
-            data[key] = value
-
-        loadedBot = type('SerializationTestBot', (), {})()
-        loadedBot._map = map
-        loadedBot.opponent_tracker = OpponentTracker(map)
-        BotSerialization.load_opponent_tracker_seen_tiles(loadedBot, data)
-
-        self.assertTrue(loadedBot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][seenTile])
-        self.assertTrue(loadedBot.opponent_tracker.seen_tiles_by_player[enemyGeneral.player][seenAdj])

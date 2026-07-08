@@ -64,12 +64,17 @@ class TestBase(unittest.TestCase):
         self._initialized: bool = False
         self._logging_handler = StreamHandler(sys.stderr, logbook.INFO)  #  format_string=LOG_FORMATTER
         self._logging_handler.formatter = BotLogging._CompactFormatter(logbook.handlers.DEFAULT_FORMAT_STRING)
+        self._sim_host: GameSimulatorHost = None
+        """Set by get_debug_render_bot"""
+
         self.map: MapBase = None
         ArmyInterceptor.DEBUG_BYPASS_BAD_INTERCEPTIONS = False
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
         if player == -2:
             player = simHost.sim.sim_map.player_index
+
+        self._sim_host = simHost
 
         bot = simHost.get_bot(player)
         bot.info_render_gather_values = False
@@ -1999,8 +2004,12 @@ class TestBase(unittest.TestCase):
 
         return pCities - enCities
 
-    def assertTileDifferentialGreaterThan(self, minimum: int, simHost: GameSimulatorHost, reason: str | None = None):
+    def assertTileDifferentialGreaterThan(self, minimum: int, simHost: GameSimulatorHost = None, reason: str | None = None):
         tileDiff = self.get_tile_differential(simHost)
+        if simHost is None:
+            simHost = self._sim_host
+            if simHost is None:
+                raise ValueError('simHost must be provided if self._sim_host is None (you havent called get_debug_render_bot yet)')
         if reason is not None:
             reason = f' {reason}'
         else:
@@ -2008,7 +2017,11 @@ class TestBase(unittest.TestCase):
         self.assertGreater(tileDiff, minimum, f'expected tile differential to be greater than {minimum}, instead found {tileDiff}. {reason}')
         logbook.info(f'tile differential was {tileDiff} (> {minimum})')
 
-    def assertEconDifferentialGreaterThan(self, minimum: int, simHost: GameSimulatorHost, reason: str | None = None, cityFactor: int = 25):
+    def assertEconDifferentialGreaterThan(self, minimum: int, simHost: GameSimulatorHost = None, reason: str | None = None, cityFactor: int = 25):
+        if simHost is None:
+            simHost = self._sim_host
+            if simHost is None:
+                raise ValueError('simHost must be provided if self._sim_host is None (you havent called get_debug_render_bot yet)')
         tileDiff = self.get_tile_differential(simHost)
         cityDiff = self.get_city_differential(simHost)
         totalDiff = tileDiff + cityDiff * cityFactor
@@ -2020,7 +2033,11 @@ class TestBase(unittest.TestCase):
         self.assertGreater(totalDiff, minimum, f'expected econ differential to be greater than {minimum}, instead found {totalDiff}. {reason}')
         logbook.info(f'total econ differential was {tileDiff} (> {minimum}) (tileDiff {tileDiff}, cityDiff {cityDiff} * 25)')
 
-    def assertTileDifferentialLessThan(self, maximum: int, simHost: GameSimulatorHost, reason: str | None = None):
+    def assertTileDifferentialLessThan(self, maximum: int, simHost: GameSimulatorHost = None, reason: str | None = None):
+        if simHost is None:
+            simHost = self._sim_host
+            if simHost is None:
+                raise ValueError('simHost must be provided if self._sim_host is None (you havent called get_debug_render_bot yet)')
         tileDiff = self.get_tile_differential(simHost)
         if reason is not None:
             reason = f' {reason}'

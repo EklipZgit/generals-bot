@@ -26,6 +26,7 @@ from Algorithms.TileIslandBuilder import TileIslandBuilder, IslandNamer
 from BoardAnalyzer import BoardAnalyzer
 
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class GatherCapturePlanBuilderTests(TestBase):
     """Tests for GCP builder handling of partial island captures."""
 
@@ -276,3 +277,13 @@ bot_target_player=1
         )
 
         return expander, builder, lookup_tables
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__gather_capture_plan_builder_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
+        solution = scenario.expander._solve_grouped_knapsack(scenario.lookup_tables, 5)
+        plans = scenario.expander._materialize_plans(solution)
+        option = assert_has_enemy_capture_option(self, plans, scenario.enemy_general.player)
+        self.assertTrue(any(tile.player == -1 for tile in option.tileSet))

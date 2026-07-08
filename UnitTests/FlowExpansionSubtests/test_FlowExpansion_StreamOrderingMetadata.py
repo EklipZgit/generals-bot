@@ -14,6 +14,7 @@ from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionStreamOrderingMetadataTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -882,3 +883,13 @@ a5   b1
                 self.assertIsNotNone(contrib.island_id)
                 self.assertIsInstance(contrib.sort_score, float)
                 self.assertFalse(contrib.sort_score != contrib.sort_score, 'sort_score should not be NaN')
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__stream_ordering_metadata_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        self.assertGreater(len(scenario.lookup_tables), 0)
+        for lookup_table in scenario.lookup_tables:
+            self.assertIsNotNone(lookup_table.border_pair)
+            self.assertIsNotNone(lookup_table.gather_entries_by_turn)
+            self.assertIsNotNone(lookup_table.capture_entries_by_turn)

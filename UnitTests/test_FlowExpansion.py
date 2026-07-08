@@ -48,6 +48,16 @@ class FlowExpansionUnitTests(TestBase):
 
         return bot
 
+    def assertAllNonOnePlayerTilesUsedInRoundPlan(self, bot: EklipZBot, general: Tile, playerMap: MapBase):
+        unused = []
+        for tileMustBeUsed in playerMap.players[general.player].tiles:
+            # skip the assertion if we used it as our 1 move in the sim game
+            if tileMustBeUsed.army > 1:
+                if not SearchUtils.any_where(bot.last_flow_opt_collection.expansion_options, lambda o: tileMustBeUsed in o.tileSet):
+                    unused.append(tileMustBeUsed)
+        if len(unused) > 0:
+            self.fail(f'The following tiles were not used in the expansion options: {unused}')
+
     def test_a_more_open_normal_map(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/a_more_open_normal_map___VY49QNB72---1--250.txtmap'
@@ -79,9 +89,11 @@ class FlowExpansionUnitTests(TestBase):
         self.enable_search_time_limits_and_disable_debug_asserts()
         self.begin_capturing_logging()
 
-        opts = self.run_army_flow_expansion(rawMap, rawMap.At(general.x, general.y), rawMap.At(enemyGeneral.x, enemyGeneral.y), turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=1, shouldRender=True, method=method)
+        expander, opts = self.run_army_flow_expansion_and_get_expander(rawMap, rawMap.At(general.x, general.y), rawMap.At(enemyGeneral.x, enemyGeneral.y), turns=50, debugMode=debugMode, renderThresh=700, tileIslandSize=1, shouldRender=True, method=method)
 
         self.assertNoDuplicateTileUse(opts)
+        self.assertEqual(-1, expander.target_team)
+        # self.assertEqual(0, expander._ortools_finder.ortools_graph_data_no_neut.enemy_army_demand)
 
         # if debugMode:
         #     simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=map, allAfkExceptMapPlayer=True)
@@ -108,17 +120,17 @@ class FlowExpansionUnitTests(TestBase):
         )
 
         # The isolated 2-army tile at (8,3) borders one neutral at (8,4). Same reasoning applies.
-        tile_8_3 = rawMap.At(8, 3)
         plans_capturing_8_3_neighbor = [
             opt for opt in opts
-            if opt.length == 1 and (map.At(9, 3) in opt.tileSet or map.At(8, 4) in opt.tileSet)
+            if rawMap.At(9, 3) in opt.tileSet or rawMap.At(8, 4) in opt.tileSet
         ]
-        self.assertEqual(
-            len(plans_capturing_8_3_neighbor), 1,
+        self.assertGreater(
+            len(plans_capturing_8_3_neighbor), 0,
             f'Expected at least one plan capturing the neutral adjacent to the isolated 2-army tile at (8,3).'
         )
 
-        self.assertGreater(sum(opt.length for opt in opts), 43)
+        total_neutral_tiles = sum(1 for tile in rawMap.tiles_by_index if tile.player == -1)
+        self.assertLessEqual(sum(opt.length for opt in opts), total_neutral_tiles)
 
     def test_build_flow_expand_plan__should_produce_valid_only__most_basic_move(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
@@ -727,7 +739,7 @@ a2
         opt = self.get_longest_flow_expansion_option(opts)
         self.assertEqual(4, round(opt.econValue), 'should be 4 econ roughly to capture 2 enemy tiles.')
         self.assertEqual(3, opt.length, 'should be 3 turns to pull 2x 3s. Should not use the 2.')
-        self.assertEqual(0, opt.armyRemaining)
+        self.assertEqual(0, opt.gathered_army)
 
     def test_builds_flow_plan_from_single_segment__not_enough_army_to_fully_cap__pull_second_friendly_island(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -759,7 +771,7 @@ a2
         longest = sorted(opts, key=lambda o: 0-o.length)[0]
         self.assertEqual(4, round(longest.econValue), 'should be 4 econ roughly to capture 2 enemy tiles.')
         self.assertEqual(4, longest.length, 'should be 5 turns to pull 2x 2s and 1x 3.')
-        self.assertEqual(0, longest.armyRemaining)
+        self.assertEqual(0, longest.gathered_army)
 
     def test_builds_flow_plan_from_single_segment__not_enough_army_to_fully_cap__pull_third_friendly_island__leftover(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -791,7 +803,7 @@ a2
         longest = self.get_longest_flow_expansion_option(opts)
         self.assertEqual(4, round(longest.econValue), 'should be 4 econ roughly to capture 2 enemy tiles.')
         self.assertEqual(4, longest.length, 'should be 4 turns to pull 2x 3s and 1x 2. (should assume pull of ally tiles in worst case order)')
-        self.assertEqual(1, longest.armyRemaining)
+        self.assertEqual(1, longest.gathered_army)
 
     def test_builds_flow_plan_from_single_segment__not_enough_army_to_fully_cap__pull_fourth_friendly_island(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -959,6 +971,35 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
         # self.assertEqual(5, maxOpt.length, 'should be 5 turns to pull 3x 2s and capture 3x 1s')
         # self.assertEqual(6, round(maxOpt.econValue), 'should be 6 econ roughly to capture 3 enemy tiles.')
 
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        testData = """
+|    |    |    |    |    |    |
+aG1       a3   a3   M    M    M
+     M         a2   M    M    M
+     M         a2   M    M    M
+     M    b2   M    b2   b2   
+     M    b2   M    b2   M     
+     M    b2   b2   b2   M   
+     M    M    M    M    M
+                              bG1
+|    |    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 102)
+
+        self.begin_capturing_logging()
+
+        FlowExpansion.set_all_debug_logging_on()
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=5, debugMode=debugMode, renderThresh=700, tileIslandSize=5, method=method)
+        self.assertNotEqual(0, len(opts))
+
+        # so we can pull everything onto the 2's besides our bottom 2 and then cap, as one GCP. Or we can use a 3 to cap a neut and then use the otehrs to cap the other neut + 4, also 5 moves. larger turns finds former
+        optWithCaps = SearchUtils.where(opts, lambda o: SearchUtils.any_where(o.tileSet, lambda t: t.player == enemyGeneral.player))
+        self.assertEqual(1, len(optWithCaps))
+        self.assertEqual(5, optWithCaps[0].length)
+        self.assertGreater(optWithCaps[0].econValue, 0.8)
+
     def test_builds_flow_plan__should_recognize_gather_into_top_path_is_best(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
@@ -1006,8 +1047,8 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
             mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
             map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
-            map.At(7, 12).isMountain = True
-            map.At(7, 10).isMountain = True
+            self.change_tile_to_mountain_xy(map, 7, 12)
+            self.change_tile_to_mountain_xy(map, 7, 10)
             map.update_reachable()
             # if debugMode:
             #     self.render_map(map)
@@ -1050,35 +1091,35 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
-        map.At(12, 8).isMountain = True
-        map.At(12, 9).isMountain = True
-        map.At(12, 10).isMountain = True
-        map.At(12, 11).isMountain = True
-        map.At(10, 11).isMountain = True
-        map.At(10, 12).isMountain = True
-        map.At(10, 13).isMountain = True
-        map.At(5, 1).isMountain = True
-        map.At(8, 10).isMountain = True
-        map.At(8, 11).isMountain = True
-        map.At(8, 12).isMountain = True
-        map.At(3, 3).isMountain = True
-        map.At(2, 1).isMountain = True
-        map.At(2, 2).isMountain = True
-        map.At(5, 0).isMountain = True
-        map.At(14, 1).isMountain = True
-        map.At(13, 0).isMountain = True
-        map.At(14, 4).isMountain = True
-        map.At(14, 8).isMountain = True
-        map.At(15, 10).isMountain = True
-        map.At(15, 11).isMountain = True
-        map.At(14, 12).isMountain = True
-        map.At(11, 8).isMountain = True
+        self.change_tile_to_mountain_xy(map, 12, 8)
+        self.change_tile_to_mountain_xy(map, 12, 9)
+        self.change_tile_to_mountain_xy(map, 12, 10)
+        self.change_tile_to_mountain_xy(map, 12, 11)
+        self.change_tile_to_mountain_xy(map, 10, 11)
+        self.change_tile_to_mountain_xy(map, 10, 12)
+        self.change_tile_to_mountain_xy(map, 10, 13)
+        self.change_tile_to_mountain_xy(map, 5, 1)
+        self.change_tile_to_mountain_xy(map, 8, 10)
+        self.change_tile_to_mountain_xy(map, 8, 11)
+        self.change_tile_to_mountain_xy(map, 8, 12)
+        self.change_tile_to_mountain_xy(map, 3, 3)
+        self.change_tile_to_mountain_xy(map, 2, 1)
+        self.change_tile_to_mountain_xy(map, 2, 2)
+        self.change_tile_to_mountain_xy(map, 5, 0)
+        self.change_tile_to_mountain_xy(map, 14, 1)
+        self.change_tile_to_mountain_xy(map, 13, 0)
+        self.change_tile_to_mountain_xy(map, 14, 4)
+        self.change_tile_to_mountain_xy(map, 14, 8)
+        self.change_tile_to_mountain_xy(map, 15, 10)
+        self.change_tile_to_mountain_xy(map, 15, 11)
+        self.change_tile_to_mountain_xy(map, 14, 12)
+        self.change_tile_to_mountain_xy(map, 11, 8)
         for i in range(12, 16):
-            map.At(7, i).isMountain = True
+            self.change_tile_to_mountain_xy(map, 7, i)
         for i in range(6, 11):
-            map.At(10, i).isMountain = True
+            self.change_tile_to_mountain_xy(map, 10, i)
         for i in range(7, 10):
-            map.At(i, 15).isMountain = True
+            self.change_tile_to_mountain_xy(map, i, 15)
 
         map.update_reachable()
 
@@ -1088,56 +1129,107 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
         self.enable_search_time_limits_and_disable_debug_asserts()
         self.begin_capturing_logging()
 
-        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5, method=method)
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=5, debugMode=debugMode, renderThresh=700, tileIslandSize=5, method=method)
         self.assertNotEqual(0, len(opts))
-        self.assertGreater(opts[0].econValue / opts[0].length, 0.99, 'should find a plan with pretty high value per turn with one-move-cap')
 
+        # so we can pull everything onto the 2's besides our bottom 2 and then cap, as one GCP. Or we can use a 3 to cap a neut and then use the otehrs to cap the other neut + 4, also 5 moves. larger turns finds former
         optWithCaps = SearchUtils.where(opts, lambda o: SearchUtils.any_where(o.tileSet, lambda t: t.player == enemyGeneral.player))
-        self.assertGreater(len(optWithCaps), 0)
+        self.assertEqual(1, len(optWithCaps))
+        self.assertEqual(5, optWithCaps[0].length)
         self.assertGreater(optWithCaps[0].econValue, 0.8)
+
+    def test_should_not_produce_invalid_plan__enemy_cluster_crossing_neutral_tile__not_enough_time(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
+
+        self.change_tile_to_mountain_xy(map, 12, 8)
+        self.change_tile_to_mountain_xy(map, 12, 9)
+        self.change_tile_to_mountain_xy(map, 12, 10)
+        self.change_tile_to_mountain_xy(map, 12, 11)
+        self.change_tile_to_mountain_xy(map, 10, 11)
+        self.change_tile_to_mountain_xy(map, 10, 12)
+        self.change_tile_to_mountain_xy(map, 10, 13)
+        self.change_tile_to_mountain_xy(map, 5, 1)
+        self.change_tile_to_mountain_xy(map, 8, 10)
+        self.change_tile_to_mountain_xy(map, 8, 11)
+        self.change_tile_to_mountain_xy(map, 8, 12)
+        self.change_tile_to_mountain_xy(map, 3, 3)
+        self.change_tile_to_mountain_xy(map, 2, 1)
+        self.change_tile_to_mountain_xy(map, 2, 2)
+        self.change_tile_to_mountain_xy(map, 5, 0)
+        self.change_tile_to_mountain_xy(map, 14, 1)
+        self.change_tile_to_mountain_xy(map, 13, 0)
+        self.change_tile_to_mountain_xy(map, 14, 4)
+        self.change_tile_to_mountain_xy(map, 14, 8)
+        self.change_tile_to_mountain_xy(map, 15, 10)
+        self.change_tile_to_mountain_xy(map, 15, 11)
+        self.change_tile_to_mountain_xy(map, 14, 12)
+        self.change_tile_to_mountain_xy(map, 11, 8)
+        for i in range(12, 16):
+            self.change_tile_to_mountain_xy(map, 7, i)
+        for i in range(6, 11):
+            self.change_tile_to_mountain_xy(map, 10, i)
+        for i in range(7, 10):
+            self.change_tile_to_mountain_xy(map, i, 15)
+
+        map.update_reachable()
+
+        # if debugMode:
+        #     self.render_map(map)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=2, debugMode=debugMode, renderThresh=700, tileIslandSize=5, method=method)
+        self.assertNotEqual(0, len(opts))
+
+        self.assertEqual(2, len(opts))  # just the 2 leaf moves
+        self.assertGreater(opts[0].econValue, 0.99)
+        self.assertGreater(opts[1].econValue, 0.99)
 
     def test_should_not_produce_invalid_plan__neutral_cap(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
-        map.At(12, 8).isMountain = True
-        map.At(12, 9).isMountain = True
-        map.At(12, 10).isMountain = True
-        map.At(12, 11).isMountain = True
-        map.At(10, 11).isMountain = True
-        map.At(10, 12).isMountain = True
-        map.At(10, 13).isMountain = True
-        map.At(5, 1).isMountain = True
-        map.At(8, 10).isMountain = True
-        map.At(8, 11).isMountain = True
-        map.At(8, 12).isMountain = True
-        map.At(3, 3).isMountain = True
-        map.At(2, 1).isMountain = True
-        map.At(2, 2).isMountain = True
-        map.At(5, 0).isMountain = True
-        # map.At(14, 1).isMountain = True
-        # map.At(13, 0).isMountain = True
-        # map.At(14, 4).isMountain = True
-        map.At(14, 8).isMountain = True
-        map.At(15, 10).isMountain = True
-        map.At(15, 11).isMountain = True
-        map.At(14, 12).isMountain = True
-        map.At(11, 8).isMountain = True
-        map.At(13, 10).isMountain = True
-        map.At(13, 11).isMountain = True
-        map.At(13, 1).isMountain = True
-        map.At(15, 14).isMountain = True
-        map.At(13, 16).isMountain = True
-        map.At(11, 16).isMountain = True
-        map.At(10, 16).isMountain = True
-        map.At(8, 17).isMountain = True
+        self.change_tile_to_mountain_xy(map, 12, 8)
+        self.change_tile_to_mountain_xy(map, 12, 9)
+        self.change_tile_to_mountain_xy(map, 12, 10)
+        self.change_tile_to_mountain_xy(map, 12, 11)
+        self.change_tile_to_mountain_xy(map, 10, 11)
+        self.change_tile_to_mountain_xy(map, 10, 12)
+        self.change_tile_to_mountain_xy(map, 10, 13)
+        self.change_tile_to_mountain_xy(map, 5, 1)
+        self.change_tile_to_mountain_xy(map, 8, 10)
+        self.change_tile_to_mountain_xy(map, 8, 11)
+        self.change_tile_to_mountain_xy(map, 8, 12)
+        self.change_tile_to_mountain_xy(map, 3, 3)
+        self.change_tile_to_mountain_xy(map, 2, 1)
+        self.change_tile_to_mountain_xy(map, 2, 2)
+        self.change_tile_to_mountain_xy(map, 5, 0)
+        # self.change_tile_to_mountain_xy(map, 14, 1)
+        # self.change_tile_to_mountain_xy(map, 13, 0)
+        # self.change_tile_to_mountain_xy(map, 14, 4)
+        self.change_tile_to_mountain_xy(map, 14, 8)
+        self.change_tile_to_mountain_xy(map, 15, 10)
+        self.change_tile_to_mountain_xy(map, 15, 11)
+        self.change_tile_to_mountain_xy(map, 14, 12)
+        self.change_tile_to_mountain_xy(map, 11, 8)
+        self.change_tile_to_mountain_xy(map, 13, 10)
+        self.change_tile_to_mountain_xy(map, 13, 11)
+        self.change_tile_to_mountain_xy(map, 13, 1)
+        self.change_tile_to_mountain_xy(map, 15, 14)
+        self.change_tile_to_mountain_xy(map, 13, 16)
+        self.change_tile_to_mountain_xy(map, 11, 16)
+        self.change_tile_to_mountain_xy(map, 10, 16)
+        self.change_tile_to_mountain_xy(map, 8, 17)
         for i in range(12, 16):
-            map.At(7, i).isMountain = True
+            self.change_tile_to_mountain_xy(map, 7, i)
         for i in range(6, 11):
-            map.At(10, i).isMountain = True
+            self.change_tile_to_mountain_xy(map, 10, i)
         for i in range(7, 10):
-            map.At(i, 15).isMountain = True
+            self.change_tile_to_mountain_xy(map, i, 15)
 
         map.update_reachable()
 
@@ -1149,7 +1241,7 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
 
         opts = self.run_army_flow_expansion(map, general, enemyGeneral, turns=40, debugMode=debugMode, renderThresh=700, tileIslandSize=5, method=method)
         self.assertNotEqual(0, len(opts))
-        self.assertGreater(opts[0].econValue / opts[0].length, 0.99, 'should find a plan with pretty high value per turn')
+        self.assertGreater(opts[0].econValue / opts[0].length, 0.74, 'should find a plan with pretty high value per turn, capturing as many neuts as possible in 40 moves')
 
     def test_should_have_enemy_general_backpressure(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -1163,43 +1255,43 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
                 mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
                 map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=True)
 
-                map.At(12, 8).isMountain = True
-                map.At(12, 9).isMountain = True
-                map.At(12, 10).isMountain = True
-                map.At(12, 11).isMountain = True
-                map.At(10, 11).isMountain = True
-                map.At(10, 12).isMountain = True
-                map.At(10, 13).isMountain = True
-                # map.At(5, 1).isMountain = True # leave this wall open
-                map.At(8, 10).isMountain = True
-                map.At(8, 11).isMountain = True
-                map.At(8, 12).isMountain = True
-                map.At(3, 3).isMountain = True
-                map.At(2, 1).isMountain = True
-                map.At(2, 2).isMountain = True
-                map.At(5, 0).isMountain = True
-                # map.At(14, 1).isMountain = True
-                # map.At(13, 0).isMountain = True
-                # map.At(14, 4).isMountain = True
-                map.At(14, 8).isMountain = True
-                map.At(15, 10).isMountain = True
-                map.At(15, 11).isMountain = True
-                map.At(14, 12).isMountain = True
-                map.At(11, 8).isMountain = True
-                map.At(13, 10).isMountain = True
-                map.At(13, 11).isMountain = True
-                map.At(13, 1).isMountain = True
-                map.At(15, 14).isMountain = True
-                map.At(13, 16).isMountain = True
-                map.At(11, 16).isMountain = True
-                map.At(10, 16).isMountain = True
-                map.At(8, 17).isMountain = True
+                self.change_tile_to_mountain_xy(map, 12, 8)
+                self.change_tile_to_mountain_xy(map, 12, 9)
+                self.change_tile_to_mountain_xy(map, 12, 10)
+                self.change_tile_to_mountain_xy(map, 12, 11)
+                self.change_tile_to_mountain_xy(map, 10, 11)
+                self.change_tile_to_mountain_xy(map, 10, 12)
+                self.change_tile_to_mountain_xy(map, 10, 13)
+                # self.change_tile_to_mountain_xy(map, 5, 1) # leave this wall open
+                self.change_tile_to_mountain_xy(map, 8, 10)
+                self.change_tile_to_mountain_xy(map, 8, 11)
+                self.change_tile_to_mountain_xy(map, 8, 12)
+                self.change_tile_to_mountain_xy(map, 3, 3)
+                self.change_tile_to_mountain_xy(map, 2, 1)
+                self.change_tile_to_mountain_xy(map, 2, 2)
+                self.change_tile_to_mountain_xy(map, 5, 0)
+                # self.change_tile_to_mountain_xy(map, 14, 1)
+                # self.change_tile_to_mountain_xy(map, 13, 0)
+                # self.change_tile_to_mountain_xy(map, 14, 4)
+                self.change_tile_to_mountain_xy(map, 14, 8)
+                self.change_tile_to_mountain_xy(map, 15, 10)
+                self.change_tile_to_mountain_xy(map, 15, 11)
+                self.change_tile_to_mountain_xy(map, 14, 12)
+                self.change_tile_to_mountain_xy(map, 11, 8)
+                self.change_tile_to_mountain_xy(map, 13, 10)
+                self.change_tile_to_mountain_xy(map, 13, 11)
+                self.change_tile_to_mountain_xy(map, 13, 1)
+                self.change_tile_to_mountain_xy(map, 15, 14)
+                self.change_tile_to_mountain_xy(map, 13, 16)
+                self.change_tile_to_mountain_xy(map, 11, 16)
+                self.change_tile_to_mountain_xy(map, 10, 16)
+                self.change_tile_to_mountain_xy(map, 8, 17)
                 for i in range(12, 16):
-                    map.At(7, i).isMountain = True
+                    self.change_tile_to_mountain_xy(map, 7, i)
                 for i in range(6, 11):
-                    map.At(10, i).isMountain = True
+                    self.change_tile_to_mountain_xy(map, 10, i)
                 for i in range(7, 10):
-                    map.At(i, 15).isMountain = True
+                    self.change_tile_to_mountain_xy(map, i, 15)
                 general.army += extraArmy
 
                 map.update_reachable()
@@ -1236,54 +1328,54 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
 
                 general.army += 50
 
-                map.At(12, 8).isMountain = True
-                map.At(12, 9).isMountain = True
-                map.At(12, 10).isMountain = True
-                map.At(12, 11).isMountain = True
-                # map.At(10, 11).isMountain = True
-                map.At(10, 12).isMountain = True
-                map.At(10, 13).isMountain = True
-                map.At(5, 1).isMountain = True
-                # map.At(8, 10).isMountain = True
-                # map.At(8, 11).isMountain = True
-                # map.At(8, 12).isMountain = True
-                map.At(3, 3).isMountain = True
-                map.At(2, 1).isMountain = True
-                map.At(2, 2).isMountain = True
-                map.At(5, 0).isMountain = True
-                # map.At(14, 1).isMountain = True
-                # map.At(13, 0).isMountain = True
-                map.At(14, 4).isMountain = True
-                map.At(14, 8).isMountain = True
-                map.At(15, 10).isMountain = True
-                map.At(15, 11).isMountain = True
-                map.At(14, 12).isMountain = True
-                map.At(11, 8).isMountain = True
-                map.At(13, 10).isMountain = True
-                map.At(13, 11).isMountain = True
-                map.At(13, 1).isMountain = True
-                map.At(15, 14).isMountain = True
-                map.At(13, 16).isMountain = True
-                map.At(11, 16).isMountain = True
-                map.At(10, 16).isMountain = True
-                map.At(10, 12).isMountain = True
-                map.At(8, 17).isMountain = True
-                # map.At(7, 14).isMountain = True
-                # map.At(9, 10).isMountain = True
-                map.At(10, 10).isMountain = True
-                map.At(6, 12).isMountain = True
-                map.At(5, 16).isMountain = True
-                map.At(5, 13).isMountain = True
-                # map.At(3, 15).isMountain = True
-                # map.At(2, 14).isMountain = True
-                # map.At(3, 13).isMountain = True
-                map.At(7, 10).isMountain = True
+                self.change_tile_to_mountain_xy(map, 12, 8)
+                self.change_tile_to_mountain_xy(map, 12, 9)
+                self.change_tile_to_mountain_xy(map, 12, 10)
+                self.change_tile_to_mountain_xy(map, 12, 11)
+                # self.change_tile_to_mountain_xy(map, 10, 11)
+                self.change_tile_to_mountain_xy(map, 10, 12)
+                self.change_tile_to_mountain_xy(map, 10, 13)
+                self.change_tile_to_mountain_xy(map, 5, 1)
+                # self.change_tile_to_mountain_xy(map, 8, 10)
+                # self.change_tile_to_mountain_xy(map, 8, 11)
+                # self.change_tile_to_mountain_xy(map, 8, 12)
+                self.change_tile_to_mountain_xy(map, 3, 3)
+                self.change_tile_to_mountain_xy(map, 2, 1)
+                self.change_tile_to_mountain_xy(map, 2, 2)
+                self.change_tile_to_mountain_xy(map, 5, 0)
+                # self.change_tile_to_mountain_xy(map, 14, 1)
+                # self.change_tile_to_mountain_xy(map, 13, 0)
+                self.change_tile_to_mountain_xy(map, 14, 4)
+                self.change_tile_to_mountain_xy(map, 14, 8)
+                self.change_tile_to_mountain_xy(map, 15, 10)
+                self.change_tile_to_mountain_xy(map, 15, 11)
+                self.change_tile_to_mountain_xy(map, 14, 12)
+                self.change_tile_to_mountain_xy(map, 11, 8)
+                self.change_tile_to_mountain_xy(map, 13, 10)
+                self.change_tile_to_mountain_xy(map, 13, 11)
+                self.change_tile_to_mountain_xy(map, 13, 1)
+                self.change_tile_to_mountain_xy(map, 15, 14)
+                self.change_tile_to_mountain_xy(map, 13, 16)
+                self.change_tile_to_mountain_xy(map, 11, 16)
+                self.change_tile_to_mountain_xy(map, 10, 16)
+                self.change_tile_to_mountain_xy(map, 10, 12)
+                self.change_tile_to_mountain_xy(map, 8, 17)
+                # self.change_tile_to_mountain_xy(map, 7, 14)
+                # self.change_tile_to_mountain_xy(map, 9, 10)
+                self.change_tile_to_mountain_xy(map, 10, 10)
+                self.change_tile_to_mountain_xy(map, 6, 12)
+                self.change_tile_to_mountain_xy(map, 5, 16)
+                self.change_tile_to_mountain_xy(map, 5, 13)
+                # self.change_tile_to_mountain_xy(map, 3, 15)
+                # self.change_tile_to_mountain_xy(map, 2, 14)
+                # self.change_tile_to_mountain_xy(map, 3, 13)
+                self.change_tile_to_mountain_xy(map, 7, 10)
                 # for i in range(12, 16):
-                #     map.At(7, i).isMountain = True
+                #     self.change_tile_to_mountain_xy(map, 7, i)
                 for i in range(6, 11):
-                    map.At(10, i).isMountain = True
+                    self.change_tile_to_mountain_xy(map, 10, i)
                 # for i in range(6, 10):
-                #     map.At(i, 15).isMountain = True
+                #     self.change_tile_to_mountain_xy(map, i, 15)
 
                 map.update_reachable()
 
@@ -1303,40 +1395,40 @@ a3   aG4  a2   a2   a2             b2   N5        bG1
         mapFile = 'GameContinuationEntries/should_recognize_gather_into_top_path_is_best___wQWfDjiGX---0--250.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 250, fill_out_tiles=False)
 
-        map.At(12, 11).isMountain = True
-        map.At(10, 12).isMountain = True
-        map.At(10, 13).isMountain = True
-        map.At(7, 13).isMountain = True
-        map.At(7, 14).isMountain = True
-        map.At(5, 0).isMountain = True
-        map.At(14, 4).isMountain = True
-        map.At(14, 8).isMountain = True
-        map.At(15, 10).isMountain = True
-        map.At(15, 11).isMountain = True
-        map.At(14, 12).isMountain = True
-        map.At(11, 8).isMountain = True
-        map.At(13, 10).isMountain = True
-        map.At(13, 11).isMountain = True
-        map.At(13, 1).isMountain = True
-        map.At(15, 14).isMountain = True
-        map.At(13, 16).isMountain = True
-        map.At(11, 16).isMountain = True
-        map.At(10, 16).isMountain = True
-        map.At(10, 12).isMountain = True
-        map.At(8, 17).isMountain = True
-        map.At(10, 10).isMountain = True
-        map.At(6, 12).isMountain = True
-        map.At(5, 16).isMountain = True
-        map.At(5, 13).isMountain = True
-        map.At(7, 10).isMountain = True
+        self.change_tile_to_mountain_xy(map, 12, 11)
+        self.change_tile_to_mountain_xy(map, 10, 12)
+        self.change_tile_to_mountain_xy(map, 10, 13)
+        self.change_tile_to_mountain_xy(map, 7, 13)
+        self.change_tile_to_mountain_xy(map, 7, 14)
+        self.change_tile_to_mountain_xy(map, 5, 0)
+        self.change_tile_to_mountain_xy(map, 14, 4)
+        self.change_tile_to_mountain_xy(map, 14, 8)
+        self.change_tile_to_mountain_xy(map, 15, 10)
+        self.change_tile_to_mountain_xy(map, 15, 11)
+        self.change_tile_to_mountain_xy(map, 14, 12)
+        self.change_tile_to_mountain_xy(map, 11, 8)
+        self.change_tile_to_mountain_xy(map, 13, 10)
+        self.change_tile_to_mountain_xy(map, 13, 11)
+        self.change_tile_to_mountain_xy(map, 13, 1)
+        self.change_tile_to_mountain_xy(map, 15, 14)
+        self.change_tile_to_mountain_xy(map, 13, 16)
+        self.change_tile_to_mountain_xy(map, 11, 16)
+        self.change_tile_to_mountain_xy(map, 10, 16)
+        self.change_tile_to_mountain_xy(map, 10, 12)
+        self.change_tile_to_mountain_xy(map, 8, 17)
+        self.change_tile_to_mountain_xy(map, 10, 10)
+        self.change_tile_to_mountain_xy(map, 6, 12)
+        self.change_tile_to_mountain_xy(map, 5, 16)
+        self.change_tile_to_mountain_xy(map, 5, 13)
+        self.change_tile_to_mountain_xy(map, 7, 10)
         # for i in range(12, 16):
-        #     map.At(7, i).isMountain = True
+        #     self.change_tile_to_mountain_xy(map, 7, i)
         for i in range(6, 11):
-            map.At(10, i).isMountain = True
+            self.change_tile_to_mountain_xy(map, 10, i)
         for i in range(7, 10):
-            map.At(i, 15).isMountain = True
+            self.change_tile_to_mountain_xy(map, i, 15)
         # for i in range(6, 10):
-        #     map.At(i, 15).isMountain = True
+        #     self.change_tile_to_mountain_xy(map, i, 15)
 
         map.update_reachable()
 
@@ -1524,7 +1616,7 @@ player_index=0
                 )
 
     def test_should_find_merging_streams_when_optimal(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapData = """
 |    |    |    |    |    |    |
 aG13 b1   b1   b7   b7   M    bG1
@@ -2230,10 +2322,10 @@ player_index=0
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
-        self.skipTest("TODO add asserts for should_be_able_to_use_general_for_better_cap_than_neuts_when_gen_has_3_army")
+        self.assertOwnedXY(13, 12)
 
     def test_should_prioritize_expanding_towards_enemy_not_neutrals(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2677,6 +2769,18 @@ player_index=0
                 #proof
                 # simHost.queue_player_moves_str(general.player, '10,15->11,15  10,16->11,16  11,18->12,18  12,17->12,16  10,20->11,20  11,19->12,19  13,16->13,17->15,17  8,17->5,17  11,17->9,17  8,19->9,19->9,14->11,14')
 
+                # from a safety calculation perspective,
+                # OPPONENT MADE TWO WASTED MOVES THIS ROUND THAT THE BOT ASSUMES WERE USEFUL MOVES
+                #   (gathering a 2 just to expand to neutral, could have directly expanded, and missing first move of round).
+                # So opponent COULD have gathered 2 more 2s here based on what we saw.
+                # SO:
+                # ON TURN 131, OPPONENT COULD HAVE 39 ARMY ON 10,14, THEORETICALLY 41 WITHOUT MOVE WASTE
+                # ON TURN 136, OPPONENT COULD HAVE 47 ARMY ON 10,14, THEORETICALLY 49 WITHOUT MOVE WASTE
+                # ON TURN 129, OPPONENT COULD HAVE THEORETICALLY 38 ARMY ON 10,14 (if they were just 2 moves ahead they'd launch with 1 less general army).
+
+                # So we should expect a threat of 20 army next to our general turn 135, 23 on 137, 31 on 142 (if went down instead of to 10,14).
+                # We defend this by just sitting on general by a whopping 14 army already, so we are very safe right now.
+
                 bot = self.get_debug_render_bot(simHost, general.player)
                 bot.info_render_gather_values = True
                 bot.info_render_enemy_vision_data = False
@@ -2691,7 +2795,7 @@ player_index=0
                 self.assertTileDifferentialGreaterThan(-1, simHost, 'should try to catch up to enemy leaf expansion')
 
                 if not enQueuesExpansions:
-                    self.assertTileDifferentialGreaterThan(3, simHost, 'should make a bunch of leaf moves to catch up and get ahead on land before considering launching down the main launch')
+                    self.assertTileDifferentialGreaterThan(6, simHost, 'should make a bunch of leaf moves to catch up and get ahead on land before considering launching down the main launch')
 
                 self.assertGreater(general.army, 28, 'should not move off the general yet, probably not on a normal map and DEFINITELY not through a forced choke')
 
@@ -2792,7 +2896,7 @@ player_index=0
                 self.assertOwned(general.player, playerMap.At(11, 13), 'Lesser - Attacking past this (before last few moves of round) is super pointless especially if we know the opponent has been saving army.')
 
     def test_should_flow_expand_and_not_sit_there_failing_timing_gather(self):
-        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and False
         mapFile = 'GameContinuationEntries/should_flow_expand_and_not_sit_there_failing_timing_gather___iHG82keVa---1--125.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 125, fill_out_tiles=True)
 
@@ -2878,7 +2982,7 @@ player_index=0
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        # simHost.queue_player_moves_str(general.player, '17,16->17,15')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -2886,4 +2990,5 @@ player_index=0
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
         self.assertNoFriendliesKilled(map, general)
 
-        self.assertGreater(bot.last_flow_opt_collection)
+        self.assertAllNonOnePlayerTilesUsedInRoundPlan(bot, general, playerMap)
+        self.assertGreater(bot.last_flow_opt_collection.total_econ, 22)

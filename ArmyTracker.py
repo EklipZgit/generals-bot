@@ -2628,7 +2628,7 @@ class ArmyTracker(object):
         if army.player == map.player_index or army.player in map.teammates:
             return None
 
-        debugFlankPathing = log_debug
+        debugFlankPathing = log_debug and False  # remove and false to turn this back on if debugging
         if debugFlankPathing:
             logbook.info(
                 f'FLANK_PATH_DEBUG_START turn={map.turn} army={army} tile={army.tile} '

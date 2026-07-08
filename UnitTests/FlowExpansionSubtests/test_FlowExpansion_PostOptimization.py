@@ -13,6 +13,7 @@ from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionPostOptimizationTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -462,3 +463,14 @@ aG2  a5   b1        bG1
         self.assertEqual(4, longestOpt.length, 'must make 4 moves to pull the ')
         self.assertEqual(IterativeExpansion.ITERATIVE_EXPANSION_EN_CAP_VAL * 2 + 1, longestOpt.econValue, 'should be 6 econ roughly to capture 3 enemy tiles.')
         self.assertEqual(5, longestOpt.gathered_army, 'gathered a 2 and a 5')
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__post_optimization_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
+        solution = scenario.expander._solve_grouped_knapsack(scenario.lookup_tables, 5)
+        optimized_solution = scenario.expander._post_optimize_locally(solution, scenario.lookup_tables, 5)
+        self.assertEqual(solution, optimized_solution)
+        plans = scenario.expander._materialize_plans(optimized_solution)
+        assert_has_enemy_capture_option(self, plans, scenario.enemy_general.player)

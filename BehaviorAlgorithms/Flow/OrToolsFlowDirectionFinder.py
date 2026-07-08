@@ -453,6 +453,9 @@ class DirectOrToolsGraphBuilder(object):
         target_general_island = islands.tile_island_lookup.raw[enemy_general.tile_index]
         fr_general_island = islands.tile_island_lookup.raw[friendly_general.tile_index]
         flow_path_constraints = self._build_flow_path_island_constraints(islands, constrained_flow_paths)
+        # UnitTests/test_FlowExpansion.py FlowExpansionUnitTests.test_should_be_able_to_flow_expand_towards_neutrals_and_predicted_general_in_1v1__no_duplicate_tile_use:
+        # target_team=-1 means neutral-only expansion, not a real enemy team; without this guard every neutral became enemy demand and OR-Tools routed huge neutral cycles.
+        has_real_target_team = target_team != -1
 
         # Exclude islands that are not reachable on the map from ALL supply/demand and arc
         # construction. Combats: UnitTests/test_FlowExpansion.FlowExpansionUnitTests.test_should_not_fail_to_find_flow_expansion_routes__what_the_fuck
@@ -560,7 +563,7 @@ class DirectOrToolsGraphBuilder(object):
                 # Output port has zero supply (no demand attr in NX)
                 node_supply_map[-island.unique_id] = 0
 
-                borders_target = any(b.team == target_team for b in island.border_islands)
+                borders_target = any(has_real_target_team and b.team == target_team for b in island.border_islands)
                 borders_friendly = any(b.team == team for b in island.border_islands)
                 # if self.log_debug:
                 #     if (
@@ -602,7 +605,7 @@ class DirectOrToolsGraphBuilder(object):
                 demand = demands[island.unique_id]
                 if island.team == team:
                     friendly_demand_islands.append((island.unique_id, demand, island.tile_count, island.sum_army))
-                elif island.team == target_team:
+                elif has_real_target_team and island.team == target_team:
                     enemy_demand_islands.append((island.unique_id, demand, island.tile_count, island.sum_army))
                 elif island.team == -1:
                     neutral_demand_islands.append((island.unique_id, demand, island.tile_count, island.sum_army))
@@ -657,10 +660,11 @@ class DirectOrToolsGraphBuilder(object):
                     arc_starts.append(src)
                     arc_ends.append(dst)
                     arc_caps.append(100000)
-                    cost = 100
+                    # 30 means we prefer flowing through neutral land vs through allied 2's (since a 2 costs 50, a 1 costs 100)
+                    cost = 30
                     if island.team == team:
                         # FROM FRIENDLY ISLAND
-                        if movable_island.team == target_team:
+                        if has_real_target_team and movable_island.team == target_team:
                             # ALWAYS prefer to flow into enemy land from friendly land directly. This is our most time effective movement strategy.
                             # TODO we want to AVOID large enemy armies when on their land, but we DONT want to avoid them when they're on our land. Need to be intelligent about that then.
                             # TODO keep in sync with other paths below
@@ -671,7 +675,7 @@ class DirectOrToolsGraphBuilder(object):
                             #  of just dead ends as a one-or-the-other group choice instead of trying to use the combined army from merging paths to capture.
                             #  Revisit later with some approach that recognizes the option to merge streams AFTER the border pair point kind like how we do the merge / collapse grouping logic for gather-through tile options or something idk.
                             #  THEN we can make this more expensive again so we prefer neut caps first over merging streams.
-                            cost = 100 // max(1, movable_island.sum_army / movable_island.tile_count)
+                            cost = int(100 / max(1, movable_island.sum_army / movable_island.tile_count))
                             # 100 army = 1 cost
                             # 50 army = 2 cost
                             # 8 army = 12 cost
@@ -689,21 +693,21 @@ class DirectOrToolsGraphBuilder(object):
                         if movable_island.team == team:
                             # moving back onto our own land should be penalized
                             cost += 20 // max(1, movable_island.sum_army / movable_island.tile_count)
-                        elif movable_island.team == target_team:
+                        elif has_real_target_team and movable_island.team == target_team:
                             # low cost moving to enemy land, we want that
                             # cost = 20 // max(1, movable_island.sum_army / movable_island.tile_count)
                             cost = movable_island.sum_army / movable_island.tile_count
                         elif movable_island.team == -1:
                             # normal cost neutral to neutral
                             cost += 0
-                    elif island.team == target_team:
+                    elif has_real_target_team and island.team == target_team:
                         # FROM TARGET ISLAND
                         if movable_island.team == team:
                             # moving back onto our own land should be penalized
                             cost += 20000 // max(1, movable_island.sum_army / movable_island.tile_count)
-                        elif movable_island.team == target_team:
+                        elif has_real_target_team and movable_island.team == target_team:
                             # low cost moving to enemy land, we want that
-                            cost = movable_island.sum_army / movable_island.tile_count
+                            cost = movable_island.sum_army // movable_island.tile_count
                         elif movable_island.team == -1:
                             # slight penalty moving to neutral from enemy land
                             cost += 10
@@ -1572,7 +1576,7 @@ class DirectOrToolsGraphBuilder(object):
                 if island_id in node_supply_map:
                     diag_supplies.append(f'{island_id}:in_supply={node_supply_map[island_id]} out_supply={node_supply_map.get(-island_id, 0)} demand={demands.get(island_id)}')
             logbook.warning(
-                f'FLOW_DIAG_GRAPH_SUMMARY use_neutral_flow={use_neutral_flow} '
+                f'FLOW_DIAG_GRAPH_SUMMARY use_neutral_flow={use_neutral_flow} has_real_target_team={has_real_target_team} '
                 f'friendly_army_supply={friendly_army_supply} enemy_army_demand={enemy_army_demand} '
                 f'enemy_general_demand={enemy_general_demand} cumulative_demand={cumulative_demand} '
                 f'fake_node={fake_node} target_general_island={target_general_island.unique_id} '

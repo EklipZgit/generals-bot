@@ -28,6 +28,7 @@ from Tests.TestBase import TestBase
 from base.client.map import MapBase, Tile
 
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option, get_neutral_border_crossing_map_data
 class MockTilePlanOption(TilePlanInterface):
     """Mock external option for testing without requiring full InterceptionOptionInfo setup."""
 
@@ -392,5 +393,25 @@ b1   bG1
                          "Flow-only solution should be identical whether external_options is None or []")
 
 
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__external_options_level(self):
+        map, general, enemy_general = self.load_map_and_generals_from_string(
+            get_neutral_border_crossing_map_data(),
+            102,
+        )
+        self.begin_capturing_logging()
+
+        opts = self.run_army_flow_expansion(
+            map,
+            general,
+            enemy_general,
+            turns=5,
+            debugMode=False,
+            renderThresh=700,
+            tileIslandSize=5,
+            method=method,
+        )
+        assert_has_enemy_capture_option(self, opts, enemy_general.player)
 if __name__ == '__main__':
     unittest.main()
+

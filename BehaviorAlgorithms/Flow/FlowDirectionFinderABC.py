@@ -90,6 +90,9 @@ class FlowDirectionFinderABC(ABC):
         enDist = intergeneral_analysis.shortestPathWay.distance
         neutEnDistCutoff = int(enDist * 1.0)
         pathwayCutoff = int(1.25 * enDist) + 1
+        # UnitTests/test_FlowExpansion.py FlowExpansionUnitTests.test_should_be_able_to_flow_expand_towards_neutrals_and_predicted_general_in_1v1__no_duplicate_tile_use:
+        # target_team can be -1 during neutral-only expansion, so neutral islands must not also be classified as enemy-border islands.
+        has_real_target_team = target_team != -1
 
         # BFS from all friendly tiles (depth 3) to find neutral islands adjacent to us;
         # their proximity is used to exclude them from being neutral sinks in certain modes.
@@ -141,7 +144,7 @@ class FlowDirectionFinderABC(ABC):
                     borders_fr = True
                     break
             for nb in island.border_islands:
-                if nb.team == target_team:
+                if has_real_target_team and nb.team == target_team:
                     borders_en = True
                     break
             are_all_borders_neut = not borders_fr and not borders_en

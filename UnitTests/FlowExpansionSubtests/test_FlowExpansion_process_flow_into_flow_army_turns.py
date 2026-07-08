@@ -21,6 +21,7 @@ from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionProcessFlowIntoFlowArmyTurnsTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -1319,3 +1320,17 @@ aG1  a5        b1   bG1
         all_cap = [e for lt in lookup_tables for e in lt.capture_entries_by_turn if e is not None and e.turns > 0]
         self.assertGreater(len(all_cap), 0,
                            'Must have at least one non-zero capture entry even through neutral gap')
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__process_flow_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        self.assertGreater(len(scenario.lookup_tables), 0)
+        self.assertTrue(any(
+            any(entry is not None and entry.turns <= 5 for entry in lookup_table.gather_entries_by_turn)
+            for lookup_table in scenario.lookup_tables
+        ))
+        self.assertTrue(any(
+            any(entry is not None and entry.turns <= 5 for entry in lookup_table.capture_entries_by_turn)
+            for lookup_table in scenario.lookup_tables
+        ))

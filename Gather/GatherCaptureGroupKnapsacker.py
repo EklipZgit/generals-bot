@@ -174,16 +174,17 @@ def solve_tile_plan_options(
         turn_budget: int,
         solver: PlanSolver,
         value_multiple: int = 10000,
+        perf_timer: PerformanceTimer | None = None
 ) -> TilePlanOptionKnapsackResult:
     """
     Dispatch protocol-based tile-plan option solving to a selected backend.
     """
     if solver == PlanSolver.CpSat:
-        return solve_tile_plan_options_with_cp_sat(options, turn_budget, value_multiple)
+        return solve_tile_plan_options_with_cp_sat(options, turn_budget, value_multiple, perf_timer)
     if solver == PlanSolver.MpCbc:
-        return solve_tile_plan_options_with_mp_cbc(options, turn_budget, value_multiple)
+        return solve_tile_plan_options_with_mp_cbc(options, turn_budget, value_multiple, perf_timer)
     if solver == PlanSolver.MpScip:
-        return solve_tile_plan_options_with_mp_scip(options, turn_budget, value_multiple)
+        return solve_tile_plan_options_with_mp_scip(options, turn_budget, value_multiple, perf_timer)
     if solver == PlanSolver.MkcpPlusGreedyConflictResolution:
         raise NotImplementedError('PlanSolver.MkcpPlusGreedyConflictResolution will be wired after grouped MKCP input is abstracted.')
     raise ValueError(f'Unsupported plan solver {solver!r}')
@@ -193,6 +194,7 @@ def solve_tile_plan_options_with_cp_sat(
         options: list[TilePlanOptionProtocol],
         turn_budget: int,
         value_multiple: int = 10000,
+        perf_timer: PerformanceTimer | None = None,
 ) -> TilePlanOptionKnapsackResult:
     """
     Solve an exact 0/1 knapsack with tile-conflict constraints using OR-Tools CP-SAT.
@@ -200,14 +202,38 @@ def solve_tile_plan_options_with_cp_sat(
     Returns the original option items when options are GenericTilePlanOption instances;
     otherwise returns the option objects themselves.
     """
-    constraints = build_tile_plan_option_conflict_constraints(options)
+    evt = None
+    try:
+        if perf_timer is not None:
+            evt = perf_timer.begin_move_event('build_tile_plan_option_conflict_constraints')
+        constraints = build_tile_plan_option_conflict_constraints(options)
+    finally:
+        if evt is not None:
+            evt.__exit__()
+    
     values = _get_tile_plan_option_integer_values(options, value_multiple)
-    chosen_indices, max_value, solver_status = _solve_tile_plan_option_arrays_with_cp_sat(
-        turn_budget=turn_budget,
-        weights=[option.length for option in options],
-        values=values,
-        mutually_exclusive_option_indices_by_tile=constraints.mutually_exclusive_option_indices_by_tile)
-    return _build_tile_plan_option_result(options, values, chosen_indices, max_value, solver_status)
+    
+    evt = None
+    try:
+        if perf_timer is not None:
+            evt = perf_timer.begin_move_event('_solve_tile_plan_option_arrays_with_cp_sat')
+        chosen_indices, max_value, solver_status = _solve_tile_plan_option_arrays_with_cp_sat(
+            turn_budget=turn_budget,
+            weights=[option.length for option in options],
+            values=values,
+            mutually_exclusive_option_indices_by_tile=constraints.mutually_exclusive_option_indices_by_tile)
+    finally:
+        if evt is not None:
+            evt.__exit__()
+    
+    evt = None
+    try:
+        if perf_timer is not None:
+            evt = perf_timer.begin_move_event('_build_tile_plan_option_result')
+        return _build_tile_plan_option_result(options, values, chosen_indices, max_value, solver_status)
+    finally:
+        if evt is not None:
+            evt.__exit__()
 
 
 def solve_tile_plan_options_with_existing_knapsack_solver(
@@ -235,6 +261,7 @@ def solve_tile_plan_options_with_mp_cbc(
         options: list[TilePlanOptionProtocol],
         turn_budget: int,
         value_multiple: int = 10000,
+        perf_timer: PerformanceTimer | None = None,
 ) -> TilePlanOptionKnapsackResult:
     """
     Solve an exact 0/1 tile-plan knapsack with OR-Tools MPSolver using CBC.
@@ -243,13 +270,15 @@ def solve_tile_plan_options_with_mp_cbc(
         options=options,
         turn_budget=turn_budget,
         value_multiple=value_multiple,
-        backend_name='CBC')
+        backend_name='CBC',
+        perf_timer=perf_timer)
 
 
 def solve_tile_plan_options_with_mp_scip(
         options: list[TilePlanOptionProtocol],
         turn_budget: int,
         value_multiple: int = 10000,
+        perf_timer: PerformanceTimer | None = None,
 ) -> TilePlanOptionKnapsackResult:
     """
     Solve an exact 0/1 tile-plan knapsack with OR-Tools MPSolver using SCIP.
@@ -258,27 +287,52 @@ def solve_tile_plan_options_with_mp_scip(
         options=options,
         turn_budget=turn_budget,
         value_multiple=value_multiple,
-        backend_name='SCIP')
-
+        backend_name='SCIP',
+        perf_timer=perf_timer)
 
 def _solve_tile_plan_options_with_mp_solver_backend(
         options: list[TilePlanOptionProtocol],
         turn_budget: int,
         value_multiple: int,
         backend_name: str,
+        perf_timer: PerformanceTimer | None = None,
 ) -> TilePlanOptionKnapsackResult:
     """
     Convert protocol options to integer arrays and solve with the requested MPSolver backend.
     """
-    constraints = build_tile_plan_option_conflict_constraints(options)
+    evt = None
+    try:
+        if perf_timer is not None:
+            evt = perf_timer.begin_move_event('build_tile_plan_option_conflict_constraints')
+        constraints = build_tile_plan_option_conflict_constraints(options)
+    finally:
+        if evt is not None:
+            evt.__exit__()
+
     values = _get_tile_plan_option_integer_values(options, value_multiple)
-    chosen_indices, max_value, solver_status = _solve_tile_plan_option_arrays_with_mp_solver(
-        turn_budget=turn_budget,
-        weights=[option.length for option in options],
-        values=values,
-        mutually_exclusive_option_indices_by_tile=constraints.mutually_exclusive_option_indices_by_tile,
-        backend_name=backend_name)
-    return _build_tile_plan_option_result(options, values, chosen_indices, max_value, solver_status)
+
+    evt = None
+    try:
+        if perf_timer is not None:
+            evt = perf_timer.begin_move_event(f'_solve_tile_plan_option_arrays_with_mp_solver {backend_name}')
+        chosen_indices, max_value, solver_status = _solve_tile_plan_option_arrays_with_mp_solver(
+            turn_budget=turn_budget,
+            weights=[option.length for option in options],
+            values=values,
+            mutually_exclusive_option_indices_by_tile=constraints.mutually_exclusive_option_indices_by_tile,
+            backend_name=backend_name)
+    finally:
+        if evt is not None:
+            evt.__exit__()
+
+    evt = None
+    try:
+        if perf_timer is not None:
+            evt = perf_timer.begin_move_event('_build_tile_plan_option_result')
+        return _build_tile_plan_option_result(options, values, chosen_indices, max_value, solver_status)
+    finally:
+        if evt is not None:
+            evt.__exit__()
 
 
 def _solve_tile_plan_option_arrays_with_cp_sat(
@@ -653,18 +707,18 @@ def solve_grouped_knapsack_input(
     """
     options = adapt_grouped_knapsack_input_to_tile_plan_options(input_data)
 
-    with perfTimer.begin_move_event('solve_grouped individual groups'):
-        groups = [i for i in range(len(input_data.groups))]
-        solutionNoGroups = _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
-            options=options,
-            turn_budget=input_data.turn_budget,
-            groups=groups,
-            values=input_data.values,
-            is_external_item=input_data.is_external_item,
-            max_iterations=input_data.max_iterations,
-            noLog=noLog,
-            noLogVerbose=noLogVerbose,
-            perfTimer=perfTimer)
+    # with perfTimer.begin_move_event('solve_grouped individual groups'):
+    #     groups = [i for i in range(len(input_data.groups))]
+    #     solutionNoGroups = _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
+    #         options=options,
+    #         turn_budget=input_data.turn_budget,
+    #         groups=groups,
+    #         values=input_data.values,
+    #         is_external_item=input_data.is_external_item,
+    #         max_iterations=input_data.max_iterations,
+    #         noLog=noLog,
+    #         noLogVerbose=noLogVerbose,
+    #         perfTimer=perfTimer)
 
     with perfTimer.begin_move_event('solve_grouped original groups'):
         solutionPreGrouped = _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
@@ -677,15 +731,16 @@ def solve_grouped_knapsack_input(
             noLog=noLog,
             noLogVerbose=noLogVerbose,
             perfTimer=perfTimer)
+        return solutionPreGrouped
 
-    if solutionNoGroups.max_value > solutionPreGrouped.max_value:
-        logbook.warn(f'YOOOOOOOOOOOO breaking groups apart produced a better result...?')
-        logbook.warn(f'{solutionNoGroups.max_value}e vs {solutionPreGrouped.max_value}e, {solutionNoGroups.chosen_weight}t vs {solutionPreGrouped.chosen_weight}t, {solutionNoGroups.chosen_indices} vs {solutionPreGrouped.chosen_indices}')
-        return solutionNoGroups
+    # if solutionNoGroups.max_value > solutionPreGrouped.max_value:
+    #     logbook.warn(f'YOOOOOOOOOOOO breaking groups apart produced a better result...?')
+    #     logbook.warn(f'{solutionNoGroups.max_value}e vs {solutionPreGrouped.max_value}e, {solutionNoGroups.chosen_weight}t vs {solutionPreGrouped.chosen_weight}t, {solutionNoGroups.chosen_indices} vs {solutionPreGrouped.chosen_indices}')
+    #     return solutionNoGroups
     
-    logbook.info(f'NoGroup vs PreGroup: {solutionNoGroups.max_value}e vs {solutionPreGrouped.max_value}e, {solutionNoGroups.chosen_weight}t vs {solutionPreGrouped.chosen_weight}t, {solutionNoGroups.chosen_indices} vs {solutionPreGrouped.chosen_indices}')
+    # logbook.info(f'NoGroup vs PreGroup: {solutionNoGroups.max_value}e vs {solutionPreGrouped.max_value}e, {solutionNoGroups.chosen_weight}t vs {solutionPreGrouped.chosen_weight}t, {solutionNoGroups.chosen_indices} vs {solutionPreGrouped.chosen_indices}')
         
-    return solutionPreGrouped
+    # return solutionPreGrouped
 
 def _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
         options: list[TilePlanOptionProtocol],
@@ -950,6 +1005,76 @@ def _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
             f'Grouped knapsack external final: chosen={external_chosen} not_chosen={external_not_chosen} '
             f'chosen_descriptions={[ _describe_grouped_knapsack_option(input_data, index) for index in external_chosen ]} '
             f'not_chosen_descriptions={[ _describe_grouped_knapsack_option(input_data, index) for index in external_not_chosen ]}')
+        final_indices_by_pruned_group: dict[int, list[int]] = {}
+        for option_idx, pruned_group_id in grouping.groups_by_index.items():
+            if pruned_group_id not in final_indices_by_pruned_group:
+                final_indices_by_pruned_group[pruned_group_id] = []
+            final_indices_by_pruned_group[pruned_group_id].append(option_idx)
+        for pruned_group_id in sorted(final_indices_by_pruned_group):
+            group_indices = sorted(
+                final_indices_by_pruned_group[pruned_group_id],
+                key=lambda idx: (-_get_option_value_per_turn(input_data, idx), -values[idx], weights[idx], idx))
+            group_chosen_indices = [
+                option_idx
+                for option_idx in group_indices
+                if option_idx in chosen_set
+            ]
+            logbook.info(
+                f'Grouped knapsack final group dump: pruned_group={pruned_group_id} '
+                f'chosen={group_chosen_indices} '
+                f'members={[ ("CHOSEN " if option_idx in chosen_set else "unchosen ") + _describe_grouped_knapsack_external_flag(input_data, option_idx) + " " + _describe_grouped_knapsack_option(input_data, option_idx) for option_idx in group_indices ]}')
+        maybe_group_ids_by_option_index = {
+            maybe.option_index: maybe.would_merge_groups
+            for maybe in grouping.maybe_options
+        }
+        final_chosen_tile_owner_by_tile_id: dict[int, int] = {}
+        final_chosen_by_input_group: dict[int, int] = {}
+        final_chosen_by_pruned_group: dict[int, list[int]] = {}
+        for chosen_idx in chosen_set:
+            final_chosen_by_input_group[input_data.groups[chosen_idx]] = chosen_idx
+            pruned_group = grouping.groups_by_index.get(chosen_idx, -1)
+            if pruned_group not in final_chosen_by_pruned_group:
+                final_chosen_by_pruned_group[pruned_group] = []
+            final_chosen_by_pruned_group[pruned_group].append(chosen_idx)
+            for tile_id in input_data.item_tile_sets[chosen_idx]:
+                final_chosen_tile_owner_by_tile_id[tile_id] = chosen_idx
+        for external_idx in external_not_chosen:
+            overlapping_chosen_indices = sorted({
+                final_chosen_tile_owner_by_tile_id[tile_id]
+                for tile_id in input_data.item_tile_sets[external_idx]
+                if tile_id in final_chosen_tile_owner_by_tile_id
+            })
+            same_input_group_chosen_idx = final_chosen_by_input_group.get(input_data.groups[external_idx], None)
+            pruned_group_id = grouping.groups_by_index.get(external_idx, -1)
+            same_pruned_group_chosen_indices = sorted(final_chosen_by_pruned_group.get(pruned_group_id, []))
+            maybe_group_ids = maybe_group_ids_by_option_index.get(external_idx, tuple())
+            maybe_chosen_indices = sorted({
+                chosen_idx
+                for maybe_group_id in maybe_group_ids
+                for chosen_idx in final_chosen_by_pruned_group.get(maybe_group_id, [])
+            })
+            if len(overlapping_chosen_indices) > 0:
+                exclusion_reason = 'direct_tile_overlap'
+            elif same_input_group_chosen_idx is not None:
+                exclusion_reason = 'same_input_group'
+            elif len(same_pruned_group_chosen_indices) > 0:
+                exclusion_reason = 'same_pruned_conflict_component'
+            elif len(maybe_chosen_indices) > 0:
+                exclusion_reason = 'maybe_merge_conflict_component'
+            elif chosen_weight + weights[external_idx] > turn_budget:
+                exclusion_reason = 'over_budget'
+            else:
+                exclusion_reason = 'not_chosen_despite_no_final_direct_conflict'
+            logbook.info(
+                f'Grouped knapsack external not chosen detail: reason={exclusion_reason} '
+                f'option={_describe_grouped_knapsack_option(input_data, external_idx)} '
+                f'input_group={input_data.groups[external_idx]} pruned_group={pruned_group_id} maybe_groups={maybe_group_ids} '
+                f'chosen_weight={chosen_weight} remaining_capacity={turn_budget - chosen_weight} '
+                f'direct_overlap_chosen={overlapping_chosen_indices} '
+                f'direct_overlap_descriptions={[ _describe_grouped_knapsack_option(input_data, chosen_idx) for chosen_idx in overlapping_chosen_indices ]} '
+                f'same_input_group_chosen={same_input_group_chosen_idx} '
+                f'same_pruned_group_chosen={same_pruned_group_chosen_indices} '
+                f'maybe_group_chosen={maybe_chosen_indices}')
 
     return GroupedKnapsackResult(
         max_value=max_value,

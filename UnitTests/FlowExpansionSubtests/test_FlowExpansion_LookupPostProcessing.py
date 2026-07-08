@@ -13,6 +13,7 @@ from base.client.map import MapBase
 from bot_ek0x45 import EklipZBot
 
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionLookupPostProcessingTests(TestBase):
     """
     Tests for Phase 3: Enriching capture entries with minimum gather support.
@@ -1435,3 +1436,15 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
                 self._assert_enriched_entry_combined_set_connected(enriched, border_pair)
 
         logbook.info(f"Validated connectivity for enriched entries in {len(lookup_tables)} lookup tables")
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__lookup_postprocessing_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
+        enriched_entries = [
+            enriched for lookup_table in scenario.lookup_tables
+            for enriched in lookup_table.enriched_capture_entries
+        ]
+        self.assertGreater(len(enriched_entries), 0)
+        self.assertTrue(any(enriched.turns <= 5 and enriched.econ_value > 0.8 for enriched in enriched_entries))

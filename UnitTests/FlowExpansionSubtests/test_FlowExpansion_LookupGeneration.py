@@ -23,6 +23,7 @@ from bot_ek0x45 import EklipZBot
 
 method = FlowGraphMethod.OrToolsSimpleMinCost
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionLookupGenerationTests(TestBase):
     """
     Tests for Phase 2: Building per-border gather/capture lookup tables.
@@ -2738,3 +2739,14 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
 
         if debugMode:
             logbook.info(f"Validated connectivity for {len(lookup_tables)} lookup tables")
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__lookup_generation_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        self.assertGreater(len(scenario.lookup_tables), 0)
+        lookup_tables_with_capture = [
+            lookup_table for lookup_table in scenario.lookup_tables
+            if any(entry is not None and entry.econ_value > 0.8 for entry in lookup_table.capture_entries_by_turn)
+        ]
+        self.assertGreater(len(lookup_tables_with_capture), 0)

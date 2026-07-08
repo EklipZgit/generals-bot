@@ -2854,3 +2854,40 @@ setting bestInterceptTable[dist 1]:
 # 100f 77p 3s, after hacking some stuff? In 3min 4sec. With limit 3 dist common tile search
 # 101f 76p 3s, 3 min 7s, in 3 min 7 s (with greater limit common tile search space (11-24-2024)
 # 88f 131p 6s, 5 min 24s - with the claude fable 5 tweak to the something cone of allowedSearchRegion or whatever
+    def test_should_not_allow_enemy_to_dodge_back_away_from_general_without_countercapping(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_allow_enemy_to_dodge_back_away_from_general_without_countercapping___xow-pf3Af---0--290.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 290, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=290)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '12,8->12,7->11,7->11,8->10,8->10,7')
+        simHost.queue_player_moves_str(general.player, '14,5->13,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertTileDifferentialGreaterThan(4, simHost, 'because obviously')
+
+    def test_should_not_allow_enemy_to_dodge_back_away_from_general_without_countercapping__short(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_allow_enemy_to_dodge_back_away_from_general_without_countercapping__short___xow-pf3Af---0--294.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 294, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=294)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '10,8->10,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertNoFriendliesKilled(map, general)
+

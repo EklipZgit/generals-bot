@@ -2985,7 +2985,8 @@ class ArmyFlowExpanderV2:
             max_iterations=32,
         )
         if self.plan_solver != PlanSolver.MkcpPlusGreedyConflictResolution:
-            with self.perf_timer.begin_move_event(f'solve_tile_plan_options ({self.plan_solver})'):
+            with self.perf_timer.begin_move_event(f'{str(self.plan_solver).split(".")[-1]} solve_tile_plan_options'):
+                # negligible cost
                 tile_plan_options = [
                     GenericTilePlanOption(
                         item=item,
@@ -2997,12 +2998,14 @@ class ArmyFlowExpanderV2:
                         econValue=econ_values[index])
                     for index, item in enumerate(items)
                 ]
+
                 tile_plan_result = solve_tile_plan_options(
                     options=tile_plan_options,
                     turn_budget=turn_budget,
                     solver=self.plan_solver,
                     value_multiple=ITERATIVE_EXPANSION_EN_CAP_VAL,
-                    perf_timer=self.perf_timer)
+                    perf_timer=self.perf_timer,
+                )
                 chosen_items = tile_plan_result.chosen_items
                 max_value = tile_plan_result.max_value
                 chosen_indices = tile_plan_result.chosen_indices

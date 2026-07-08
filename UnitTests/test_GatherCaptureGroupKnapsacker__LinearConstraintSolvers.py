@@ -15,6 +15,7 @@ from Gather.GatherCaptureGroupKnapsacker import (
     solve_tile_plan_options_with_mp_cbc,
     solve_tile_plan_options_with_mp_scip,
 )
+from PerformanceTimer import PerformanceTimer
 from base.client.tile import Tile
 
 
@@ -122,14 +123,17 @@ class GatherCaptureGroupKnapsackerLinearConstraintSolverTests(unittest.TestCase)
         grouped_input = self._build_grouped_input()
         options = adapt_grouped_knapsack_input_to_tile_plan_options(grouped_input)
 
-        public_result = solve_grouped_knapsack_input(grouped_input)
+        perfTimer = PerformanceTimer()
+        perfTimer.begin_move(1)
+        public_result = solve_grouped_knapsack_input(grouped_input, perfTimer=perfTimer)
         internal_result = _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
             options=options,
             turn_budget=grouped_input.turn_budget,
             groups=grouped_input.groups,
             values=grouped_input.values,
             is_external_item=grouped_input.is_external_item,
-            max_iterations=grouped_input.max_iterations)
+            max_iterations=grouped_input.max_iterations,
+            perfTimer=perfTimer)
 
         self._assert_same_grouped_knapsack_result(
             expected_max_value=public_result.max_value,

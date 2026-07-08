@@ -27,6 +27,7 @@ Grouped-knapsack repro workflow:
 """
 
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionGroupedKnapsackTests(TestBase):
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
@@ -2786,3 +2787,12 @@ aG1  a3   b1   bG1
             expected = enriched.capture_entry.turns + enriched.gather_entry.turns
             self.assertEqual(expected, enriched.turns,
                              f'turns must equal capture.turns + gather.turns for pair {bp}')
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__grouped_knapsack_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
+        solution = scenario.expander._solve_grouped_knapsack(scenario.lookup_tables, 5)
+        self.assertGreater(len(solution), 0)
+        self.assertTrue(any(selected.turns == 5 and selected.econ_value > 0.8 for selected in solution.values()))

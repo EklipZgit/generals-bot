@@ -1,5 +1,6 @@
 import argparse
 import gc
+import inspect
 import signal
 import time
 from multiprocessing.context import DefaultContext, DefaultContext
@@ -273,6 +274,8 @@ class BotHostBase(object):
 
     def initialize_viewer(self, skip_file_logging: bool = False, onClick: typing.Callable[[Tile, bool], None] | None = None):
         window_title = f'{self._game_type} {self._name.split("_")[-1]}'
+        if self._game_type == 'test':
+            window_title = self.get_test_name_from_stack()
         self._viewer = ViewerHost(window_title, alignTop=not self.align_bottom, alignLeft=not self.align_right, useTestPositions=self.use_test_viewer_positions, useConfigTestAlignment=self.use_test_viewer_positions, noLog=skip_file_logging, onClick=onClick, ctx=self.ctx, mgr=self.mgr)
 
     def is_viewer_closed_by_user(self) -> bool:
@@ -303,6 +306,18 @@ class BotHostBase(object):
 
     def handle_tile_ping(self, pingedTile: Tile):
         BotComms.notify_tile_ping(self.eklipz_bot, pingedTile)
+
+    def get_test_name_from_stack(self) -> str:
+        """
+        Extracts the test name from the current call stack by looking for a function name starting with 'test_'.
+        Returns the test name if found, otherwise returns 'Unknown Test'.
+        """
+        stack = inspect.stack()
+        for frame_info in stack:
+            func_name = frame_info.function
+            if func_name.startswith('test_'):
+                return func_name
+        return 'Unknown Test'
 
 
 class BotHostLiveServer(BotHostBase):

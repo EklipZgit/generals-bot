@@ -12,6 +12,7 @@ from base.client.tile import Tile
 from bot_ek0x45 import EklipZBot
 
 
+from UnitTests.FlowExpansionSubtests.NeutralBorderCrossingFixture import build_neutral_border_crossing_scenario, assert_has_enemy_capture_option
 class FlowExpansionIslandSetConnectivityTests(TestBase):
     """
     Tests that FlowExpansion produces connected/contiguous tile sets.
@@ -322,3 +323,13 @@ a3   a3   a3   a3   bG1  a3   a3
         from Algorithms.TileIslandBuilder import TileIslandBuilder as TIB
         TIB.add_tile_islands_to_view_info(builder, view_info)
         self.render_view_info(map, view_info)
+
+
+    def test_builds_flow_plan_gathering_through_neutral_border_crossings__island_set_connectivity_level(self):
+        scenario = build_neutral_border_crossing_scenario(self)
+
+        scenario.expander._postprocess_flow_stream_gather_capture_lookup_pairs(scenario.lookup_tables)
+        solution = scenario.expander._solve_grouped_knapsack(scenario.lookup_tables, 5)
+        plans = scenario.expander._materialize_plans(solution)
+        option = assert_has_enemy_capture_option(self, plans, scenario.enemy_general.player)
+        self.assertGreater(len(option.tileSet), 0)

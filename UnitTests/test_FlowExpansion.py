@@ -3030,8 +3030,6 @@ player_index=0
         self.assertAllNonOnePlayerTilesUsedInRoundPlan(bot, general, playerMap)
         self.assertGreater(bot.last_flow_opt_collection.total_econ, 22)
 
-# 51f, 72p, 5ig as of cleaning up all the hyperverbose logs. Still in the middle of figuring out why flow expand routes like dogshit
-# 58f, 83p, 6ig - 26-07-07 after tweaks for the test_builds_flow_plan_gathering_through_neutral_border_crossings stuff by claude
     def test_should_not_keep_requeueing_from_general_when_have_other_options_later(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_not_keep_requeueing_from_general_when_have_other_options_later___XVjMU7Et9---0--73.txtmap'
@@ -3071,3 +3069,7 @@ player_index=0
 
         self.assertOwnedXY(10, 13)
         self.assertLess(10, playerMap.At(10, 13).army)
+
+# 51f, 72p, 5ig as of cleaning up all the hyperverbose logs. Still in the middle of figuring out why flow expand routes like dogshit
+# 65f, 79p, 6ig - 26-07-08 v rolled back, baseline.
+# 58f, 83p, 6ig - 26-07-07 after tweaks for the test_builds_flow_plan_gathering_through_neutral_border_crossings stuff by claude

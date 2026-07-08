@@ -26,7 +26,7 @@ from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotRepetition import BotRepetition
 from BotModules.BotTargeting import BotTargeting
 from DangerAnalyzer import ThreatType
-from Behavior.ArmyInterceptor import InterceptionOptionInfo
+from Behavior.ArmyInterceptor import InterceptionOptionInfo, ThreatBlockInfo
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, ITERATIVE_EXPANSION_EN_CAP_VAL
 from Gather import GatherCapturePlan
 from Interfaces import TilePlanInterface
@@ -620,6 +620,29 @@ class BotExpansionOps:
                     addlOptions.append(opt)
                     bot.info(f'opt quickKillCity {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) {str(bot.quick_kill_city_plan_option)}')
 
+            # Clone blocking_tile_info and add general movement blocking
+            threatBlockingTiles = dict(bot.blocking_tile_info)
+            if bot.general.lastMovedTurn >= bot._map.turn - 3 and bot.general.delta.toTile is not None:
+                toTile = bot.general.delta.toTile
+                blockInfo: ThreatBlockInfo = threatBlockingTiles.get(bot.general, None)
+                shouldSkip = False
+                if blockInfo is None:
+                    blockInfo = ThreatBlockInfo(bot.general, amount_needed_to_block=bot.general.army)
+                    threatBlockingTiles[bot.general] = blockInfo
+                else:
+                    if toTile in blockInfo.blocked_destinations:
+                        # already blocked, ignore
+                        shouldSkip = True
+                    else:
+                        # clone the blockInfo...
+                        dests = list(blockInfo.blocked_destinations)
+                        blockInfo = ThreatBlockInfo(bot.general, amount_needed_to_block=blockInfo.amount_needed_to_block)
+                        blockInfo.blocked_destinations = dests
+                        threatBlockingTiles[bot.general] = blockInfo
+                if not shouldSkip:
+                    blockInfo.add_blocked_destination(toTile)
+                    bot.info(f'FE GEN_MV_BLK toTile={toTile} lastMovedTurn={bot.general.lastMovedTurn}')
+
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
                     ogStart = time.perf_counter()
@@ -710,6 +733,7 @@ class BotExpansionOps:
                         enemyAttackPathTiles = None
                         if bot.enemy_attack_path is not None:
                             enemyAttackPathTiles = bot.enemy_attack_path.tileSet
+
                         optCollection = flowExpander.get_expansion_options(
                             islands=bot.tileIslandBuilder,
                             asPlayer=bot.player.index,
@@ -722,7 +746,7 @@ class BotExpansionOps:
                             cutoffTime=cutoffTime,
                             additional_options=additionalOptionsToInclude,
                             army_override_matrix=armyOverrideMatrix,
-                            threatBlockingTiles=bot.blocking_tile_info,
+                            threatBlockingTiles=threatBlockingTiles,
                             enemyAttackPathTiles=enemyAttackPathTiles,
                         )
                         cumulative = 0.0
@@ -832,7 +856,7 @@ class BotExpansionOps:
                 time_limit=timeLimit,
                 lengthWeightOffset=bot.expansion_length_weight_offset,
                 useCutoff=bot.expansion_use_cutoff,
-                threatBlockingTiles=bot.blocking_tile_info,
+                threatBlockingTiles=threatBlockingTiles,
                 colors=pathColor,
                 smallTileExpansionTimeRatio=bot.expansion_small_tile_time_ratio,
                 bonusCapturePointMatrix=bonusCapturePointMatrix,
@@ -1026,7 +1050,7 @@ class BotExpansionOps:
                     lengthWeightOffset=bot.expansion_length_weight_offset,
                     useCutoff=bot.expansion_use_cutoff,
                     smallTileExpansionTimeRatio=bot.expansion_small_tile_time_ratio,
-                    threatBlockingTiles=bot.blocking_tile_info,
+                    threatBlockingTiles=None,
                     colors=pathColor,
                     bonusCapturePointMatrix=None)
             finally:
@@ -1596,6 +1620,7 @@ class BotExpansionOps:
         0.5 means hella sketchy, half our army is outside the play area.
         @return:
         """
+        bot.force_far_gathers_turns = 0
         bot.out_of_play_tiles = set()
         if bot.force_far_gathers and bot.force_far_gathers_turns <= 0:
             bot.force_far_gathers_turns = 0

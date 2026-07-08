@@ -169,7 +169,7 @@ class BotTargeting:
             cutoffEmergenceRatio: float = 0.333,
             includeCities: bool = False,
             limitNearbyTileRange: int = -1,
-            requirePredictedFogTeamTile: bool = False
+            requirePredictedFogTeamTile: bool = True
     ) -> typing.List[Tile]:
         """
 

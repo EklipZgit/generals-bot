@@ -989,16 +989,25 @@ class ArmyFlowExpanderV2:
         if friendly_node is None or target_node is None:
             return None
 
-        friendly_stream = self._build_upstream_stream(
-            friendly_node, target_crossable_islands
-        )
-
+        flow_lookup = lookup
+        if self.log_debug:
+            logbook.info(
+                f'STREAM_DATA bp={self._diag_border_pair_anchor(border_pair)}: '
+                f'target_crossable_islands={target_crossable_islands} '
+                f'flow_lookup_size={len(flow_lookup) if flow_lookup else 0}'
+            )
         # Build downstream target stream traversal — walk starting AT the target
         # border node. Starting from the friendly source would fork into sibling
         # border pairs that share the same friendly node (friendly.flow_to often
         # contains multiple target neighbours, each of which is its own border pair).
+        # Built before the upstream stream so the gather traversal can pull in friendly
+        # islands physically adjacent to the neutral nodes captured along this target stream.
         target_stream, target_node_potentials = self._build_downstream_stream(
             target_node, target_crossable_islands, flow_graph, turn_budget, border_pair, node_potentials
+        )
+
+        friendly_stream = self._build_upstream_stream(
+            friendly_node, target_crossable_islands, flow_lookup, target_stream
         )
 
         # Calculate potential values from streams
@@ -1050,7 +1059,9 @@ class ArmyFlowExpanderV2:
     def _build_upstream_stream(
         self,
         start_node: IslandFlowNode,
-        target_crossable_islands: set[int]
+        target_crossable_islands: set[int],
+        flow_lookup: dict[int, IslandFlowNode] | None = None,
+        target_stream: list[IslandFlowNode] | None = None,
     ) -> list[IslandFlowNode]:
         """Build upstream traversal from friendly border node using priority queue.
 
@@ -1063,6 +1074,9 @@ class ArmyFlowExpanderV2:
         TileIslandBuilder.debug_verify_all_islands. Therefore every edge we walk
         here is guaranteed to connect two spatially adjacent islands — no
         per-tile adjacency check is needed.
+
+        Also includes friendly islands that flow into target_crossable_islands
+        (neutral crossing nodes), to capture side-feeding gather support.
         """
 
         visited = set()
@@ -1078,6 +1092,62 @@ class ArmyFlowExpanderV2:
             start_heuristic = start_island.sum_army / max(start_island.tile_count, 1)
             heapq.heappush(frontier, (-start_heuristic, start_island.unique_id, start_node, start_island.sum_army))
             visited.add(start_island.unique_id)
+
+        with self.perf_timer.begin_move_event('add friendly target_crossables'):
+            # Also add friendly islands that flow into target_crossable_islands
+            # This captures side-feeding islands that don't flow directly to the friendly border node
+            if flow_lookup is not None:
+                for target_island_id in target_crossable_islands:
+                    target_node = flow_lookup.get(target_island_id)
+                    if target_node is None:
+                        continue
+                    for edge in target_node.flow_from:
+                        src = edge.source_flow_node
+                        src_island = src.island
+                        if src_island.unique_id in visited:
+                            continue
+                        if src_island.team != self.team:
+                            continue
+                        heuristic = src_island.sum_army / max(src_island.tile_count, 1)
+                        heapq.heappush(frontier, (-heuristic, src_island.unique_id, src, src_island.sum_army))
+                        visited.add(src_island.unique_id)
+
+        with self.perf_timer.begin_move_event('add friendly border islands'):
+            # Pull in friendly islands physically adjacent to the neutral nodes in the capture
+            # (target/downstream) stream. When a plan captures a neutral crossing corridor, friendly
+            # army sitting alongside that corridor can be gathered sideways into it to fund the deeper
+            # captures, even though MinCostFlow did not route flow through those friendlies. This mirrors
+            # the physical-adjacency ('border_adj') fallback that _build_downstream_stream already uses to
+            # extend the capture path past un-routed neutrals. border_islands is strictly tile-adjacent
+            # (TileIslandBuilder.debug_verify_all_islands), so the gather stream stays spatially connected.
+            # UnitTests/test_FlowExpansion_*.py::test_builds_flow_plan_gathering_through_neutral_border_crossings
+            if target_stream is not None and flow_lookup is not None:
+                target_stream_island_ids = {node.island.unique_id for node in target_stream}
+                for target_stream_node in target_stream:
+                    if target_stream_node.island.team != -1:
+                        continue
+                    for neighbor_island in target_stream_node.island.border_islands:
+                        if neighbor_island.unique_id in visited:
+                            continue
+                        if neighbor_island.team != self.team:
+                            continue
+                        neighbor_node = flow_lookup.get(neighbor_island.unique_id)
+                        if neighbor_node is None:
+                            continue
+                        # Only pull in genuine side-feeders of THIS capture path. A neighbouring friendly
+                        # qualifies when nothing is routed into it (empty flow_from) AND its own routed
+                        # output (flow_to), if any, feeds only islands that this border pair is already
+                        # capturing (they are in target_stream). That identifies army sitting alongside the
+                        # neutral corridor with nowhere else to go. Friendlies routed elsewhere (e.g. toward
+                        # the general or a different target) are gathered by the pair they belong to; adding
+                        # them here would pollute unrelated pairs' gather streams and change their plans.
+                        if neighbor_node.flow_from:
+                            continue
+                        if any(edge.target_flow_node.island.unique_id not in target_stream_island_ids for edge in neighbor_node.flow_to):
+                            continue
+                        heuristic = neighbor_island.sum_army / max(neighbor_island.tile_count, 1)
+                        heapq.heappush(frontier, (-heuristic, neighbor_island.unique_id, neighbor_node, neighbor_island.sum_army))
+                        visited.add(neighbor_island.unique_id)
 
         while frontier:
             _, _, current_node, upstream_army = heapq.heappop(frontier)
@@ -2206,15 +2276,38 @@ class ArmyFlowExpanderV2:
             if current_turn > max_turns:
                 continue
 
-            for edge in node_bfs.flow_from:
-                src = edge.source_flow_node
+            next_num_friendly_1s_traversed = num_friendly_1s_traversed + sum(
+                1
+                for tile in node_bfs.island.tile_set
+                if self._get_tile_army(tile) <= 1
+            )
+
+            # Collect upstream gather sources from two channels, deduped:
+            #   1. flow_from edges — the army MinCostFlow actually routed toward this island.
+            #   2. physical friendly adjacency (border_islands) restricted to islands the upstream
+            #      stream already selected (friendlyContributionsByIslandId), and ONLY when this node
+            #      received no routed flow of its own (empty flow_from). Side-feeding friendly chains
+            #      that feed a captured neutral corridor (e.g. (3,2)-(3,1)-(3,0)) are spatially
+            #      gatherable but were not routed by MinCostFlow, so they have no flow_from edge. Without
+            #      this channel their army never reaches the gather lookup and the corridor plan is
+            #      starved of the army needed to push through the neutrals into the enemy. Restricting to
+            #      flow-less nodes keeps normal flow-routed gathering (and its plan values) unchanged.
+            #      border_islands is strictly tile-adjacent (TileIslandBuilder.debug_verify_all_islands).
+            # UnitTests/test_FlowExpansion_*.py::test_builds_flow_plan_gathering_through_neutral_border_crossings
+            gather_source_nodes: list[IslandFlowNode] = [edge.source_flow_node for edge in node_bfs.flow_from]
+            if not node_bfs.flow_from:
+                seen_gather_source_ids: set[int] = set()
+                for neighbor_island in node_bfs.island.border_islands:
+                    if neighbor_island.unique_id in seen_gather_source_ids:
+                        continue
+                    if neighbor_island.unique_id not in friendlyContributionsByIslandId:
+                        continue
+                    seen_gather_source_ids.add(neighbor_island.unique_id)
+                    gather_source_nodes.append(friendlyContributionsByIslandId[neighbor_island.unique_id].flow_node)
+
+            for src in gather_source_nodes:
                 if src.island.team == self.team and src.island.unique_id not in bfs_visited:
                     next_depth = depth + src.island.tile_count
-                    next_num_friendly_1s_traversed = num_friendly_1s_traversed + sum(
-                        1
-                        for tile in node_bfs.island.tile_set
-                        if self._get_tile_army(tile) <= 1
-                    )
                     bfs_sequence += 1
                     heapq.heappush(
                         bfs_queue,

@@ -48,6 +48,21 @@ _GUID_STEM_PATTERN: re.Pattern[str] = re.compile(r'^[0-9a-f]{32}$')
 # External blob/path bot viewer source; a local machine path outside the repo.
 BLOB_PATH_VIEWER: str = r'C:\old-bots\generals-blob-and-path\base\viewer.py'
 
+HUMAN_LIVE_BOT_COMMANDS: list[str] = [
+    'Run-Human -left -game 1v1 -sleepMax 600 -cpuAffinityMask P',
+    'Run-Human -right -game ffa -sleepMax 120 -cpuAffinityMask P',
+    'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 4',
+    'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui -cpuAffinityMask 6',
+    'Run-Teammate -sleepMax 90 -left -nolog -cpuAffinityMask 8',
+    'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask 10',
+]
+
+NON_HUMAN_LIVE_BOT_COMMANDS: list[str] = [
+    'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public -noui',
+    'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public -noui',
+    'run-SoraAlt -public -sleepMax 120',
+]
+
 
 @dataclass(slots=True)
 class PwshResult:
@@ -234,6 +249,61 @@ function Get-Content {{
     Microsoft.PowerShell.Management\\Get-Content @PSBoundParameters
 }}
 """
+
+    def _live_bot_launch_markers(self, arguments: str = '') -> dict[str, list[str]]:
+        """Capture live-fleet tab selection without opening terminals, sleeping, or running bots."""
+        script = f"""
+{self._load_functions_prelude()}
+function Start-RunBotWindowsTerminalTab {{
+    param($WindowName, $Command, [switch]$LoadGameResultUtils)
+    if ($LoadGameResultUtils) {{
+        Write-Output "DEV_TAB|$WindowName"
+    }} else {{
+        Write-Output "LAUNCH|$Command"
+    }}
+}}
+function Start-Sleep {{ param($Seconds) Write-Output "SLEEP|$Seconds" }}
+try {{
+    Start-WindowsTerminalLiveBots {arguments}
+    Write-Output 'COMPLETED|True'
+}} catch {{
+    Write-Output "THREW|$($_.Exception.Message)"
+}}
+"""
+        return self._markers(self._run_pwsh(script))
+
+    def test_live_bots_default_launches_all_groups(self) -> None:
+        """Omitting filters must retain all bot tabs and the shared development tab."""
+        markers = self._live_bot_launch_markers()
+        self.assertNotIn('THREW', markers)
+        self.assertEqual(markers.get('LAUNCH'), HUMAN_LIVE_BOT_COMMANDS + NON_HUMAN_LIVE_BOT_COMMANDS)
+        self.assertEqual(markers.get('DEV_TAB'), ['LiveBots'])
+        self.assertEqual(markers.get('SLEEP'), ['3'])
+
+    def test_live_bots_non_human_exe_only_excludes_human_and_team_bots(self) -> None:
+        """NonHumanExeOnly must launch only Blob, Path, and Sora, not the current bot or its partners."""
+        markers = self._live_bot_launch_markers('-NonHumanExeOnly')
+        self.assertNotIn('THREW', markers)
+        self.assertEqual(markers.get('LAUNCH'), NON_HUMAN_LIVE_BOT_COMMANDS)
+        self.assertEqual(markers.get('DEV_TAB'), ['LiveBots'])
+
+    def test_live_bots_only_human_exe_includes_all_team_bots(self) -> None:
+        """OnlyHumanExe must include Human.exe 1v1/FFA and the full existing 2v2 partner group."""
+        markers = self._live_bot_launch_markers('-OnlyHumanExe')
+        self.assertNotIn('THREW', markers)
+        self.assertEqual(markers.get('LAUNCH'), HUMAN_LIVE_BOT_COMMANDS)
+        self.assertEqual(markers.get('DEV_TAB'), ['LiveBots'])
+
+    def test_live_bots_rejects_conflicting_filters_before_opening_tabs(self) -> None:
+        """Mutually exclusive filters must fail before opening even the development tab."""
+        markers = self._live_bot_launch_markers('-NonHumanExeOnly -OnlyHumanExe')
+        self.assertIn('THREW', markers)
+        self.assertIn('NonHumanExeOnly', markers['THREW'][0])
+        self.assertIn('OnlyHumanExe', markers['THREW'][0])
+        self.assertNotIn('LAUNCH', markers)
+        self.assertNotIn('DEV_TAB', markers)
+        self.assertNotIn('SLEEP', markers)
+        self.assertNotIn('COMPLETED', markers)
 
     def _temp_launch_script(self, simulate_played: bool) -> str:
         """Builds a pwsh payload that runs Run-BotOnce with all launch effects stubbed.

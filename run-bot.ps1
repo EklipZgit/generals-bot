@@ -1078,7 +1078,15 @@ function Start-WindowsTerminalBigTeamBots {
 # starts a windows terminal that runs the standard live bots and opens dev tabs
 function Start-WindowsTerminalLiveBots {
     Param(
+        [switch]$NonHumanExeOnly,
+        [switch]$OnlyHumanExe
     )
+
+    # UnitTests/test_RunBotLauncher.py::test_live_bots_rejects_conflicting_filters_before_opening_tabs
+    # Reject contradictory selections before opening any terminal tabs.
+    if ($NonHumanExeOnly -and $OnlyHumanExe) {
+        throw '-NonHumanExeOnly and -OnlyHumanExe cannot be used together.'
+    }
 
     $windowName = 'LiveBots'
 
@@ -1090,32 +1098,38 @@ function Start-WindowsTerminalLiveBots {
     # time for the terminal window to open
     start-sleep -seconds 3
 
-    <#
-    Human 1v1
-    #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game 1v1 -sleepMax 600 -cpuAffinityMask P'
+    # UnitTests/test_RunBotLauncher.py::test_live_bots_only_human_exe_includes_all_team_bots
+    # Keep all current-bot 2v2 partners in the Human.exe group, regardless of their account names.
+    if (-not $NonHumanExeOnly) {
+        <#
+        Human 1v1
+        #>
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game 1v1 -sleepMax 600 -cpuAffinityMask P'
 
-    <#
-    Human ffa
-    #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -right -game ffa -sleepMax 120 -cpuAffinityMask P'
+        <#
+        Human ffa
+        #>
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -right -game ffa -sleepMax 120 -cpuAffinityMask P'
 
-    <#
-    Human 2v2 partners
-    #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 4'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui -cpuAffinityMask 6'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 90 -left -nolog -cpuAffinityMask 8'
-    # SECOND teammate for local testing:
-    # run-teammate -sleepMax 1 -left -name Teammate2.exe
+        <#
+        Human 2v2 partners
+        #>
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 4'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui -cpuAffinityMask 6'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 90 -left -nolog -cpuAffinityMask 8'
+        # SECOND teammate for local testing:
+        # run-teammate -sleepMax 1 -left -name Teammate2.exe
 
-    <# Teammate in team lobby #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask 10'
+        <# Teammate in team lobby #>
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask 10'
+    }
 
     # weak bots
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public -noui'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public -noui'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-SoraAlt -public -sleepMax 120'
+    if (-not $OnlyHumanExe) {
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public -noui'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public -noui'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-SoraAlt -public -sleepMax 120'
+    }
 
     # <#
     # Human in custom lobby with custom maps

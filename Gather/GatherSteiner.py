@@ -101,59 +101,70 @@ def _build_pcst_tile_prize_matrix(
     tilePrizeMatrix = MapMatrix(map, 0.0)
     tileExtraCostMatrix = MapMatrix(map, 0.0)
 
+    tCostRaw = tileExtraCostMatrix.raw
+    tPrizeRaw = tilePrizeMatrix.raw
+
+    capMatRaw = None
+    if captureMatrix:
+        capMatRaw = captureMatrix.raw
+
+    gathMatRaw = None
+    if gatherMatrix:
+        gathMatRaw = gatherMatrix.raw
+
     if negativeTiles:
         for tile in map.iterate_tile_set(negativeTiles):
-            tileExtraCostMatrix.raw[tile.tile_index] += 2.0
-            tilePrizeMatrix.raw[tile.tile_index] = -1.0
+            tCostRaw[tile.tile_index] += 2.0
+            tPrizeRaw[tile.tile_index] = -1.0
 
     if hintIncludeTiles:
         for tile in map.iterate_tile_set(hintIncludeTiles):
             # never extra-cost these, and make their cost hint lower than other nearby
-            tileExtraCostMatrix.raw[tile.tile_index] = -1.0
-            tilePrizeMatrix.raw[tile.tile_index] += 0.5
+            tCostRaw[tile.tile_index] = -1.0
+            tPrizeRaw[tile.tile_index] += 0.5
 
     # root tiles have no value themselves, should always be included
     for tile in rootTiles:
-        tilePrizeMatrix.raw[tile.tile_index] += 1.0
-        tileExtraCostMatrix.raw[tile.tile_index] = -1.0
+        tPrizeRaw[tile.tile_index] += 1.0
+        tCostRaw[tile.tile_index] = -1.0
 
     minCost = 1000000.0
     maxCost = -1000000.0
     minPrize = 1000000.0
     maxPrize = -1000000.0
     for tile in map.reachable_tiles:
-        prize = tilePrizeMatrix.raw[tile.tile_index]
-        extraCost = tileExtraCostMatrix.raw[tile.tile_index]
+        prize = tPrizeRaw[tile.tile_index]
+        extraCost = tCostRaw[tile.tile_index]
 
         if negativeTiles is not None and tile in negativeTiles:
             prize = 0.0
         elif map.is_tile_on_team_with(tile, searchingPlayer):
             prize = float(tile.army)
-            if gatherMatrix:
-                prize += gatherMatrix.raw[tile.tile_index]
+            if gathMatRaw:
+                prize += gathMatRaw[tile.tile_index]
         else:
             if tile.army >= -1:
                 if not prioritizeCaptureHighArmyTiles:
                     extraCost = tile.army * enemyArmyFactor
-                    if captureMatrix and tile.army < enemyArmyLimit:
-                        capVal = captureMatrix.raw[tile.tile_index]
+                    if capMatRaw and tile.army < enemyArmyLimit:
+                        capVal = capMatRaw[tile.tile_index]
                         prize = capVal
                 else:
-                    if captureMatrix and tile.army < enemyArmyLimit:
+                    if capMatRaw and tile.army < enemyArmyLimit:
                         prize = float(tile.army) * enemyArmyFactor
-                        capVal = captureMatrix.raw[tile.tile_index]
+                        capVal = capMatRaw[tile.tile_index]
                         prize += capVal
 
         minCost = min(extraCost, minCost)
         minPrize = min(prize, minPrize)
         maxCost = max(extraCost, maxCost)
         maxPrize = max(prize, maxPrize)
-        tilePrizeMatrix.raw[tile.tile_index] = prize
-        tileExtraCostMatrix.raw[tile.tile_index] = extraCost
+        tPrizeRaw[tile.tile_index] = prize
+        tCostRaw[tile.tile_index] = extraCost
 
     if tilesToHalf is not None:
         for tile in map.iterate_tile_set(tilesToHalf):
-            tilePrizeMatrix.raw[tile.tile_index] /= 2.0
+            tPrizeRaw[tile.tile_index] /= 2.0
 
     return tilePrizeMatrix, minPrize, maxPrize, tileExtraCostMatrix, minCost, maxCost
 
@@ -843,9 +854,12 @@ def _pcst_iteration_internal(
     scaleNegativesBelow = 2
     costBasis += scaleNegativesBelow
     """ verbosity_level: an integer indicating how much debug output the function should produce."""
+    tPrizeRaw = tilePrizeMatrix.raw
+    tCostRaw = None if tileExtraCostMatrix is None else tileExtraCostMatrix.raw
+
     for tileIndex, tile in enumerate(map.tiles_by_index):
-        prize = tilePrizeMatrix.raw[tileIndex]
-        extraCost = tileExtraCostMatrix.raw[tileIndex] if tileExtraCostMatrix is not None else 0.0
+        prize = tPrizeRaw[tileIndex]
+        extraCost = tCostRaw[tileIndex] if tCostRaw is not None else 0.0
         # if tile.army > 1 or not map.is_tile_friendly(tile):
         prize += prizeOffset
         if tile.player == -1 and tile.army < 0:

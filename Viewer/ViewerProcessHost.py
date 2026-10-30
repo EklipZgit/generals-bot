@@ -16,6 +16,9 @@ import BotLogging
 from ViewInfo import ViewInfo
 from base.client.map import MapBase, Tile
 
+# Statically evaluated at module load: when bypass_ui is true, no test/debug tooling should ever open a viewer window.
+BYPASS_UI = os.environ.get('bypass_ui', 'False') == 'True'
+
 
 class ViewerHost(object):
     def __init__(
@@ -33,6 +36,14 @@ class ViewerHost(object):
             minUpdateSleep: float = 0.0,
             noLog: bool = False
     ):
+        self._bypass: bool = BYPASS_UI
+        if self._bypass:
+            self.on_click: typing.Callable[[Tile, bool], None] | None = onClick
+            self._started: bool = False
+            self._recieved_init_ack: bool = False
+            self._closed_by_user: bool | None = True
+            return
+
         if ctx is None:
             logbook.info("getting spawn context")
             ctx = mp.get_context('spawn')
@@ -60,11 +71,15 @@ class ViewerHost(object):
         raise AssertionError('this should never get de-serialized')
 
     def start(self):
+        if self._bypass:
+            return
         logbook.info("starting viewer process")
         self.process.start()
         self._started = True
 
     def kill(self):
+        if self._bypass:
+            return
         logbook.info("putting Complete viewer update in queue")
         try:
             self._update_queue.put((None, None, True))
@@ -78,6 +93,8 @@ class ViewerHost(object):
             self.process.kill()
 
     def check_viewer_closed(self) -> bool:
+        if self._bypass:
+            return True
         if not self._started:
             return True
 
@@ -94,6 +111,8 @@ class ViewerHost(object):
             return True
 
     def check_viewer_closed_by_user(self) -> bool:
+        if self._bypass:
+            return False
         if self.check_viewer_closed():
             if self._closed_by_user:
                 return True
@@ -101,6 +120,8 @@ class ViewerHost(object):
         return False
 
     def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool = False):
+        if self._bypass:
+            return
         try:
             # if map.turn == 94:  # Proved the problem was contents of viewInfo
             #     viewInfo = None
@@ -118,8 +139,8 @@ class ViewerHost(object):
             #     # logbook.info('DILL loading:')
             #     # dill.loads(string)
             # except:
-            #     logbook.info(f'DILL LOAD ERROR: ' + traceback.format_exc())
-            #     pass
+            #     # logbook.info(f'DILL LOAD ERROR: ' + traceback.format_exc())
+            #     # pass
 
             self._update_queue.put(obj)
         except BrokenPipeError as ex:
@@ -136,6 +157,8 @@ class ViewerHost(object):
             self._recieved_init_ack: bool = True
 
     def handle_viewer_events(self):
+        if self._bypass:
+            return
         try:
             while True:
                 eventType, eventValue = self._viewer_event_queue.get(block=False)
@@ -159,6 +182,8 @@ class ViewerHost(object):
                 self._closed_by_user = False
 
     def wait_viewer_initialized(self):
+        if self._bypass:
+            return
         if self._recieved_init_ack:
             return
 

@@ -109,7 +109,8 @@ function Find-PyCharmExecutable {
 $resolvedPathA = Resolve-RequiredFilePath -Path $PathA
 $resolvedPathB = Resolve-RequiredFilePath -Path $PathB
 
-$tempRoot = 'D:\2019_reformat_Backup\cascade-debug-output\generals-bot\log-diffs'
+# D:\ is a small system recovery volume on this machine; never write output there.
+$tempRoot = 'C:\cascade-debug-output\generals-bot\log-diffs'
 if (-not (Test-Path -LiteralPath $tempRoot)) {
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
 }

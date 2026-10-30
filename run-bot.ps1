@@ -138,7 +138,17 @@ function Get-PathBotPath {
 
 
 function Get-HistoricalBotsRoot {
-    return Get-RequiredRunConfigValue -Key 'historical_bots_root'
+    $root = Get-RequiredRunConfigValue -Key 'historical_bots_root'
+    # UnitTests/test_RunBotLauncher.py::test_missing_historical_bots_root_throws_config_error
+    # The configured historical bots root must be an existing directory; a typo in the
+    # setting used to silently produce nonexistent bot paths that failed much later
+    # and far less clearly at bot launch time.
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+        $configFile = Get-RunConfigFilePath
+        throw "The historical_bots_root entry in $configFile points at '$root', which is not an existing directory. Fix the historical_bots_root=<path> entry in that file."
+    }
+
+    return $root
 }
 
 
@@ -170,7 +180,50 @@ function Get-HistoricalBotPath {
         [string]$BotFile
     )
 
-    return (Join-Path (Join-Path (Get-HistoricalBotsRoot) $VersionFolder) $BotFile)
+    $botPath = (Join-Path (Join-Path (Get-HistoricalBotsRoot) $VersionFolder) $BotFile)
+    # UnitTests/test_RunBotLauncher.py::test_get_historical_bot_path_throws_for_missing_entrypoint
+    # The joined entrypoint must be an existing file so a wrong version folder or bot
+    # file name fails here naming the setting, version, and entrypoint instead of
+    # surfacing as a cryptic interpreter error at launch.
+    if (-not (Test-Path -LiteralPath $botPath -PathType Leaf)) {
+        $configFile = Get-RunConfigFilePath
+        throw "historical_bots_root in $configFile has no bot entrypoint '$BotFile' under version folder '$VersionFolder' (checked '$botPath')."
+    }
+
+    return $botPath
+}
+
+
+# Looks up a bot name in the gitignored bot_user_ids.txt file next to this script.
+# Each line is '<bot name> <userID>'; the name is everything before the LAST
+# whitespace-separated token on the line, so names containing spaces still work.
+# Returns the userID for the first matching line, or $null if there is no match.
+function Get-BotUserIdForName {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $userIdsFile = Join-Path $PSScriptRoot 'bot_user_ids.txt'
+    if (-not (Test-Path $userIdsFile)) {
+        return $null
+    }
+
+    foreach ($line in (Get-Content -Path $userIdsFile)) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+        if ($line.TrimStart().StartsWith('#')) {
+            continue
+        }
+        # Name must be followed by whitespace so 'Queue' doesn't match 'QueueT'.
+        if ($line -cmatch "^$([regex]::Escape($Name))\s+") {
+            $tokens = $line.Trim() -split '\s+'
+            return $tokens[-1]
+        }
+    }
+
+    return $null
 }
 
 
@@ -283,10 +336,23 @@ function Run-BotOnce {
     )
 
     $ErrorActionPreference = 'Stop'
+
+    # UnitTests/test_RunBotLauncher.py::test_run_botonce_invalid_path_throws_before_launcher_work
+    # Fail fast on a bad -path before the userID lookup, block_bot check, temp dir, or
+    # log folder work so a stale or mistyped bot path throws a clear error naming the
+    # offending path instead of dying deeper in the launch pipeline.
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Bot entrypoint path '$path' passed to Run-BotOnce does not exist or is not a file."
+    }
+
+    $path = (Resolve-Path -LiteralPath $path).ProviderPath
     $cpuAffinityMask = Resolve-CpuAffinityMask $cpuAffinityMask
 
-    if (-not (Test-Path "$PSScriptRoot/../temp")) {
-        mkdir "$PSScriptRoot/../temp"
+    # bot_user_ids.txt (gitignored, holds real userIDs for bot names) takes
+    # precedence over any default/hardcoded -userID when the name matches.
+    $fileUserId = Get-BotUserIdForName -Name $name
+    if ($fileUserId) {
+        $userID = $fileUserId
     }
 
     $blockBotFile = "$PSScriptRoot/../block_bot.txt"
@@ -347,10 +413,15 @@ function Run-BotOnce {
 
     Write-Host "Python ver $pythonVer for path $path"
 
-    $randNums = 1..10 | Get-Random -Count 10
-    $randName = $randNums -join ''
-    $ps1File = "$PSScriptRoot/../temp/$randName.ps1"
-    $playedGameFile = "$PSScriptRoot/../temp/$randName.played"
+    # UnitTests/test_RunBotLauncher.py::test_run_botonce_temp_scripts_use_unique_guid_names
+    # Generated launcher scripts live under the OS temp dir instead of a repo-adjacent
+    # temp folder, and use GUID names so parallel launches can never collide on or
+    # delete each other's .ps1/.played files.
+    $tempRoot = Join-Path (Join-Path ([IO.Path]::GetTempPath()) 'generals-bot') 'run-bot'
+    $null = New-Item -ItemType Directory -Force -Path $tempRoot
+    $randName = [Guid]::NewGuid().ToString('N')
+    $ps1File = Join-Path $tempRoot "$randName.ps1"
+    $playedGameFile = Join-Path $tempRoot "$randName.played"
 
     # this exeString is a hack due to the powershell memory leak, need to keep opening new PS processes
     # or we fill up memory to 1GB per powershell window overnight :(
@@ -525,25 +596,29 @@ function Run-BotOnce {
     }
 "@
 
-    $exeString | Out-File $ps1File
-    Write-Verbose $ps1File -Verbose
-    if ($IsWindows) {
-        Start-Process Powershell "-File $ps1File" -Wait -NoNewWindow
-    } elseif ($IsLinux) {
-        Start-Process pwsh "-File $ps1File" -Wait -NoNewWindow
-    }
+    # UnitTests/test_RunBotLauncher.py::test_run_botonce_spawn_failure_still_cleans_temp_files
+    # Write, invoke, played-marker check, and return are wrapped in try/finally so a
+    # failed spawn still removes this invocation's generated files. The -File argument
+    # is quoted because the OS temp path can contain spaces.
     try {
-        Remove-Item $ps1File
-    }
-    catch {
-        # no op I guess
-    }
+        $exeString | Out-File $ps1File
+        Write-Verbose $ps1File -Verbose
+        if ($IsWindows) {
+            Start-Process Powershell "-File `"$ps1File`"" -Wait -NoNewWindow
+        } elseif ($IsLinux) {
+            Start-Process pwsh "-File `"$ps1File`"" -Wait -NoNewWindow
+        }
 
-    $playedGame = Test-Path $playedGameFile
-    if ($playedGame) {
-        Remove-Item $playedGameFile -Force
+        return (Test-Path -LiteralPath $playedGameFile)
     }
-    return $playedGame
+    finally {
+        if (Test-Path -LiteralPath $ps1File) {
+            Remove-Item -LiteralPath $ps1File -Force
+        }
+        if (Test-Path -LiteralPath $playedGameFile) {
+            Remove-Item -LiteralPath $playedGameFile -Force
+        }
+    }
 }
 
 
@@ -1196,7 +1271,10 @@ function Run-Path {
         [switch]$public,
         [switch]$nolog,
         [switch]$noTextLog,
-        [switch]$noui,
+        # UnitTests/test_RunBotLauncher.py::test_blob_and_path_default_to_headless_and_allow_explicit_viewer
+        # Fleet launches call this helper without -noui; default to headless so no
+        # viewer window opens, while an explicit -noui:$false still enables it.
+        [switch]$noui = $true,
         [int]$sleepMax = 3,
         $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )
@@ -1221,7 +1299,10 @@ function Run-Blob {
         [switch]$public,
         [switch]$nolog,
         [switch]$noTextLog,
-        [switch]$noui,
+        # UnitTests/test_RunBotLauncher.py::test_blob_and_path_default_to_headless_and_allow_explicit_viewer
+        # Fleet launches call this helper without -noui; default to headless so no
+        # viewer window opens, while an explicit -noui:$false still enables it.
+        [switch]$noui = $true,
         [int]$sleepMax = 3,
         $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
     )

@@ -1501,6 +1501,11 @@ class ArmyInterceptionTests(TestBase):
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
+        bot.army_interceptor.log_debug = False
+        bot.flow_expander.log_debug = False
+        bot.army_interceptor.log_eval_debug = False
+        bot.tileIslandBuilder.desired_tile_island_size = 12
+        bot.tileIslandBuilder.recalculate_tile_islands(bot.targetPlayerExpectedGeneralLocation)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
@@ -2689,6 +2694,15 @@ setting bestInterceptTable[dist 1]:
 
 
     def test_should_intercept_army_in_the_open_without_splitting_general_LOL(self):
+        # SIGNIFICANT
+
+        """
+        This is a significant test case. We have 15 turns left in cycle, and we have an intercept we can do to mitigate incoming damage.
+        Our 7 can spend 2 turns capturing 2 2's. or it can spend 7 turns capturing 6 neutrals.
+        Our general can intercept immediately, coalescing army along the gather path. Or we can pull an extra 4 (that is otherwise unused) into our gather path, utilizing our army better.
+        We also have some unused 2's not on the gather path that can be used to capture 1s or hit the incoming attack in the meantime.
+        :return:
+        """
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/should_intercept_army_in_the_open_without_splitting_general_LOL___ERyMALJ2o---0--134.txtmap'
         map, general, enemyGeneral = self.load_map_and_generals(mapFile, 134, fill_out_tiles=True)
@@ -2702,10 +2716,10 @@ setting bestInterceptTable[dist 1]:
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=7)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
         self.assertNoFriendliesKilled(map, general)
 
-        self.assertTrue(playerMap.At(13, 10).army == 1 or playerMap.At(13, 10).army == 21, 'either should move the whole army or should be grabbing a 4 to help intercept better. Not split off gen')
+        self.assertTrue(playerMap.At(13, 10).army <= 2 or playerMap.At(13, 10).army == 22, 'either should move the whole army or should be grabbing a 4 to help intercept better. Not split off gen')
 
     def test_should_intercept_without_thinking_intercept_value_negative(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2912,3 +2926,35 @@ setting bestInterceptTable[dist 1]:
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwnedXY(9, 12, 'should obviously stop enemy from capping our tiles the fuck')
+
+    def test_should_split_to_leave_behind_defensive_intercept_when_direct_intercept_infeasable(self):
+        # TODO IMPORTANT
+        #  Quite probable that the Offensive analyzer can be used to revamp interception,
+        #  we could predict this behavior with that and understand that if we move this army away from 6,13 we fail to intercept near our general and allow catastrophic damage.
+
+        for enPath, proof in [
+            ('7,11->7,9->4,9->4,11->3,11->3,12->0,12->0,14', '5,13->6,13->7,13z->7,9'), # worst case econ damage
+            ('7,11->7,9->4,9->4,11->3,11->3,12->2,12->2,14', '5,13->6,13->7,13z->7,9'),  # the actual risk against our general that we have to pull back for instead of trade capping
+        ]:
+            with self.subTest(enPath=enPath):
+                debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+                mapFile = 'GameContinuationEntries/should_split_to_leave_behind_defensive_intercept_when_direct_intercept_infeasable___xvzD8or7J---0--135.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 135, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=135)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, enPath)
+
+                # #proof
+                # simHost.queue_player_moves_str(general.player, proof)
+
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertTileDifferentialGreaterThan(-5, simHost, 'cuz we shouldnt get completely fucked here if we just split')

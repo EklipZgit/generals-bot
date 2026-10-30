@@ -27,7 +27,7 @@ from BotModules.BotRendering import BotRendering
 
 from Viewer.ViewerProcessHost import ViewerHost
 
-FORCE_NO_VIEWER = False     # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
+FORCE_NO_VIEWER = True     # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
 FORCE_PRIVATE = False       # if you're making changes that are gonna break the bot and want to force it to only play in private rooms temporarily but dont want to kill all the shell loops, flip this flag, and it will keep restarting and wait for the flag to be flipped back before queuing again (except private games).
 
 
@@ -80,6 +80,11 @@ class BotHostBase(object):
         self.ctx: DefaultContext | None = ctx
         self.mgr: SyncManager | None = mgr
 
+        self.bot_client: typing.Any | None = None
+
+        self._chess_clock_start_holding_sent: bool = False
+        self._chess_clock_stop_holding_sent: bool = False
+
     def run_viewer_loop(self):
         logbook.info("attempting to start viewer loop")
         self._viewer.start()
@@ -89,7 +94,10 @@ class BotHostBase(object):
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
         now = (time.time_ns() / NS_CONVERTER)
         diff = now - updateReceivedTime
-        if diff > 0.3:
+
+        if currentMap.is_chess_clock:
+            logbook.info(f'CHESS CLOCK receiving turn {currentMap.turn}, update diff {diff:.5f}, (now {now:.5f} - updateReceivedTime {updateReceivedTime:.5f})')
+        elif diff > 0.3:
             logbook.info(f'MISSED MOVE receiving turn {currentMap.turn}, update diff {diff:.5f}, (now {now:.5f} - updateReceivedTime {updateReceivedTime:.5f})')
             self.receive_update_no_move(currentMap, updateReceivedTime)
             return
@@ -104,18 +112,16 @@ class BotHostBase(object):
 
         with timer.begin_move(currentMap.turn) as moveTimer:
             self._log_turn_start_map_identity_state(currentMap)
-            gap = timer.get_elapsed_since_update(currentMap.turn)
-            quickTurn = gap > 0.05
-            move: Move | None = None
-            if gap > 0.15:
-                with moveTimer.begin_event(f'LAG GAP Init turn {currentMap.turn} - no move chance / dropped move'):
-                    self.eklipz_bot.init_turn()
-                    self.eklipz_bot.viewInfo.add_info_line(f'LAG GAP OF {gap:.4f}, SKIPPING MOVE :(')
-                    matrix = MapMatrix(self.eklipz_bot._map, True, emptyVal=False)
-                    self.eklipz_bot.viewInfo.add_map_zone(matrix, (255, 140, 0), alpha=60)
-            else:
+
+            if currentMap.is_chess_clock and self.bot_client is not None and not self._chess_clock_start_holding_sent:
+                self.bot_client.send_start_holding_clear_moves()
+                self.eklipz_bot.holding_clear_moves = True
+                self._chess_clock_start_holding_sent = True
+
+            if currentMap.is_chess_clock:
+                move: Move | None = None
                 try:
-                    move = self.eklipz_bot.find_move(is_lag_move=quickTurn)
+                    move = self.eklipz_bot.find_move(is_lag_move=False)
                 except:
                     errMsg = traceback.format_exc()
                     self.eklipz_bot.viewInfo.add_info_line(f'ERROR: {errMsg}')
@@ -124,8 +130,36 @@ class BotHostBase(object):
                     if self.rethrow:
                         raise
 
-            duration = timer.get_elapsed_since_update(currentMap.turn)
+                if move is None:
+                    self.eklipz_bot.viewInfo.add_info_line('Chess clock: no move returned')
+                    logbook.info('Chess clock: no move returned')
+            else:
+                gap = timer.get_elapsed_since_update(currentMap.turn)
+                quickTurn = gap > 0.05
+                move: Move | None = None
+                if gap > 0.15:
+                    with moveTimer.begin_event(f'LAG GAP Init turn {currentMap.turn} - no move chance / dropped move'):
+                        self.eklipz_bot.init_turn()
+                        self.eklipz_bot.viewInfo.add_info_line(f'LAG GAP OF {gap:.4f}, SKIPPING MOVE :(')
+                        matrix = MapMatrix(self.eklipz_bot._map, True, emptyVal=False)
+                        self.eklipz_bot.viewInfo.add_map_zone(matrix, (255, 140, 0), alpha=60)
+                else:
+                    try:
+                        move = self.eklipz_bot.find_move(is_lag_move=quickTurn)
+                    except:
+                        errMsg = traceback.format_exc()
+                        self.eklipz_bot.viewInfo.add_info_line(f'ERROR: {errMsg}')
+                        logbook.error(f'ERROR: IN EKBOT.find_move() turn {self.eklipz_bot._map.turn}:')
+                        logbook.error(errMsg)
+                        if self.rethrow:
+                            raise
+
+            if currentMap.is_chess_clock:
+                duration = time.perf_counter() - moveTimer.move_beginning_time
+            else:
+                duration = timer.get_elapsed_since_update(currentMap.turn)
             self.eklipz_bot.viewInfo.lastMoveDuration = duration
+
             if move is not None:
                 if move.source.army == 1 or move.source.army == 0 or move.source.player != self.eklipz_bot.general.player:
                     logbook.info(
@@ -133,6 +167,9 @@ class BotHostBase(object):
                 else:
                     with moveTimer.begin_event(f'Sending move {str(move)} to server'):
                         self.place_move_func(move.source, move.dest, move.move_half)
+            elif currentMap.is_chess_clock and not self.eklipz_bot.holding_clear_moves:
+                if self.bot_client is not None:
+                    self.bot_client.send_clear_moves()
 
             tilePings = BotComms.get_queued_tile_pings(self.eklipz_bot)
             for tilePing in tilePings:
@@ -174,6 +211,9 @@ class BotHostBase(object):
             gc.collect()
 
     def receive_update_no_move(self, currentMap: MapBase, updateReceivedTime: float):
+        if currentMap.is_chess_clock:
+            return
+
         timer: PerformanceTimer = self.eklipz_bot.perf_timer
 
         timer.record_update(currentMap.turn, updateReceivedTime)
@@ -354,6 +394,7 @@ class BotHostLiveServer(BotHostBase):
             public_server=isPublic)
 
         self.eklipz_bot.clear_moves_func = self.bot_client.send_clear_moves
+        self.eklipz_bot.stop_holding_clear_moves_func = self.bot_client.send_stop_holding_clear_moves
         self.eklipz_bot.surrender_func = self.bot_client.send_surrender
 
     # returns whether the placed move was valid

@@ -23,7 +23,7 @@ from pygame import *
 import BotLogging
 from ArmyAnalyzer import *
 
-from ViewInfo import ViewInfo
+from ViewInfo import ViewInfo, BorderGradient
 from base.client.map import MapBase, Score
 
 MIN_WINDOW_WIDTH = 16
@@ -670,6 +670,8 @@ class GeneralsViewer(object):
             self.draw_board_chokes()
 
             self.draw_division_borders()
+
+            self._draw_border_gradients()
 
             if self._viewInfo.targetingArmy is not None:
                 self.draw_square(self._viewInfo.targetingArmy.tile, 2, 25, 25, 25, 200, self.square_inner_3)
@@ -1752,6 +1754,71 @@ class GeneralsViewer(object):
             trueAlpha = alphaSum // count
             trueLabelAlpha = labelAlphaSum // count
             self.draw_arrow_between(fromX, fromY, toX, toY, label, trueColor, trueAlpha, isBidir, trueLabelAlpha)
+
+    def _draw_border_gradients(self):
+        """
+        Render each queued ViewInfo.BorderGradient: a 2px full-cell-spanning line of colorA along sourceTile's
+        edge with destTile, the same for colorB along destTile's edge, and a 1px line of the average of the two
+        colors drawn in the black margin directly between the two tiles. See ViewInfo.add_border_gradient.
+        """
+        edgeWidth = 5
+        for gradient in self._viewInfo.border_gradients:
+            self._draw_border_gradient(gradient, edgeWidth)
+
+    def _draw_border_gradient(self, gradient: BorderGradient, edgeWidth: int):
+        """
+        Draw a single border gradient between the two adjacent tiles described by gradient.
+
+        @param gradient: The BorderGradient render data (source/dest tile coords and the two edge colors).
+        @param edgeWidth: The pixel thickness of each tile's colored edge line.
+        @return:
+        """
+        xDiff = gradient.destX - gradient.sourceX
+        yDiff = gradient.destY - gradient.sourceY
+
+        sourceLeft = (CELL_MARGIN + self.cellWidth) * gradient.sourceX + CELL_MARGIN
+        sourceTop = (CELL_MARGIN + self.cellHeight) * gradient.sourceY + CELL_MARGIN
+        destLeft = (CELL_MARGIN + self.cellWidth) * gradient.destX + CELL_MARGIN
+        destTop = (CELL_MARGIN + self.cellHeight) * gradient.destY + CELL_MARGIN
+
+        colorA = gradient.colorA
+        colorB = gradient.colorB
+
+        if xDiff > 0:
+            # dest is to the right of source
+            colorARect = Rect(sourceLeft + self.cellWidth - edgeWidth, sourceTop, edgeWidth, self.cellHeight)
+            colorBRect = Rect(destLeft, destTop, edgeWidth, self.cellHeight)
+            avgRect = Rect(sourceLeft + self.cellWidth, sourceTop, CELL_MARGIN, self.cellHeight)
+        elif xDiff < 0:
+            # dest is to the left of source
+            colorARect = Rect(sourceLeft, sourceTop, edgeWidth, self.cellHeight)
+            colorBRect = Rect(destLeft + self.cellWidth - edgeWidth, destTop, edgeWidth, self.cellHeight)
+            avgRect = Rect(destLeft + self.cellWidth, destTop, CELL_MARGIN, self.cellHeight)
+        elif yDiff > 0:
+            # dest is below source
+            colorARect = Rect(sourceLeft, sourceTop + self.cellHeight - edgeWidth, self.cellWidth, edgeWidth)
+            colorBRect = Rect(destLeft, destTop, self.cellWidth, edgeWidth)
+            avgRect = Rect(sourceLeft, sourceTop + self.cellHeight, self.cellWidth, CELL_MARGIN)
+        elif yDiff < 0:
+            # dest is above source
+            colorARect = Rect(sourceLeft, sourceTop, self.cellWidth, edgeWidth)
+            colorBRect = Rect(destLeft, destTop + self.cellHeight - edgeWidth, self.cellWidth, edgeWidth)
+            avgRect = Rect(destLeft, destTop + self.cellHeight, self.cellWidth, CELL_MARGIN)
+        else:
+            logbook.error(f'tried drawing border gradient between ({gradient.sourceX},{gradient.sourceY}) and ({gradient.destX},{gradient.destY}) but they dont appear adjacent...?')
+            return
+
+        pygame.draw.rect(self._screen, colorA, colorARect)
+
+        # colorB None means only draw colorA on tileA's side; leave tileB's edge and the 1px margin untouched.
+        if colorB is not None:
+            avgColor = (
+                (colorA[0] + colorB[0]) // 2,
+                (colorA[1] + colorB[1]) // 2,
+                (colorA[2] + colorB[2]) // 2,
+            )
+            pygame.draw.rect(self._screen, colorB, colorBRect)
+            pygame.draw.rect(self._screen, avgColor, avgRect)
 
     def draw_arrow_between(self, fromX: float, fromY: float, toX: float, toY: float, label: str | None, color: typing.Tuple[int, int, int], alpha: int, isBidir: bool, labelAlpha: int | None = None):
         trueFromX, trueFromY = self.getTopLeftTileFloats(fromX, fromY)

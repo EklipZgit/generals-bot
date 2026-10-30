@@ -22,7 +22,7 @@ import time
 from websocket import create_connection, WebSocketConnectionClosedException
 
 import BotLogging
-from .map import MapBase, MODIFIER_TORUS, MODIFIER_WATCHTOWER
+from .map import MapBase, MODIFIER_TORUS, MODIFIER_WATCHTOWER, MODIFIER_CHESS_CLOCK
 
 WSPREFIX = "wss"
 HTTPPREFIX = "https"
@@ -185,6 +185,19 @@ class GeneralsClient(object):
             self.customOptions['desert_density'] = 0.05
             self.customOptions['observatory_density'] = 0.04
             self.customOptions['lookout_density'] = 0.04
+
+        if gameid and gameid.__contains__('ChessClock'):
+            self.customOptions['map'] = None
+            self.customOptions['modifiers'] = [MODIFIER_CHESS_CLOCK]
+            self.customOptions['modifier_options'] = (
+            {
+                "ChessClock": 
+                {
+                    "StartingClock": 10,        # seconds, range 1-300
+                    "ClockIncrement": 5,        # seconds per round bonus, range 1-120
+                    "DontLimitMoveSpeed": False  # true = "Unlimited Game Speed" mode
+                }
+            })
 
         if not public_server:
             self.bot_key = None
@@ -427,6 +440,7 @@ class GeneralsClient(object):
 
                 _spawn(self._delayed_chat_thread)
                 os.makedirs(f"{self.logFolder}//_chat", exist_ok=True)
+
                 if _LOG_WS:
                     try:
                         with open(self.logFile, "a+") as myfile:
@@ -614,6 +628,16 @@ class GeneralsClient(object):
         logbook.info("\n\nSending clear_moves")
         with self._lock:
             self._send(["clear_moves"])
+
+    def send_start_holding_clear_moves(self):
+        logbook.info("\n\nSending start_holding_clear_moves")
+        with self._lock:
+            self._send(["start_holding_clear_moves"])
+
+    def send_stop_holding_clear_moves(self):
+        logbook.info("\n\nSending stop_holding_clear_moves")
+        with self._lock:
+            self._send(["stop_holding_clear_moves"])
 
     def send_surrender(self):
         logbook.info("\n\nSending surrender")

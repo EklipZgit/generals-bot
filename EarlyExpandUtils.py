@@ -642,7 +642,8 @@ def _sub_optimize_first_25_specific_wasted(
 
         if not dont_force_first:
             if curAttemptGenArmy <= 1:
-                raise AssertionError(f'Someone ran a sub_optimize_specific_wasted with gen army 1 lol')
+                logbook.warn(f'Someone ran a sub_optimize_specific_wasted with gen army 1 lol')
+                return capped, pathList
 
             skipToUse = skip_tiles
             if additional_one_level_skips:
@@ -660,6 +661,7 @@ def _sub_optimize_first_25_specific_wasted(
                 visited_set=visited_set,
                 skip_tiles=skipToUse,
                 debug_view_info=debug_view_info,
+                cutoff_time=cutoff_time,
                 no_log=no_log)
 
             if path1 is None:
@@ -1085,6 +1087,7 @@ def _optimize_25_launch_segment(
     skip_tiles: typing.Set[Tile] = None,
     debug_view_info: typing.Union[None, ViewInfo] = None,
     use_global_visited_set: bool = False,
+    cutoff_time: float | None = None,
     no_log: bool = not DEBUG_ASSERTS
 ) -> Path | None:
     # no_log = False
@@ -1277,6 +1280,15 @@ def _optimize_25_launch_segment(
     startVals: typing.Dict[Tile, typing.Tuple[object, int]] = {general: ((0, 0, -1000, 0, 0, 0, 0, 0, gen_army, force_wasted_moves), 0)}
     if not no_log:
         logbook.info(f'finding segment for genArmy {gen_army}, force_wasted_moves {force_wasted_moves}, alreadyVisited {len(visited_set)}')
+
+    # UnitTests.test_fix_optimize_first_25_runaway: the caller's cutoff_time is only
+    # checked BETWEEN calls to this function, so the search must clamp its own maxTime
+    # to the caller's remaining budget. Without this a single search ran the full
+    # hardcoded maxTime and stalled turns (24s observed in-game with ~0.07s remaining).
+    maxTime = 1000 if not use_global_visited_set else 0.1
+    if cutoff_time is not None:
+        maxTime = min(maxTime, max(0.0, cutoff_time - time.perf_counter()))
+
     path = breadth_first_dynamic_max(
         map,
         startVals,
@@ -1291,7 +1303,7 @@ def _optimize_25_launch_segment(
         maxTurns=turns_left,
         useGlobalVisitedSet=use_global_visited_set,  # has to be false so we try multiple combinations of deviations from the re-traversal in one go.
         includePath=True,
-        maxTime=1000 if not use_global_visited_set else 0.1)
+        maxTime=maxTime)
 
     # if not no_log:
     #     logbook.info(f'  found {path}')
@@ -1373,6 +1385,7 @@ def _sub_optimize_first_25_specific_wasted__reverse(
                 visited_set=visited_set,
                 skip_tiles=skipToUse,
                 debug_view_info=debug_view_info,
+                cutoff_time=cutoff_time,
                 no_log=no_log)
 
             if path1 is None:
@@ -1787,6 +1800,7 @@ def _optimize_25_launch_segment__reverse(
     visited_set: typing.Set[Tile],
     skip_tiles: typing.Set[Tile] = None,
     debug_view_info: typing.Union[None, ViewInfo] = None,
+    cutoff_time: float | None = None,
     no_log: bool = not DEBUG_ASSERTS
 ) -> Path | None:
     """
@@ -1803,6 +1817,7 @@ def _optimize_25_launch_segment__reverse(
     @param visited_set:
     @param skip_tiles:
     @param debug_view_info:
+    @param cutoff_time: absolute perf_counter deadline of the caller's move budget; clamps the search's maxTime so one call cannot overrun the budget
     @param no_log:
     @return:
     """
@@ -1820,6 +1835,13 @@ def _optimize_25_launch_segment__reverse(
     startVals: typing.Dict[Tile, typing.Tuple[object, int]] = {general: ((0, 0, -1000, 0, 0, 0, 0, 0, gen_army), 0)}
     if not no_log:
         logbook.info(f'finding segment for genArmy {gen_army}, force_wasted_moves {force_wasted_moves}, alreadyVisited {len(visited_set)}')
+
+    # UnitTests.test_fix_optimize_first_25_runaway: clamp the search's maxTime to the
+    # caller's remaining budget, same as the forward _optimize_25_launch_segment.
+    maxTime = 0.2
+    if cutoff_time is not None:
+        maxTime = min(maxTime, max(0.0, cutoff_time - time.perf_counter()))
+
     path = breadth_first_dynamic_max(
         map,
         startVals,
@@ -1830,7 +1852,8 @@ def _optimize_25_launch_segment__reverse(
         noLog=True,
         maxTurns=turns_left,
         useGlobalVisitedSet=False,  # has to be false so we try multiple combinations of deviations from the re-traversal in one go.
-        includePath=True)
+        includePath=True,
+        maxTime=maxTime)
 
     # if not no_log:
     #     logbook.info(f'  found {path}')

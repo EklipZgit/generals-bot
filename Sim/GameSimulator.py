@@ -1,3 +1,5 @@
+from typing import Any
+
 import logbook
 import time
 import traceback
@@ -667,6 +669,7 @@ class GameSimulatorHost(object):
         winner = None
         try:
             turnsRun = 0
+
             while turnsRun < turns:
                 winner = self.execute_turn(run_real_time=run_real_time, turn_time=turn_time)
                 if winner is not None:
@@ -879,6 +882,38 @@ class GameSimulatorHost(object):
         @param turn_time:
         @return:
         """
+        winner = self.setup_and_get_moves(run_real_time, turn_time)
+
+        self.sim.execute_turn(dont_require_all_players_to_move=True)
+
+        gameEndedByUser = False
+        for botHost in self.bot_hosts:
+            if botHost is None:
+                continue
+            if botHost.has_viewer and botHost.is_viewer_closed_by_user():
+                gameEndedByUser = True
+
+        if self.sim.is_game_over() or gameEndedByUser:
+            # run these one last time
+            for func in self._between_turns_funcs:
+                self._run_between_turns_func(run_real_time, func)
+            self.sim.end_game()
+            for player in self.sim.players:
+                if not player.dead:
+                    if winner is None:
+                        winner = player.index
+                    else:
+                        winner = -1
+            for botHost in self.bot_hosts:
+                if botHost is None:
+                    continue
+                botHost.notify_game_over()
+
+        if winner == -1:
+            winner = None
+        return winner
+
+    def setup_and_get_moves(self, run_real_time: bool, turn_time: float) -> Any:
         logbook.info(f'sim starting turn {self.sim.turn}')
         start = time.perf_counter()
         winner = None
@@ -906,7 +941,8 @@ class GameSimulatorHost(object):
                     else:
                         fakeTimeReceived = time.time_ns() / NS_CONVERTER
                     if not self.init_only:
-                        botHost.make_move(player.map, updateReceivedTime=fakeTimeReceived)  # - timeWaste simulates roll-over lag from moves that took too long to calculate. THIS IMPACTS DEBUGGING, HOWEVER, SO WE SET TO 0 WITH DEBUGGER ATTACHED.
+                        botHost.make_move(player.map,
+                                          updateReceivedTime=fakeTimeReceived)  # - timeWaste simulates roll-over lag from moves that took too long to calculate. THIS IMPACTS DEBUGGING, HOWEVER, SO WE SET TO 0 WITH DEBUGGER ATTACHED.
                     else:
                         botHost.receive_update_no_move(player.map, updateReceivedTime=fakeTimeReceived)
                 except:
@@ -973,34 +1009,6 @@ class GameSimulatorHost(object):
 
             if self.frame_skips_queued > 0:
                 self.frame_skips_queued -= 1
-
-        self.sim.execute_turn(dont_require_all_players_to_move=True)
-
-        gameEndedByUser = False
-        for botHost in self.bot_hosts:
-            if botHost is None:
-                continue
-            if botHost.has_viewer and botHost.is_viewer_closed_by_user():
-                gameEndedByUser = True
-
-        if self.sim.is_game_over() or gameEndedByUser:
-            # run these one last time
-            for func in self._between_turns_funcs:
-                self._run_between_turns_func(run_real_time, func)
-            self.sim.end_game()
-            for player in self.sim.players:
-                if not player.dead:
-                    if winner is None:
-                        winner = player.index
-                    else:
-                        winner = -1
-            for botHost in self.bot_hosts:
-                if botHost is None:
-                    continue
-                botHost.notify_game_over()
-
-        if winner == -1:
-            winner = None
         return winner
 
     def get_player_map(self, player: int = -1) -> MapBase:
@@ -1127,4 +1135,8 @@ class GameSimulatorHost(object):
         while self.frame_skips_queued == 0 and ((self.any_bot_has_viewer_running() and time.perf_counter() - start < max_seconds_to_wait) or self.paused):
             self.check_for_viewer_events()
             time.sleep(0.5)
+
+    def reset_move_queue(self):
+        self.move_queue = [[] for player in self.sim.players]
+        self.sim.moves = [None for player in self.sim.players]
 

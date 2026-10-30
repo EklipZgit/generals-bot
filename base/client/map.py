@@ -30,6 +30,7 @@ MODIFIER_TORUS = 7
 MODIFIER_FADING_SMOG = 8
 MODIFIER_DEFECTION = 9
 MODIFIER_SLIPPERY = 10
+MODIFIER_CHESS_CLOCK = 11
 
 OBSERVATORY_RANGE = 7
 LOOKOUT_RANGE = 2
@@ -299,6 +300,9 @@ class MapBase(object):
         self.has_defection = self.modifiers_by_id[MODIFIER_DEFECTION]
         self.has_slippery = self.modifiers_by_id[MODIFIER_SLIPPERY]
 
+        self.chess_clock_normal: bool = False
+        self.chess_clock_unlimited: bool = False
+
         self.is_low_cost_city_game: bool = False
         self.is_walled_city_game: bool = False
         self.walled_city_base_value: int | None = None
@@ -416,6 +420,11 @@ class MapBase(object):
             self.is_city_bonus_turn = False
 
         self._turn = val
+
+    @property
+    def is_chess_clock(self) -> bool:
+        """True if the game is in either Chess Clock mode (normal or unlimited)."""
+        return self.chess_clock_normal or self.chess_clock_unlimited
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -2152,6 +2161,16 @@ AttributeError: 'Map' object has no attribute 'grid'
         return
 
     def calculate_player_deltas(self):
+        """
+        Computes per-team expected-vs-actual score deltas for this update and resyncs each enemy
+        team's tracked cityCount (newCityCount) toward the score-derived estimate realEnemyCities
+        when it looks sane, then walks team members' cityCount toward newCityCount one at a time.
+        See the comment on the is_city_bonus_turn block for why realEnemyCities is only trusted
+        within a small bound (capture-inflated score deltas caused the 'INFINITE LOOPED IN TEAM
+        CITY HANDLER' crash; repro in UnitTests/test_fix_city_count_loop.py).
+
+        @return: None
+        """
         myPlayer = self.players[self.player_index]
 
         lastScores = self.scoreHistory[1]
@@ -2292,7 +2311,21 @@ AttributeError: 'Map' object has no attribute 'grid'
                         f"WE just took a city? enemy team cityDifference {cityDifference} > 30 should only happen when we just took a city because of the effect on tiledelta. Ignoring realEnemyCities {realEnemyCities} this turn, realEnemyCities {realEnemyCities} >= 30 and actualEnemyTeamDelta {actualEnemyTeamDelta} < -30")
 
                 if self.is_city_bonus_turn and realEnemyCities != teamCurrentCities and realEnemyCities > 0:
-                    if abs(realEnemyCities - teamCurrentCities) < 6 or friendlyFightDelta == 0:
+                    # UnitTests/test_fix_city_count_loop.py
+                    #   CityCountLoopFixTests.test_calculate_player_deltas__enemy_capture_score_inflation_does_not_runaway
+                    #   CityCountLoopFixTests.test_calculate_player_deltas__enemy_capture_score_inflation_does_not_runaway_decrement
+                    # realEnemyCities is derived from the enemy team's SCORE delta, which includes non-city
+                    # score events: most notably the army/tile windfall when they capture another player
+                    # (664 and 231 in the live FFA crashes). friendlyFightDelta only measures OUR
+                    # unexplained delta, so it stays 0 on an enemy-vs-enemy capture, and the old
+                    # `or friendlyFightDelta == 0` clause let that inflated value overwrite newCityCount.
+                    # The +/-1 corrective loops below then ran to their 100-iteration cap and raised
+                    # 'INFINITE LOOPED IN TEAM CITY HANDLER'. A large diff is never a legitimate
+                    # single-turn city change: a neutral city capture shows up as a score DROP handled
+                    # by the cityDifference <= -20 branch above, and a captured player's cities are
+                    # credited separately by handle_player_capture. So realEnemyCities is only trusted
+                    # within the small-diff bound.
+                    if abs(realEnemyCities - teamCurrentCities) < 6:
                         newCityCount = realEnemyCities
                         logbook.info(
                             f"want to set team {teamIndex} cityCount to {newCityCount}. "
@@ -2305,6 +2338,15 @@ AttributeError: 'Map' object has no attribute 'grid'
                             f"\nexpectedFriendlyDelta {expectedFriendlyDelta}, actualFriendlyDelta {actualFriendlyDelta},"
                             f"\nexpectedEnemyTeamDelta {expectedEnemyTeamDelta}, actualEnemyTeamDelta {actualEnemyTeamDelta},"
                             f"\nfrFightDelta {friendlyFightDelta} results in realEnemyCities {realEnemyCities} vs teamCurrentCities {teamCurrentCities}")
+                    else:
+                        logbook.info(
+                            f"IGNORING team {teamIndex} realEnemyCities {realEnemyCities} vs teamCurrentCities {teamCurrentCities}: "
+                            f"diff {realEnemyCities - teamCurrentCities} is too large to be a real city count change "
+                            f"despite friendlyFightDelta == 0; usually means an enemy captured another player "
+                            f"this turn and the score delta is inflated by the victim's transferred army/tiles."
+                            f"\nexpectedFriendlyDelta {expectedFriendlyDelta}, actualFriendlyDelta {actualFriendlyDelta},"
+                            f"\nexpectedEnemyTeamDelta {expectedEnemyTeamDelta}, actualEnemyTeamDelta {actualEnemyTeamDelta},"
+                            f"\nfrFightDelta {friendlyFightDelta}")
 
             logbook.info(f'cities for team {teamIndex}, as {newCityCount} vs current {teamCurrentCities}?')
 
@@ -2734,13 +2776,57 @@ AttributeError: 'Map' object has no attribute 'grid'
                     if byPlayer == -1:
                         byPlayer = destTile.player
 
-                    self.set_tile_moved(
-                        destTile,
-                        exclusiveSrc,
-                        # fullFromDiffCovered=exactMatch, #both this and hardcoding true currently have the same result in tests...?
-                        fullFromDiffCovered=True,
-                        fullToDiffCovered=True,  # otherwise we try to find the fog move to this tile again. This being wrong should be exceedingly rare, like 3 players all moving to the same tile rare.
-                        byPlayer=byPlayer)
+                    # Fix for UnitTests/test_fix_set_tile_moved_fog_neutral.py
+                    # test_run_positive_delta_movement_scan__unattributable_neutral_fog_source_does_not_crash:
+                    # in live 8p FFA games (Human.exe-ffa-2026-09-30_07-15-12---0uXgRCOQ4 t24 and
+                    # Human.exe-ffa-2026-09-30_07-46-57---RSGhqHwZ1 t33) an exclusive fog source that we
+                    # believe is neutral (delta.oldOwner -1) 'moved' onto a neutral dest tile, so every
+                    # fallback above returned -1 and set_tile_moved asserted on 'moves from fog with
+                    # unknown ownership'. The fallbacks below mirror the byPlayer attribution chain in
+                    # run_attacked_tile_movement_scan, and when no non-neutral owner can be determined
+                    # the move is logged and skipped (exactly like the ATTK DELTA SCAN 'UNABLE TO
+                    # EXECUTE DUE TO UNABLE TO FIND byPlayer THAT ISNT NEUTRAL' path) instead of
+                    # asserting. These only run while byPlayer is -1 so they can only affect cases
+                    # that previously crashed.
+                    if byPlayer == -1:
+                        # the fog source is remembered as neutral; if a visible enemy tile borders it,
+                        # the fog tile most likely belongs to that enemy (same as ATTK scan fog-city handling).
+                        for adj in exclusiveSrc.movable:
+                            if adj.visible and self.is_tile_enemy(adj):
+                                byPlayer = adj.player
+                                break
+                    if byPlayer == -1:
+                        for adj in exclusiveSrc.movable:
+                            if self.is_tile_enemy(adj):
+                                byPlayer = adj.player
+                                break
+                    if byPlayer == -1 and destTile.delta.oldOwner != -1:
+                        # unlike the ATTK scan, the dest here can legitimately be neutral, so only
+                        # index players by oldOwner when it is a real player.
+                        byPlayer = self.players[destTile.delta.oldOwner].fighting_with_player
+                    if byPlayer == -1:
+                        possibilities = list(filter(lambda p: (
+                            not p.dead
+                            and not p.leftGame
+                            and p.last_move is None
+                            and p.unexplainedTileDelta < 0
+                            and p.index != self.player_index
+                            and p.index != destTile.delta.oldOwner
+                        ), self.players))
+                        if len(possibilities) > 0:
+                            byPlayer = possibilities[0].index
+
+                    if byPlayer != -1:
+                        self.set_tile_moved(
+                            destTile,
+                            exclusiveSrc,
+                            # fullFromDiffCovered=exactMatch, #both this and hardcoding true currently have the same result in tests...?
+                            fullFromDiffCovered=True,
+                            fullToDiffCovered=True,  # otherwise we try to find the fog move to this tile again. This being wrong should be exceedingly rare, like 3 players all moving to the same tile rare.
+                            byPlayer=byPlayer)
+                    else:
+                        logbook.error(
+                            f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} SRC {repr(exclusiveSrc)} UNABLE TO EXECUTE DUE TO UNABLE TO FIND byPlayer THAT ISNT NEUTRAL')
                 else:
                     if len(potentialSources) > 0:
                         logbook.info(f'POS DELTA SCAN{fogFlag} DEST {repr(destTile)} RESULTED IN MULTIPLE SOURCES {repr([repr(s) for s in potentialSources])}, UNHANDLED FOR NOW')
@@ -3182,6 +3268,8 @@ class Map(MapBase):
 
         super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url, start_data['replay_id'], mods)
 
+        self._parse_chess_clock(start_data, mods)
+
         if 'map' in opts and opts['map'] is not None:
             self.is_custom_map = True
 
@@ -3195,6 +3283,24 @@ class Map(MapBase):
 
         if customMapRaw is not None:
             self.apply_custom_map_known_data(customMapRaw)
+
+    def _parse_chess_clock(self, start_data: dict, mods: typing.List[int]):
+        """Set chess_clock_normal / chess_clock_unlimited from the initial game start data.
+
+        The server sends `chessClock.dontLimitMoveSpeed` to distinguish the two modes:
+        - True  -> unlimited move speed
+        - False/missing -> normal move speed
+        If the `chessClock` object is missing but the `chess_clock` modifier id is present,
+        we default to normal mode.
+        """
+        chess_clock_data = start_data.get('chessClock')
+        if chess_clock_data is not None:
+            if chess_clock_data.get('dontLimitMoveSpeed', False):
+                self.chess_clock_unlimited = True
+            else:
+                self.chess_clock_normal = True
+        elif MODIFIER_CHESS_CLOCK in mods:
+            self.chess_clock_normal = True
 
     def __getstate__(self):
         state = super().__getstate__()

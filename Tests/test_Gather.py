@@ -1010,6 +1010,9 @@ b1   b1   b1   b1   b1   b1   bG1
         simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
         simHost.queue_player_moves_str(enemyGeneral.player, 'None')
         bot = self.get_debug_render_bot(simHost, general.player)
+        bot.info_render_gather_values = True
+        bot.info_render_gather_locality_values = True
+        bot.info_render_gather_matrix_values = True
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()

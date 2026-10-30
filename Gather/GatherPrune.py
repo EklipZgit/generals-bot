@@ -540,7 +540,8 @@ def prune_mst_to_army_with_values(
 
     def pruneWorstValuePerTurnFunc(node: GatherTreeNode, curObj) -> typing.Tuple:
         trunkValuePerTurn = node.trunkValue / node.trunkDistance if node.trunkDistance > 0 else 0
-        return node.value / node.gatherTurns, trunkValuePerTurn, node.trunkDistance
+        valuePerTurn = node.value / node.gatherTurns if node.gatherTurns > 0 else 0
+        return valuePerTurn, trunkValuePerTurn, node.trunkDistance
 
     prioFunc = pruneLargeTilesFirstFunc
     if not pruneLargeTilesFirst:

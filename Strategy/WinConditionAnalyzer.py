@@ -272,7 +272,39 @@ class WinConditionAnalyzer(object):
 
         rawADists = self.board_analysis.intergeneral_analysis.aMap.raw
         rawBDists = self.board_analysis.intergeneral_analysis.bMap.raw
-        contestableCities = [c for c, score in enTargetCities if self.map.is_tile_on_team_with(c, self.target_player) and rawBDists[c.tile_index] > 0.5 * rawADists[c.tile_index]][0:2]
+        
+        # Calculate army strength - if enemy has very little army, distance matters less (they can't reinforce effectively)
+        frStandingArmy = frScores.standingArmy
+        enStandingArmy = enScores.standingArmy
+        frTotalArmy = frStandingArmy + frArmyStats.approximate_fog_army_available_total
+        enTotalArmy = enStandingArmy + enArmyStats.approximate_fog_army_available_total
+        
+        # Cities are contestable if the enemy is not significantly closer (enemy distance > 0.5 * our distance)
+        # This allows contesting far cities where we're not strictly closer but still reasonably close
+        # ADDITION: If enemy has very little army (< 15), we can contest even if they're closer (within reason)
+        enemyHasVeryLittleArmy = enTotalArmy < 15
+        
+        if self._verbose_logging_enabled:
+            self.info(f'WCA_CONTEST_ARMY frArmy={frTotalArmy} enArmy={enTotalArmy} enemyHasVeryLittleArmy={enemyHasVeryLittleArmy}')
+            for c, score in enTargetCities[:5]:
+                if self.map.is_tile_on_team_with(c, self.target_player):
+                    enDist = rawBDists[c.tile_index]
+                    frDist = rawADists[c.tile_index]
+                    passesDistance = enDist > 0.5 * frDist
+                    # If enemy has very little army, allow if we're not extremely far (our distance < 5x their distance)
+                    passesArmy = enemyHasVeryLittleArmy and frDist < 5.0 * enDist
+                    self.info(f'WCA_CONTEST_FILTER city={c} enDist={enDist} ourDist={frDist} passesDistance={passesDistance} passesArmy={passesArmy}')
+        
+        def is_city_contestable(city: Tile) -> bool:
+            if not self.map.is_tile_on_team_with(city, self.target_player):
+                return False
+            enDist = rawBDists[city.tile_index]
+            frDist = rawADists[city.tile_index]
+            passesDistance = enDist > 0.5 * frDist
+            passesArmy = enemyHasVeryLittleArmy and frDist < 5.0 * enDist
+            return passesDistance or passesArmy
+        
+        contestableCities = [c for c, score in enTargetCities if is_city_contestable(c)][0:2]
 
         baselineWinRequirement = 0.5   # 0.5 equates to 12.5 tile econ advantage by holding the city
         if self.is_contesting_cities:

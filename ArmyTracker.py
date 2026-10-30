@@ -149,6 +149,11 @@ class ArmyTracker(object):
         self.decremented_fog_tiles_this_turn: typing.Set[Tile] = set()
         self.dropped_fog_tiles_this_turn: typing.Set[Tile] = set()
         self.fog_back_push_touched_tiles_this_turn: typing.Set[Tile] = set()
+        self._over_elimination_resets_in_progress: typing.Set[int] = set()
+        """Players currently inside a _check_over_elimination reset + re-limit cycle. The reset
+        re-limits all recorded emergence events, which can itself trigger _check_over_elimination;
+        this set prevents that mutual recursion from running forever when the reset cannot restore
+        a surviving candidate set (live RecursionError, ffa 1rMOTScJ5 t129 / 1v1 icLXQIWYa t290)."""
         self._boardAnalysis: BoardAnalyzer | None = None
 
     def __getstate__(self):
@@ -179,6 +184,12 @@ class ArmyTracker(object):
 
         if 'discovered_enemy_land_connector_tiles' not in self.__dict__:
             self.discovered_enemy_land_connector_tiles = [set() for player in self.map.players]
+
+        # UnitTests/test_fix_armytracker_crashes.py - serialized tracker states saved before the
+        # re-entrancy guard existed lack this field; rehydrate so _check_over_elimination doesn't
+        # AttributeError on old save data.
+        if '_over_elimination_resets_in_progress' not in self.__dict__:
+            self._over_elimination_resets_in_progress = set()
 
     # distMap used to determine how to move armies under fog
     def scan_movement_and_emergences(
@@ -1219,6 +1230,14 @@ class ArmyTracker(object):
         return True
 
     def move_army_into_fog(self, army: Army, fogTargetTile: Tile):
+        """
+        Move a tracked army onto a fogged tile, updating the fogged tile's simulated
+        army/player ownership. Never flips the owner of a general tile: general captures
+        eliminate the owner and are broadcast game state, not fog inference.
+
+        @param army: the tracked army moving.
+        @param fogTargetTile: the fogged tile it is believed to have moved to.
+        """
         self.armies.pop(army.tile, None)
 
         # if fogTargetTile in self.armies:
@@ -1251,12 +1270,22 @@ class ArmyTracker(object):
                 fogTargetTile.army -= army.value
                 if fogTargetTile.army < 0:
                     fogTargetTile.army = 0 - fogTargetTile.army
-                    oldPlayer = self.map.players[fogTargetTile.player]
-                    if fogTargetTile in oldPlayer.tiles:
-                        oldPlayer.tiles.remove(fogTargetTile)
-                    movingPlayer.tiles.append(fogTargetTile)
-                    # if not fogTargetTile.discovered and len(army.entangledArmies) == 0:
-                    fogTargetTile.player = army.player
+                    # UnitTests/test_fix_armytracker_crashes.py::ArmyTrackerCrashFixTests::test_move_army_into_fog_does_not_flip_enemy_general_ownership
+                    # A general tile only changes owner when its owner is eliminated, which is a
+                    # broadcast game event rather than something the fog tracker has to infer; an
+                    # army 'capturing' a general under fog without the owner dying is always a
+                    # tracking misprediction. Leave the general owned by its real player instead of
+                    # tripping the deliberate guard in the Tile.player setter (see also the
+                    # matching isGeneral guard in the friendly branch above).
+                    if not fogTargetTile.isGeneral:
+                        oldPlayer = self.map.players[fogTargetTile.player]
+                        if fogTargetTile in oldPlayer.tiles:
+                            oldPlayer.tiles.remove(fogTargetTile)
+                        movingPlayer.tiles.append(fogTargetTile)
+                        # if not fogTargetTile.discovered and len(army.entangledArmies) == 0:
+                        fogTargetTile.player = army.player
+                    else:
+                        logbook.error(f'move_army_into_fog: refusing to flip ownership of general tile {fogTargetTile.toString()} from p{fogTargetTile.player} to p{army.player}; a real capture would have eliminated the owner, so this army did not actually move here')
         logbook.info(f"      fogTargetTile {fogTargetTile.toString()} updated army to {fogTargetTile.army}")
         # breaks stuff real bad. Don't really want to do this anyway.
         # Rather track the army through fog with no consideration of owning the tiles it crosses
@@ -2044,6 +2073,16 @@ class ArmyTracker(object):
             skip: typing.Set[Tile],
             trackingArmies: typing.Dict[Tile, Army]
     ):
+        """
+        Attempt to follow a previously-tracked army into adjacent tiles using tile deltas,
+        falling back to fog-move guesses (fogBois) when no delta-consistent destination is
+        found. Another team's general tile is never a valid fog-move destination since a
+        real capture would eliminate the owner and be broadcast.
+
+        @param army: the tracked army to move.
+        @param skip: tiles already claimed by other armies this turn.
+        @param trackingArmies: out-param accumulating armies confirmed moved this turn.
+        """
         armyTile = army.tile
         if army.scrapped:
             self.armies.pop(armyTile, None)
@@ -2126,7 +2165,15 @@ class ArmyTracker(object):
 
                 # fogged armies cant move to other fogged tiles when army is uncovered unless that player already owns the other fogged tile
                 legalFogMove = (army.visible or adjacent.player == army.player)
-                if not adjacent.was_visible_last_turn() and self.army_could_capture(army, adjacent) and legalFogMove:
+                # UnitTests/test_fix_armytracker_crashes.py::ArmyTrackerCrashFixTests::test_try_track_army_does_not_offer_enemy_general_as_fog_destination
+                # Another team's general can never be an ambiguous fog-move destination: if the army
+                # had actually captured it, the owner would be eliminated, which is broadcast game
+                # state we would already know about. Offering known enemy generals as fogBois sent
+                # entangled splits onto them and crashed in move_army_into_fog on the Tile.player
+                # ownership guard (live ffa UZaLRtz-e t226: 'trying to set general tile 11,10 player
+                # from 6 to 5').
+                fogTargetIsEnemyGeneral = adjacent.isGeneral and not self.map.is_player_on_team_with(adjacent.player, army.player)
+                if not adjacent.was_visible_last_turn() and self.army_could_capture(army, adjacent) and legalFogMove and not fogTargetIsEnemyGeneral:
                     # if (closestFog == None or self.distMap[adjacent.x][adjacent.y] < self.distMap[closestFog.x][closestFog.y]):
                     #    closestFog = adjacent
                     expected = army.value
@@ -2176,7 +2223,11 @@ class ArmyTracker(object):
                     foundLocation = True
                     logbook.info(f"    WHOO! Army {str(army)} moved into fog at {fogBois[0].toString()}!?")
                     self.move_army_into_fog(army, fogTarget)
-                    if fogCount == 1:
+                    # UnitTests/test_fix_armytracker_crashes.py::ArmyTrackerCrashFixTests::test_try_track_army_does_not_offer_enemy_general_as_fog_destination
+                    # General tiles keep their recorded owner (predicted teammate generals could still
+                    # land here as legalFogMove targets even though enemy generals are excluded from
+                    # fogBois above); flipping them would trip the Tile.player general-ownership guard.
+                    if fogCount == 1 and not fogTarget.isGeneral:
                         logbook.info("closestFog and fogCount was 1, converting fogTile to be owned by player")
                         fogTarget.player = army.player
                     self.unaccounted_tile_diffs.pop(army.tile, None)
@@ -4678,6 +4729,15 @@ class ArmyTracker(object):
             f'fakePathLen={None if fakePath is None else fakePath.length}')
 
     def _check_over_elimination(self, player: int):
+        """
+        Sanity-check that the player still has viable general spawn candidates after a
+        restriction. If none (or only an impossible one) remain, resets the candidate set
+        to undiscovered tiles, bumps all recorded emergence distances, and re-limits once.
+        Re-entrant resets for the same player are skipped to prevent infinite recursion
+        (reset -> re-limit -> over-elimination -> reset).
+
+        @param player: the player whose valid_general_positions were just restricted.
+        """
         if player == -1:
             return
         if self.map.players[player].dead:
@@ -4738,15 +4798,42 @@ class ArmyTracker(object):
             validTiles = self.map.pathable_tiles
             if self.map.valid_spawns:
                 validTiles = self.map.valid_spawns
+            restored = 0
             for tile in validTiles:
                 if not tile.discovered and not tile.isCity and not tile.visible and not tile.isGeneral and tile.player in (-1, player):
                     validGenPos.raw[tile.tile_index] = True
+                    restored += 1
+            if restored == 0:
+                # UnitTests/test_fix_armytracker_crashes.py::ArmyTrackerCrashFixTests::test_over_elimination_reset_restores_undiscovered_tiles_owned_by_other_players
+                # The strict reset above trusts fog-ownership predictions on undiscovered tiles
+                # (tile.player in (-1, player)), but those predictions are exactly what can be wrong
+                # - over-eliminating is proof our state is inconsistent. If no candidate survives the
+                # strict filter, fall back to every undiscovered non-visible non-city non-general
+                # tile regardless of predicted owner so the reset actually yields candidates.
+                for tile in validTiles:
+                    if not tile.discovered and not tile.isCity and not tile.visible and not tile.isGeneral:
+                        validGenPos.raw[tile.tile_index] = True
+                        restored += 1
+                logbook.error(f'p{player} over-elimination reset restored 0 tiles under the strict ownership filter; broadened reset to all undiscovered tiles and restored {restored}')
             playerEvents = self.uneliminated_emergence_events[player]
             for tile, distance in list(playerEvents.items()):
                 playerEvents[tile] = distance + 2
+            if player in self._over_elimination_resets_in_progress:
+                # UnitTests/test_fix_armytracker_crashes.py::ArmyTrackerCrashFixTests::test_re_limit_player_gen_locations_terminates_when_no_tiles_can_be_restored
+                # re_limit_player_gen_locations -> _limit_general_position_to_within_tile_and_distance
+                # -> _check_over_elimination can land right back here while a reset for this same
+                # player is still on the stack; recursing again ping-ponged forever (RecursionError
+                # in live games). The reset + distance bump above still ran, so unwind and let the
+                # outermost reset finish instead of re-entering the re-limit.
+                logbook.error(f'skipping re-entrant over-elimination re-limit for p{player}; the in-progress reset will continue unwinding')
+                return
             # TODO why was this commented out?
             logbook.info(f'mustResetAndIncrease RE LIMITING INLINE (was commented out..?) for player {player}')
-            self.re_limit_player_gen_locations(player, playerEvents)
+            self._over_elimination_resets_in_progress.add(player)
+            try:
+                self.re_limit_player_gen_locations(player, playerEvents)
+            finally:
+                self._over_elimination_resets_in_progress.discard(player)
 
     @classmethod
     def get_expected_enemy_expansion_path(

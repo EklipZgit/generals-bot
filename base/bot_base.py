@@ -283,6 +283,8 @@ class GeneralsClientHost(object):
         self._updateMethod(update, updateReceivedTime)
 
     def _notify_bot_of_missed_update(self, update, updateReceivedTime: float):
+        if self._map is not None and self._map.is_chess_clock:
+            return
         self._handleUpdateNoMove(update, updateReceivedTime)
 
     def place_move(self, source, dest, move_half=False):
@@ -290,6 +292,12 @@ class GeneralsClientHost(object):
 
     def send_clear_moves(self):
         self._game.send_clear_moves()
+
+    def send_start_holding_clear_moves(self):
+        self._game.send_start_holding_clear_moves()
+
+    def send_stop_holding_clear_moves(self):
+        self._game.send_stop_holding_clear_moves()
 
     def send_surrender(self):
         self._game.send_surrender()
@@ -333,6 +341,10 @@ class GeneralsClientHost(object):
             return False
 
         if update is not None and 'map_diff' in update:
+            # In chess clock games the server sends repeated game_update messages with the same turn number
+            # that only update the clock. Ignore those and only process real turn-advancing updates.
+            if self._map is not None and 'turn' in update and update['turn'] <= self._map.turn:
+                return False
             self._process_map_diff(update)
             return True
         return False

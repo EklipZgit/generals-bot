@@ -2,28 +2,29 @@
 2. Prefer adding logging via logbook.info/warn/error/etc to be certain what an issue is rather than guessing. This is a very complex system and random changes can have a lot of cascading effects.
 3. You use the `python3.14` command, not `python` for anything you run in this project.
 4. You are using a PowerShell terminal, not bash.
-5. Tests are run with unittest, not pytest. Run them from the repo root `D:\2019_reformat_Backup\generals-bot`, not from `D:\2019_reformat_Backup`.
-    Tests that import [TestBase](cci:2://file:///d:/2019_reformat_Backup/generals-bot/Tests/TestBase.py:55:0-2748:73) directly require `PYTHONPATH` to include both the repo root and `Tests`.
+5. Tests are run with unittest, not pytest. Run them from the repo root `C:\src\generals-bot`, not from `C:\src`.
+    Tests that import [TestBase](cci:2://file:///c:/src/generals-bot/Tests/TestBase.py:55:0-2748:73) directly require `PYTHONPATH` to include both the repo root and `Tests`.
 
     Single test target:
-    $env:PYTHONPATH='D:\2019_reformat_Backup\generals-bot\Tests;D:\2019_reformat_Backup\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
+    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
 
     Single test file/module target examples:
-    $env:PYTHONPATH='D:\2019_reformat_Backup\generals-bot\Tests;D:\2019_reformat_Backup\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target Tests.test_Expansion.ExpansionTests.test_shouldnt_create_broken_islands_after_captures
-    $env:PYTHONPATH='D:\2019_reformat_Backup\generals-bot\Tests;D:\2019_reformat_Backup\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --path D:\2019_reformat_Backup\generals-bot\UnitTests\FlowExpansionSubtests
+    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target Tests.test_Expansion.ExpansionTests.test_shouldnt_create_broken_islands_after_captures
+    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --path C:\src\generals-bot\UnitTests\FlowExpansionSubtests
 
     If a test has `debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True`, run it with `bypass_ui=True` instead of editing the test file:
-    $env:bypass_ui='True'; $env:PYTHONPATH='D:\2019_reformat_Backup\generals-bot\Tests;D:\2019_reformat_Backup\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
+    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
 
     Write temporary test/debug output outside the repo at:
-D:\2019_reformat_Backup\cascade-debug-output\generals-bot
+C:\cascade-debug-output\generals-bot
+    (D:\ is a tiny system recovery volume on this machine — NEVER write anything there.)
 
 Use cmd /c OS-level redirection, not PowerShell pipes:
-cmd /c "... > D:\2019_reformat_Backup\cascade-debug-output\generals-bot\raw_test.txt 2>&1"
+cmd /c "... > C:\cascade-debug-output\generals-bot\raw_test.txt 2>&1"
 
 6. You should ask me (the prompter) questions clarifying any assumptions you are unsure about rather than going down the wrong path.
 7. When asked to fix something, you are expected to try to reproduce it with a test first if at all possible. You should have assertions that fail before fixing the bug and seeing the assertions pass.
-8. We don't EVER do imports inside of functions. Always do imports at the top of the file and reorganize code if necessary to work around circular imports.
+8. We don't EVER do imports inside of functions or tests. Always do imports at the top of the file and reorganize code if necessary to work around circular imports. Imports not at the top of the file are banned without explicit permission and code comment documentation for why it exists.
 9. Tests are run with unittest, not pytest.
 10. Do not EVER unstage or stash staged git changes. Don't ever stage git changes. The user will do all git staging and unstaging, you are allowed read-only git commands only.
 11. For Python structured data passed across functions, never use ad-hoc nested dicts when fields are known; use dataclasses with type annotations and slots instead, and only convert to/from dict at serialization or logging boundaries.
@@ -35,11 +36,12 @@ cmd /c "... > D:\2019_reformat_Backup\cascade-debug-output\generals-bot\raw_test
 17. We strongly type all parameter and return definitions in function signatures, including the generics to dict[A, B] and list[A] etc, as well as including docstrings for function definitions. We keep the function documentation up to date with changes inside the function or to its parameter list or parameter usage.
 18. We don't allow multiple types that dont fit the same interface in the same variable (besides A | None). solution: dict[FlowBorderPairKey | str, EnrichedFlowTurnsEntry | ExternalPlanOption] is a huge violation of this. Create an interface (via typing.Protocol, see @InterfaceSample.py) that they duck type against instead.
 19. hasattr etc is fucking banned. Never ever is that shit acceptable. All classes we use always have all attributes, don't write retarded code. This is very performance oriented codebase and must never do dumb slow shit like that.
+20. We always throw errors, and avoid try except. It requires a human approval to catch and swallow any error, you may not decide to do this as a way to stop getting an error. We solve root causes, we don't suppress errors and continue.
 
 --- RunUnittestBaseline.py ---
 1. Use RunUnittestBaseline.py from the repo root to create stable unittest pass/fail baselines before risky changes.
 2. It writes raw and summary output outside the repo by default:
-   D:\2019_reformat_Backup\cascade-debug-output\generals-bot
+   C:\cascade-debug-output\generals-bot
 3. Example:
    .\.venv\Scripts\python.exe RunUnittestBaseline.py --target UnitTests.test_ArmyInterceptionUnit --name army_interceptor_before_fix
 4. Output files:
@@ -94,3 +96,9 @@ def test_grouped_knapsack__logged_repro(self):
                 is_external=False)
         ])
 ^ good. We always indent 4, never try to vertical align mid-line shit. Wrap first argument if wrapping, etc.
+
+--- Avoiding command hangs / REPL mistakes ---
+1. Use `python3.14` (or `.venv\Scripts\python3.14.exe`) for any Python invocation, not `python`.
+2. Do not use `python - <<'PY'` or any bash-style heredoc; PowerShell has no heredoc and this can drop into an interactive Python REPL that appears to hang.
+3. When the active terminal is the VS Code Native Python REPL (`>>>` prompt), do not run PowerShell syntax (`$env:`, `Get-ChildItem`, `;` separators, `py_compile` with PS-flags, etc.) there. It parses as Python and then waits for input.
+4. For quick inline execution, write a temporary `.py` file to `C:\cascade-debug-output\generals-bot` and run it with the correct Python interpreter from a PowerShell terminal; use `cmd /c` with OS-level redirection only when the active terminal is PowerShell/cmd.

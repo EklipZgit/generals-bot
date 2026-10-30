@@ -462,6 +462,11 @@ class ArmyAnalyzer:
         @param maxDist: the maximum distance from the tiles to include in the analysis, beyond which chokes and stuff will be excluded.
         @return:
         """
+        # UnitTests/test_fix_armyanalyzer_tail.py::test_build_from_path__raises_value_error_on_empty_path:
+        # A path containing zero tiles (start=None, eg Path.get_subsegment on an already-empty path)
+        # has nothing to analyze; fail loudly with a clear error instead of AttributeError on path.tail.
+        if path.start is None:
+            raise ValueError(f'ArmyAnalyzer.build_from_path cannot build an analysis for an empty path {path}')
 
         tileA = path.tail.tile
         tileB = path.start.tile

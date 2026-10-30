@@ -3858,3 +3858,60 @@ whoever has less extra troops will always get ahead
         self.assertEqual(1, playerMap.At(10, 11).army)
         self.assertEqual(1, playerMap.At(10, 10).army)
 
+    def test_should_analyze_complex_post_optimization_options_and_use_time_effectively(self):
+        # SIGNIFICANT
+
+        """
+        This is a significant test case. We have 16 turns left in cycle, and we have an intercept we can do to mitigate incoming damage.
+        Our 7 can spend 2 turns capturing 2 2's. or it can spend 7 turns capturing 6 neutrals.
+        Our general can intercept immediately, coalescing army along the gather path. Or we can pull an extra 4 (that is otherwise unused) into our gather path, utilizing our army better.
+        We also have some unused 2's not on the gather path that can be used to capture 1s or hit the incoming attack in the meantime.
+        Our general also has the ability to spend 3 turns retraversing followed by dumping any remaining army into neutrals.
+
+        Mental framework:
+        Because we can dump general army after general launch (TODO FLOW EXPAND TO CALCULATE), we should be optimizing for move-effectiveness, not army-econ efficiency.
+            (if we were not move constrained, EG early collision in round 2 so we only have like 4 army on general and 16 moves left or something, then we would want to optimize for army efficiency).
+            (given we have many cost effective options and cannot use them all this round, we should be optimizing for move efficiency as a heuristic).
+        Given we need to optimize for move efficiency and not army efficiency, we should definitely be sinking the 7 into enemy land.
+            However that is near the enemy general, and thus should be delayed for later in the round to avoid giving enemy general recapture avenues.
+        Given that the opponents threats are all moving towards a choke (we have no land they can access aside from through that choke), we only need to intercept at the choke and can delay the move out / coalesce a little bit.
+        Given that we have a substantial amount of our standing army on the gather path, our intercept needs to coalesce that army before intercept so we must move from general along that path at some point.
+            Note that the left 4 (which has a lefter 4 next to it) is left of the rightmost intercept choke point,
+            so an argument may be made that both 4's should be gathered to the right to ensure the entire coalesce-line is lined up with the intercept box so we dont have to backtrack.
+            This is probably not correct since it involves a forced 1-retraversal during intercept however, just noting it here.
+        Given that we have 4 turns till enemy is at choke and 3 turns to reach that point (4 turns to the further choke cornering the 4), we have time to consider coalescing to the intercept.
+        A super quick coalesce-check gather augmenting the intercepts would yield that
+
+
+        :return:
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+
+        for enPath, minTileDiff, proof in [
+            ('10,14->14,14->14,11->16,11->16,5->12,5', 14, '10,10->11,10  6,11->6,12  11,10->13,10  9,13->10,13  12,13->11,13'),  # realistic dodge approach a good human would do, less econ efficient but more likely to avoid interception while maintaining threat and doing damage
+            ('10,14->11,14->12,14->12,13->10,13->10,12->11,12->11,9->9,9->9,11', 10, '10,10->11,10  6,11->6,12  11,10->12,10  13,10->12,10  6,12->6,13  9,13->10,13  13,12->12,12  12,10->12,11->11,11  13,10->11,10  12,12->12,13'),  # maximize land captures and general distance (but left)    #  13,10->11,10  12,12->12,13     |     6,13->6,14  13,10->13,12->10,12   (both work as ends to this, both can only achieve 51 vs 37. Its crazy how if zzdbot just dives at the general it loses 2 economy even if human uses every single tile on the board in the other case. Both achieve 11 tile diff, but 10 is more reasonable.
+            ('10,14->11,14->12,14->12,13->10,13->10,12->14,12->14,11->16,11->16,9', 10, '10,10->11,10  6,11->6,12  13,10->12,10'), # maximize land captures and general distance (right)
+            ('10,14->11,14->11,10->13,10', 14, '10,10->11,10  6,11->6,12  13,10->12,10'),  # straight dive general
+            ('10,14->11,14->11,11->13,11->13,10', 11, '10,10->11,10  6,11->6,12  13,10->12,10'),  # straight dive general, diff route
+        ]:
+            with self.subTest(enPath=enPath):
+                mapFile = 'GameContinuationEntries/should_intercept_army_in_the_open_without_splitting_general_LOL___ERyMALJ2o---0--134.txtmap'
+                map, general, enemyGeneral = self.load_map_and_generals(mapFile, 134, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=134)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, enPath)
+
+                # # proof
+                # simHost.queue_player_moves_str(general.player, proof)
+
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=16)
+                self.assertNoFriendliesKilled(map, general)
+
+                self.assertTileDifferentialGreaterThan(minTileDiff, simHost, 'see proof. Coalescing army and prepping caps before the enemy army reaches you is best play.')

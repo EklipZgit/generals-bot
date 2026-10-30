@@ -570,25 +570,31 @@ class BotCombatOps:
         if bot.win_condition_analyzer.projected_loss_all_in_active:
             return None
 
-        hitGeneralInTurns = bot.all_in_army_advantage_cycle - bot.all_in_army_advantage_counter % bot.all_in_army_advantage_cycle
-        if bot.is_all_in_army_advantage and bot.targetPlayerObj.tileCount < 90:
+        mode = 'PCST'
+
+        hitGeneralInTurns = bot.all_in_army_advantage_cycle - bot.all_in_army_advantage_counter % bot.all_in_army_advantage_cycle - 5
+        if bot.is_all_in_army_advantage:
             hitGeneralInTurns = hitGeneralInTurns % 25 + 5
+            mode = 'GATH'
         flankAllInMove = BotCombatOps.try_find_flank_all_in(bot, hitGeneralInTurns)
 
         if flankAllInMove:
             bot.all_in_army_advantage_counter += 1
             return flankAllInMove
 
-        targets = [bot.targetPlayerExpectedGeneralLocation]
+        teams = bot._map.team_ids_by_player_index
+        targets = [t for t in bot.target_player_gather_targets if teams[bot.targetPlayer] == teams[t.player] and not t.visible]
+
+        if not bot.is_all_in_losing and bot.enemy_attack_path:
+            targets.extend([t for t in bot.enemy_attack_path.tileSet if teams[bot.targetPlayer] == teams[t.player] and not t.visible])
+
 
         andTargs = ''
 
         if not bot.targetPlayerExpectedGeneralLocation.isGeneral:
             andTargs = f' (and undisc)'
             emergenceTiles = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=5, cutoffEmergenceRatio=0.6)[0:3]
-            targets = emergenceTiles[0:5]
-            for t in targets:
-                bot.viewInfo.add_targeted_tile(t, TargetStyle.WHITE)
+            targets.extend(emergenceTiles[0:5])
 
         if (bot.is_all_in_army_advantage or bot.all_in_city_behind) and not BotStateQueries.is_still_ffa_and_non_dominant(bot):
             andTargs = ' (and cities)'
@@ -597,7 +603,7 @@ class BotCombatOps:
 
         msg = f'allin g AT tg gen{andTargs}, in {hitGeneralInTurns}t, {str([str(t) for t in targets])}'
 
-        with bot.perf_timer.begin_move_event(f'pcst {msg}. self.all_in_army_advantage_cycle {bot.all_in_army_advantage_cycle}, self.all_in_army_advantage_counter {bot.all_in_army_advantage_counter}'):
+        with bot.perf_timer.begin_move_event(f'{mode} {msg}. self.all_in_army_advantage_cycle {bot.all_in_army_advantage_cycle}, self.all_in_army_advantage_counter {bot.all_in_army_advantage_counter}'):
             gathNeg = defenseCriticalTileSet.copy()
             citiesToHalf = set()
             if bot.is_all_in_army_advantage:
@@ -611,6 +617,9 @@ class BotCombatOps:
                 gathNeg.update(bot.defensive_spanning_tree)
                 gathNeg.update(l.tile for l in bot.best_defense_leaves)
 
+            bot.viewInfo.add_targeted_tiles_with_legend(targets, 'ALLIN TARGS', TargetStyle.GRAY)
+
+            # if mode == 'PCST':
             gathCapPlan = Gather.gather_approximate_turns_to_tiles(
                 bot._map,
                 rootTiles=targets,
@@ -620,14 +629,16 @@ class BotCombatOps:
                 captureMatrix=None,
                 negativeTiles=gathNeg,
                 skipTiles=None,
-                prioritizeCaptureHighArmyTiles=False,
-                useTrueValueGathered=True,
+                prioritizeCaptureHighArmyTiles=bot.is_all_in_army_advantage,
+                useTrueValueGathered=not bot.is_all_in_army_advantage,
                 includeGatherPriorityAsEconValues=True,
                 includeCapturePriorityAsEconValues=True,
                 tilesToHalf=citiesToHalf,
-                timeLimit=min(0.075, BotTimings.get_remaining_move_time(bot, )),
+                timeLimit=min(0.05, BotTimings.get_remaining_move_time(bot, )),
                 logDebug=False,
                 viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
+            # else:
+            #     gathCapPlan = Gather.
             if gathCapPlan is None:
                 if bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind:
                     # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack:
@@ -648,7 +659,7 @@ class BotCombatOps:
 
             move = gathCapPlan.get_first_move()
             bot.curPath = gathCapPlan
-            bot.info(f'PCST ALL IN appx {hitGeneralInTurns}t: {gathCapPlan}')
+            bot.info(f'{mode} ALL IN appx {hitGeneralInTurns}t: {gathCapPlan}')
 
         if move is not None:
             bot.info(msg)
@@ -661,6 +672,7 @@ class BotCombatOps:
             bot.all_in_army_advantage_counter += 1
             bot.gatherNodes = gathCapPlan.root_nodes
             return move
+
         return None
 
     # @staticmethod
@@ -1659,6 +1671,7 @@ class BotCombatOps:
 
     @staticmethod
     def check_should_be_all_in_losing(bot: EklipZBot) -> bool:
+        """Check endgame surrender thresholds before preserving or updating losing all-in state."""
         general = bot.general
         if general is None:
             bot.is_all_in_losing = False
@@ -1705,6 +1718,25 @@ class BotCombatOps:
         allInLosingCounterThreshold = frStats.tileCount // 5 + 15
         allInLosingCounterThreshold = max(50, allInLosingCounterThreshold)
 
+        # Tests/test_AllIn.py::AllInSurrenderTests.test_should_surrender_when_projected_loss_active_at_turn_500:
+        # Evaluate surrender before preserving projected-loss all-in state so its early return cannot bypass hopeless endgames.
+        shouldCheckLosing = bot._map.remainingPlayers - len(BotTargeting.get_afk_players(bot)) <= 2 or bot._map.is_2v2
+        if shouldCheckLosing:
+            if enStats.tileCount + 35 * enStats.cityCount > frStats.tileCount * 1.5 * customRatioMult + 5 + 35 * frStats.cityCount and enStats.score > frStats.score * 1.6 * customRatioMult + 5:
+                bot.giving_up_counter += 1
+                logbook.info(
+                    f"It looks like we're getting wrecked. givingUpCounter {bot.giving_up_counter}")
+                BotComms.send_all_chat_communication(bot, "gg")
+                time.sleep(1)
+                if bot.surrender_func:
+                    bot.surrender_func()
+                    # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_duplicate_army_out_of_fog runs under GameSimulatorHost without a real surrender_func; only complete the map when we can actually submit a surrender to the game client.
+                    time.sleep(1)
+                    bot._map.result = False
+                    bot._map.complete = True
+            else:
+                bot.giving_up_counter = 0
+
         # Tests/test_BotBehavior.py::test_should_detect_lost_round_and_detect_all_in_opportunity_and_set_up_all_in_instead sets projected-loss all-in state through WinConditionAnalyzer/BotKillTiming; preserve that all-in flag instead of clearing it through the older score-threshold counter path.
         if bot.win_condition_analyzer.projected_loss_all_in_active:
             bot.is_all_in_losing = True
@@ -1713,7 +1745,7 @@ class BotCombatOps:
 
         bot.is_all_in_losing = False
 
-        if bot._map.remainingPlayers - len(BotTargeting.get_afk_players(bot)) <= 2 or bot._map.is_2v2:
+        if shouldCheckLosing:
             should2v2PartnerDeadAllIn = (bot._map.is_2v2 and bot.teammate_general is None and bot._map.remainingPlayers > 2)
             enJustContested = len(bot.cityAnalyzer.enemy_contested_cities)
             if should2v2PartnerDeadAllIn:
@@ -1730,20 +1762,6 @@ class BotCombatOps:
                 bot.all_in_losing_counter = 0
             if bot.all_in_losing_counter > allInLosingCounterThreshold:
                 bot.is_all_in_losing = True
-            if enStats.tileCount + 35 * enStats.cityCount > frStats.tileCount * 1.5 * customRatioMult + 5 + 35 * frStats.cityCount and enStats.score > frStats.score * 1.6 * customRatioMult + 5:
-                bot.giving_up_counter += 1
-                logbook.info(
-                    f"It looks like we're getting wrecked. givingUpCounter {bot.giving_up_counter}")
-                BotComms.send_all_chat_communication(bot, "gg")
-                time.sleep(1)
-                if bot.surrender_func:
-                    bot.surrender_func()
-                    # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_duplicate_army_out_of_fog runs under GameSimulatorHost without a real surrender_func; only complete the map when we can actually submit a surrender to the game client.
-                    time.sleep(1)
-                    bot._map.result = False
-                    bot._map.complete = True
-            else:
-                bot.giving_up_counter = 0
 
         if bot.is_all_in_losing:
             bot.expansion_plan = ExpansionPotential(0, 0, 0, None, [], 0.0, bot._map.turn)

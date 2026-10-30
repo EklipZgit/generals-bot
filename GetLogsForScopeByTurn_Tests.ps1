@@ -3,7 +3,7 @@ Set-StrictMode -Version Latest
 Describe "GetLogsForScopeByTurn" {
     BeforeAll {
         $script:scriptPath = Join-Path $PSScriptRoot "GetLogsForScopeByTurn.ps1"
-        $groupedLogsRoot = "D:\GeneralsLogs\GroupedLogs"
+        $groupedLogsRoot = "C:\GeneralsLogs\GroupedLogs"
 
         if (-not (Test-Path $groupedLogsRoot)) {
             Set-ItResult -Skipped -Because "Grouped logs folder was not found: $groupedLogsRoot"

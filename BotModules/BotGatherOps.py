@@ -696,40 +696,46 @@ class BotGatherOps:
     def get_gather_tiebreak_matrix(bot: EklipZBot) -> MapMatrixInterface[float]:
         matrix = MapMatrix(bot._map, 0.0)
 
+        matRaw = matrix.raw
         desertPenalty = 0.25
         for tile in bot.board_analysis.backwards_tiles:
             if tile.army > 2:
-                matrix.raw[tile.tile_index] += 0.45
+                matRaw[tile.tile_index] += 0.45
             elif tile.army > 1:
-                matrix.raw[tile.tile_index] += 0.25
+                matRaw[tile.tile_index] += 0.25
 
         for tile in bot._map.swamps:
-            matrix.raw[tile.tile_index] -= 2.0
+            matRaw[tile.tile_index] -= 2.0
 
         for tile in bot._map.deserts:
-            matrix.raw[tile.tile_index] -= desertPenalty
+            matRaw[tile.tile_index] -= desertPenalty
 
         if bot.expansion_plan is not None:
             if bot.expansion_plan.selected_option is not None:
                 for tile in bot.expansion_plan.selected_option.tileSet:
-                    matrix.raw[tile.tile_index] -= 0.2
+                    matRaw[tile.tile_index] -= 0.2
             for path in bot.expansion_plan.all_paths:
                 for tile in path.tileSet:
-                    matrix.raw[tile.tile_index] -= 0.05
+                    matRaw[tile.tile_index] -= 0.05
+
+        shortestPathSet = bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles
+        targetPlayerTerrRaw = bot.territories.territoryDistances[bot.targetPlayer].raw
+        extendedPlayMatRaw = bot.board_analysis.extended_play_area_matrix.raw
+        shortestPathDistsRaw = bot.board_analysis.shortest_path_distances.raw
+        topRightGridRaw = bot.viewInfo.topRightGridText.raw
 
         isNonDomFfa = BotStateQueries.is_still_ffa_and_non_dominant(bot)
-
         for p in bot._map.get_teammates(bot._map.player_index):
             for tile in bot._map.players[p].tiles:
-                if not isNonDomFfa or bot._map.turn > 200:
-                    if tile in bot.board_analysis.intergeneral_analysis.shortestPathWay.tiles:
-                        matrix.raw[tile.tile_index] -= 0.4
+                if not isNonDomFfa and bot._map.turn > 200:
+                    if tile in shortestPathSet:
+                        matRaw[tile.tile_index] -= 0.25
 
                     if tile.army <= 1:
-                        matrix.raw[tile.tile_index] -= 0.5
+                        matRaw[tile.tile_index] -= 0.5
 
                 if tile.isDesert:
-                    matrix.raw[tile.tile_index] += desertPenalty
+                    matRaw[tile.tile_index] += desertPenalty
 
                 isAllFriendly = True
                 for adj in tile.movable:
@@ -737,24 +743,30 @@ class BotGatherOps:
                         isAllFriendly = False
                         break
 
-                if isAllFriendly and bot.territories.territoryDistances[bot.targetPlayer].raw[tile.tile_index] > 3:
-                    matrix.raw[tile.tile_index] += min(0.49, 0.04 * bot.territories.territoryDistances[bot.targetPlayer].raw[tile.tile_index])
+                if isAllFriendly and targetPlayerTerrRaw[tile.tile_index] > 3:
+                    matRaw[tile.tile_index] += min(0.49, 0.04 * targetPlayerTerrRaw[tile.tile_index])
 
                 if not isAllFriendly and not isNonDomFfa:
-                    matrix.raw[tile.tile_index] -= 0.25
+                    matRaw[tile.tile_index] -= 0.25
 
-                if tile not in bot.board_analysis.extended_play_area_matrix and tile.army > 1:
-                    distToShortest = bot.board_analysis.shortest_path_distances.raw[tile.tile_index]
+                if not extendedPlayMatRaw[tile.tile_index] and tile.army > 1:
+                    distToShortest = shortestPathDistsRaw[tile.tile_index]
                     if distToShortest < 1000:
-                        matrix.raw[tile.tile_index] += min(0.49, 0.03 * distToShortest)
+                        matRaw[tile.tile_index] += min(0.49, 0.03 * distToShortest)
 
                 if bot.info_render_gather_matrix_values:
-                    matrixVal = matrix.raw[tile.tile_index]
+                    matrixVal = matRaw[tile.tile_index]
                     if matrixVal:
-                        bot.viewInfo.topRightGridText.raw[tile.tile_index] = f'g{str(round(matrixVal, 3)).lstrip("0").replace("-0", "-")}'
+                        topRightGridRaw[tile.tile_index] = f'g{str(round(matrixVal, 3)).lstrip("0").replace("-0", "-")}'
 
         for city in bot.cities_gathered_this_cycle:
-            matrix.raw[city.tile_index] = -1.0
+            matRaw[city.tile_index] = -1.0
+
+        for leafMove in bot.captureLeafMoves[0:20]:
+            if leafMove.source.army <= 1:
+                continue
+
+            matRaw[leafMove.source.tile_index] -= 1.0 / leafMove.source.army
 
         return matrix
 

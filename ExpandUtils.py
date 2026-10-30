@@ -9,10 +9,11 @@ from Algorithms import TileIslandBuilder, TileIsland
 from Behavior.ArmyInterceptor import NEUTRAL_CAP_VALUE, TARGET_CAP_VALUE, InterceptionOptionInfo, ThreatBlockInfo, ArmyInterception
 from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherCapturePlan
+from Interfaces.MapMatrixInterface import EmptyTileSet, TileSet
 from MapMatrix import MapMatrix
 from Models import Move
 from Interfaces import TilePlanInterface, MapMatrixInterface
-from Path import Path
+from Path import Path, MoveListPath
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import breadth_first_foreach, count, where
 from ViewInfo import PathColorer, ViewInfo
@@ -337,7 +338,12 @@ def get_round_plan_with_expansion(
                 addlPaths = additionalOptionValues
 
                 # counts = {}
-                for option in sorted(addlPaths, key=lambda p: p.econValue / p.length, reverse=True):
+                # UnitTests/test_fix_expandutils_zerodiv.py::ExpandUtilsZeroDivRegressionTests:
+                # additionalOptionValues entries can legitimately have length == 0 (a Path with a
+                # single tile has length == tiles - 1 == 0, eg an in-place/stay option), so divide
+                # by max(length, 1) per the econ-per-turn convention used throughout
+                # BotModules/BotExpansionOps.py instead of crashing with ZeroDivisionError.
+                for option in sorted(addlPaths, key=lambda p: p.econValue / max(p.length, 1), reverse=True):
                     # for tile in path.tileList:
                     #     count = counts.get(tile, 0)
                     #     counts[tile] = count + 1
@@ -618,7 +624,11 @@ def get_round_plan_with_expansion(
                         )
 
                     otherPaths = [p for p in maxPaths if p != path]
-                    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, originalNegativeTiles) / pa.length, reverse=True)]
+                    # UnitTests/test_fix_expandutils_zerodiv.py::ExpandUtilsZeroDivRegressionTests.test_additional_options_zero_length_sort_skip_knapsack:
+                    # same zero-length option root cause as the :341 sort -- a length-0
+                    # additionalOptionValues entry that wasn't selected as the first-move path
+                    # lands in otherPaths, so divide by max(length, 1) here too.
+                    otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, originalNegativeTiles) / max(pa.length, 1), reverse=True)]
 
                 with perfTimer.begin_move_event(f'_get_capture_counts (skipKnapsacking)'):
                     totalTurns, enCaps, neutCaps, visited = _get_capture_counts(
@@ -707,7 +717,10 @@ def get_round_plan_with_expansion(
                 valueOverrides)
 
             otherPaths = [p for p in maxPaths if p != path]
-            otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, originalNegativeTiles) / pa.length, reverse=True)]
+            # UnitTests/test_fix_expandutils_zerodiv.py::ExpandUtilsZeroDivRegressionTests.test_additional_options_zero_length_sort_knapsack:
+            # same zero-length option root cause as the :341 sort -- knapsacked paths can
+            # include length-0 additionalOptionValues entries, so divide by max(length, 1).
+            otherPaths = [p for p in sorted(otherPaths, key=lambda pa: postPathEvalFunction(pa, originalNegativeTiles) / max(pa.length, 1), reverse=True)]
 
         with perfTimer.begin_move_event(f'_get_capture_counts'):
             totalTurns, enCaps, neutCaps, visited = _get_capture_counts(
@@ -1793,7 +1806,7 @@ def _execute_expansion_gather_to_borders(
             searchingPlayer = startTiles[0].player
 
     if shouldLog:
-        logbook.info(f"Trying exp timing gather. Turns {depth}. Searching player {searchingPlayer}")
+        logbook.info(f"Trying exp extension gather. Depth {depth}. Searching player {searchingPlayer}")
     if valueFunc is None:
 
         if shouldLog:
@@ -1992,6 +2005,129 @@ def _execute_expansion_gather_to_borders(
                 continue
 
             paths.append(path)
+
+    return paths
+
+
+def find_all_two_move_edge_cap_combinations(
+        map: MapBase,
+        leafMoves: list[Move],
+        skipTiles: TileSet | None = None,
+        searchingPlayer: int = -2,
+        targetTeam: int = -2,
+        bonusMatrix: MapMatrixInterface[float] | None = None,
+        shouldLog=True,
+) -> typing.List[Path]:
+    """
+    For every not-one-move-cappable enemy leaf tile that has a non-1 us-tile next to it:
+        Check for another us-tile next to it that added to the leafMove one would capture it in a 1-2 combo.
+        Check for another us-tile adjacent to our source tile which added would cap, as a path-combo.
+
+    @return:
+    """
+
+    teams = MapBase.get_teams_array(map)
+
+    if searchingPlayer == -2:
+        searchingPlayer = leafMoves[0].source.player
+    if targetTeam == -2:
+        targetPlayer = teams[leafMoves[0].dest.player]
+
+    paths = []
+    if skipTiles is None:
+        skipTiles = EmptyTileSet()
+
+    # For every not-one-move-cappable enemy leaf tile that has a non-1 us-tile next to it:
+    #     Check for another us-tile next to it that added to the leafMove one would capture it in a 1-2 combo.
+    #     Check for another us-tile adjacent to our source tile which added would cap, as a path-combo.
+    for move in leafMoves:
+        if (move.dest.player != -1 and teams[move.dest.player] != targetTeam) or move.source in skipTiles or move.dest in skipTiles:
+            continue
+
+        deficit = move.dest.army - move.source.army + 2
+        if deficit <= 0:
+            continue  # these are covered under leafmoves.
+
+        for adjacentTile in move.source.movableNoObstacles:
+            if adjacentTile.player != searchingPlayer or adjacentTile in skipTiles:
+                continue
+
+            nextTileDeficit = deficit - adjacentTile.army + 1
+            if nextTileDeficit > 0:
+                continue
+
+            path = Path(0 - nextTileDeficit)
+            path.add_next(adjacentTile)
+            path.add_next(move.source)
+            path.add_next(move.dest)
+            path.econValue = ENEMY_TILE_CAP_VALUE if move.dest.player != -1 else 1.0
+            paths.append(path)
+
+            if nextTileDeficit <= -2:
+                # check if we can cap TWO tiles with the extra tile we pulled
+                for otherEn in move.dest.movableNoObstacles:
+                    if otherEn in skipTiles:
+                        continue
+                    nextNextDeficit = nextTileDeficit - otherEn.army + 1
+                    if teams[otherEn.player] == targetTeam and nextNextDeficit <= 0:
+                        path = Path(adjacentTile.army - 1 - deficit)
+                        path.add_next(adjacentTile)
+                        path.add_next(move.source)
+                        path.add_next(move.dest)
+                        path.add_next(otherEn)
+                        path.econValue = ENEMY_TILE_CAP_VALUE * 2
+                        paths.append(path)
+
+        if move.source.army <= 1:
+            continue
+
+        for targetAdjacentFriendlyTile in move.dest.movableNoObstacles:
+            if targetAdjacentFriendlyTile.player != searchingPlayer or targetAdjacentFriendlyTile in skipTiles or targetAdjacentFriendlyTile == move.source:
+                continue
+
+            nextTileDeficit = deficit - targetAdjacentFriendlyTile.army + 1
+            if targetAdjacentFriendlyTile.player != searchingPlayer or nextTileDeficit > 0 or targetAdjacentFriendlyTile in skipTiles:
+                continue
+
+            doubleCapOnly = False
+            if targetAdjacentFriendlyTile.army - 1 > move.dest.army:
+                # this tile is already in leaf moves capturing this tile directly, we don't need to double team it EXCEPT that we can potentially double cap?
+                # for testing double cap, we wouldn't have evaled in the other direction so we can't create duplicate.
+                # continue
+                doubleCapOnly = True
+            elif targetAdjacentFriendlyTile < move.source:
+                # if this is a pair, don't double count it. Only check one of the two permutations of gather pairs.
+                continue
+
+            if not doubleCapOnly:
+                path = MoveListPath([move, Move(targetAdjacentFriendlyTile, move.dest)])
+                path.econValue = ENEMY_TILE_CAP_VALUE if move.dest.player != -1 else 1.0
+                paths.append(path)
+
+            if nextTileDeficit <= -2:
+                # check if we can cap TWO tiles with the extra tile we pulled
+                for otherEn in move.dest.movableNoObstacles:
+                    if otherEn in skipTiles:
+                        continue
+                    nextNextDeficit = nextTileDeficit - otherEn.army + 1
+                    if teams[otherEn.player] == targetTeam and nextNextDeficit <= 0:
+                        path = MoveListPath([move, Move(targetAdjacentFriendlyTile, move.dest), Move(move.dest, otherEn)])
+                        path.econValue = ENEMY_TILE_CAP_VALUE * 2
+                        paths.append(path)
+
+    if bonusMatrix:
+        bonusRaw = bonusMatrix.raw
+        for path in paths:
+            for tile in path.tileList:
+                path.econValue += bonusRaw[tile.tile_index]
+
+    logbook.info(f'find_all_two_move_edge_cap_combinations produced {len(paths)} paths. Exciting!')
+
+    if shouldLog and len(paths) > 0:
+        strs = []
+        for path in paths:
+            strs.append(f'  path: {path}')
+        logbook.info(f'find_all_two_move_edge_cap_combinations produced paths:\n  {"\n  ".join(strs)}')
 
     return paths
 

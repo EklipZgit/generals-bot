@@ -585,6 +585,10 @@ class BotDefense:
 
                     if len(blockingTiles) > 0:
                         bot.viewInfo.add_info_line(f'for threat {str(tile)}..{"|".join(str(t.path.tail.tile) for t in threats)}, blocking tiles were {"  ".join(str(v) for v in sorted(blockingTiles.values(), key=lambda v: v.tile.army))}')
+                        # Intercept split-hint blocking tiles render yellow on the key tile's side of each blocked border.
+                        for splitHintBlock in blockingTiles.values():
+                            for blockedDest in splitHintBlock.blocked_destinations:
+                                bot.viewInfo.add_border_gradient(splitHintBlock.tile, blockedDest,  (90, 120, 40), None)
 
                     if SearchUtils.any_where(threats, lambda t: t.threatType == ThreatType.Kill and t.path.tail.tile.isGeneral and t.threatValue > 0):
                         isDeathThreat = True
@@ -610,7 +614,9 @@ class BotDefense:
                             # TODO allow splitting and leaving half if we think we can still hold with half maybe...?
                             contestedCityBlock = ThreatBlockInfo(t, amount_needed_to_block=t.army)
                             for m in t.movable:
+                                # Contested-city intercept blocks render dark orange on the key tile's side of each blocked border.
                                 contestedCityBlock.add_blocked_destination(m)
+                                bot.viewInfo.add_border_gradient(contestedCityBlock.tile, m, (120, 60, 10), None)
                             blocks[t] = contestedCityBlock
 
                 with bot.perf_timer.begin_move_event(f'INT @{str(tile)} Calc'):
@@ -782,13 +788,45 @@ class BotDefense:
             # (fastestThreat is None, i.e. "no fastest threat found"), fully excluding that tile starves the city
             # defense - e.g. an army that is +50 more than the city threat value gets dropped from the gather and
             # the city is wrongly abandoned. Such a tile is free to move toward the (city) threat instead.
-            # TODO maybe we need directional blocking to be supported instead of treating blocked tiles as fully negative.
+            # Directional blocking is now honored below: a blocked tile is only excluded when it cannot move toward
+            # the defensive gather target in any unblocked direction (see loop over blocking_tile_info).
             hasLethalGeneralThreat = (
                 (bot.dangerAnalyzer.fastestThreat is not None and bot.dangerAnalyzer.fastestThreat.turns > -1)
                 or (bot.dangerAnalyzer.fastestAllyThreat is not None and bot.dangerAnalyzer.fastestAllyThreat.turns > -1)
             )
             if hasLethalGeneralThreat:
-                negatives.update(bot.blocking_tile_info.keys())
+                # The blocking_tile_info blocks are DIRECTIONAL (ThreatBlockInfo.blocked_destinations only lists the
+                # neighbor tiles the held tile must not move TOWARD to preserve a general-kill block). Previously we
+                # added every blocking key straight into negatives, which fully excluded e.g. the general's own army
+                # from a (non-general) city defense gather even though it could gather toward the city in an unblocked
+                # direction. Only keep the exclusion when the block prevents ALL movement toward the defensive gather
+                # point - i.e. every movable that is closer to the gather target than the key tile is blocked. If any
+                # closer-to-target movable is NOT blocked, the tile is free to gather toward the city, so leave it in.
+                gatherTargetTile = threat.path.tail.tile
+                distMapper = bot._map.distance_mapper
+                for blockedTile, blockInfo in bot.blocking_tile_info.items():
+                    keyDistToTarget = distMapper.get_distance_between(gatherTargetTile, blockedTile)
+                    hasUnblockedTargetwardMove = False
+                    # DBG (user request): prove per-blocking-tile why the general/blocking tile is or is not excluded.
+                    movableDbg: typing.List[str] = []
+                    for movable in blockedTile.movable:
+                        mvDist = distMapper.get_distance_between(gatherTargetTile, movable)
+                        isBlocked = movable in blockInfo.blocked_destinations
+                        movableDbg.append(f'{movable}(d{mvDist},obst={movable.isObstacle},blk={isBlocked})')
+                        if movable.isObstacle:
+                            continue
+                        if mvDist >= keyDistToTarget:
+                            # not closer to the gather target, this direction doesn't help defend the city
+                            continue
+                        if not isBlocked:
+                            hasUnblockedTargetwardMove = True
+                    logbook.info(
+                        f'DEFENSE_BLOCK_DECISION target={gatherTargetTile} blockedTile={blockedTile} keyDist={keyDistToTarget} '
+                        f'blockedDests=[{"|".join([str(t) for t in blockInfo.blocked_destinations])}] '
+                        f'movables=[{", ".join(movableDbg)}] hasUnblockedTargetwardMove={hasUnblockedTargetwardMove} '
+                        f'-> {"EXCLUDED" if not hasUnblockedTargetwardMove else "kept"}')
+                    if not hasUnblockedTargetwardMove:
+                        negatives.add(blockedTile)
 
         if additionalNegatives is not None:
             negatives.update(additionalNegatives)
@@ -802,6 +840,12 @@ class BotDefense:
                 timeLimit = 1000
             else:
                 timeLimit = 0.05
+
+        # DBG (user request): confirm whether the general is already in negatives before the (city) defense gather runs.
+        logbook.info(
+            f'DEFENSE_NEG_PRE_GATHER threatTail={threat.path.tail.tile} generalInNegatives={bot.general in negatives} '
+            f'blockingKeys=[{"|".join([str(t) for t in bot.blocking_tile_info.keys()])}] '
+            f'negativesCount={len(negatives)}')
 
         move, value, turnsUsed, gatherNodes = BotGatherOps.get_defensive_gather_to_target_tiles(
             bot,
@@ -1919,6 +1963,7 @@ class BotDefense:
             if dangerPath is not None:
                 dangerTiles.update(SearchUtils.where(dangerPath.tileList, lambda t: bot._map.is_tile_enemy(t) and t.army > 2))
 
+        logbook.info(f'get_danger_tiles: returning {len(dangerTiles)} dangerTiles: {[str(t) for t in dangerTiles]}')
         return dangerTiles
 
     @staticmethod
@@ -1927,15 +1972,19 @@ class BotDefense:
         if move_half:
             thresh = bot.general.army - bot.general.army // 2 + 2
 
+        logbook.info(f'get_danger_paths: general={bot.general} general.army={bot.general.army} thresh={thresh} move_half={move_half} fastestThreat={bot.dangerAnalyzer.fastestThreat} fastestThreat.turns={bot.dangerAnalyzer.fastestThreat.turns if bot.dangerAnalyzer.fastestThreat else None}')
+
         dangerPaths = []
         if bot.targetPlayer != -1:
             dangerPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, targetArmy=thresh, maxTime=0.1, maxDepth=1, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
             if dangerPath is not None:
+                logbook.info(f'get_danger_paths: found dangerPath={dangerPath}')
                 dangerPaths.append(dangerPath)
                 altSet = dangerPath.tileSet.copy()
 
                 altPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, negativeTiles=altSet, targetArmy=thresh, maxTime=0.1, maxDepth=1, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
                 if altPath is not None:
+                    logbook.info(f'get_danger_paths: found altPath1={altPath}')
                     dangerPaths.append(altPath)
                     altSet.discard(altPath.start.tile)
 
@@ -1943,6 +1992,7 @@ class BotDefense:
 
                 altPath = SearchUtils.dest_breadth_first_target(bot._map, bot.general.movable, negativeTiles=altSet, targetArmy=thresh, maxTime=0.1, maxDepth=1, searchingPlayer=bot.targetPlayer, ignoreGoalArmy=False)
                 if altPath is not None and str(altPath) != str(dangerPath):
+                    logbook.info(f'get_danger_paths: found altPath2={altPath}')
                     dangerPaths.append(altPath)
 
         for mv in bot.general.movable:
@@ -1950,6 +2000,7 @@ class BotDefense:
                 path = Path()
                 path.add_next(mv)
                 path.add_next(bot.general)
+                logbook.info(f'get_danger_paths: found movable enemy threat {mv} army={mv.army}')
                 dangerPaths.append(path)
 
         for dangerPath in dangerPaths:
@@ -2438,16 +2489,27 @@ class BotDefense:
                         viewInfo=bot.viewInfo,
                         noLog=True)
                     bot.viewInfo.add_info_line(f'Flank Gath valGathered {sumPruned}({valGathered}) / (gatherTurns {sumPrunedTurns}({gatherTurns}) - caps {caps.value}) vs {playerArmyBaseline}')
-                    path = Path()
-                    n = SearchUtils.where(gatherNodes, lambda n: n.gatherTurns > 0)[0]
-                    while True:
-                        path.add_start(n.tile)
-                        if len(n.children) == 0:
-                            break
-                        n = n.children[0]
+                    # UnitTests/test_fix_botdefense_gather_nodes.py
+                    # test_flank_vision_defense_does_not_crash_when_prune_strips_all_gather_turns
+                    # prune_mst_to_army_with_values can legitimately prune EVERY non-root
+                    # node out of the gather tree (invalid leaves such as 1-army or enemy
+                    # tiles are pruned regardless of the army=1 untilFunc), leaving only
+                    # bare roots whose gatherTurns all decremented to 0. A gather tree
+                    # with no gatherTurns > 0 root has no gather path to render, so skip
+                    # the curPath assignment and let the loop try the next offset rather
+                    # than indexing [0] on an empty filtered list.
+                    gatherRootsWithTurns = SearchUtils.where(gatherNodes, lambda n: n.gatherTurns > 0)
+                    if len(gatherRootsWithTurns) > 0:
+                        path = Path()
+                        n = gatherRootsWithTurns[0]
+                        while True:
+                            path.add_start(n.tile)
+                            if len(n.children) == 0:
+                                break
+                            n = n.children[0]
 
-                    if path.length > 0:
-                        bot.curPath = path
+                        if path.length > 0:
+                            bot.curPath = path
 
                 elif 3 * valGathered / wasteWeight < playerArmyBaseline:
                     bot.viewInfo.add_info_line(f'increasing flank def due to valGathered {valGathered} / (gatherTurns {gatherTurns} - caps {caps.value}) vs {playerArmyBaseline}')
@@ -2624,6 +2686,8 @@ class BotDefense:
                         tDist = 100
                 if defDist < tDist:
                     block.add_blocked_destination(t)
+                    # Main defense blocking tiles render dark gray on the key tile's side of each blocked border. Blueish for threat path
+                    bot.viewInfo.add_border_gradient(block.tile, t, (30, 40, 70), None)
             bot.info(f'blocking threatPath {threatPathTile} from moving to {"|".join([str(t) for t in block.blocked_destinations])}')
 
         for gatherTreeNode in bot.best_defense_leaves:
@@ -2655,6 +2719,8 @@ class BotDefense:
                         tDist = 100
                 if defDist < tDist:
                     block.add_blocked_destination(t)
+                    # Main defense blocking tiles render dark gray on the key tile's side of each blocked border.  # reddish for gather planned stuff
+                    bot.viewInfo.add_border_gradient(block.tile, t, (70, 10, 30), None)
             bot.info(f'blocking defensive {defensiveTile} from moving to {"|".join([str(t) for t in block.blocked_destinations])}')
 
 

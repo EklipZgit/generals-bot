@@ -248,6 +248,36 @@ aG1  a3   b1   bG1
         self.assertEqual(1, len(external_options))
         self.assertIs(allowed_option, external_options[0].plan)
 
+    def test_convert_additional_options_allows_blocked_destination_with_excess_army(self):
+        """
+        Test that when a tile has excess army beyond amount_needed_to_block,
+        it should be allowed to move to blocked destinations.
+        This fixes the issue where a tile with 45 army blocked from moving
+        when it only needed 24 to block.
+        """
+        expander, map, general, enemyGeneral = self._build_expander(self._SIMPLE_MAP)
+        source = map.At(1, 0)
+        blockedDestination = map.At(2, 0)
+        
+        # Set source to have 45 army (like the bug case)
+        source.army = 45
+        
+        blocked_option = MockTilePlanOption({source, blockedDestination}, length=1, required_delay=0, econ_value=10.0, name="blocked")
+        blocked_option.set_move_list([Move(source, blockedDestination)])
+        
+        # Set amount_needed_to_block to 24 (like the bug case)
+        blockInfo = ThreatBlockInfo(source, amount_needed_to_block=24)
+        blockInfo.add_blocked_destination(blockedDestination)
+        expander.threat_blocking_tiles = {source: blockInfo}
+        
+        external_options = expander._convert_additional_options_to_external(
+            [blocked_option], turns=10
+        )
+        
+        # With excess army (45 > 24), the move should be allowed
+        self.assertEqual(1, len(external_options))
+        self.assertIs(blocked_option, external_options[0].plan)
+
     def test_constrained_flow_paths_limit_only_outgoing_edges_from_path_islands(self):
         mapData = """
 |    |    |

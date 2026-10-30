@@ -126,14 +126,14 @@ class InterceptPointTileInfo(object):
 class InterceptionOptionInfo(TilePlanInterface):
     __slots__ = (
         'path',
-        '_econ_value',
-        '_turns',
+        'econValue',
+        'turns',
         'damage_blocked',
         'intercepting_army_remaining',
         'recapture_turns',
         'best_case_intercept_moves',
         'worst_case_intercept_moves',
-        '_requiredDelay',
+        'requiredDelay',
         'friendly_army_reaching_intercept',
         'intercept',
     )
@@ -155,8 +155,8 @@ class InterceptionOptionInfo(TilePlanInterface):
         if path is None or path.start is None:
             raise Exception(f"Wtf, dont pass interception a bad path :V {path}")
 
-        self._econ_value: float = econValue
-        self._turns: int = turns
+        self.econValue: float = econValue
+        self.turns: int = turns
         self.damage_blocked: float = damageBlocked
         """The economic damage prevented by this intercept."""
         self.intercepting_army_remaining: int = interceptingArmyRemaining
@@ -171,7 +171,7 @@ class InterceptionOptionInfo(TilePlanInterface):
         self.worst_case_intercept_moves: int = worstCaseInterceptMoves
         """Worst case turns-to-intercept"""
 
-        self._requiredDelay: int = requiredDelay
+        self.requiredDelay: int = requiredDelay
 
         self.friendly_army_reaching_intercept: int = friendlyArmyReachingIntercept
         """
@@ -189,25 +189,11 @@ class InterceptionOptionInfo(TilePlanInterface):
 
         Note 1 move may be wasted chasing if the intercept happens adjacently on a non-priority move, so factor in that this could be over-shooting the number of available recapture turns by 1.
         """
-        return self._turns - self.path.length
+        return self.turns - self.path.length
 
     @property
     def length(self) -> int:
-        return max(self._turns, self.path.length + self.recapture_turns, self.best_case_intercept_moves)
-
-    @property
-    def turns(self) -> int:
-        """The number of actual moves planned here (for example maybe 1 move to block a choke against an army that is 10 moves away from that choke)."""
-        return self._turns
-
-    @property
-    def econValue(self) -> float:
-        """
-        Includes the econ value of the recapture PLUS the econ value of the opponents that is blocked. So this is the net-sum of true econ capture value plus the econ damage blocked.
-
-        @return:
-        """
-        return self._econ_value
+        return max(self.turns, self.path.length + self.recapture_turns, self.best_case_intercept_moves)
 
     def __iter__(self) -> typing.Iterator[PathMove]:
         return iter(self.path)
@@ -216,9 +202,6 @@ class InterceptionOptionInfo(TilePlanInterface):
     def tiles(self) -> typing.Iterable[Tile]:
         return iter(self.path.tiles)
 
-    @econValue.setter
-    def econValue(self, value: float):
-        self._econ_value = value
 
     @property
     def tileSet(self) -> typing.Set[Tile]:
@@ -233,9 +216,6 @@ class InterceptionOptionInfo(TilePlanInterface):
             self._tileList.append(self.intercept.target_tile)
         return self._tileList
 
-    @property
-    def requiredDelay(self) -> int:
-        return self._requiredDelay
 
     def get_move_list(self) -> typing.List[Move]:
         return self.path.get_move_list()
@@ -247,7 +227,7 @@ class InterceptionOptionInfo(TilePlanInterface):
         return self.path.pop_first_move()
 
     def __str__(self):
-        return f'int {self.str_start()}: {self.econValue:.2f}v/{self._turns}t ({self._econ_value / max(1, self._turns):.2f}vt), {self.str_details()}'
+        return f'int {self.str_start()}: {self.econValue:.2f}v/{self.turns}t ({self.econValue / max(1, self.turns):.2f}vt), {self.str_details()}'
 
     def str_start(self):
         tgTile = 'NONE'
@@ -268,13 +248,13 @@ class InterceptionOptionInfo(TilePlanInterface):
         clone = InterceptionOptionInfo(
             self.path.clone(),
             self.econValue,
-            self._turns,
+            self.turns,
             self.damage_blocked,
             self.intercepting_army_remaining,
             self.best_case_intercept_moves,
             self.worst_case_intercept_moves,
             self.recapture_turns,
-            self._requiredDelay,
+            self.requiredDelay,
             self.friendly_army_reaching_intercept)
         clone.intercept = self.intercept
         clone._tileList = self._tileList
@@ -2494,12 +2474,15 @@ class ArmyInterceptor(object):
                 if not towardsUs:
                     continue
 
+                bMapRaw = threat.armyAnalysis.bMap.raw
                 for chokeTile in threat.path.tileList:
                     if not self.map.is_tile_friendly(chokeTile):
                         continue
                     if chokeTile.army < otherTile.army // 3:
                         continue
                     # if chokeTile == threat.path.tail.tile:
+                    #     # Was commented out. Commented back in to try to work on test_should_defend_cities_and_not_lie_saying_dead_city_when_clearly_not_fucking_dead_bro where the general is being held hostage for no reason and preventing defending a city
+                    #     logbook.info(f'get_intercept_blocking_tiles_for_split_hinting skipping threat end tile {chokeTile} for threat {threat}')
                     #     continue
 
                     # blockAmount = threat.threatValue
@@ -2519,9 +2502,9 @@ class ArmyInterceptor(object):
 
                     for moveable in chokeTile.movable:
                         # if moveable not in threat.armyAnalysis.shortestPathWay.tiles:
-                        if (
+                        wouldMoveAwayFromThreat = bMapRaw[moveable.tile_index] > bMapRaw[chokeTile.tile_index]
+                        if wouldMoveAwayFromThreat and (
                             canDie
-                            or threat.armyAnalysis.bMap.raw[moveable.tile_index] > threat.armyAnalysis.bMap.raw[chokeTile.tile_index]
                             or (
                                 moveable not in threat.path.tileSet
                                 and moveable not in threat.armyAnalysis.shortestPathWay.tiles

@@ -1085,12 +1085,33 @@ def prune_set_by_articulation_points(
                 break
             lastPrunedToUnsafe = len(toPrune)
             refreshUnableToPrune()
+            # UnitTests.test_fix_gathermaxiterativeset_empty_queue: refreshUnableToPrune
+            # only re-queues unableToPrune members that are still in toPrune, so the
+            # queue can legitimately stay empty here (unableToPrune empty, or all of its
+            # members pruned via stale duplicate dcQueue entries while parked). The
+            # lastPrunedToUnsafe check above only catches stalls where the queue DID
+            # refill and drained again with no progress - without this break the
+            # heappop below raises IndexError on the empty heap.
+            if not dcQueue:
+                break
         if mustReEvaluateUnsafe:
             unsafeToCut = {t for t in nx.algorithms.articulation_points(nxForBcc)}
             mustReEvaluateUnsafe = False
             articExecutions += 1
 
         _, t = heapq.heappop(dcQueue)
+
+        # UnitTests.test_fix_gathermaxiterativeset_remove_node.GatherMaxIterativeSetRemoveNodeFixTests
+        # covers the live-game NetworkXError 'The node {n} is not in the graph' from
+        # nxForBcc.remove_node below (Human.exe-1v1-2026-09-30_05-09-15---S_d8HGVge t368-t387).
+        # toPrune can contain isObstacle tiles (mountains, undiscovered obstacles, costly
+        # neutrals like neutral cities that gather plans target) which
+        # build_networkX_graph_no_obstacles_no_weights never inserts as nxForBcc nodes, so
+        # they can never be articulation points and fall straight through to remove_node.
+        # The `t not in toPrune` skip also drops any stale duplicate dcQueue entry for an
+        # already-pruned tile so remove_node can never run twice on the same node.
+        if t not in toPrune:
+            continue
 
         if t.tile_index in unsafeToCut:
             unableToPrune.add(t)
@@ -1101,7 +1122,11 @@ def prune_set_by_articulation_points(
 
         # pruned = _prune_connected_by_value(t, toPrune, valueMatrix, rootTiles)
         toPrune.discard(t)
-        nxForBcc.remove_node(t.tile_index)
+        # obstacle tiles were never added to nxForBcc (see comment at the pop above);
+        # removing them from toPrune cannot disconnect the graph so we just skip the
+        # graph-side removal that used to raise NetworkXError.
+        if t.tile_index in nxForBcc:
+            nxForBcc.remove_node(t.tile_index)
         currentGathVal -= valueMatrix.raw[t.tile_index]
         currentArmySum -= armyCostMatrix.raw[t.tile_index]
         if tileDictToPrune:

@@ -1,3 +1,6 @@
+# bot data
+bot_user_ids.txt
+
 # cppimport temp files
 
 .rendered.*.cpp

@@ -8,7 +8,9 @@ from dataclasses import dataclass
 import logbook
 
 import DebugHelper
+import ExpandUtils
 import Gather
+from Gather.CpSatParameterConfigs import ALL_CONFIGS
 from Gather.GatherCaptureGroupKnapsacker import (
     GenericTilePlanOption,
     GroupedKnapsackInput,
@@ -36,6 +38,50 @@ OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
 
 SHOULD_LOG_DEBUG_BY_DEFAULT = False
 """Tests already override this, should never need to enable this these days."""
+
+# CP-SAT solver configuration flags for performance testing
+CP_SAT_CONFIG_NAME: str | None = 'aggressive_speed'
+"""Set to a config name from CpSatParameterConfigs to use that CP-SAT configuration.
+Options: 'baseline', 'time_limit_10ms', 'single_worker', 'linearization_none', 'balanced_performance', 'aggressive_speed'
+If None, uses default CP-SAT settings."""
+
+# Individual boolean flags for quick switching (mutually exclusive with CP_SAT_CONFIG_NAME)
+CP_SAT_USE_BASELINE: bool = False
+CP_SAT_USE_TIME_LIMIT_10MS: bool = False
+CP_SAT_USE_SINGLE_WORKER: bool = False
+CP_SAT_USE_LINEARIZATION_NONE: bool = False
+CP_SAT_USE_BALANCED_PERFORMANCE: bool = False
+CP_SAT_USE_AGGRESSIVE_SPEED: bool = False
+
+
+def _get_cp_sat_config():
+    """Resolve CP-SAT config from flags. Returns None if no config specified."""
+    # Priority: individual boolean flags > CP_SAT_CONFIG_NAME
+    if CP_SAT_USE_BASELINE:
+        config_name = 'baseline'
+    elif CP_SAT_USE_TIME_LIMIT_10MS:
+        config_name = 'time_limit_10ms'
+    elif CP_SAT_USE_SINGLE_WORKER:
+        config_name = 'single_worker'
+    elif CP_SAT_USE_LINEARIZATION_NONE:
+        config_name = 'linearization_none'
+    elif CP_SAT_USE_BALANCED_PERFORMANCE:
+        config_name = 'balanced_performance'
+    elif CP_SAT_USE_AGGRESSIVE_SPEED:
+        config_name = 'aggressive_speed'
+    else:
+        config_name = CP_SAT_CONFIG_NAME
+
+    if config_name is None:
+        return None
+
+    # Look up config by name from ALL_CONFIGS
+    for config in ALL_CONFIGS:
+        if config.name == config_name:
+            return config
+
+    logbook.warning(f'CP-SAT config "{config_name}" not found in ALL_CONFIGS, using default settings')
+    return None
 
 
 # NOTE THAT THE FLAGS BELOW GENERALLY DO NOTHING IF THE TESTS DO NOT ALREADY ALSO SET log_debug=True in the flow expander. All FlowExpansion test classes already do this in their setup though.
@@ -450,11 +496,6 @@ class ArmyFlowExpanderV2:
         if army_override_matrix is not None:
             self.army_override_matrix = army_override_matrix
 
-        # Process additional_options (intercepts, etc.) into MKCP-compatible format
-        external_options: list[ExternalPlanOption] = []
-        if additional_options:
-            external_options = self._convert_additional_options_to_external(additional_options, turns)
-
         # Phase 0: Build flow graph
         with self.perf_timer.begin_move_event('V2 phase0 _ensure_flow_graph_exists'):
             self._ensure_flow_graph_exists(islands, turns, negativeTiles)
@@ -478,6 +519,24 @@ class ArmyFlowExpanderV2:
         with self.perf_timer.begin_move_event('V2 phase3 _postprocess_flow_stream_gather_capture_lookup_pairs'):
             self._postprocess_flow_stream_gather_capture_lookup_pairs(lookup_tables)
         self.last_lookup_tables = lookup_tables
+
+        if leafMoves is not None:
+            with self.perf_timer.begin_move_event('V2 phase3.5 add edge extensions'):
+                additional_options = additional_options.copy()
+                addlPaths = ExpandUtils.find_all_two_move_edge_cap_combinations(
+                    self.map,
+                    leafMoves,
+                    negativeTiles,
+                    searchingPlayer=self.map.player_index,
+                    targetTeam=self.target_team,
+                    bonusMatrix=bonusCapturePointMatrix,
+                )
+                additional_options.extend(addlPaths)
+
+        # Process additional_options (intercepts, etc.) into MKCP-compatible format
+        external_options: list[ExternalPlanOption] = []
+        if additional_options:
+            external_options = self._convert_additional_options_to_external(additional_options, turns)
 
         # Phase 4: Solve grouped knapsack for turn budget (includes external options like intercepts)
         with self.perf_timer.begin_move_event('V2 phase4 _solve_grouped_knapsack'):
@@ -1093,61 +1152,59 @@ class ArmyFlowExpanderV2:
             heapq.heappush(frontier, (-start_heuristic, start_island.unique_id, start_node, start_island.sum_army))
             visited.add(start_island.unique_id)
 
-        with self.perf_timer.begin_move_event('add friendly target_crossables'):
-            # Also add friendly islands that flow into target_crossable_islands
-            # This captures side-feeding islands that don't flow directly to the friendly border node
-            if flow_lookup is not None:
-                for target_island_id in target_crossable_islands:
-                    target_node = flow_lookup.get(target_island_id)
-                    if target_node is None:
+        # Also add friendly islands that flow into target_crossable_islands
+        # This captures side-feeding islands that don't flow directly to the friendly border node
+        if flow_lookup is not None:
+            for target_island_id in target_crossable_islands:
+                target_node = flow_lookup.get(target_island_id)
+                if target_node is None:
+                    continue
+                for edge in target_node.flow_from:
+                    src = edge.source_flow_node
+                    src_island = src.island
+                    if src_island.unique_id in visited:
                         continue
-                    for edge in target_node.flow_from:
-                        src = edge.source_flow_node
-                        src_island = src.island
-                        if src_island.unique_id in visited:
-                            continue
-                        if src_island.team != self.team:
-                            continue
-                        heuristic = src_island.sum_army / max(src_island.tile_count, 1)
-                        heapq.heappush(frontier, (-heuristic, src_island.unique_id, src, src_island.sum_army))
-                        visited.add(src_island.unique_id)
+                    if src_island.team != self.team:
+                        continue
+                    heuristic = src_island.sum_army / max(src_island.tile_count, 1)
+                    heapq.heappush(frontier, (-heuristic, src_island.unique_id, src, src_island.sum_army))
+                    visited.add(src_island.unique_id)
 
-        with self.perf_timer.begin_move_event('add friendly border islands'):
-            # Pull in friendly islands physically adjacent to the neutral nodes in the capture
-            # (target/downstream) stream. When a plan captures a neutral crossing corridor, friendly
-            # army sitting alongside that corridor can be gathered sideways into it to fund the deeper
-            # captures, even though MinCostFlow did not route flow through those friendlies. This mirrors
-            # the physical-adjacency ('border_adj') fallback that _build_downstream_stream already uses to
-            # extend the capture path past un-routed neutrals. border_islands is strictly tile-adjacent
-            # (TileIslandBuilder.debug_verify_all_islands), so the gather stream stays spatially connected.
-            # UnitTests/test_FlowExpansion_*.py::test_builds_flow_plan_gathering_through_neutral_border_crossings
-            if target_stream is not None and flow_lookup is not None:
-                target_stream_island_ids = {node.island.unique_id for node in target_stream}
-                for target_stream_node in target_stream:
-                    if target_stream_node.island.team != -1:
+        # Pull in friendly islands physically adjacent to the neutral nodes in the capture
+        # (target/downstream) stream. When a plan captures a neutral crossing corridor, friendly
+        # army sitting alongside that corridor can be gathered sideways into it to fund the deeper
+        # captures, even though MinCostFlow did not route flow through those friendlies. This mirrors
+        # the physical-adjacency ('border_adj') fallback that _build_downstream_stream already uses to
+        # extend the capture path past un-routed neutrals. border_islands is strictly tile-adjacent
+        # (TileIslandBuilder.debug_verify_all_islands), so the gather stream stays spatially connected.
+        # UnitTests/test_FlowExpansion_*.py::test_builds_flow_plan_gathering_through_neutral_border_crossings
+        if target_stream is not None and flow_lookup is not None:
+            target_stream_island_ids = {node.island.unique_id for node in target_stream}
+            for target_stream_node in target_stream:
+                if target_stream_node.island.team != -1:
+                    continue
+                for neighbor_island in target_stream_node.island.border_islands:
+                    if neighbor_island.unique_id in visited:
                         continue
-                    for neighbor_island in target_stream_node.island.border_islands:
-                        if neighbor_island.unique_id in visited:
-                            continue
-                        if neighbor_island.team != self.team:
-                            continue
-                        neighbor_node = flow_lookup.get(neighbor_island.unique_id)
-                        if neighbor_node is None:
-                            continue
-                        # Only pull in genuine side-feeders of THIS capture path. A neighbouring friendly
-                        # qualifies when nothing is routed into it (empty flow_from) AND its own routed
-                        # output (flow_to), if any, feeds only islands that this border pair is already
-                        # capturing (they are in target_stream). That identifies army sitting alongside the
-                        # neutral corridor with nowhere else to go. Friendlies routed elsewhere (e.g. toward
-                        # the general or a different target) are gathered by the pair they belong to; adding
-                        # them here would pollute unrelated pairs' gather streams and change their plans.
-                        if neighbor_node.flow_from:
-                            continue
-                        if any(edge.target_flow_node.island.unique_id not in target_stream_island_ids for edge in neighbor_node.flow_to):
-                            continue
-                        heuristic = neighbor_island.sum_army / max(neighbor_island.tile_count, 1)
-                        heapq.heappush(frontier, (-heuristic, neighbor_island.unique_id, neighbor_node, neighbor_island.sum_army))
-                        visited.add(neighbor_island.unique_id)
+                    if neighbor_island.team != self.team:
+                        continue
+                    neighbor_node = flow_lookup.get(neighbor_island.unique_id)
+                    if neighbor_node is None:
+                        continue
+                    # Only pull in genuine side-feeders of THIS capture path. A neighbouring friendly
+                    # qualifies when nothing is routed into it (empty flow_from) AND its own routed
+                    # output (flow_to), if any, feeds only islands that this border pair is already
+                    # capturing (they are in target_stream). That identifies army sitting alongside the
+                    # neutral corridor with nowhere else to go. Friendlies routed elsewhere (e.g. toward
+                    # the general or a different target) are gathered by the pair they belong to; adding
+                    # them here would pollute unrelated pairs' gather streams and change their plans.
+                    if neighbor_node.flow_from:
+                        continue
+                    if any(edge.target_flow_node.island.unique_id not in target_stream_island_ids for edge in neighbor_node.flow_to):
+                        continue
+                    heuristic = neighbor_island.sum_army / max(neighbor_island.tile_count, 1)
+                    heapq.heappush(frontier, (-heuristic, neighbor_island.unique_id, neighbor_node, neighbor_island.sum_army))
+                    visited.add(neighbor_island.unique_id)
 
         while frontier:
             _, _, current_node, upstream_army = heapq.heappop(frontier)
@@ -2767,7 +2824,7 @@ class ArmyFlowExpanderV2:
                 continue
 
             # Get tile set for conflict detection
-            tile_set = frozenset(opt.tileSet)
+            tile_set = frozenset(opt.tileList)
             external_value = int(1000 * opt.econValue) - total_turns
             if self.log_debug:
                 logbook.info(
@@ -2804,6 +2861,11 @@ class ArmyFlowExpanderV2:
             if block_info is None:
                 continue
             if move.dest in block_info.blocked_destinations:
+                # If the source tile has excess army beyond what's needed to block,
+                # allow the move (the excess can be moved while still leaving enough to block)
+                source_army = self._get_tile_army(move.source)
+                if source_army > block_info.amount_needed_to_block:
+                    continue
                 return True
 
         return False
@@ -3098,12 +3160,19 @@ class ArmyFlowExpanderV2:
                     solver=self.plan_solver,
                     value_multiple=ITERATIVE_EXPANSION_EN_CAP_VAL,
                     perf_timer=self.perf_timer,
+                    cp_sat_config=_get_cp_sat_config(),
                 )
                 chosen_items = tile_plan_result.chosen_items
                 max_value = tile_plan_result.max_value
                 chosen_indices = tile_plan_result.chosen_indices
         else:
-            grouped_result = solve_grouped_knapsack_input(grouped_input, noLog=not self.log_debug, noLogVerbose=not SHOULD_LOG_ALL_MKCP_ITEMS_SUPER_VERBOSE, perfTimer=self.perf_timer)
+            grouped_result = solve_grouped_knapsack_input(
+                grouped_input,
+                noLog=not self.log_debug,
+                noLogVerbose=not SHOULD_LOG_ALL_MKCP_ITEMS_SUPER_VERBOSE,
+                perfTimer=self.perf_timer,
+                cp_sat_config=_get_cp_sat_config(),
+            )
             chosen_items = [items[index] for index in grouped_result.chosen_indices]
             max_value = grouped_result.max_value
             chosen_indices = grouped_result.chosen_indices

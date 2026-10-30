@@ -284,6 +284,12 @@ def _extend_tree_node_lookup(
     If a path in the list does not produce any army, returns None for remaining turns.
     Sets trunkdistance.
 
+    Maintains the invariant that each tile has at most one GatherTreeNode in the tree:
+    when a path passes through a tile that already has a node in gatherTreeNodeLookup,
+    that existing node is reused as the parent for the rest of the path instead of
+    appending a duplicate (duplicate tile nodes break pruning's tile-keyed bookkeeping,
+    see UnitTests/test_fix_gather_fromdist.py).
+
     @param force:
     @param shouldLog:
     @param startTilesDict:
@@ -354,6 +360,17 @@ def _extend_tree_node_lookup(
         pathNode = pathNode.next
         # add the new path to startTiles and then search a new path
         iter = 0
+        # A path may pass through tiles that already exist in the gather tree (all tree
+        # tiles become start tiles again for later iterations, and multiple knapsack paths
+        # can overlap). When it does, we reuse the existing node instead of appending a
+        # duplicate node for the same tile (see the junction block in the loop below).
+        # Because of that, the value/gatherTurns bubble-up must happen per contiguous run
+        # of newly-created nodes, up the ancestor chain of the node each run attached
+        # under, rather than always bubbling the whole path value up the start node's chain.
+        # UnitTests/test_fix_gather_fromdist.py
+        currentRunAttachNode: GatherTreeNode = gatherTreeNodePathAddingOnTo
+        currentRunNodes: typing.List[GatherTreeNode] = []
+        gatherValueBubbles: typing.List[typing.Tuple[GatherTreeNode, float, int]] = []
         while pathNode is not None:
             # if DebugHelper.IS_DEBUGGING and pathNode.tile.x == 17 and pathNode.tile.y > 1 and pathNode.tile.y < 5:
             #     pass
@@ -367,7 +384,6 @@ def _extend_tree_node_lookup(
             # skipTiles.add(pathNode.tile)
             # if viewInfo:
             #    viewInfo.bottomRightGridText[pathNode.tile] = newDist
-            nextGatherTreeNode = GatherTreeNode(pathNode.tile, currentGatherTreeNode.tile, newDist)
 
             tileEffect = 1
 
@@ -378,6 +394,47 @@ def _extend_tree_node_lookup(
                     tileEffect += pathNode.tile.army
             # if priorityMatrix and pathNode.next is not None:
             #     runningValue -= priorityMatrix[pathNode.tile]
+
+            existingGatherTreeNode = gatherTreeNodeLookup.get(pathNode.tile, None)
+            if existingGatherTreeNode is not None:
+                # This tile is already in the gather tree (added by an earlier path or
+                # iteration). Creating a second GatherTreeNode for the same tile breaks
+                # the bijection between gatherTreeNodeLookup and the tree: prune_mst_until
+                # pops a pruned subtree's tile keys out of gatherTreeNodeLookupToPrune, so
+                # pruning EITHER duplicate unregisters the tile while the other duplicate
+                # is still in the tree - leaving its children with a toTile that no longer
+                # resolves, which tripped the 'HAD A FROM TILE' assert below in live game
+                # Human.exe-ffa-2026-09-29_12-13-47---85TYBCqWs.
+                # (UnitTests/test_fix_gather_fromdist.py
+                #  test_extend_after_pruning_duplicate_does_not_hit_dangling_from_tile)
+                #
+                # Reuse the existing node as the parent for the rest of this path instead;
+                # the path's remaining tiles simply extend the node's existing branch.
+                #
+                # The now-finished run of new nodes had value/gatherTurns computed as
+                # suffixes through the end of the path (this tile and everything beyond);
+                # correct them down to only cover the run itself, then queue the run's
+                # value bubble so it propagates up the ancestor chain it attached under.
+                junctionRemainingTurns = valuePerTurnPath.length - addlDist + 1
+                for runNode in currentRunNodes:
+                    runNode.value -= runningValue
+                    runNode.gatherTurns -= junctionRemainingTurns
+                if len(currentRunNodes) > 0:
+                    gatherValueBubbles.append((currentRunAttachNode, currentRunNodes[0].value, len(currentRunNodes)))
+                    currentRunNodes = []
+
+                currentGatherTreeNode = existingGatherTreeNode
+                currentRunAttachNode = existingGatherTreeNode
+                runningTrunkDist = existingGatherTreeNode.trunkDistance
+                runningTrunkValue = existingGatherTreeNode.trunkValue
+                runningValue += tileEffect
+                if priorityMatrix:
+                    runningValue -= priorityMatrix[pathNode.tile]
+                addlDist += 1
+                pathNode = pathNode.next
+                continue
+
+            nextGatherTreeNode = GatherTreeNode(pathNode.tile, currentGatherTreeNode.tile, newDist)
 
             runningTrunkValue -= tileEffect
             if GatherDebug.USE_DEBUG_ASSERTS:
@@ -391,7 +448,10 @@ def _extend_tree_node_lookup(
                 runningValue -= priorityMatrix[pathNode.tile]
 
             if nextGatherTreeNode not in currentGatherTreeNode.children:
+                if len(currentRunNodes) == 0:
+                    currentRunAttachNode = currentGatherTreeNode
                 currentGatherTreeNode.children.append(nextGatherTreeNode)
+                currentRunNodes.append(nextGatherTreeNode)
                 prunedToRemove = None
                 for p in currentGatherTreeNode.pruned:
                     if p.tile == nextGatherTreeNode.tile:
@@ -403,50 +463,54 @@ def _extend_tree_node_lookup(
             addlDist += 1
             pathNode = pathNode.next
 
+        if len(currentRunNodes) > 0:
+            gatherValueBubbles.append((currentRunAttachNode, currentRunNodes[0].value, len(currentRunNodes)))
+
         # now bubble the value of the path and turns up the tree
-        curGatherTreeNode = gatherTreeNodePathAddingOnTo
-        iter = 0
-        while True:
-            iter += 1
+        for bubbleStartNode, bubbleValue, bubbleTurns in gatherValueBubbles:
+            curGatherTreeNode = bubbleStartNode
+            iter = 0
+            while True:
+                iter += 1
 
-            curGatherTreeNode.value += valuePerTurnPath.value
-            curGatherTreeNode.gatherTurns += valuePerTurnPath.length
-            if curGatherTreeNode.toTile is None:
-                break
+                curGatherTreeNode.value += bubbleValue
+                curGatherTreeNode.gatherTurns += bubbleTurns
+                if curGatherTreeNode.toTile is None:
+                    break
 
-            nextGatherTreeNode = gatherTreeNodeLookup.get(curGatherTreeNode.toTile, None)
-            if nextGatherTreeNode is not None and nextGatherTreeNode.toTile == curGatherTreeNode.tile:
-                errMsg = f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)}) setting curGatherTreeNode fromTile to None to break the cycle.'
-                logbook.error(errMsg)
-                if GatherDebug.USE_DEBUG_ASSERTS:
+                nextGatherTreeNode = gatherTreeNodeLookup.get(curGatherTreeNode.toTile, None)
+                if nextGatherTreeNode is not None and nextGatherTreeNode.toTile == curGatherTreeNode.tile:
+                    errMsg = f'found graph cycle in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)}) setting curGatherTreeNode fromTile to None to break the cycle.'
+                    logbook.error(errMsg)
+                    if GatherDebug.USE_DEBUG_ASSERTS:
+                        logbook.info('\r\n' + '\r\n'.join(logEntries))
+                        raise AssertionError(errMsg)
+
+                    curGatherTreeNode.toTile = None
+                    break
+
+                if iter > 600 and nextGatherTreeNode is not None:
                     logbook.info('\r\n' + '\r\n'.join(logEntries))
-                    raise AssertionError(errMsg)
+                    raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)})')
 
-                curGatherTreeNode.toTile = None
-                break
-
-            if iter > 600 and nextGatherTreeNode is not None:
-                logbook.info('\r\n' + '\r\n'.join(logEntries))
-                raise AssertionError(f'Infinite looped in extend_tree_node_lookup, {str(curGatherTreeNode)}<-{str(curGatherTreeNode.toTile)}  ({str(nextGatherTreeNode)}<-{str(nextGatherTreeNode.toTile)})')
-
-            if nextGatherTreeNode is None:
-                startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
-                gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
-                newPathsStringed = "\r\n      ".join([repr(t) for t in newPaths])
-                fromDist = distanceLookup.get(curGatherTreeNode.toTile, None)
-                curDist = distanceLookup.get(curGatherTreeNode.tile, None)
-                msg = (f'curGatherTreeNode {repr(curGatherTreeNode)} HAD A FROM TILE {repr(curGatherTreeNode.toTile)} fromDist [{fromDist}] curDist [{curDist}] THAT WAS NOT IN THE gatherTreeNodeLookup...?\r\n'
-                       f'  Path was {repr(valuePerTurnPath)}\r\n'
-                       f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
-                       f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
-                       f'  newPaths was\r\n      {newPathsStringed}')
-                if not force:
-                    logbook.info('\r\n' + '\r\n'.join(logEntries))
-                    raise AssertionError(msg)
-                else:
-                    logbook.error(msg)
-                break
-            curGatherTreeNode = nextGatherTreeNode
+                if nextGatherTreeNode is None:
+                    startTilesDictStringed = "\r\n      ".join([repr(t) for t in startTilesDict.items()])
+                    gatherTreeNodeLookupStringed = "\r\n      ".join([repr(t) for t in gatherTreeNodeLookup.items()])
+                    newPathsStringed = "\r\n      ".join([repr(t) for t in newPaths])
+                    fromDist = distanceLookup.get(curGatherTreeNode.toTile, None)
+                    curDist = distanceLookup.get(curGatherTreeNode.tile, None)
+                    msg = (f'curGatherTreeNode {repr(curGatherTreeNode)} HAD A FROM TILE {repr(curGatherTreeNode.toTile)} fromDist [{fromDist}] curDist [{curDist}] THAT WAS NOT IN THE gatherTreeNodeLookup...?\r\n'
+                           f'  Path was {repr(valuePerTurnPath)}\r\n'
+                           f'  startTiles was\r\n      {startTilesDictStringed}\r\n'
+                           f'  gatherTreeNodeLookup was\r\n      {gatherTreeNodeLookupStringed}\r\n'
+                           f'  newPaths was\r\n      {newPathsStringed}')
+                    if not force:
+                        logbook.info('\r\n' + '\r\n'.join(logEntries))
+                        raise AssertionError(msg)
+                    else:
+                        logbook.error(msg)
+                    break
+                curGatherTreeNode = nextGatherTreeNode
 
     return gatherTreeNodeLookup
 

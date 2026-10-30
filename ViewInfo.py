@@ -9,6 +9,7 @@ import random
 import logbook
 import typing
 from collections import deque
+from dataclasses import dataclass
 from enum import Enum
 
 from Army import Army
@@ -38,6 +39,22 @@ class TargetStyle(Enum):
     WHITE = 8
     YELLOW = 9
     GRAY = 10
+
+
+@dataclass(slots=True)
+class BorderGradient:
+    """
+    Render data describing a gradient line drawn along the shared border between two adjacent tiles.
+    colorA is drawn along sourceTile's edge, colorB along destTile's edge, and the 1px margin between them
+    is drawn with the average of the two colors. If colorB is None, only colorA is drawn on sourceTile's
+    edge and destTile's edge and the 1px margin are left untouched. See ViewInfo.add_border_gradient.
+    """
+    sourceX: int
+    sourceY: int
+    destX: int
+    destY: int
+    colorA: typing.Tuple[int, int, int]
+    colorB: typing.Tuple[int, int, int] | None
 
 
 class PathColorer(object):
@@ -108,6 +125,8 @@ class ViewInfo(object):
         self.infoLines: typing.List[str] = []
         self.arrows: typing.List[typing.Tuple[float, float, float, float, str, typing.Tuple[int, int, int], int, bool, int | None]] = []
         """(from, to, label, color, alpha, isBidirectional, labelAlpha)"""
+        self.border_gradients: typing.List[BorderGradient] = []
+        """Two-color gradient lines drawn along the shared border between two adjacent tiles. See add_border_gradient."""
         self.statsLines: typing.List[str] = []
 
     @staticmethod
@@ -162,6 +181,7 @@ class ViewInfo(object):
         self.bottomMidLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
         self.midLeftGridText: MapMatrixInterface[str | None] = MapMatrix(self.map, None)
         self.arrows = []
+        self.border_gradients = []
         # countHist = len(self.redTargetedTileHistory)
         # for i in range(countHist):
         #     if (i == countHist - 2):
@@ -304,6 +324,35 @@ class ViewInfo(object):
         """
 
         self.draw_diagonal_arrow_between_xy(fromTile.x, fromTile.y, toTile.x, toTile.y, label, color, alpha, bidir, colorFloor, labelAlpha)
+
+    def add_border_gradient(
+            self,
+            tileA: Tile,
+            tileB: Tile,
+            colorA: typing.Tuple[int, int, int] | TargetStyle,
+            colorB: typing.Tuple[int, int, int] | TargetStyle | None
+    ):
+        """
+        Queue a border gradient line drawn along the shared border between two adjacent tiles.
+
+        colorA is drawn as a 2px full-cell-spanning line along tileA's edge with tileB. If colorB is provided,
+        it is drawn the same way along tileB's edge with tileA and the 1px black margin directly between the
+        two tiles is drawn with the average of the two colors. If colorB is None, only colorA is drawn on
+        tileA's side of the border and neither tileB's edge nor the 1px margin are altered. TargetStyle inputs
+        are converted to RGB before storing.
+
+        @param tileA: The first (source) tile whose shared border edge is colored with colorA.
+        @param tileB: The second (dest) tile whose shared border edge is colored with colorB. Must be adjacent to tileA.
+        @param colorA: The color (RGB tuple or TargetStyle) drawn along tileA's edge.
+        @param colorB: The color (RGB tuple or TargetStyle) drawn along tileB's edge, or None to only draw colorA.
+        @return:
+        """
+        if isinstance(colorA, TargetStyle):
+            colorA = self.get_color_from_target_style(colorA)
+        if isinstance(colorB, TargetStyle):
+            colorB = self.get_color_from_target_style(colorB)
+
+        self.border_gradients.append(BorderGradient(tileA.x, tileA.y, tileB.x, tileB.y, colorA, colorB))
 
     def add_info_multi_line(self, inputStr: str, lineLenChars: int = 80, childLineIndent: int = 2):
         subsLineStart = ''

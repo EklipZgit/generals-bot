@@ -52,6 +52,15 @@ class BotExpansionOps:
             return
         if BotTargeting.is_ffa_situation(bot):
             return
+        # UnitTests/test_fix_botexpansion_crashes.py::BotExpansionOpsCrashRegressionTests.test_super_careful_flank_bonuses_skip_when_shortest_path_missing:
+        # shortest_path_to_target_player is legitimately None in the window between a mid-turn
+        # target-player reset (eg when an FFA target is eliminated and
+        # _reset_all_in_state_after_target_player_change clears it) and the next
+        # recalculate_player_paths call in perform_move_prep. Without it there is no
+        # target-distance baseline to measure flank proximity against, so the super-careful
+        # bonus cannot be evaluated and must be skipped.
+        if bot.shortest_path_to_target_player is None:
+            return
 
         pathToCheck = pathToCheck.get_subsegment_excluding_trailing_visible()
         if pathToCheck is None or pathToCheck.tail is None:
@@ -105,7 +114,11 @@ class BotExpansionOps:
                 condensedOptions.append(longestOption)
                 seenOptions.add(longestOption)
 
-        return sorted(condensedOptions, key=lambda option: option.econValue / option.length, reverse=True)
+        # UnitTests/test_fix_botexpansion_crashes.py::BotExpansionOpsCrashRegressionTests.test_condensed_intercept_options_sort_handles_zero_length:
+        # length-0 options are legitimate plan members (a Path with a single tile has
+        # length == tiles - 1 == 0), so use the same max(length, 1) econ-per-turn
+        # denominator as _log_intercept_option_info to keep the info sort from crashing.
+        return sorted(condensedOptions, key=lambda option: option.econValue / max(option.length, 1), reverse=True)
 
     @staticmethod
     def _log_intercept_option_info(bot: EklipZBot, option: InterceptionOptionInfo, useBotInfo: bool) -> None:
@@ -530,7 +543,8 @@ class BotExpansionOps:
             expansionNegatives: typing.Set[Tile],
             pathColor: typing.Tuple[int, int, int],
             overrideTurns: int = -1,
-            includeExtraGenAndCityArmy: bool = False
+            includeExtraGenAndCityArmy: bool = False,
+            skip_remaining_time_check: bool = False,
     ) -> ExpansionPotential:
         territoryMap = bot.territories.territoryMap
 
@@ -562,7 +576,7 @@ class BotExpansionOps:
             bonusCapturePointMatrix = BotExpansionOps.get_expansion_weight_matrix(bot)
 
             remainingMoveTime = BotTimings.get_remaining_move_time(bot)
-            if remainingMoveTime < timeLimit and not DebugHelper.IS_DEBUGGING:
+            if remainingMoveTime < timeLimit and not DebugHelper.IS_DEBUGGING and not skip_remaining_time_check:
                 timeLimit = remainingMoveTime
                 if remainingMoveTime < 0.05:
                     timeLimit = 0.05
@@ -641,7 +655,11 @@ class BotExpansionOps:
                         threatBlockingTiles[bot.general] = blockInfo
                 if not shouldSkip:
                     blockInfo.add_blocked_destination(toTile)
+                    # The custom blocks passed into flow expansion (main defense + general-movement tweak) render dark purple
+                    # on the key tile's side of each blocked border, distinguishing the final flow-expansion block set.
+                    bot.viewInfo.add_border_gradient(blockInfo.tile, toTile, (90, 0, 90), None)
                     bot.info(f'FE GEN_MV_BLK toTile={toTile} lastMovedTurn={bot.general.lastMovedTurn}')
+
 
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
@@ -748,6 +766,7 @@ class BotExpansionOps:
                             army_override_matrix=armyOverrideMatrix,
                             threatBlockingTiles=threatBlockingTiles,
                             enemyAttackPathTiles=enemyAttackPathTiles,
+                            leafMoves=bot.leafMoves,  # not capture leafmoves, this is for gather plan extension
                         )
                         cumulative = 0.0
                         cumulativeTurns = 0
@@ -772,7 +791,12 @@ class BotExpansionOps:
                                     key=lambda t2: bot.board_analysis.intergeneral_analysis.aMap.raw[t2.tile_index]
                                 )
                             )
-                            bot.info(f'FE: {opt.econValue / opt.length:.2f} ({opt.econValue:.1f}e/{opt.length}t) {opt}  {sorted_tiles_text}')
+                            # UnitTests/test_fix_botexpansion_crashes.py::BotExpansionOpsCrashRegressionTests.test_build_expansion_plan_logs_zero_length_option:
+                            # length-0 options are legitimate plan members (a Path with a single
+                            # tile has length == tiles - 1 == 0, eg an in-place/stay option), so
+                            # use the max(length, 1) econ-per-turn denominator convention used by
+                            # the other option log lines in this file to keep logging from crashing.
+                            bot.info(f'FE: {opt.econValue / max(opt.length, 1):.2f} ({opt.econValue:.1f}e/{opt.length}t) {opt}  {sorted_tiles_text}')
 
                         addlOptions = list(optCollection.expansion_options)
                         bot.last_flow_expander = flowExpander
@@ -1953,7 +1977,11 @@ class BotExpansionOps:
             return None
 
         negativeTiles = defenseCriticalTileSet.copy()
-        if not bot.timings.in_launch_timing(bot._map.turn):
+        # UnitTests/test_fix_botexpansion_crashes.py::BotExpansionOpsCrashRegressionTests.test_quick_capture_move_handles_missing_gather_path:
+        # target_player_gather_path is legitimately None in the window between a mid-turn
+        # target-player reset (eg an eliminated FFA target) and recalculate_player_paths;
+        # when there is no gather path there are no gather tiles to exclude from quick captures.
+        if bot.target_player_gather_path is not None and not bot.timings.in_launch_timing(bot._map.turn):
             negativeTiles.update(bot.target_player_gather_path.tileList)
 
         move = None
@@ -1994,7 +2022,10 @@ class BotExpansionOps:
             if SearchUtils.any_where(path.tileList, lambda t: t.army == 1 and bot._map.is_tile_friendly(t)):
                 continue
 
-            scoreVt = path.econValue / path.length
+            # UnitTests/test_fix_botexpansion_crashes.py::BotExpansionOpsCrashRegressionTests.test_build_expansion_plan_logs_zero_length_option:
+            # same length-0-options root cause as the FE log line: a single-tile path has
+            # length 0, so divide by max(length, 1) instead of crashing the quick-capture scan.
+            scoreVt = path.econValue / max(path.length, 1)
             if maxPath is None or maxScoreVt < scoreVt:
                 maxPath = path
                 maxScoreVt = scoreVt
@@ -2120,7 +2151,14 @@ class BotExpansionOps:
 
         if bot.enemy_attack_path is not None:
             for tile in bot.enemy_attack_path.tileList:
-                if not tile.visible and tile not in bot.target_player_gather_path.tileSet:
+                # UnitTests/test_fix_botexpansion_crashes.py::BotExpansionOpsCrashRegressionTests.test_standard_weight_matrix_handles_missing_gather_path_after_target_reset:
+                # target_player_gather_path is legitimately None in the window between a mid-turn
+                # target-player reset (eg an eliminated FFA target clears it in
+                # _reset_all_in_state_after_target_player_change while enemy_attack_path stays
+                # stale) and the recalculate_player_paths call later in perform_move_prep.
+                # With no gather path there are no gather-path tiles to exclude, so every
+                # non-visible enemy-attack-path tile gets the +0.2 capture bonus.
+                if not tile.visible and (bot.target_player_gather_path is None or tile not in bot.target_player_gather_path.tileSet):
                     matrix.raw[tile.tile_index] += 0.2
 
         if bot.sketchiest_potential_inbound_flank_path is not None and bot.targetPlayerObj and len(bot.targetPlayerObj.tiles) > 0:

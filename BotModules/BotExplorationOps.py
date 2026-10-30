@@ -120,7 +120,11 @@ class BotExplorationOps:
 
         startTile = bestArmy.tile
 
-        with bot.perf_timer.begin_move_event(f'Watch {startTile} c{str(includeCities)[0]} tgA {targetArmyLevel}'):
+        if startTile.army < targetArmyLevel:
+            bot.info(f'skipped WRPHunt, {startTile} with {startTile.army}a < targetArmyLevel {targetArmyLevel}')
+            return None
+
+        with bot.perf_timer.begin_move_event(f'WRPHunt {startTile} c{str(includeCities)[0]} tgA {targetArmyLevel}'):
             if maxTime is None:
                 maxTime = BotTimings.get_remaining_move_time(bot) / 2
 

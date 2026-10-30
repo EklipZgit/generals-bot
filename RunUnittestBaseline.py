@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_OUTPUT_DIR = Path(r'D:\2019_reformat_Backup\cascade-debug-output\generals-bot')
+# D:\ is a small system recovery volume on this machine; never write output there.
+DEFAULT_OUTPUT_DIR = Path(r'C:\cascade-debug-output\generals-bot')
 
 
 def _discover_test_methods(target: str) -> list[str]:

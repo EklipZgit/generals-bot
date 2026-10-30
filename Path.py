@@ -300,7 +300,15 @@ class Path(TilePlanInterface):
             node = node.next
             i += 1
 
-        sub = self.get_subsegment(i - 1)
+        # UnitTests/test_fix_armyanalyzer_tail.py::test_get_positive_subsegment__still_returns_empty_path_when_army_dies_immediately:
+        # Now that get_subsegment(0) returns a degenerate single-tile path (matching its documented
+        # 'count+1 TILES long' contract), we must explicitly preserve the legacy empty Path (start=None)
+        # when the army cannot even begin this path without going non-positive. Callers such as
+        # DangerAnalyzer threat filtering check `path.start is None` to skip dead threat paths.
+        if i <= 1:
+            sub = Path()
+        else:
+            sub = self.get_subsegment(i - 1)
         sub.value = val
         return sub
 
@@ -357,11 +365,20 @@ class Path(TilePlanInterface):
     def get_subsegment(self, count: int, end: bool = False) -> Path:
         """
         The subsegment path will be count moves long, count+1 TILES long
-        @param count:
+        @param count: The number of MOVES in the returned subsegment. count=0 returns a degenerate
+            path containing a single tile (the start tile, or the tail tile when end=True).
+            Negative counts return an empty Path (start=None, tail=None) which some callers use
+            as a 'no path' sentinel.
         @param end: If True, get the subsegment of the LAST {count} moves instead of FIRST {count} moves
         @return:
         """
-        if count <= 0:
+        # UnitTests/test_fix_armyanalyzer_tail.py::test_get_subsegment__zero_count_returns_single_tile_start_segment
+        # and ::test_build_from_path__handles_degenerate_half_subsegment_of_length_one_threat_path:
+        # count == 0 previously returned an empty Path (tail=None) here, violating the documented
+        # 'count+1 TILES long' contract and crashing consumers like ArmyAnalyzer.build_from_path
+        # (AttributeError on path.tail) when eg BotCombatOps.kill_threat asked for the
+        # length // 2 == 0 subsegment of a length-1 threat path. Negative counts remain empty.
+        if count < 0:
             return Path()
 
         newPath = self.clone()

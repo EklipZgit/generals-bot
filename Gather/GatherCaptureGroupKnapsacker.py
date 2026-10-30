@@ -15,6 +15,8 @@ from PerformanceTimer import PerformanceTimer
 from base.client.tile import Tile
 from ortools.sat.python import cp_model
 
+from Gather.CpSatParameterConfigs import CpSatConfig
+
 
 @dataclass(slots=True)
 class GroupedKnapsackIterationSummary:
@@ -174,13 +176,17 @@ def solve_tile_plan_options(
         turn_budget: int,
         solver: PlanSolver,
         value_multiple: int = 10000,
-        perf_timer: PerformanceTimer | None = None
+        perf_timer: PerformanceTimer | None = None,
+        cp_sat_config: CpSatConfig | None = None,
 ) -> TilePlanOptionKnapsackResult:
     """
     Dispatch protocol-based tile-plan option solving to a selected backend.
+
+    Args:
+        cp_sat_config: Optional CpSatConfig for CP-SAT solver parameters.
     """
     if solver == PlanSolver.CpSat:
-        return solve_tile_plan_options_with_cp_sat(options, turn_budget, value_multiple, perf_timer)
+        return solve_tile_plan_options_with_cp_sat(options, turn_budget, value_multiple, perf_timer, cp_sat_config)
     if solver == PlanSolver.MpCbc:
         return solve_tile_plan_options_with_mp_cbc(options, turn_budget, value_multiple, perf_timer)
     if solver == PlanSolver.MpScip:
@@ -195,9 +201,13 @@ def solve_tile_plan_options_with_cp_sat(
         turn_budget: int,
         value_multiple: int = 10000,
         perf_timer: PerformanceTimer | None = None,
+        cp_sat_config: CpSatConfig | None = None,
 ) -> TilePlanOptionKnapsackResult:
     """
     Solve an exact 0/1 knapsack with tile-conflict constraints using OR-Tools CP-SAT.
+
+    Args:
+        cp_sat_config: Optional CpSatConfig with solver parameters. If None, uses default settings.
 
     Returns the original option items when options are GenericTilePlanOption instances;
     otherwise returns the option objects themselves.
@@ -221,7 +231,9 @@ def solve_tile_plan_options_with_cp_sat(
             turn_budget=turn_budget,
             weights=[option.length for option in options],
             values=values,
-            mutually_exclusive_option_indices_by_tile=constraints.mutually_exclusive_option_indices_by_tile)
+            mutually_exclusive_option_indices_by_tile=constraints.mutually_exclusive_option_indices_by_tile,
+            cp_sat_config=cp_sat_config,
+        )
     finally:
         if evt is not None:
             evt.__exit__()
@@ -340,9 +352,13 @@ def _solve_tile_plan_option_arrays_with_cp_sat(
         weights: list[int],
         values: list[int],
         mutually_exclusive_option_indices_by_tile: list[list[int]],
+        cp_sat_config: CpSatConfig | None = None,
 ) -> tuple[list[int], int, int]:
     """
     Solve an exact 0/1 integer-array knapsack with optional tile-conflict constraints using OR-Tools CP-SAT.
+
+    Args:
+        cp_sat_config: Optional CpSatConfig with solver parameters. If None, uses default settings.
     """
     model: CpModel = cp_model.CpModel()
     selected_vars = [
@@ -356,6 +372,16 @@ def _solve_tile_plan_option_arrays_with_cp_sat(
     model.maximize(sum(values[option_index] * selected_vars[option_index] for option_index in range(len(weights))))
 
     solver = cp_model.CpSolver()
+    if cp_sat_config is not None:
+        for param_name, param_value in cp_sat_config.params.items():
+            solver.parameters.__setattr__(param_name, param_value)
+        if cp_sat_config.may_produce_suboptimal:
+            logbook.info(
+                f'CP-SAT using config {cp_sat_config.name} (may produce suboptimal solutions): {cp_sat_config.description}'
+            )
+        else:
+            logbook.info(f'CP-SAT using config {cp_sat_config.name}: {cp_sat_config.description}')
+
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return [], 0, status
@@ -700,10 +726,14 @@ def solve_grouped_knapsack_input(
         input_data: GroupedKnapsackInput,
         noLog: bool = True,
         noLogVerbose: bool = True,
-        perfTimer: PerformanceTimer | None = None
+        perfTimer: PerformanceTimer | None = None,
+        cp_sat_config: CpSatConfig | None = None,
 ) -> GroupedKnapsackResult:
     """
     Solve legacy grouped-knapsack input after adapting its option arrays to the shared tile-plan option interface.
+
+    Args:
+        cp_sat_config: Optional CpSatConfig for CP-SAT solver parameters.
     """
     options = adapt_grouped_knapsack_input_to_tile_plan_options(input_data)
 
@@ -730,7 +760,9 @@ def solve_grouped_knapsack_input(
             max_iterations=input_data.max_iterations,
             noLog=noLog,
             noLogVerbose=noLogVerbose,
-            perfTimer=perfTimer)
+            perfTimer=perfTimer,
+            cp_sat_config=cp_sat_config,
+        )
         return solutionPreGrouped
 
     # if solutionNoGroups.max_value > solutionPreGrouped.max_value:
@@ -751,7 +783,8 @@ def _solve_grouped_tile_plan_options_with_mkcp_plus_greedy_conflict_resolution(
         max_iterations: int,
         noLog: bool = True,
         noLogVerbose: bool = True,
-        perfTimer: PerformanceTimer | None = None
+        perfTimer: PerformanceTimer | None = None,
+        cp_sat_config: CpSatConfig | None = None,
 ) -> GroupedKnapsackResult:
     """
     Solve shared tile-plan options with the legacy MKCP grouping plus greedy tile-conflict repair flow.

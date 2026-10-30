@@ -50,6 +50,13 @@ class BotPathingUtils:
     def continue_cur_path(bot: EklipZBot, threat: ThreatObj | None, defenseCriticalTileSet: typing.Set[Tile]) -> typing.Tuple[bool, Move | None]:
         '''
         returns shouldUseMove, move. if move is None and shouldUseMove is true, that means the curPath actually wants you to play None as the move.
+
+        Stored-path recovery contract: a small number of stale head moves (source tile
+        drained to 0/1 army or recaptured by an enemy) are popped so the surviving tail of
+        the path can still be executed. If more than 20 consecutive moves are stale the
+        stored plan is dead -- its planned army-flow never happened -- so curPath is
+        abandoned (curPath = None, curPathPrio = -1) and (False, None) is returned so the
+        caller falls through to fresh planning.
         :param bot:
         :param threat:
         :param defenseCriticalTileSet:
@@ -98,7 +105,21 @@ class BotPathingUtils:
             logbook.info(f"{inc}: doing made move thing? Path: {bot.curPath}")
             bot.curPath.pop_first_move()
             if inc > 20:
-                raise AssertionError("bitch, what you doin?")
+                # UnitTests.test_fix_continue_cur_path.ContinueCurPathStalePathTests
+                # (test_long_fully_stale_path_is_abandoned_instead_of_asserting and friends):
+                # When a stored path's plan never actually executed -- eg the head move's
+                # army was spent on a higher-priority move, or tiles along the path were
+                # recaptured -- EVERY remaining move sources from a 0/1-army or enemy tile.
+                # Long paths then legitimately need >20 stale pops in one call (observed
+                # crashing 4 live FFA games at turns ~75-77), so this assertion's invariant
+                # was wrong. Past the stale-pop limit the plan is unrecoverable, so abandon
+                # curPath the same way the other invalid-path branches below do
+                # (curPath = None, curPathPrio = -1) and let the caller replan.
+                logbook.warning(
+                    f"Abandoning curPath after popping {inc} stale moves whose sources were empty or enemy-owned. Path was {bot.curPath}")
+                bot.curPath = None
+                bot.curPathPrio = -1
+                return (False, None)
             try:
                 nextMove = bot.curPath.get_first_move()
             except:

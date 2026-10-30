@@ -107,7 +107,9 @@ class EklipZBot(object):
         self._spawn_cramped: bool = False
         self.general_safe_func_set = {}
         self.clear_moves_func: typing.Union[None, typing.Callable] = None
+        self.stop_holding_clear_moves_func: typing.Union[None, typing.Callable] = None
         self.surrender_func: typing.Union[None, typing.Callable] = None
+        self.holding_clear_moves: bool = False
         self._map: MapBase = None
         self.curPath: Path | None = None
         self.last_move: Move | None = None
@@ -566,6 +568,8 @@ class EklipZBot(object):
 
     # STEP2: Stay in EklipZBotV2.py. Tiny shell utility used broadly for perf/log timing display; keep local on the bot.
     def get_elapsed(self):
+        if self._map.is_chess_clock and self.lastTurnStartTime != 0 and self.last_init_turn == self._map.turn:
+            return round(time.perf_counter() - self.lastTurnStartTime, 3)
         return round(self.perf_timer.get_elapsed_since_update(self._map.turn), 3)
 
     # STEP2: Stay in EklipZBotV2.py. Core turn initialization/orchestration entrypoint spanning trackers, analyzers, communications, targeting, and caches; keep on shell and delegate sub-steps later.
@@ -925,7 +929,10 @@ class EklipZBot(object):
         # even though it thinks it is making sane moves' issue. If we seem to have dropped a move, clear moves on
         # the server before sending more moves to prevent moves from backing up and getting executed later.
         if self._map.turn - 1 in self.history.move_history:
-            if BotRepetition.dropped_move(self):
+            # In chess clock mode we explicitly manage clear_moves through BotHost and cannot send clear_moves
+            # while start_holding_clear_moves is active, so never treat a previous turn as a dropped move.
+            dropped = False if self._map.is_chess_clock else BotRepetition.dropped_move(self)
+            if dropped:
                 matrix = MapMatrix(self._map, True, emptyVal=False)
                 self.viewInfo.add_map_zone(matrix, (255, 200, 0), alpha=40)
                 msg = "(Dropped move)... Sending clear_moves..."
@@ -981,6 +988,14 @@ class EklipZBot(object):
                 else:
                     self.force_far_gathers_sleep_turns -= 1
 
+    def _stop_holding_clear_moves(self, move: Move | None) -> Move | None:
+        """If the server is still holding clear-moves for us and we are about to return a real move, release the hold first."""
+        if move is not None and self.holding_clear_moves:
+            self.holding_clear_moves = False
+            if self.stop_holding_clear_moves_func is not None:
+                self.stop_holding_clear_moves_func()
+        return move
+
     # STEP2: Stay in EklipZBotV2.py. Primary turn move-selection entrypoint that sequences prep, lag handling, path recalculation, and final pick; keep as shell orchestration.
     def select_move(self, is_lag_move=False) -> Move | None:
         self.init_turn()
@@ -998,12 +1013,12 @@ class EklipZBot(object):
             matrix = MapMatrix(self._map, True, emptyVal=False)
             self.viewInfo.add_map_zone(matrix, (250, 140, 0), alpha=25)
 
-        if self._map.turn <= 1:
+        if self._map.turn == 0 or (self._map.turn <= 1 and not self._map.is_chess_clock):
             # bypass divide by 0 error instead of fixing it
-            return None
+            return self._stop_holding_clear_moves(None)
 
         if self._map.remainingPlayers == 1:
-            return None
+            return self._stop_holding_clear_moves(None)
 
         self.perform_move_prep(is_lag_move=is_lag_move)
 
@@ -1012,17 +1027,17 @@ class EklipZBot(object):
             for move in moves:
                 if move is None:
                     self.info(f'LAG CONTINUING NONE MOVE PLANNED')
-                    return None
+                    return self._stop_holding_clear_moves(None)
                 if move.source.player == self.general.player and move.source.army > 3:
                     self.info(f'LAG CONTINUING PLANNED MOVES {move}')
-                    return move
+                    return self._stop_holding_clear_moves(move)
 
         if self._map.turn - 1 in self.history.move_history:
             lastMove = self.history.move_history[self._map.turn - 1][0]
             if BotRepetition.dropped_move(self) and self._map.turn <= 50 and lastMove is not None:
                 if lastMove.source != self.general:
                     self.viewInfo.add_info_line(f're-performing dropped first-25 non-general move {str(lastMove)}')
-                    return lastMove
+                    return self._stop_holding_clear_moves(lastMove)
                 else:
                     # force reset the expansion plan so we recalculate from general.
                     self.city_expand_plan = None
@@ -1042,7 +1057,7 @@ class EklipZBot(object):
             if move != pathNext and pathNext is not None and move.dest != pathNext.source:
                 self.curPath = None
 
-        return move
+        return self._stop_holding_clear_moves(move)
 
     # STEP2: Stay in EklipZBotV2.py. Central post-prep decision tree coordinating combat, defense, city capture, expansion, and continuation logic; keep on shell and delegate subroutines out.
     def pick_move_after_prep(self, is_lag_move=False):
@@ -1877,6 +1892,8 @@ class EklipZBot(object):
             self._lastTargetPlayerCityCount = 0
             if self.targetPlayer >= 0:
                 self._lastTargetPlayerCityCount = self.opponent_tracker.get_current_team_scores_by_player(self.targetPlayer).cityCount
+
+        self.captureLeafMoves = BotExpansionOps.prioritize_expansion_leaves(self, self.captureLeafMoves, distPriorityMap=self.board_analysis.shortest_path_distances)
 
     def _calculate_target_player_considering_dead_current_target(self) -> int:
         """Return the next target player, preferring the current dead target's living teammate before normal targeting."""

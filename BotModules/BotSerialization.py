@@ -289,7 +289,24 @@ class BotSerialization:
                 bot.armyTracker.seen_tiles_by_player[player.index] = BotSerialization.convert_string_to_bool_map_matrix(bot, resume_data[key])
 
     @staticmethod
-    def convert_tile_set_to_string(bot: EklipZBot, tiles: typing.Set[Tile]) -> str:
+    def convert_tile_set_to_string(bot: EklipZBot, tiles: typing.Set[Tile] | None) -> str:
+        """
+        Serialize a tile set to a per-tile '0'/'1' bitmap string (tile_index order).
+
+        @param bot: The bot whose _map defines the tile ordering.
+        @param tiles: The tile set to serialize, or None (serializes as the empty/all-zero bitmap).
+        @return: A string of '0'/'1' characters, one per tile in bot._map.get_all_tiles().
+        """
+        # UnitTests/test_fix_serialization_none.py SerializationNoneTests.test_should_serialize_none_tile_set_as_empty_bitmap:
+        # The txtmap dump (BotRendering.dump_turn_data_to_string) serializes bot.defensive_spanning_tree and
+        # bot.friendly_city_spanning_tree through here. bot_ek0x45.py intentionally resets both attributes to None
+        # after the bot captures a friendly city so they get rebuilt by the next spanning-tree recompute pass; when
+        # the per-turn dump scope runs before that recompute (the analyze sections are skipped on some turns), this
+        # function received None and crashed with TypeError, trashing the field in the txtmap. The txtmap dump is a
+        # debug/resume facility and must never crash, so a None set is serialized as the empty (all-zero) bitmap,
+        # which deserializes back to an empty set via convert_string_to_tile_set.
+        if tiles is None:
+            tiles = set()
         return ''.join(["1" if tile in tiles else "0" for tile in bot._map.get_all_tiles()])
 
     @staticmethod

@@ -11,6 +11,7 @@ from BoardAnalyzer import BoardAnalyzer
 from BotModules.BotCombatOps import BotCombatOps
 from CityAnalyzer import CityAnalyzer
 from Directives import Timings
+from Models import Move
 from Path import Path
 from Sim.GameSimulator import GameSimulatorHost
 from Strategy.OpponentTracker import OpponentTracker
@@ -304,4 +305,49 @@ class AllInTests(TestBase):
         self.begin_capturing_logging()
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
         self.assertNoFriendliesKilled(map, general)
+
+    def test_should_not_idle_during_projected_loss_all_in_with_uncertain_enemy_general(self) -> None:
+        """
+        Regression for Human.exe-1v1-2026-11-09_10-20-09---TtVz86M3i: at t133 the WCA
+        projected-round-loss check activated KillAllIn and the bot idled t134-149.
+        projected_loss_all_in_active is never persisted into txtmaps, so it is
+        restored manually to reproduce the live path. Note the replay recalculates
+        3 candidate enemy general positions vs 8 in the live game, so this exercises
+        the same idle outcome but not the >6-alt-positions skip branch.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_idle_during_projected_loss_all_in_with_uncertain_enemy_general___TtVz86M3i---1--134.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 134, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=134)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.assertTrue(bot.is_all_in_losing)
+        bot.win_condition_analyzer.projected_loss_all_in_active = True
+        bot.win_condition_analyzer.projected_loss_all_in_target = playerMap.GetTile(15, 11)
+        self.assertTrue(bot.win_condition_analyzer.projected_loss_all_in_active)
+
+        def assert_bot_made_a_move_this_turn() -> None:
+            """Between-turns hook: assert the bot returned a move for the turn just decided."""
+            turn: int = simHost.sim.turn
+            altGenCount: int = -1
+            if 0 <= bot.targetPlayer < len(bot.alt_en_gen_positions):
+                altGenCount = len(bot.alt_en_gen_positions[bot.targetPlayer])
+            decidedMoves: typing.List[Move] = bot.history.move_history.get(turn, [])
+            decidedMove: Move | None = decidedMoves[-1] if len(decidedMoves) > 0 else None
+            logbook.info(
+                f'idle-repro check t{turn}: '
+                f'projected_loss_all_in_active={bot.win_condition_analyzer.projected_loss_all_in_active} '
+                f'altEnGenPositions={altGenCount} decidedMove={decidedMove}')
+            self.assertIsNotNone(decidedMove, f'bot returned no move on turn {turn} during projected-loss all-in')
+
+        simHost.run_between_turns(assert_bot_made_a_move_this_turn)
+
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
 

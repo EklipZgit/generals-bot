@@ -270,7 +270,9 @@ class BotHostBase(object):
         logbook.info(f'TURN_START_IDENTITY turn={currentMap.turn} map.player_index={currentMap.player_index}')
         for generalIndex, generalTile in enumerate(currentMap.generals):
             if generalTile is None:
-                logbook.info(f'TURN_START_IDENTITY gIdx {generalIndex} = None')
+                # Log noise: ~1.2% of a live game log was 16 'gIdx N = None' lines per turn. Uncomment when debugging general identity.
+                # logbook.info(f'TURN_START_IDENTITY gIdx {generalIndex} = None')
+                pass
             else:
                 logbook.info(f'TURN_START_IDENTITY gIdx {generalIndex} = {generalTile.x},{generalTile.y} p{generalTile.player}')
 
@@ -374,7 +376,8 @@ class BotHostLiveServer(BotHostBase):
             noLog: bool,
             noTextLog: bool = False,
             ctx: DefaultContext | None = None,
-            mgr: SyncManager | None = None
+            mgr: SyncManager | None = None,
+            server: str | None = None
     ):
         super().__init__(name, self.place_move, self.ping_server_tile, self.send_server_chat, gameType, noUi, alignBottom, alignRight, noLog=noLog, ctx=ctx, mgr=mgr)
 
@@ -391,7 +394,8 @@ class BotHostLiveServer(BotHostBase):
             userId=userId,
             gameType=self._game_type,
             privateRoomID=roomId,
-            public_server=isPublic)
+            public_server=isPublic,
+            server=server)
 
         self.eklipz_bot.clear_moves_func = self.bot_client.send_clear_moves
         self.eklipz_bot.stop_holding_clear_moves_func = self.bot_client.send_stop_holding_clear_moves
@@ -435,7 +439,7 @@ class BotHostLiveServer(BotHostBase):
             self.notify_game_over()
 
 
-def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog: bool = False, noTextLog: bool = False):
+def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog: bool = False, noTextLog: bool = False, server: str | None = None):
     loggingProc = None
     mgr = None
     ctx: DefaultContext = multiprocessing.get_context('spawn')
@@ -464,7 +468,7 @@ def run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, ali
 
     try:
         logbook.info("newing up bot host")
-        host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog=noLog, noTextLog=noTextLog, ctx=ctx, mgr=mgr)
+        host = BotHostLiveServer(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog=noLog, noTextLog=noTextLog, ctx=ctx, mgr=mgr, server=server)
 
         logbook.info("running bot host")
         host.run()
@@ -493,7 +497,14 @@ if __name__ == '__main__':
     parser.add_argument('--no-ui', action='store_true', help="Hide UI (no game viewer)")
     parser.add_argument('--no-log', action='store_true', help="Skip all logging")
     parser.add_argument('--no-text-log', action='store_true', help="Skip bot text logging but keep txtmaps and PNGs")
-    parser.add_argument('--public', action='store_true', help="Run on public (not bot) server")
+    # UnitTests/test_ServerSelection.py::test_every_parser_accepts_server_and_defaults_to_bot
+    server_group = parser.add_mutually_exclusive_group()
+    server_group.add_argument(
+        '-server', '--server', choices=('local', 'bot', 'na'), default='bot',
+        help='Server destination (default: bot)')
+    server_group.add_argument(
+        '--public', dest='server', action='store_const', const='na',
+        help='Compatibility alias for -server na')
     args = vars(parser.parse_args())
 
     name: str = args['name']
@@ -502,11 +513,11 @@ if __name__ == '__main__':
         userId = None
     gameType: str = args['gameType']
     roomId = args['roomID']
-    isPublic: bool = args['public']
+    isPublic: bool = args['server'] == 'na'
     noUi = args['no_ui']
     noLog = args['no_log']
     noTextLog = args['no_text_log']
     alignBottom: bool = args['bottom']
     alignRight: bool = args['right']
 
-    run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog, noTextLog)
+    run_bothost(name, gameType, roomId, userId, isPublic, noUi, alignBottom, alignRight, noLog, noTextLog, server=args['server'])

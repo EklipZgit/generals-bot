@@ -68,6 +68,7 @@ class TestBase(unittest.TestCase):
         """Set by get_debug_render_bot"""
 
         self.map: MapBase = None
+        self.use_v2_interception: bool = False
         ArmyInterceptor.DEBUG_BYPASS_BAD_INTERCEPTIONS = False
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
@@ -2594,7 +2595,11 @@ class TestBase(unittest.TestCase):
         analysis.rebuild_intergeneral_analysis(enemyGeneral)
 
         self.begin_capturing_logging()
-        interceptor = ArmyInterceptor(map, analysis, useDebugLogging=useDebugLogging)
+        interceptor = ArmyInterceptor(
+            map,
+            analysis,
+            useDebugLogging=useDebugLogging,
+            useV2Interception=self.use_v2_interception)
         return interceptor
 
     def get_interception_plan(
@@ -3256,6 +3261,5 @@ class TestBase(unittest.TestCase):
             runEach(map, general, enemyGeneral, mapFileName)
 
         self.execute_with_random_maps(runCount, mapShuffler, mapFilterer)
-
 
 

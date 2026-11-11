@@ -102,3 +102,6 @@ def test_grouped_knapsack__logged_repro(self):
 2. Do not use `python - <<'PY'` or any bash-style heredoc; PowerShell has no heredoc and this can drop into an interactive Python REPL that appears to hang.
 3. When the active terminal is the VS Code Native Python REPL (`>>>` prompt), do not run PowerShell syntax (`$env:`, `Get-ChildItem`, `;` separators, `py_compile` with PS-flags, etc.) there. It parses as Python and then waits for input.
 4. For quick inline execution, write a temporary `.py` file to `C:\cascade-debug-output\generals-bot` and run it with the correct Python interpreter from a PowerShell terminal; use `cmd /c` with OS-level redirection only when the active terminal is PowerShell/cmd.
+--- Live game log analysis ---
+1. To analyze live game log folders (txtmaps + ~40MB bot log), use the debug-live-game-logs skill (.devin/skills/debug-live-game-logs/SKILL.md) and the LiveGameAnalysis/ tools (GameStatsGenerator.py, GameLogTool.py). Never read the raw log file directly.
+

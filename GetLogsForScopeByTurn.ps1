@@ -135,7 +135,7 @@ function Get-TurnTimingsSummary {
 }
 
 # Regex patterns
-$turnPattern = '(?m)^\s*~~~\s*Turn (\d+)\s+\(([\d.]+)\)\s*~~~\s*$'
+$turnPattern = '(?m)^[ \t]*~~~[ \t]*(?:Turn (\d+)[ \t]+\(([\d.]+)\)[ \t]*~~~|(?:\r?\n)[ \t]*Turn (\d+)[ \t]+\(([\d.]+)\)[ \t]*(?:\r?\n)[ \t]*~~~)[ \t]*\r?$'
 $beginPattern = '(?m)^\s*Beginning t\d+:\s([^\(]+)\s*\(([^\)]+)\)'
 $completePattern = '(?m)^\s*Complete t\d+:\s\(([^\)]+)\)\s*([^\s]+)'
 $vvvPattern = '(?m)^\s*vvv--------------vvv\s*$'
@@ -159,8 +159,13 @@ Write-Host "Found $($turns.Count) turns in log file"
 
 for ($turnIndex = 0; $turnIndex -lt $turns.Count; $turnIndex++) {
     $turn = $turns[$turnIndex]
-    $turnNumber = $turn.Groups[1].Value
-    $turnTiming = $turn.Groups[2].Value
+    if ($turn.Groups[1].Success) {
+        $turnNumber = $turn.Groups[1].Value
+        $turnTiming = $turn.Groups[2].Value
+    } else {
+        $turnNumber = $turn.Groups[3].Value
+        $turnTiming = $turn.Groups[4].Value
+    }
     $turnStartIndex = $turn.Index
 
     # Find the next turn or end of file

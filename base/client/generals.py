@@ -24,34 +24,30 @@ from websocket import create_connection, WebSocketConnectionClosedException
 import BotLogging
 from .map import MapBase, MODIFIER_TORUS, MODIFIER_WATCHTOWER, MODIFIER_CHESS_CLOCK
 
-WSPREFIX = "wss"
-HTTPPREFIX = "https"
-BOTWSPREFIX = "wss"
-BOTHTTPPREFIX = "https"
-# _ENDPOINT_BOT = "://bot.generals.io/socket.io/?EIO=4"
-_ENDPOINT_BOT = "://botws.generals.io/socket.io/?EIO=4"
-_ENDPOINT_LOCAL = "://localhost:8080/socket.io/?EIO=4"
-# _ENDPOINT_PUBLIC = "://generals.io/socket.io/?EIO=4"
-_ENDPOINT_PUBLIC = "://ws.generals.io/socket.io/?EIO=4"
-_ENDPOINT_LAN = "://192.168.1.17:8080/socket.io/?EIO=4"
+# UnitTests/test_ServerSelection.py::test_clients_select_endpoints_without_mutating_global_state
+# Server selection belongs to each connection, never mutable module-level overrides.
+def resolve_server(server: str | None = None, public_server: bool = False) -> str:
+    """Resolve explicit selection, retaining public_server as a compatibility alias."""
+    selected = server if server is not None else ('na' if public_server else 'bot')
+    if selected not in ('local', 'bot', 'na'):
+        raise ValueError(f'Invalid server {selected!r}; expected local, bot, or na.')
+    return selected
 
-# force bot server bots to local:
-#_ENDPOINT_BOT = _ENDPOINT_LOCAL
-#BOTWSPREFIX = "ws"
-#BOTHTTPPREFIX = "http"
 
-# # force bot server bots to lan:
-# _ENDPOINT_BOT = _ENDPOINT_LAN
-# BOTWSPREFIX = "ws"
-# BOTHTTPPREFIX = "http"
-
-# # force public bots to lan:
-# _ENDPOINT_PUBLIC = _ENDPOINT_LAN
-# WSPREFIX = "ws"
-# HTTPPREFIX = "http"
-
-# # force public bots to bot
-# _ENDPOINT_PUBLIC = _ENDPOINT_BOT
+def get_server_endpoint(server: str, transport: str = 'websocket') -> str:
+    """Build the selected websocket or polling endpoint without opening a connection."""
+    selected = resolve_server(server)
+    if transport not in ('websocket', 'polling'):
+        raise ValueError(f'Invalid transport {transport!r}.')
+    if selected == 'local':
+        origin = 'http://localhost:8080'
+    elif selected == 'bot':
+        origin = 'https://botws.generals.io'
+    else:
+        origin = 'https://ws.generals.io'
+    if transport == 'websocket':
+        origin = origin.replace('http', 'ws', 1)
+    return f'{origin}/socket.io/?EIO=4&transport={transport}'
 
 _LOG_WS = True
 
@@ -77,7 +73,10 @@ class GeneralsClient(object):
             mode="1v1",
             gameid: str | None =None,
             force_start=False,
-            public_server=False):
+            public_server=False,
+            server: str | None = None):
+        self.server: str = resolve_server(server, public_server)
+        public_server = self.server == 'na'
         self.terminated: bool = False
         """Prevent double-termination"""
 
@@ -253,14 +252,16 @@ class GeneralsClient(object):
             _spawn(self._send_forcestart)
         logbook.debug("Starting heartbeat thread")
 
-    def get_endpoint_ws(self):
-        return (WSPREFIX if self.public_server else BOTWSPREFIX) + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=websocket"
+    def get_endpoint_ws(self) -> str:
+        """Return this connection's websocket endpoint."""
+        return get_server_endpoint(self.server)
 
-    def get_endpoint_requests(self):
-        return (HTTPPREFIX if self.public_server else BOTHTTPPREFIX) + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC) + "&transport=polling"
+    def get_endpoint_requests(self) -> str:
+        """Return the polling endpoint for the same server selection."""
+        return get_server_endpoint(self.server, 'polling')
 
     def get_endpoint_http_api(self) -> str:
-        baseUrl = (HTTPPREFIX if self.public_server else BOTHTTPPREFIX) + (_ENDPOINT_BOT if not self.public_server else _ENDPOINT_PUBLIC)
+        baseUrl = self.get_endpoint_requests()
         endpointUrl = baseUrl.split('/socket.io/')[0] + '/api/'
         return endpointUrl
 
@@ -506,6 +507,13 @@ class GeneralsClient(object):
                                 "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write chat message to file")
                 elif " captured " in chat_msg["text"]:
                     yield "player_capture", chat_msg
+                elif (chat_msg.get("eventType") == "general_trade"
+                        and self.start_data is not None
+                        and chat_room == self.start_data.get('chat_room')):
+                    # Tests: Tests/test_FfaGeneralTrade.py - a system
+                    # general_trade notification (no username sender, our
+                    # game's chat room) is a real server event, not chat.
+                    yield "general_trade", chat_msg
                 else:
                     logbook.info("Sys Message: %s" % chat_msg["text"])
                     if self.writingFile or (

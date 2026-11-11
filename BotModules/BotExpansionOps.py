@@ -33,6 +33,7 @@ from Interfaces import TilePlanInterface
 from MapMatrix import MapMatrix, MapMatrixInterface
 from Path import Path, MoveListPath
 from StrategyModels import ExpansionPotential
+from Strategy.RoundProjection import project_round_outcome
 from Strategy.WinConditionAnalyzer import WinCondition
 from Algorithms import WatchmanRouteUtils
 from ViewInfo import TargetStyle, PathColorer
@@ -545,7 +546,14 @@ class BotExpansionOps:
             overrideTurns: int = -1,
             includeExtraGenAndCityArmy: bool = False,
             skip_remaining_time_check: bool = False,
+            includeNeutralCityCapture: bool = True,
     ) -> ExpansionPotential:
+        """
+        @param includeNeutralCityCapture: when False, omit only the neutral-city
+        capture option (bot.city_capture_plan_option, or quick-kill whose target is
+        neutral); used by the CITY_ROUND_OPPORTUNITY_COST affordability rebuild in
+        Tests/test_CityRoundDecisions.py::test_should_expand_instead_of_committing_to_slow_neutral_city_t115
+        """
         territoryMap = bot.territories.territoryMap
 
         numDanger = 0
@@ -617,14 +625,21 @@ class BotExpansionOps:
             for option in interceptOptionsToLog:
                 i += 1
                 BotExpansionOps._log_intercept_option_info(bot, option, option in botInfoInterceptOptions and i < 9)
-            if bot.city_capture_plan_option is not None:
+            # only omit the city capture option when its actual target is neutral;
+            # an enemy-city capture option must still be offered either way.
+            if bot.city_capture_plan_option is not None and (
+                    includeNeutralCityCapture
+                    or not BotExpansionOps._option_targets_neutral_tile(bot.city_capture_plan_option)):
                 addlOptions.append(bot.city_capture_plan_option)
                 bot.info(f'opt ntCity {bot.city_capture_plan_option.econValue / max(bot.city_capture_plan_option.length, 1):.2f} ({bot.city_capture_plan_option.econValue:.1f}e/{bot.city_capture_plan_option.length}t) {str(bot.city_capture_plan_option)}')
             contestCityPlanOption = bot.contest_city_plan_option
             if contestCityPlanOption is not None:
                 addlOptions.append(contestCityPlanOption)
                 bot.info(f'opt enCity {contestCityPlanOption.econValue / max(contestCityPlanOption.length, 1):.2f} ({contestCityPlanOption.econValue:.1f}e/{contestCityPlanOption.length}t) {str(contestCityPlanOption)}')
-            if bot.quick_kill_city_plan_option is not None:
+            # only omit the quick-kill option when its actual target is also neutral
+            if bot.quick_kill_city_plan_option is not None and (
+                    includeNeutralCityCapture
+                    or not BotExpansionOps._option_targets_neutral_tile(bot.quick_kill_city_plan_option)):
                 opt = bot.quick_kill_city_plan_option
                 if bot.quick_kill_city_plan_option.length > bot._map.remainingCycleTurns:
                     shortOpt = BotPathingUtils.get_truncated_expansion_option(bot.quick_kill_city_plan_option, bot._map.remainingCycleTurns)
@@ -1014,7 +1029,125 @@ class BotExpansionOps:
         for path in plan.all_paths:
             plan.preferred_tiles.update(path.tileSet)
 
+        if includeNeutralCityCapture:
+            # Tests/test_CityRoundDecisions.py::test_should_expand_instead_of_committing_to_slow_neutral_city_t115
+            # If this plan commits the round to buying a neutral city, verify the
+            # purchase is affordable in material terms and rebuild once without the
+            # city when it dominates on both projected tiles and army.
+            plan = BotExpansionOps._reject_unaffordable_neutral_city_capture_plan(
+                bot, plan, expansionNegatives, pathColor,
+                overrideTurns, includeExtraGenAndCityArmy, skip_remaining_time_check)
+
         return plan
+
+    @staticmethod
+    def _reject_unaffordable_neutral_city_capture_plan(
+            bot: EklipZBot,
+            plan: ExpansionPotential,
+            expansionNegatives: typing.Set[Tile],
+            pathColor: typing.Tuple[int, int, int],
+            overrideTurns: int,
+            includeExtraGenAndCityArmy: bool,
+            skip_remaining_time_check: bool,
+    ) -> ExpansionPotential:
+        """
+        Opportunity-cost affordability check for a selected neutral-city capture.
+        When buying the city projects to leave our end-round army below the
+        enemy's (Tests/test_CityRoundDecisions.py t115 repro), rebuild the plan once
+        without the neutral-city option; keep the rebuild only when it dominates
+        on BOTH projected tiles and army. This is not a panic all-in and does not
+        run on FFA (>2-team) boards where the enemy projection is ambiguous.
+        """
+        selectedOption = plan.selected_option
+        if selectedOption is None or bot.enemy_expansion_plan is None:
+            return plan
+        if not (bot._map.remainingPlayers == 2 or bot._map.is_2v2):
+            return plan
+        if bot.targetPlayer == -1:
+            return plan
+
+        targetTile = BotExpansionOps._get_option_target_tile(selectedOption)
+        logbook.info(
+            f'CITY_ROUND_OPPORTUNITY_COST check turn={bot._map.turn} '
+            f'selectedType={type(selectedOption).__name__} selected={selectedOption} '
+            f'target={targetTile} targetIsCity={None if targetTile is None else targetTile.isCity} '
+            f'targetPlayer={None if targetTile is None else targetTile.player} '
+            f'enemyPlan={len(bot.enemy_expansion_plan.all_paths)} remainingPlayers={bot._map.remainingPlayers}')
+        if targetTile is None or not targetTile.isCity or targetTile.player != -1:
+            return plan
+
+        ourStats = bot._map.get_team_stats(bot._map.player_index)
+        enemyStats = bot._map.get_team_stats(bot.targetPlayer)
+        candidate = project_round_outcome(
+            bot._map, ourStats, enemyStats, plan, bot.enemy_expansion_plan, bot.timings.cycleTurns)
+
+        if candidate.friendly.army >= candidate.enemy.army * 0.90:
+            return plan
+
+        # the rebuild mutates caller-owned and published state: expansionNegatives
+        # gains danger/blocking entries, and flow-expansion assigns
+        # bot.city_expand_plan (581), bot.flow_expander (683), bot.last_flow_expander
+        # and bot.last_flow_opt_collection (817-818). Snapshot them all and force a
+        # FRESH flow expander for the alternative so a kept candidate doesn't
+        # inherit the rejected build's contents.
+        savedNegatives = set(expansionNegatives)
+        savedFlowExpander = bot.flow_expander
+        savedLastFlowExpander = bot.last_flow_expander
+        savedLastFlowOptCollection = bot.last_flow_opt_collection
+        savedCityExpandPlan = bot.city_expand_plan
+        bot.flow_expander = None
+        alternative = BotExpansionOps.build_expansion_plan(
+            bot, 0.01, expansionNegatives, pathColor, overrideTurns,
+            includeExtraGenAndCityArmy, skip_remaining_time_check,
+            includeNeutralCityCapture=False)
+        alternativeOutcome = project_round_outcome(
+            bot._map, ourStats, enemyStats, alternative, bot.enemy_expansion_plan, bot.timings.cycleTurns)
+
+        rejected = (alternativeOutcome.friendly.tile_count > candidate.friendly.tile_count
+                    and alternativeOutcome.friendly.army > candidate.friendly.army)
+        logbook.info(
+            f'CITY_ROUND_OPPORTUNITY_COST turn={bot._map.turn} city={str(targetTile)} rejected={rejected} '
+            f'candTiles={candidate.friendly.tile_count} candCities={candidate.friendly.city_count} '
+            f'candArmy={candidate.friendly.army:.1f} candIncome={candidate.friendly.next_cycle_income:.1f} '
+            f'altTiles={alternativeOutcome.friendly.tile_count} altCities={alternativeOutcome.friendly.city_count} '
+            f'altArmy={alternativeOutcome.friendly.army:.1f} altIncome={alternativeOutcome.friendly.next_cycle_income:.1f} '
+            f'enemyTiles={candidate.enemy.tile_count} enemyCities={candidate.enemy.city_count} '
+            f'enemyArmy={candidate.enemy.army:.1f} enemyIncome={candidate.enemy.next_cycle_income:.1f}')
+        if not rejected:
+            # candidate kept: restore everything the exploratory rebuild mutated so
+            # all published fields correspond to the returned plan.
+            expansionNegatives.clear()
+            expansionNegatives.update(savedNegatives)
+            bot.flow_expander = savedFlowExpander
+            bot.last_flow_expander = savedLastFlowExpander
+            bot.last_flow_opt_collection = savedLastFlowOptCollection
+            bot.city_expand_plan = savedCityExpandPlan
+            return plan
+
+        # the selected neutral-city capture is rejected: clear the city-plan state
+        # so downstream logic doesn't keep honoring it, and drop curPath only when
+        # its tail is the rejected city.
+        bot.city_capture_plan_option = None
+        bot.city_capture_plan_tiles = set()
+        if bot.curPath is not None and bot.curPath.tail is not None and bot.curPath.tail.tile == targetTile:
+            bot.curPath = None
+            bot.curPathPrio = -1
+        return alternative
+
+    @staticmethod
+    def _get_option_target_tile(option: TilePlanInterface) -> Tile | None:
+        """Resolved end-target tile of a plan option (gather_target for gather plans, path tail otherwise)."""
+        if isinstance(option, GatherCapturePlan):
+            return option.gather_target
+        if option.tail is not None:
+            return option.tail.tile
+        return None
+
+    @staticmethod
+    def _option_targets_neutral_tile(option: TilePlanInterface) -> bool:
+        """True when the option's actual end target is a neutral-owned tile (player == -1)."""
+        target = BotExpansionOps._get_option_target_tile(option)
+        return target is not None and target.player == -1
 
     @staticmethod
     def build_enemy_expansion_plan(
@@ -1264,7 +1397,8 @@ class BotExpansionOps:
 
             points += distEnemyPoints / 3
 
-            logbook.info(f"leafMove {leafMove}, points {points:.2f} (distEnemyPoints {distEnemyPoints:.2f})")
+            # Log noise: this was ~3.4% of a live game log (every leaf move every turn). Uncomment when debugging leaf move prioritization.
+            # logbook.info(f"leafMove {leafMove}, points {points:.2f} (distEnemyPoints {distEnemyPoints:.2f})")
             queue.put((0 - points, leafMove))
         vals = []
         while queue.queue:

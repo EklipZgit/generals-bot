@@ -577,6 +577,26 @@ class EklipZBot(object):
         if self.last_init_turn == self._map.turn:
             return
 
+        # Tests: Tests/test_GeneralTrade.py - a mutual general capture detected
+        # by MapBase.update must rebind all general-dependent bot state BEFORE
+        # any general-dependent calculations run this turn.
+        trade = self._map.general_trade
+        if trade is not None:
+            # reconcile every traded pair's tracked army state for ANY
+            # detected trade - an observed trade between other players still
+            # requires the pair's stale tracked armies to be rebuilt.
+            for detectedTrade in self._map.general_trades:
+                self.armyTracker.handle_general_trade(detectedTrade)
+                self.opponent_tracker.handle_general_trade(detectedTrade)
+                # Tests: Tests/test_FfaGeneralTrade.py - observed trades need
+                # bot-level spatial caches (territory, alt gen positions,
+                # target expectations) swapped too; self trades are handled
+                # by the rebind below.
+                if detectedTrade.player != self._map.player_index and detectedTrade.opponent != self._map.player_index:
+                    BotEventHandlers.handle_observer_general_trade(self, detectedTrade)
+            if trade.player == self._map.player_index and self.general is not self._map.generals[self._map.player_index]:
+                BotEventHandlers.handle_general_trade(self)
+
         self.quick_kill_city_plan_option = None
         self.contest_city_plan_option = None
 
@@ -1702,7 +1722,11 @@ class EklipZBot(object):
                     targets.extend(t for t in self._map.get_all_tiles() if t.player == -1 and not t.isObstacle)
                 negatives = defenseCriticalTileSet.copy()
                 negatives.update(self.target_player_gather_targets)
-                turns = self.timings.launchTiming - self.timings.get_turn_in_cycle(self._map.turn)
+                # Tests/test_AllIn.py::test_should_not_idle_during_projected_loss_all_in_with_uncertain_enemy_general
+                # launchTiming - turnInCycle goes negative once the cycle is past
+                # launch; roll the horizon to the NEXT launch so the emergency
+                # gather always gets a positive turn budget instead of depth<=0.
+                turns = max(1, (self.timings.launchTiming - self.timings.get_turn_in_cycle(self._map.turn)) % self.timings.cycleTurns)
                 gathMove = BotGatherOps.timing_gather(
                 self,
                 targets,

@@ -28,7 +28,8 @@ class GeneralsClientHost(object):
             userId=None,
             gameType="private",
             privateRoomID: str | None = None,
-            public_server=False
+            public_server=False,
+            server: str | None = None
     ):
         # Save Config
 
@@ -53,7 +54,9 @@ class GeneralsClientHost(object):
         self._userId = userId
         self._gameType = gameType
         self._privateRoomID = privateRoomID
-        self._public_server = public_server
+        # UnitTests/test_ServerSelection.py::test_server_reaches_every_client_constructor_including_rejoins
+        self._server: str = generals.resolve_server(server, public_server)
+        self._public_server = self._server == 'na'
 
         self._running = True
 
@@ -104,7 +107,7 @@ class GeneralsClientHost(object):
 
     def _start_game_thread(self):
         # Create Game (spawns other threads and stuff...)
-        self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server)
+        self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server, server=self._server)
 
         logbook.info("game thread start...?")
         updateLoopExitReason = "get_updates generator exhausted without exception"
@@ -326,6 +329,11 @@ class GeneralsClientHost(object):
             self._make_result(updateType, update)
         elif updateType == "game_lost":
             self._make_result(updateType, update)
+        elif updateType == "general_trade":
+            # Tests: Tests/test_FfaGeneralTrade.py - queue the server trade
+            # notification into the map; it applies on the next game_update.
+            self._map.handle_general_trade_message(update)
+            return False
         elif updateType == "player_capture":
             # NOTE player captures happen BEFORE the map update that shows you the updated tiles comes through.
             # TODO change this to PREPARE the map for a player capture, let it use the map update, and

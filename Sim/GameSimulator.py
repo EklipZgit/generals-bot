@@ -241,8 +241,44 @@ class GameSimulator(object):
         # Use the move resolver to determine the order of moves
         move_order = self.move_resolver.determine_move_order(valid_moves)
 
-        # Execute moves in the determined order
-        for player, move in move_order:
+        # Execute moves in the determined order, consuming both moves of a
+        # mutual general capture (general trade) atomically when found.
+        # Tests: Tests/test_GeneralTrade.py test_sim__general_trade__world_state
+        consumed_move_indices: typing.Set[int] = set()
+        for moveIndex, (player, move) in enumerate(move_order):
+            if moveIndex in consumed_move_indices:
+                continue
+            tradePartnerIndex = self._get_mutual_general_trade_partner(move_order, moveIndex, consumed_move_indices)
+            if tradePartnerIndex != -1:
+                partnerPlayer, partnerMove = move_order[tradePartnerIndex]
+                logbook.info(f'SIM executing general trade: p{player} {move.source.x},{move.source.y}->{move.dest.x},{move.dest.y} and p{partnerPlayer} {partnerMove.source.x},{partnerMove.source.y}->{partnerMove.dest.x},{partnerMove.dest.y}')
+                self._execute_general_trade(player, move, partnerPlayer, partnerMove)
+                # Tests: Tests/test_FfaGeneralTrade.py - mirror the server's
+                # general_trade system message to every player's map before
+                # the update that applies the swap (server event turn T,
+                # effect T+1), same ingestion path as the live client. In
+                # SilentWar the payload is anonymous (no pair) exactly like
+                # the real server - the sim never leaks the pair through a
+                # hidden channel.
+                if self.sim_map.has_silent_war:
+                    tradePayload = {
+                        'text': 'Two players traded generals.',
+                        'turn': self.turn,
+                        'eventType': 'general_trade',
+                    }
+                else:
+                    tradePayload = {
+                        'text': f'{self.sim_map.usernames[player]} and {self.sim_map.usernames[partnerPlayer]} traded generals.',
+                        'multiText': [self.sim_map.usernames[player], ' and ', self.sim_map.usernames[partnerPlayer], ' traded generals.'],
+                        'multiColors': [player, None, partnerPlayer, None],
+                        'turn': self.turn,
+                        'eventType': 'general_trade',
+                    }
+                for p in self.players:
+                    if p.map is not None:
+                        p.map.handle_general_trade_message(tradePayload)
+                consumed_move_indices.add(tradePartnerIndex)
+                continue
             self._execute_move(player, move)
 
         self.turn = self.turn + 1
@@ -504,6 +540,161 @@ class GameSimulator(object):
 
             elif tile.army != tile.delta.oldArmy:
                 tile.delta.armyDelta = tile.army - tile.delta.oldArmy
+
+    def _get_mutual_general_trade_partner(self, move_order: typing.List[typing.Tuple[int, Move]], moveIndex: int, consumed_move_indices: typing.Set[int]) -> int:
+        """
+        Checks whether the move at moveIndex targets an enemy general AND some
+        later (not yet executed) move of that enemy would likewise capture this
+        player's general. Mirrors Game.js getMutualGeneralSwapMoveIndex /
+        checkAttackValid / wouldAttackCaptureGeneral.
+        Tests: Tests/test_GeneralTrade.py test_sim__general_trade__world_state,
+        test_sim__general_trade__negative_control_tie_fails,
+        test_sim__general_trade__negative_control_allied.
+
+        @param move_order: prioritized (playerIndex, move) list.
+        @param moveIndex: index in move_order of the candidate move.
+        @param consumed_move_indices: indices already consumed by a trade.
+        @return: index of the partner move in move_order, or -1.
+        """
+        player_index, move = move_order[moveIndex]
+        player = self.players[player_index]
+        if player.dead:
+            return -1
+        destTile = self.sim_map.GetTile(move.dest.x, move.dest.y)
+        if not destTile.isGeneral or destTile.isMountain:
+            return -1
+        opponentIndex = destTile.player
+        if opponentIndex < 0 or opponentIndex == player_index:
+            return -1
+        if self.teams[opponentIndex] == self.teams[player_index]:
+            return -1
+        if self.sim_map.generals[opponentIndex] is not destTile:
+            return -1
+        playerGen = self.sim_map.generals[player_index]
+        for otherIndex in range(moveIndex + 1, len(move_order)):
+            if otherIndex in consumed_move_indices:
+                continue
+            oPlayer, oMove = move_order[otherIndex]
+            if oPlayer != opponentIndex:
+                continue
+            if oMove.dest.x != playerGen.x or oMove.dest.y != playerGen.y:
+                continue
+            if not self._would_move_capture_general(player_index, move, oMove):
+                continue
+            if not self._would_move_capture_general(opponentIndex, oMove, move):
+                continue
+            return otherIndex
+        return -1
+
+    def _would_move_capture_general(self, player_index: int, move: Move, defender_move: Move) -> bool:
+        """
+        Mirrors Game.js wouldAttackCaptureGeneral/checkAttackValid: the source
+        must still be owned by the attacker, have an army > 1, not be a
+        mountain, and be orthogonally adjacent to the target; the sent army
+        must exceed the defense left on the target general (which is the
+        defender's own move reserve only when the defender's opposing move
+        starts ON that general).
+        """
+        srcTile = self.sim_map.GetTile(move.source.x, move.source.y)
+        destTile = self.sim_map.GetTile(move.dest.x, move.dest.y)
+        if srcTile.player != player_index:
+            return False
+        if srcTile.army <= 1:
+            return False
+        if srcTile.isMountain:
+            return False
+        # orthogonally adjacent via the map's movable links (respects torus /
+        # map modifiers instead of hard-coded Manhattan distance)
+        if destTile not in srcTile.movable:
+            return False
+        sentArmy = srcTile.army // 2 if move.move_half else srcTile.army - 1
+        defSrc = self.sim_map.GetTile(defender_move.source.x, defender_move.source.y)
+        if defSrc is destTile:
+            defenseArmy = (destTile.army + 1) // 2 if defender_move.move_half else 1
+        else:
+            defenseArmy = destTile.army
+        return sentArmy > defenseArmy
+
+    def _execute_general_trade(self, playerA: int, moveA: Move, playerB: int, moveB: Move) -> None:
+        """
+        Atomic mutual general capture (general trade), mirroring Game.js
+        executeMutualGeneralSwap (lines ~4167-4325): all non-general owned
+        tiles swap to the other player at ceil(army/2), attack source tiles
+        keep only ceil(reserve/2) where reserve is 1 for a full move or
+        ceil(army/2) for a half move, and each captured general transfers to
+        the attacker with its full unhalved leftover (sentArmy - defense),
+        remaining isGeneral (never a city, nobody dies, no capture stats).
+        Bonuses/increments for the new turn are applied afterwards by the
+        normal increment pass.
+        Tests: Tests/test_GeneralTrade.py test_sim__general_trade__world_state.
+        """
+        simMap = self.sim_map
+        genA = simMap.generals[playerA]
+        genB = simMap.generals[playerB]
+        srcA = simMap.GetTile(moveA.source.x, moveA.source.y)
+        srcB = simMap.GetTile(moveB.source.x, moveB.source.y)
+
+        reserveA = (srcA.army + 1) // 2 if moveA.move_half else 1
+        reserveB = (srcB.army + 1) // 2 if moveB.move_half else 1
+        sentA = srcA.army - reserveA
+        sentB = srcB.army - reserveB
+        defenseAtGenB = reserveB if srcB is genB else genB.army
+        defenseAtGenA = reserveA if srcA is genA else genA.army
+        capturedGenArmyB = max(0, sentA - defenseAtGenB)
+        capturedGenArmyA = max(0, sentB - defenseAtGenA)
+
+        playerObjA = self.players[playerA]
+        playerObjB = self.players[playerB]
+
+        # one pass over ORIGINAL ownership of both players: swap every
+        # non-general tile at ceil(army/2), with attack-source reserves used
+        # in place of the source's full army before halving.
+        for tile in simMap.get_all_tiles():
+            if tile.player != playerA and tile.player != playerB:
+                continue
+            if tile is genA or tile is genB:
+                continue
+            sourceArmy = tile.army
+            if tile is srcA:
+                sourceArmy = reserveA
+            elif tile is srcB:
+                sourceArmy = reserveB
+            tile.army = (sourceArmy + 1) // 2
+            if tile.player == playerA:
+                tile.player = playerB
+                self._stage_tile_captured_events(tile, playerObjB, playerObjA)
+            else:
+                tile.player = playerA
+                self._stage_tile_captured_events(tile, playerObjA, playerObjB)
+            self.tiles_updated_this_cycle.add(tile)
+
+        # captured generals keep isGeneral and get the unhalved leftovers
+        # (Tile.player setter asserts on general owner changes, so toggle the
+        # flag around it - the general identity itself is preserved by the trade)
+        genA.isGeneral = False
+        genA.player = playerB
+        genA.isGeneral = True
+        genA.army = capturedGenArmyA
+        self._stage_tile_captured_events(genA, playerObjB, playerObjA)
+        genB.isGeneral = False
+        genB.player = playerA
+        genB.isGeneral = True
+        genB.army = capturedGenArmyB
+        self._stage_tile_captured_events(genB, playerObjA, playerObjB)
+        self.tiles_updated_this_cycle.add(genA)
+        self.tiles_updated_this_cycle.add(genB)
+
+        # move deltas point attacker -> captured general (same convention as _execute_move)
+        srcA.delta.toTile = genB
+        genB.delta.fromTile = srcA
+        srcB.delta.toTile = genA
+        genA.delta.fromTile = srcB
+
+        # the generals array entries are swapped between the two players
+        simMap.generals[playerA] = genB
+        simMap.generals[playerB] = genA
+        simMap.players[playerA].general = genB
+        simMap.players[playerB].general = genA
 
 
 class GameSimulatorHost(object):

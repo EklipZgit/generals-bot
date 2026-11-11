@@ -61,12 +61,14 @@ class InterceptHarnessParams:
 
 
 class ArmyInterceptionUnitTests(TestBase):
+    USE_V2_INTERCEPTION: bool = False
     INNER_PATH_INTERCEPT_DEBUG_MAP_FILE = 'GameContinuationEntries/should_correctly_value_intercept_from_general___jzXGxMXQl---1--323.txtmap'
     INNER_PATH_INTERCEPT_DEBUG_TURN = 323
 
     def __init__(self, methodName: str = ...):
         MapBase.DO_NOT_RANDOMIZE = True
         super().__init__(methodName)
+        self.use_v2_interception = ArmyInterceptionUnitTests.USE_V2_INTERCEPTION
         # TestBase.GLOBAL_BYPASS_REAL_TIME_TEST = True
         TestBase.GLOBAL_BYPASS_RENDERING = True
 
@@ -810,6 +812,7 @@ class ArmyInterceptionUnitTests(TestBase):
         bot.info_render_board_analysis_choke_widths = True
         bot.info_render_army_emergence_values = False
         bot.army_interceptor.log_debug = True
+        bot.army_interceptor.use_v2_interception = self.use_v2_interception
         if clearCurPath:
             bot.curPath = None
 

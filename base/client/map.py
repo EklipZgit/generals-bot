@@ -9,6 +9,7 @@ from __future__ import annotations
 import itertools
 import json
 from copy import deepcopy
+from dataclasses import dataclass
 from base.client.tile import *
 
 import logbook
@@ -225,6 +226,48 @@ class Score(object):
         return f'p{self.player}{" DEAD" if self.dead else ""} {self.total} {self.tiles}t'
 
 
+@dataclass(slots=True)
+class GeneralTrade(object):
+    """
+    A mutual general capture (general trade) detected on this map for the
+    current turn: both players remain alive but exchanged generals and all
+    non-general owned land at halved armies. Detected in MapBase.update from
+    real tile deltas (a visible enemy isGeneral tile becoming ours while our
+    old general goes fog or flips to the enemy; or, for an observing player,
+    a living player whose visible land all flipped to a specific enemy while
+    they stayed alive on the scoreboard) - never from a simulator or server
+    notification.
+    Tests: Tests/test_GeneralTrade.py
+    """
+    player: int
+    """The player whose general was captured and who received the opponent's land (the local player when self-involved)."""
+    opponent: int
+    """The other player in the trade."""
+    old_general: Tile | None
+    """The tile that was `player`'s general and is now `opponent`'s general."""
+    new_general: Tile | None
+    """The tile that was `opponent`'s general and is now `player`'s general."""
+    turn: int = -1
+    """The map turn the trade took effect on (server event turn T applied at T+1)."""
+
+
+@dataclass(slots=True)
+class GeneralTradeNotification(object):
+    """
+    A parsed server general_trade system message (Game.js
+    buildGeneralTradeMessage): the pair usernames are resolved to player
+    indices at parse time via map.usernames. SilentWar anonymous events carry
+    no pair (player_a/player_b are None).
+    Tests: Tests/test_FfaGeneralTrade.py
+    """
+    server_turn: int
+    """The server turn the event was emitted on (the swap applies at server_turn + 1)."""
+    player_a: int | None
+    """One traded player's index, or None for anonymous events."""
+    player_b: int | None
+    """The other traded player's index, or None for anonymous events."""
+
+
 class DistanceMapper:
     def get_distance_between_or_none(self, tileA: Tile, tileB: Tile) -> int | None:
         raise NotImplementedError()
@@ -324,6 +367,19 @@ class MapBase(object):
         self._team_stats: typing.List[TeamStats | None] = []
         self.friendly_team: int = 0
         self.set_teams(teams)
+
+        self._pending_trade_notifications: typing.List[GeneralTradeNotification] = []
+        """Server general_trade messages queued to apply on their effect turn's update."""
+        self._applied_trade_keys: typing.Set[typing.Tuple[int, int, int]] = set()
+        """(effectTurn, loPlayer, hiPlayer) dedup keys for already-applied trades."""
+        self._pre_trade_generals: typing.List[Tile | None] = []
+        """Previous-turn generals refs snapshotted BEFORE raw tile updates, for original-identity swaps."""
+        self._pre_trade_city_counts: typing.List[int] = []
+        """Previous-turn city estimates, before raw update callbacks alter their owners."""
+        self._anonymous_trade_turns: typing.Set[int] = set()
+        """Server turns of anonymous (SilentWar) trade events, retained for dedup/record."""
+        self._self_trade_notification_opponent: int = -1
+        """Opponent hint from a server notification when the trade involves the local player."""
 
         self.pathable_tiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
@@ -455,6 +511,15 @@ class MapBase(object):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        # serialized maps saved before the trade-notification fields existed
+        # lack them; rehydrate explicit defaults (never hasattr checks)
+        self.__dict__.setdefault('general_trades', [])
+        self.__dict__.setdefault('_pending_trade_notifications', [])
+        self.__dict__.setdefault('_applied_trade_keys', set())
+        self.__dict__.setdefault('_pre_trade_generals', [])
+        self.__dict__.setdefault('_pre_trade_city_counts', [])
+        self.__dict__.setdefault('_anonymous_trade_turns', set())
+        self.__dict__.setdefault('_self_trade_notification_opponent', -1)
         self.notify_tile_captures = []
         self.notify_tile_deltas = []
         self.notify_city_found = []
@@ -643,6 +708,12 @@ AttributeError: 'Map' object has no attribute 'grid'
                     score = scores[p]
                     lastScore = last[p]
                     tileDelta = score.tiles - lastScore.tiles
+                    # Tests/test_FfaGeneralTrade.py::test_map__ffa_trade__city_estimates:
+                    # score observations from before/at a player's trade
+                    # describe the OLD territory's production, so they cannot
+                    # infer the current city's production at all.
+                    if any(priorTurn <= turn and p in (pA, pB) for turn, pA, pB in self._applied_trade_keys):
+                        continue
 
                     # print("player {} delta {}".format(player.index, delta))
                     if abs(tileDelta) <= 1 and not priorTurn % 50 == 0:  # ignore army bonus turns and other player captures
@@ -805,7 +876,96 @@ AttributeError: 'Map' object has no attribute 'grid'
 
     def update_turn(self, turn: int):
         self.turn = turn
+        # Tests: Tests/test_FfaGeneralTrade.py - raw tile updates rewrite and
+        # even CLEAR self.generals entries; snapshot the previous-turn
+        # references first so general trades can swap the ORIGINAL known
+        # general identities instead of already-overwritten refs.
+        self._pre_trade_generals = list(self.generals)
+        self._pre_trade_city_counts = [player.cityCount for player in self.players]
+        self._self_trade_notification_opponent = -1
+        self._anonymous_trade_turns = {turn for turn in self._anonymous_trade_turns if turn >= self.turn - 100}
         self.clear_deltas()
+        # reset each turn; repopulated by pending trade notifications and
+        # _detect_and_repair_general_trade inside update().
+        self.general_trade: GeneralTrade | None = None
+        self.general_trades: typing.List[GeneralTrade] = []
+
+    def handle_general_trade_message(self, message: typing.Dict[str, object]) -> None:
+        """
+        Parses a server general_trade system message into a typed
+        GeneralTradeNotification and queues it to apply at the map update for
+        server_turn + 1 (the event is emitted during server execution of turn
+        T and arrives with the T+1 game_update). Anonymous (SilentWar)
+        payloads carry no pair - the event turn is recorded for the dedup
+        record but never resolves a pair on its own.
+
+        Malformed server data (missing/wrong turn, non-distinct or unknown
+        pair names) raises ValueError rather than silently guessing.
+
+        Tests: Tests/test_FfaGeneralTrade.py
+        """
+        if message.get('eventType') != 'general_trade':
+            raise ValueError(f'handle_general_trade_message received non-trade payload {message}')
+        if 'username' in message:
+            raise ValueError(f'general_trade message carried a user sender - forged chat is not a server event {message}')
+        rawTurn = message.get('turn')
+        # bool is an int subclass - reject it explicitly as a malformed turn
+        if not isinstance(rawTurn, int) or isinstance(rawTurn, bool) or rawTurn < 0:
+            raise ValueError(f'general_trade message has invalid turn {rawTurn!r}')
+        serverTurn = rawTurn
+        playerA: int | None = None
+        playerB: int | None = None
+        multiText = message.get('multiText')
+        if multiText is not None and not (isinstance(multiText, list) and len(multiText) >= 3):
+            # a PRESENT but malformed multiText is bad server data, not an
+            # anonymous (SilentWar) payload - raise rather than guess
+            raise ValueError(f'general_trade message has malformed multiText {multiText!r}')
+        if isinstance(multiText, list) and len(multiText) >= 3:
+            # exact usernames.index lookups - the file-safe fallback in
+            # get_id_from_username can collide on punctuation-variant names
+            try:
+                idxA = self.usernames.index(str(multiText[0]))
+                idxB = self.usernames.index(str(multiText[2]))
+            except ValueError:
+                raise ValueError(f'general_trade message references unknown player names {multiText}')
+            if idxA == idxB:
+                raise ValueError(f'general_trade message has non-distinct pair {multiText}')
+            playerA, playerB = idxA, idxB
+        else:
+            # anonymous (SilentWar): record the event turn only - it never
+            # resolves a pair and never invalidates models on its own
+            self._anonymous_trade_turns.add(serverTurn)
+            return
+        notification = GeneralTradeNotification(server_turn=serverTurn, player_a=playerA, player_b=playerB)
+        self._pending_trade_notifications.append(notification)
+
+    def _trade_key(self, turn: int, pA: int, pB: int) -> typing.Tuple[int, int, int]:
+        """Dedup key for a trade event: (effect turn, lo pair, hi pair)."""
+        return (turn, min(pA, pB), max(pA, pB))
+
+    def _queue_trade_event(self, trade: GeneralTrade) -> bool:
+        """Registers a resolved GeneralTrade for this update, deduplicated by
+        (turn, pair); returns True if newly recorded."""
+        key = self._trade_key(trade.turn, trade.player, trade.opponent)
+        if key in self._applied_trade_keys:
+            return False
+        self._applied_trade_keys.add(key)
+        # compatibility: general_trade prefers the self-involving pair so old
+        # self-trade handlers keep working in multi-pair turns
+        if self.general_trade is None or trade.player == self.player_index or trade.opponent == self.player_index:
+            self.general_trade = trade
+        self.general_trades.append(trade)
+        return True
+
+    @property
+    def traded_players_this_turn(self) -> typing.Set[int]:
+        """Union of every player index involved in ANY recorded trade this
+        turn (all entries of general_trades, not just the compat first)."""
+        result: typing.Set[int] = set()
+        for trade in self.general_trades:
+            result.add(trade.player)
+            result.add(trade.opponent)
+        return result
 
     def update_scores(self, scores: typing.List[Score]):
         """ONLY call this when simulating the game"""
@@ -1057,6 +1217,12 @@ AttributeError: 'Map' object has no attribute 'grid'
         if self.complete and not self.result and self.remainingPlayers > 2:  # Game Over - Ignore Empty Board Updates in FFA
             return self
 
+        # Tests: Tests/test_GeneralTrade.py - detect a mutual general capture
+        # (general trade) from the raw tile deltas and repair the fog map state
+        # (owners/armies/generals) BEFORE the normal fog increment pass applies
+        # this turn's bonuses onto the repaired values.
+        self._detect_and_repair_general_trade()
+
         for curTile in self.get_all_tiles():
             if curTile.isCity and curTile.delta.oldOwner != curTile.delta.newOwner and not curTile.delta.gainedSight and curTile.delta.newOwner != -1:
                 oldOwner = curTile.delta.oldOwner
@@ -1142,7 +1308,419 @@ AttributeError: 'Map' object has no attribute 'grid'
         for teammate in self.teammates:
             self.players[teammate].cityCount = len(self.players[teammate].cities) + 1
 
+        # Tests: Tests/test_GeneralTrade.py - on a trade WE participated in,
+        # the opponent's ENTIRE territory is our own former land, so their
+        # exact cities+general count is fully known to us (fog-repaired tiles
+        # are already in player.cities); the heuristics cannot see this and
+        # would leave a stale/over-counted value that poisons tracker
+        # inferences. An observed trade between other players does NOT carry
+        # perfect info, so it must not run this path.
+        if self.general_trade is not None and self.general_trade.player == self.player_index:
+            self.players[self.general_trade.opponent].cityCount = len(self.players[self.general_trade.opponent].cities) + 1
+
+        # Tests/test_FfaGeneralTrade.py::test_map__ffa_trade__city_estimates:
+        # score-history heuristics cannot relabel a transferred city estimate
+        # back to its old player. Known city tiles provide a lower bound.
+        for trade in self.general_trades:
+            if self.player_index in (trade.player, trade.opponent):
+                continue
+            self._restore_observer_trade_city_counts(trade.player, trade.opponent)
+
         return self
+
+    def _restore_observer_trade_city_counts(self, pA: int, pB: int) -> None:
+        """Apply the opposite player's prior city estimate, bounded by known cities."""
+        for recipient, donor in ((pA, pB), (pB, pA)):
+            inheritedCount = self._pre_trade_city_counts[donor]
+            knownCount = sum(
+                1 for tile in self.tiles_by_index
+                if tile.player == recipient and tile.isCity and not tile.isTempFogPrediction) + 1
+            self.players[recipient].cityCount = max(inheritedCount, knownCount)
+            self.players[recipient].lastCityCount = inheritedCount
+
+    def _detect_and_repair_general_trade(self) -> None:
+        """
+        Detects a mutual general capture (general trade) from this turn's raw
+        tile deltas and repairs the fog map accordingly, BEFORE the normal fog
+        increment pass applies bonuses.
+
+        Detection: a visible enemy general that changed owner to us this turn
+        (isGeneral stayed true - the flag never flips in the diffs) while our
+        own cached general is still a general but is now hidden or owned by
+        that enemy. Both players remain alive on the scoreboard.
+
+        Repair: every tile that was ours last turn (delta.oldOwner == us) and
+        lost vision this turn belongs to the opponent now, at
+        ceil(delta.oldArmy/2) (the trade halves all transferred non-general
+        land; our submitted attack source only contributed its pre-move
+        reserve before halving). These values are pre-bonus - the normal fog
+        increment pass below applies this turn's city/general/swamp/army
+        bonuses to reach the exact post-bonus armies. The hidden old general's
+        residual is inferred from the opponent scoreboard once every other
+        transferred enemy tile is accounted.
+        Tests: Tests/test_GeneralTrade.py test_sim__general_trade__bot_fog_state,
+        test_live_map__general_trade__apply_server_update.
+        """
+        us = self.player_index
+
+        # Tests: Tests/test_FfaGeneralTrade.py - consume server general_trade
+        # notifications whose effect turn is this update BEFORE the
+        # delta-driven detection; each resolved pair registers once (dedup
+        # across notification + visual detection) and applies the observer
+        # repair (fog land swap + general refs) so later heuristics see a
+        # consistent board. Anonymous notifications never resolve a pair.
+        remaining: typing.List[GeneralTradeNotification] = []
+        for notification in self._pending_trade_notifications:
+            if notification.player_a is None or notification.player_b is None:
+                # anonymous (SilentWar): never resolves a pair on its own
+                continue
+            if notification.server_turn + 1 != self.turn:
+                # a message for a LATER effect turn stays queued; a stale one
+                # (effect turn already passed) is dropped rather than applied
+                # to the wrong future update
+                if notification.server_turn + 1 > self.turn:
+                    remaining.append(notification)
+                continue
+            pA, pB = notification.player_a, notification.player_b
+            if pA == us or pB == us:
+                # a self-involving pair uses the normal visual self-detection
+                # below (it keeps our old-general identity); the notification
+                # pair is authoritative for the opponent side
+                self._self_trade_notification_opponent = pB if pA == us else pA
+                continue
+            self._apply_observer_general_trade(pA, pB, self.turn)
+        self._pending_trade_notifications = remaining
+        # keep the dedup record bounded to recent turns
+        self._applied_trade_keys = {k for k in self._applied_trade_keys if k[0] >= self.turn - 100}
+
+        oldGen = self.generals[us] if self.generals[us] is not None else None
+
+        newGen: Tile | None = None
+        for tile in self.get_all_tiles():
+            if (tile.isGeneral
+                    and tile.visible
+                    and tile.player == us
+                    and tile is not oldGen):
+                newGen = tile
+                break
+
+        if newGen is None or oldGen is None or not oldGen.isGeneral or (oldGen.visible and oldGen.player == us):
+            # Tests: Tests/test_GeneralTrade.py - observer-map fallback: a
+            # player that is ALIVE on the scoreboard but whose entire visible
+            # land mass just flipped to a specific enemy is a trade signature
+            # an observer can detect even with both generals hidden (a normal
+            # capture would make the victim's scoreboard tiles hit 0/dead).
+            self._detect_observer_general_trade()
+            if self.general_trade is not None:
+                self._normalize_general_trade_deltas()
+            return
+
+        # Tests: Tests/test_FfaGeneralTrade.py - a server notification that
+        # named our pair is authoritative for the opponent, beating the
+        # tile-delta inference when the enemy gen was previously unseen.
+        opponent = newGen.delta.oldOwner
+        if opponent < 0 and self._self_trade_notification_opponent >= 0:
+            opponent = self._self_trade_notification_opponent
+        if opponent < 0:
+            # the previously unseen enemy general: infer the trader from our old
+            # general's new owner, else the only other living enemy player.
+            if oldGen.visible and oldGen.player >= 0:
+                opponent = oldGen.player
+            else:
+                aliveEnemies = [p.index for p in self.players
+                                if p.index != us and p.index not in self.teammates
+                                and not self.scores[p.index].dead and self.scores[p.index].tiles > 0]
+                opponent = aliveEnemies[0] if len(aliveEnemies) == 1 else -1
+        self._self_trade_notification_opponent = -1
+        if opponent < 0 or opponent == us or self.is_player_on_team_with(opponent, us):
+            return
+        if self.scores[us].dead or self.scores[opponent].dead:
+            return
+
+        selfTrade = GeneralTrade(player=us, opponent=opponent, old_general=oldGen, new_general=newGen, turn=self.turn)
+        # register via the dedup path so init_turn's general_trades iteration
+        # reaches self trades too (compat general_trade prefers self pairs).
+        self._queue_trade_event(selfTrade)
+        logbook.info(f'GENERAL TRADE DETECTED: our gen {str(oldGen)} <-> p{opponent} gen {str(newGen)}')
+
+        # rebind generals + player general refs to the NEW identities
+        self.generals[us] = newGen
+        self.generals[opponent] = oldGen
+        self.players[us].general = newGen
+        self.players[opponent].general = oldGen
+
+        # our submitted attack source keeps only ceil(reserve/2) - and only
+        # when our submitted move was actually the trade attack onto the new
+        # general (a stale/unrelated last move must not skew the source).
+        ourSource: Tile | None = None
+        ourSourceReserve = -1
+        if self.last_player_index_submitted_move is not None:
+            src, dst, moveHalf = self.last_player_index_submitted_move
+            if dst.x == newGen.x and dst.y == newGen.y:
+                ourSource = self.GetTile(src.x, src.y)
+                ourSourceReserve = (src.delta.oldArmy + 1) // 2 if moveHalf else 1
+
+        # repair all fog tiles that were ours last turn: they are the
+        # opponent's halved land now (pre-bonus armies; the fog increment pass
+        # in update() applies this turn's city/general/swamp/army bonuses).
+        for tile in self.get_all_tiles():
+            if tile.visible or tile.delta.oldOwner != us or tile.isMountain:
+                continue
+            if tile is oldGen:
+                continue
+            halved = (tile.delta.oldArmy + 1) // 2
+            if tile is ourSource:
+                halved = (ourSourceReserve + 1) // 2
+            # do not clear isGeneral/isCity flags or the fog/lostSight state
+            tile.player = opponent
+            tile.army = halved
+            tile.delta.newOwner = opponent
+            tile.delta.friendlyCaptured = False
+            tile.delta.armyMovedHere = False
+
+        # the old general is always the opponent's general now, even when its
+        # exact army cannot be inferred - never leave it as confident neutral.
+        if not oldGen.visible:
+            oldGen.player = opponent
+            oldGen.isGeneral = True
+            oldGen.delta.newOwner = opponent
+            oldGen.delta.friendlyCaptured = False
+
+            # infer the exact residual army from the opponent's scoreboard,
+            # but only when every other transferred enemy tile's final owner
+            # AND army is exactly accounted for (a fog swamp that halves to 1
+            # then decays neutral must not be counted as an owned tile, and
+            # the army bonus must not 'revive' it back).
+            ownedEnemyTiles = []
+            exactOwnership = True
+            for t in self.get_all_tiles():
+                if t is oldGen:
+                    continue
+                expectedOwned = t.player == opponent
+                # project post-bonus swamp decay for fog tiles: an owned swamp
+                # whose repaired value decays to 0 becomes neutral, not enemy land
+                if expectedOwned and not t.visible and t.isSwamp and self.is_city_bonus_turn:
+                    if t.army - 1 <= 0:
+                        expectedOwned = False
+                if expectedOwned:
+                    ownedEnemyTiles.append(t)
+            # the hidden old general itself is the remaining transferred tile:
+            # its residual is only exact when every other enemy tile is known.
+            if len(ownedEnemyTiles) + 1 != self.scores[opponent].tiles:
+                exactOwnership = False
+                logbook.warn(f'GENERAL TRADE: cannot infer hidden old general army, opponent tile count {self.scores[opponent].tiles} != known {len(ownedEnemyTiles)}+1')
+
+            if exactOwnership:
+                knownArmy = 0
+                for t in ownedEnemyTiles:
+                    # visible enemy tiles already carry exact post-bonus armies
+                    # from the diff; only fog-repaired tiles need projected bonuses
+                    final = t.army
+                    if not t.visible:
+                        if self.is_city_bonus_turn:
+                            if t.isCity or t.isGeneral:
+                                final += 1
+                            if t.isSwamp:
+                                final -= 1
+                        if self.is_army_bonus_turn and not t.isDesert:
+                            final += 1
+                    knownArmy += final
+                residual = self.scores[opponent].total - knownArmy
+                # undo the bonuses the fog increment pass will apply to the
+                # general (a desert general does not get the army bonus)
+                preBonus = residual
+                if self.is_city_bonus_turn:
+                    preBonus -= 1
+                if self.is_army_bonus_turn and not oldGen.isDesert:
+                    preBonus -= 1
+                if preBonus < 0:
+                    raise AssertionError(f'GENERAL TRADE: hidden old general residual {residual} -> preBonus {preBonus} < 0, conservation inputs inconsistent (owned {len(ownedEnemyTiles)} tiles, scoreboard {self.scores[opponent].tiles}/{self.scores[opponent].total})')
+                oldGen.army = preBonus
+
+        self._normalize_general_trade_deltas()
+
+    def _normalize_general_trade_deltas(self) -> None:
+        """
+        Zeroes the swap-direction unexplained/armyMovedHere deltas for both
+        traded players so ordinary movement inference in
+        detect_movement_and_populate_unexplained_diffs does not try to
+        reconstruct dozens of fake moves/emergences out of the bulk transfer.
+        """
+        # Tests: Tests/test_FfaGeneralTrade.py - normalize for EVERY recorded
+        # pair this turn, not just the compat first; a cross-pair flip
+        # (1->3 when 1/2 and 3/4 traded) is NOT a swap artifact, so each
+        # tile's transfer must match a specific pair, not just the union.
+        tradePairs = [(t.player, t.opponent) for t in self.general_trades]
+        traded = self.traded_players_this_turn
+        for tile in self.get_all_tiles():
+            isSwapTransfer = (
+                # a flip strictly between the two members of a recorded pair
+                # (or to neutral decay within it) is a swap transfer
+                any((tile.delta.oldOwner == pA and tile.delta.newOwner in (pB, -1))
+                    or (tile.delta.oldOwner == pB and tile.delta.newOwner in (pA, -1))
+                    for pA, pB in tradePairs)
+                # only previously-UNKNOWN ownership (oldOwner<0: a raw
+                # revealed tile) claimed by a traded player is a swap gain;
+                # a cross-pair flip (1->3 between pairs 1/2 and 3/4) or a
+                # real third-party move into traded land is NOT a swap
+                or (tile.delta.oldOwner < 0
+                    and tile.delta.oldOwner != tile.delta.newOwner
+                    and tile.delta.newOwner in traded))
+            if isSwapTransfer:
+                tile.delta.unexplainedDelta = 0
+                tile.delta.armyMovedHere = False
+
+        for pIdx in traded:
+            self.players[pIdx].unexplainedTileDelta = 0
+
+    def _apply_observer_general_trade(self, pA: int, pB: int, turn: int) -> None:
+        """
+        Applies a resolved OBSERVED general trade between two other players
+        (server notification or confirmed visual signature): fog-remembered
+        tiles of each pair member flip to the other at ceil(oldArmy/2)
+        (pre-bonus - the normal fog increment pass applies this turn's
+        bonuses), and the generals/player.general references exchange.
+        Visible server updates stay authoritative. Anonymous/unresolved pairs
+        never reach here.
+        Tests: Tests/test_FfaGeneralTrade.py
+        """
+        # dedup before mutating
+        key = self._trade_key(turn, pA, pB)
+        if key in self._applied_trade_keys:
+            return
+        if pA == pB or pA < 0 or pB < 0:
+            return
+        if pA == self.player_index or pB == self.player_index:
+            return
+        if self.is_player_on_team_with(pA, pB):
+            return
+        if self.scores[pA].dead or self.scores[pB].dead:
+            return
+
+        # generals exchange identity using the PRE-UPDATE known refs (the raw
+        # diff pass may already have rewritten/cleared self.generals); a
+        # never-seen player's ref is None. A newly VISIBLE general tile owned
+        # by the recipient is authoritative and wins over a stale ref.
+        genA = self._pre_trade_generals[pA] if pA < len(self._pre_trade_generals) else self.generals[pA]
+        genB = self._pre_trade_generals[pB] if pB < len(self._pre_trade_generals) else self.generals[pB]
+        # any visible server general tile owned by the recipient is the real
+        # ref - don't let a stale pre-trade ref (or None) erase it
+        for tile in self.get_all_tiles():
+            if not tile.visible or not tile.isGeneral:
+                continue
+            if tile.player == pB:
+                genA = tile
+            elif tile.player == pA:
+                genB = tile
+
+        # fog-remembered territory: oldOwner A tiles that are still fog go to
+        # B at halved armies and vice versa; visible tiles were already
+        # updated authoritatively by the server diff. Original general tiles
+        # (pre-ref set) are EXCLUDED from halving even when the raw update
+        # temporarily cleared their isGeneral flag.
+        originalGenSet = {g for g in (genA, genB) if g is not None}
+        for tile in self.get_all_tiles():
+            if tile.visible or tile.isMountain or tile in originalGenSet or tile.isGeneral:
+                continue
+            if tile.delta.oldOwner == pA:
+                tile.player = pB
+                tile.army = (tile.delta.oldArmy + 1) // 2
+                tile.delta.newOwner = pB
+                tile.delta.friendlyCaptured = False
+                tile.delta.armyMovedHere = False
+            elif tile.delta.oldOwner == pB:
+                tile.player = pA
+                tile.army = (tile.delta.oldArmy + 1) // 2
+                tile.delta.newOwner = pA
+                tile.delta.friendlyCaptured = False
+                tile.delta.armyMovedHere = False
+
+        self.generals[pA] = genB
+        self.generals[pB] = genA
+        self.players[pA].general = genB
+        self.players[pB].general = genA
+        if genA is not None and not genA.visible:
+            # the player setter guards owner-writes on isGeneral tiles; clear
+            # the flag, write the new owner, then restore it so the swapped
+            # general stays a general (never becomes a city)
+            genA.isGeneral = False
+            genA.player = pB
+            genA.isGeneral = True
+            genA.delta.newOwner = pB
+        if genB is not None and not genB.visible:
+            genB.isGeneral = False
+            genB.player = pA
+            genB.isGeneral = True
+            genB.delta.newOwner = pA
+
+        # Tests: Tests/test_FfaGeneralTrade.py - territorial city estimates
+        # swap with the land: each player inherits the other's remembered
+        # cityCount, floored at what we can still confirm (known visible
+        # cities + general); the normal heuristic recalc below may refine it
+        # upward but must never UNDO the swap with stale counts.
+        self._restore_observer_trade_city_counts(pA, pB)
+
+        trade = GeneralTrade(player=pA, opponent=pB, old_general=genA, new_general=genB, turn=turn)
+        if self._queue_trade_event(trade):
+            logbook.info(f'OBSERVED GENERAL TRADE: p{pA} <-> p{pB} (turn {turn})')
+            self._normalize_general_trade_deltas()
+
+    def _detect_observer_general_trade(self) -> None:
+        """
+        Detects a general trade between two OTHER players on an observer map:
+        a living player (scoreboard tiles > 0, not dead) whose entire visible
+        land flipped to a specific enemy this turn cannot have been captured
+        normally (that would zero their tiles/kill them), so the flip must be
+        a mutual general swap. Sets self.general_trade with only the player
+        pair; no fog repair is attempted for un-witnessed swaps.
+        """
+        # Tests: Tests/test_FfaGeneralTrade.py - an observed pair is justified
+        # when either (a) known general tiles swapped owners while both stay
+        # alive on the scoreboard, or (b) >=2 CONFIRMED previously-visible
+        # (not gainedSight, not imperfect) tiles flipped oldA->newB while both
+        # stay alive - one normal attack cannot flip >=2 tiles away from a
+        # living player, so the flip must be a mutual swap. No requirement
+        # that the old land all be hidden this turn (newly gained opposing
+        # land can legitimately be visible too). Every disjoint confirmed
+        # pair applies via the shared repair path; dedup prevents double
+        # application when a notification already registered the pair.
+        confirmedPairs: typing.Set[typing.Tuple[int, int]] = set()
+
+        # (a) known generals that visibly swapped owners
+        for pIdx in range(len(self._pre_trade_generals)):
+            genTile = self._pre_trade_generals[pIdx]
+            if genTile is None:
+                continue
+            newOwner = genTile.delta.newOwner
+            if (newOwner >= 0 and newOwner != pIdx and newOwner != self.player_index
+                    and pIdx != self.player_index
+                    and pIdx < len(self.scores) and newOwner < len(self.scores)
+                    and not self.scores[pIdx].dead and not self.scores[newOwner].dead):
+                confirmedPairs.add((min(pIdx, newOwner), max(pIdx, newOwner)))
+
+        # (b) >=2 confirmed prev-visible one-directional flips
+        lostCounts: typing.Dict[typing.Tuple[int, int], int] = {}
+        for tile in self.get_all_tiles():
+            if (tile.delta.oldOwner >= 0
+                    and tile.delta.newOwner >= 0
+                    and tile.delta.oldOwner != tile.delta.newOwner
+                    and tile.was_visible_last_turn()
+                    and not tile.delta.imperfectArmyDelta):
+                key = (tile.delta.oldOwner, tile.delta.newOwner)
+                lostCounts[key] = lostCounts.get(key, 0) + 1
+        for (oldOwner, newOwner), count in lostCounts.items():
+            if count < 2:
+                continue
+            if oldOwner == self.player_index or newOwner == self.player_index:
+                continue
+            if self.scores[oldOwner].dead or self.scores[newOwner].dead:
+                continue
+            if self.is_player_on_team_with(oldOwner, newOwner):
+                continue
+            confirmedPairs.add((min(oldOwner, newOwner), max(oldOwner, newOwner)))
+
+        for lo, hi in sorted(confirmedPairs):
+            self._apply_observer_general_trade(lo, hi, self.turn)
 
     def init_grid_movable(self):
         forceMovableCityGenVisible = self.has_misty_veil and self.has_watchtower
@@ -2093,7 +2671,14 @@ AttributeError: 'Map' object has no attribute 'grid'
         logbook.info(f'Tiles with MovedHere pre-own: {str([str(t) for t in self.moved_here_set])}')
 
         # TRY OWN MOVE FIRST
-        if self.last_player_index_submitted_move is not None:
+        # Tests: Tests/test_GeneralTrade.py - when WE are one of the traded
+        # players, our submitted move was consumed by the atomic swap, not
+        # executed as a normal attack; running it through
+        # _apply_last_player_move would treat the transferred source tile as
+        # lost/killed and fabricate emergence diffs. An uninvolved player's
+        # own submitted move still resolves normally.
+        skipOwnMove = self.player_index in self.traded_players_this_turn
+        if self.last_player_index_submitted_move is not None and not skipOwnMove:
             # check for dropped moves and apply the tile diffs from the players move ahead of time to more easily recognize other players moves.
             self.players[self.player_index].last_move = self._apply_last_player_move(self.last_player_index_submitted_move)
             if self.last_player_index_submitted_move is not None:
@@ -2111,6 +2696,16 @@ AttributeError: 'Map' object has no attribute 'grid'
         for p in self.players:
             if p.dead and p.capturedBy is not None:
                 skipCapturedPlayers.append(p.index)
+
+        # Tests: Tests/test_GeneralTrade.py - the traded players' bulk transfer
+        # is fully explained by the swap (normalized in
+        # _normalize_general_trade_deltas); exclude them from capture/move
+        # inference like eliminated players, while still running the scans for
+        # any unrelated third-party moves this turn.
+        if self.traded_players_this_turn:
+            skipCapturedPlayers.extend(self.traded_players_this_turn)
+            self.players[self.general_trade.player].unexplainedTileDelta = 0
+            self.players[self.general_trade.opponent].unexplainedTileDelta = 0
 
         attempt = 0
         numRuns = 1
@@ -2159,6 +2754,93 @@ AttributeError: 'Map' object has no attribute 'grid'
             logbook.info(f'unexplained emergence {repr(t)} of {t.delta.unexplainedDelta}')
 
         return
+
+    def _get_known_neutral_damage_from_last_move(self) -> int:
+        """
+        Tests/test_CityRoundDecisions.py::test_should_not_invent_enemy_cities_or_force_all_in_while_chipping_neutral_city
+
+        Returns the army we KNOW we spent attacking a neutral tile with our submitted
+        move last update (neutral-city chip or capture). This loss is not a fight
+        with an opponent, so calculate_player_deltas subtracts it from
+        friendlyFightDelta before deriving the score-based realEnemyCities.
+        Returns 0 when the submitted move is missing, not an attack on a neutral
+        tile, or inconsistent with this update's raw deltas (stale reference):
+        the destination must be adjacent to the source, the source's actual army
+        must match oldArmy + expectedDelta - sent, and the destination's outcome
+        must exactly match what the sent army would do (full neutral capture leaves
+        sent - oldArmy plus the newly-captured city's own bonus tick; a partial
+        chip must have dealt exactly sentArmy damage).
+
+        @return: neutral army paid by our submitted move, or 0.
+        """
+        if self.last_player_index_submitted_move is None:
+            return 0
+        source, dest, moveHalf = self.last_player_index_submitted_move
+        # obviously-friendly or obviously-irrelevant moves skip the dump entirely.
+        if source.delta.oldOwner != self.player_index or dest.delta.oldOwner != -1:
+            return 0
+        logbook.info(
+            f'CITY_COUNT neutral-damage check move {source} -> {dest} half={moveHalf} '
+            f'srcVis={source.visible} dstVis={dest.visible} srcGained={source.delta.gainedSight} '
+            f'dstGained={dest.delta.gainedSight} srcOldOwner={source.delta.oldOwner} '
+            f'dstOldOwner={dest.delta.oldOwner} srcOldArmy={source.delta.oldArmy} srcExp={source.delta.expectedDelta} '
+            f'dstOldArmy={dest.delta.oldArmy} dstPlayer={dest.player} dstArmy={dest.army}')
+        if not source.visible or not dest.visible:
+            return 0
+        if source.delta.gainedSight or dest.delta.gainedSight:
+            return 0
+        if dest not in source.movable:
+            logbook.info(
+                f'CITY_COUNT neutral-damage check: submitted move {source} -> {dest} '
+                f'is not adjacent, ignoring stale reference')
+            return 0
+
+        sentArmy = source.delta.oldArmy - 1
+        if moveHalf:
+            sentArmy = source.delta.oldArmy // 2
+        if sentArmy <= 0:
+            return 0
+
+        # stale-move guard: source expected delta already accounts for its bonus
+        # increments, so the actual army must match it exactly after the send.
+        expectedSourceArmy = source.delta.oldArmy + source.delta.expectedDelta - sentArmy
+        if source.army != expectedSourceArmy:
+            logbook.info(
+                f'CITY_COUNT neutral-damage check: submitted move {source} -> {dest} '
+                f'looks stale (source army {source.army} vs expected {expectedSourceArmy}), ignoring')
+            return 0
+
+        if dest.player == self.player_index:
+            # captured: we must have overwhelmed the neutral army (oldArmy < sent),
+            # and the remainder should be sent - oldArmy plus the newly-owned
+            # city's own bonus tick on a city bonus turn.
+            if dest.delta.oldArmy >= sentArmy:
+                return 0
+            expectedDestArmy = sentArmy - dest.delta.oldArmy
+            # new owned tiles get the army bonus increment; the newly-owned city
+            # gets its city tick; swamps drain on city bonus turns.
+            if self.is_army_bonus_turn and not dest.isDesert:
+                expectedDestArmy += 1
+            if dest.isCity and self.is_city_bonus_turn:
+                expectedDestArmy += 1
+            if dest.isSwamp and self.is_city_bonus_turn:
+                expectedDestArmy -= 1
+            if dest.army != expectedDestArmy:
+                logbook.info(
+                    f'CITY_COUNT neutral-damage check: capture of {dest} leaves {dest.army} '
+                    f'vs expected {expectedDestArmy}, ignoring')
+                return 0
+            return dest.delta.oldArmy
+        if dest.player == -1:
+            # still neutral: a chip must have dealt exactly sentArmy damage.
+            damage = dest.delta.oldArmy - dest.army
+            if damage != sentArmy:
+                logbook.info(
+                    f'CITY_COUNT neutral-damage check: chip on {dest} dealt {damage} '
+                    f'vs sent {sentArmy}, ignoring')
+                return 0
+            return damage
+        return 0
 
     def calculate_player_deltas(self):
         """
@@ -2222,6 +2904,13 @@ AttributeError: 'Map' object has no attribute 'grid'
                 actualFriendlyDelta += teammatePlayer.score - lastScores[teammatePlayer.index].total
 
         friendlyFightDelta = expectedFriendlyDelta - actualFriendlyDelta
+
+        # Tests/test_CityRoundDecisions.py::test_should_not_invent_enemy_cities_or_force_all_in_while_chipping_neutral_city
+        # Army we verifiably spent attacking NEUTRAL tiles last turn (chipping or
+        # capturing a neutral city) is not a fight with an opponent; excluding it
+        # keeps realEnemyCities below from inventing enemy cities off our own
+        # neutral spend (the live TtVz86M3i t132 count inflated enemy cities 1->5).
+        friendlyFightDelta -= self._get_known_neutral_damage_from_last_move()
 
         logbook.info(f"myPlayer score {myPlayer.score}, lastScores myPlayer total {lastScores[myPlayer.index].total}, friendlyFightDelta {friendlyFightDelta} based on expectedFriendlyDelta {expectedFriendlyDelta} actualFriendlyDelta {actualFriendlyDelta}")
 

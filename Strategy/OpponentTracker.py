@@ -10,7 +10,7 @@ from ArmyTracker import Army
 from MapMatrix import MapMatrix
 from StrategyModels import CycleStatsData, PlayerMoveCategory, UnresolvedEmergenceData
 from ViewInfo import ViewInfo, TargetStyle
-from base.client.map import MapBase, TeamStats, Tile, Player, PLAYER_CHAR_BY_INDEX
+from base.client.map import MapBase, TeamStats, Tile, Player, PLAYER_CHAR_BY_INDEX, GeneralTrade
 
 ENABLE_DEBUG_ASSERTS = False
 SAFE_PLAYERS_CAP = 20
@@ -286,7 +286,7 @@ class TeamAttackData(object):
 
 class OpponentTracker(object):
     def __init__(self, map: MapBase, viewInfo: ViewInfo | None = None):
-        self.outbound_emergence_notifications: typing.List[typing.Callable[[int, Tile, bool], None]] = []
+        self.outbound_emergence_notifications: typing.List[typing.Callable[[int, Tile, bool, int], None]] = []
         self.map: MapBase = map
         self.team_score_data_history: typing.List[typing.Dict[int, TeamStats | None]] = [{} for i in range(SAFE_PLAYERS_CAP)]
         self.targetPlayer: int = -1
@@ -368,15 +368,54 @@ class OpponentTracker(object):
             # if we don't figure out anything else, then probably a fog gather. Default to that at start of each turn.
             self.last_player_move_type[player.index] = PlayerMoveCategory.FogGather
 
+        # Tests: Tests/test_GeneralTrade.py - on a general-trade turn every
+        # emergence/vision/reveal event involving the two swapped identities is
+        # an artifact of the bulk transfer, not real enemy activity; drop them
+        # before any team's heuristic handling runs (a non-traded team could
+        # otherwise process an artifact event against missing team stats).
+        # Tests: Tests/test_FfaGeneralTrade.py - filter against the union of
+        # ALL traded pairs this turn, not just the compat first
+        tradedPlayers = self.map.traded_players_this_turn
+        if tradedPlayers:
+            self._emergences = [
+                (tile, emergingPlayer, emergence)
+                for tile, emergingPlayer, emergence in self._emergences
+                if emergingPlayer not in tradedPlayers
+                and tile.player not in tradedPlayers
+                and tile.delta.oldOwner not in tradedPlayers
+                and tile.delta.newOwner not in tradedPlayers]
+            self._vision_losses = {t for t in self._vision_losses if t.delta.oldOwner not in tradedPlayers and t.delta.newOwner not in tradedPlayers}
+            self._revealed = {t for t in self._revealed if t.player not in tradedPlayers and t.delta.oldOwner not in tradedPlayers and t.delta.newOwner not in tradedPlayers}
+            self._moves_into_fog = [army for army in self._moves_into_fog if army.player not in tradedPlayers]
+
         if self.skip_this_turn:
             self.skip_this_turn = False
+            # Tests: Tests/test_GeneralTrade.py - a resume skip must not
+            # suppress the exact trade reseed; the bulk swap is real knowledge
+            # that still has to overwrite the stale queues this turn.
+            if self.map.general_trades:
+                for trade in self.map.general_trades:
+                    for tradedPlayer in (trade.player, trade.opponent):
+                        team = self._team_lookup_by_player[tradedPlayer]
+                        stats = self.current_team_cycle_stats[team]
+                        if stats is None:
+                            stats = self.initialize_cycle_stats(team)
+                            self.current_team_cycle_stats[team] = stats
+                        self._reseed_general_trade_fog_state(stats)
             return
+
+        # Tests: Tests/test_GeneralTrade.py - teams whose calculate_cycle_stats
+        # early-returns (no cycle history yet) never reach the in-calculate
+        # trade reseed; collect them for the post-loop fallback.
+        tradeNoHistoryTeams: typing.List[int] = []
 
         for team in self._team_indexes:
             curTurnTeamScore = self.map.get_team_stats_by_team_id(team)
 
             # also was incrementing the gather tiles
             teamStats = self.calculate_cycle_stats(team, curTurnTeamScore)
+            if teamStats is None and len(self.map.general_trades) > 0:
+                tradeNoHistoryTeams.append(team)
             logbook.info(
                 f'OT_ANALYZE_TEAM_STATS turn={self.map.turn} targetPlayer={targetPlayer} team={team} '
                 f'calculatedStatsIsNone={teamStats is None} '
@@ -402,6 +441,17 @@ class OpponentTracker(object):
 
             self.last_team_scores[team] = self.current_team_scores[team]
             self.current_team_scores[team] = curTurnTeamScore
+
+        # Tests: Tests/test_GeneralTrade.py - reseed the traded players' gather
+        # queues + fog pools with the exact perfect-information trade outcome
+        # for teams whose cycle stats early-returned without history (the
+        # normal path reseeds inside calculate_cycle_stats instead).
+        for team in tradeNoHistoryTeams:
+            currentStats = self.current_team_cycle_stats[team]
+            if currentStats is None:
+                currentStats = self.initialize_cycle_stats(team)
+                self.current_team_cycle_stats[team] = currentStats
+            self._reseed_general_trade_fog_state(currentStats)
 
         self._emergences = []
         self._moves_into_fog = []
@@ -542,6 +592,15 @@ class OpponentTracker(object):
         @param emergenceAmount:
         @return:
         """
+        # Tests: Tests/test_GeneralTrade.py - on a general-trade turn an
+        # "emergence" attributed to either traded player is a bulk-transfer
+        # artifact, not real enemy activity; drop it here so later analysis
+        # does not run general elimination heuristics on a swapped identity.
+        # Tests: Tests/test_FfaGeneralTrade.py - the artifact filter covers
+        # every traded pair this turn, not just the compat first
+        if emergingPlayer in self.map.traded_players_this_turn:
+            logbook.info(f'OppTrack NEM: dropping trade-artifact emergence {repr(tile)} p{emergingPlayer} amount {emergenceAmount}')
+            return
         em = (tile, emergingPlayer, emergenceAmount)
         logbook.info(f'OppTrack NEM: queued {repr(em)}')
         self._emergences.append(em)
@@ -845,6 +904,29 @@ class OpponentTracker(object):
     def calculate_cycle_stats(self, team: int, curTurnScores: TeamStats) -> CycleStatsData | None:
         lastCycleEndTurn = self.get_last_cycle_end_turn()
         if lastCycleEndTurn is None:
+            # Tests/test_FfaGeneralTrade.py::test_map__ffa_trade__bonus_turns_parameterized:
+            # a mid-game load may lack cycle history, but transferred queues
+            # still need this turn's bonuses after halving, exactly once.
+            observerPlayers = {
+                player for trade in self.map.general_trades
+                if self.map.player_index not in (trade.player, trade.opponent)
+                for player in (trade.player, trade.opponent)}
+            teamPlayers = self.get_team_players(team)
+            if observerPlayers.intersection(teamPlayers):
+                stats = self.current_team_cycle_stats[team]
+                if stats is None:
+                    stats = self.initialize_cycle_stats(team)
+                    self.current_team_cycle_stats[team] = stats
+                stats.fog_city_count = self.calculate_team_fog_tile_data(team)[2]
+                if self.map.is_city_bonus_turn:
+                    self._include_city_bonus(stats)
+                if self.map.is_army_bonus_turn:
+                    stats.approximate_fog_city_army += stats.fog_city_count
+                    for player in teamPlayers:
+                        self.get_player_gather_queue(player).increment_army_bonus()
+                self._check_missing_fog_gather_tiles(stats)
+                self._validate_army_totals(curTurnScores, stats)
+                return stats
             return None
 
         currentCycleStats, lastCycleScores = self._update_cycle_stats_and_moves_no_checks(team, curTurnScores, lastCycleEndTurn)
@@ -878,11 +960,105 @@ class OpponentTracker(object):
 
             self._start_team_score_next_cycle_and_record_efficiencies(curTurnScores, team, currentCycleStats)
 
+        # Tests: Tests/test_GeneralTrade.py - exact trade reseed runs AFTER the
+        # bonus/rollover accounting above but BEFORE missing-tile checks and
+        # score-conservation validation so the reseeded values are what gets
+        # validated. Idempotent (queue contents are fully replaced).
+        self._reseed_general_trade_fog_state(currentCycleStats)
+
         self._check_missing_fog_gather_tiles(currentCycleStats)
 
         self._validate_army_totals(curTurnScores, currentCycleStats)
 
         return currentCycleStats
+
+    def _get_traded_players_for_team(self, currentCycleStats: CycleStatsData) -> typing.Set[int]:
+        """Returns the subset of this team's players involved in ANY detected
+        general trade this turn - their emergences/moves/fog losses are swap
+        artifacts and must be skipped, for observed trades too."""
+        traded = self.map.traded_players_this_turn
+        if not traded:
+            return set()
+        return {pIdx for pIdx in currentCycleStats.players if pIdx in traded}
+
+    def _get_exact_reseed_players_for_team(self, currentCycleStats: CycleStatsData) -> typing.Set[int]:
+        """Returns the subset of this team's players whose queues/fog pools
+        can be rebuilt with EXACT knowledge this turn - only trades we
+        participated in, where every transferred tile's state is known."""
+        selfTraded = {
+            pIdx for t in self.map.general_trades
+            for pIdx in (t.player, t.opponent)
+            if t.player == self.map.player_index or t.opponent == self.map.player_index}
+        if not selfTraded:
+            return set()
+        return {pIdx for pIdx in currentCycleStats.players if pIdx in selfTraded}
+
+    def _reseed_general_trade_fog_state(self, currentCycleStats: CycleStatsData) -> None:
+        """
+        Rebuilds the gather queue + fog pools of every traded player on this
+        team from the exact post-trade map state (the trade gives perfect
+        information about what was exchanged): the queue holds EVERY current
+        fog non-city non-general enemy land tile at its exact army value,
+        replacing stale contents entirely; the fog-city pool holds the FULL
+        raw armies of hidden enemy cities+generals; no army is auto-gathered
+        (available fog army total is 0).
+        """
+        tradedPlayers = self._get_exact_reseed_players_for_team(currentCycleStats)
+        if len(tradedPlayers) == 0:
+            return
+
+        # partner lookup across every self-involving trade this turn
+        partnerByPlayer: typing.Dict[int, int] = {}
+        for t in self.map.general_trades:
+            if t.player == self.map.player_index or t.opponent == self.map.player_index:
+                partnerByPlayer[t.player] = t.opponent
+                partnerByPlayer[t.opponent] = t.player
+        fogCityArmy = 0
+        fogCityCount = 0
+        for pIdx in tradedPlayers:
+            # in an atomic swap EVERY tile the traded player owns arrived from
+            # the other player's land - a tile marked as theirs that did not
+            # flip this turn is stale predicted-fog memory, not real ownership
+            otherTraded = partnerByPlayer.get(pIdx, pIdx)
+            queue = self.get_player_gather_queue(pIdx)
+            for size, count in queue.get_amount_dict().items():
+                queue.set_amount_for_size(size, 0)
+
+            for tile in self.map.get_all_tiles():
+                if tile.player != pIdx or tile.visible or tile.isMountain:
+                    continue
+                if tile.delta.oldOwner != otherTraded and tile is not self.map.generals[pIdx]:
+                    continue
+                if tile.isCity or tile.isGeneral:
+                    fogCityArmy += tile.army
+                    fogCityCount += 1
+                else:
+                    queue.append(tile.army)
+
+            # stale unresolved-emergence records for the swapped identity no
+            # longer describe real army timing after the land transfer
+            self.current_largest_unresolved_emergence_by_player[pIdx] = None
+
+        # Tests: Tests/test_GeneralTrade.py - the pools are TEAM-shared, so
+        # when the team has unaffected members with unknown fog land we keep
+        # their existing contribution conservatively instead of zeroing it;
+        # exact zero only applies when every fog tile in the team belongs to
+        # the traded pair (or unaffected members are fully visible).
+        unaffected = [pIdx for pIdx in currentCycleStats.players if pIdx not in tradedPlayers]
+        # scoreboard-based fog check: an unaffected teammate with fog tiles we
+        # never saw has no remembered tiles at all, so remembered-tile scans
+        # would falsely claim them fully visible
+        allUnaffectedFullyVisible = all(
+            self.calculate_player_fog_tile_data(pIdx)[0] == 0
+            for pIdx in unaffected)
+        if len(unaffected) == 0 or allUnaffectedFullyVisible:
+            currentCycleStats.approximate_fog_city_army = fogCityArmy
+            currentCycleStats.fog_city_count = fogCityCount
+            currentCycleStats.approximate_fog_army_available_total = 0
+            currentCycleStats.approximate_fog_army_available_total_true = 0
+        else:
+            currentCycleStats.fog_city_count = max(currentCycleStats.fog_city_count, fogCityCount)
+            currentCycleStats.approximate_fog_city_army = max(currentCycleStats.approximate_fog_city_army, fogCityArmy)
 
     def _update_cycle_stats_and_moves_no_checks(self, team: int, curTurnScores: TeamStats, lastCycleEndTurn: int, skipTurn: bool = False):
         lastTurnScores = self.current_team_scores[team]
@@ -893,7 +1069,15 @@ class OpponentTracker(object):
         lastCycleScores = self.team_score_data_history[team].get(lastCycleEndTurn, None)
         # lastCycleStats = self.team_cycle_stats_history[team].get(lastCycleEndTurn, None)
 
-        if not skipTurn:
+        # Tests: Tests/test_GeneralTrade.py - on a general-trade turn the bulk
+        # land swap must not be classified as heuristic reveals/emergences/
+        # moves/vision losses for the two exchanged player identities; their
+        # fog model is rebuilt exactly in _reseed_general_trade_fog_state
+        # instead (called after bonus/rollover accounting in
+        # calculate_cycle_stats). Unrelated teams still get normal handling.
+        tradedThisTurn = self._get_traded_players_for_team(currentCycleStats)
+
+        if not skipTurn and not tradedThisTurn:
             self._handle_reveals(currentCycleStats)
             self._handle_emergences(currentCycleStats)
             self._handle_moves_into_fog(currentCycleStats)
@@ -1224,6 +1408,97 @@ class OpponentTracker(object):
         if player == -1:
             raise AssertionError(f'Player p{player} is not a valid player to retrieve a gather queue for')
         return self._gather_queues_new_by_player[player]
+
+    def handle_general_trade(self, trade: GeneralTrade) -> None:
+        """
+        For an OBSERVED (non-self) general trade, each traded player's fog
+        gather queue receives the OTHER player's halved contents: an
+        observer cannot see the swapped land itself, so the pair's seeded
+        estimates exchange at ceil(amount/2). Self-involved trades use the
+        exact reseed in _reseed_general_trade_fog_state instead.
+        Tests: Tests/test_FfaGeneralTrade.py test_map__ffa_trade__territory_and_queue_swap.
+        """
+        if trade.player == self.map.player_index or trade.opponent == self.map.player_index:
+            return
+        pA, pB = trade.player, trade.opponent
+        qA = self.get_player_gather_queue(pA)
+        qB = self.get_player_gather_queue(pB)
+        histA = dict(qA.get_amount_dict())
+        histB = dict(qB.get_amount_dict())
+        # Tests: Tests/test_FfaGeneralTrade.py - halving can COLLIDE (ceil(1/2)
+        # == ceil(2/2) == 1): aggregate the halved counts BEFORE rebuilding or
+        # the last-written bin silently drops the collided entries.
+        halvedA: typing.Dict[int, int] = {}
+        for amt, cnt in histA.items():
+            half = (amt + 1) // 2
+            halvedA[half] = halvedA.get(half, 0) + cnt
+        halvedB: typing.Dict[int, int] = {}
+        for amt, cnt in histB.items():
+            half = (amt + 1) // 2
+            halvedB[half] = halvedB.get(half, 0) + cnt
+        # clear then rebuild each queue from the other's halved histogram
+        for amt in list(histA.keys()):
+            qA.set_amount_for_size(amt, 0)
+        for amt in list(histB.keys()):
+            qB.set_amount_for_size(amt, 0)
+        for amt, cnt in halvedB.items():
+            qA.set_amount_for_size(amt, cnt)
+        for amt, cnt in halvedA.items():
+            qB.set_amount_for_size(amt, cnt)
+
+        # Tests: Tests/test_FfaGeneralTrade.py - unresolved-emergence SPATIAL
+        # records (current + history) belong to the territory that just
+        # swapped: exchange them between the pair with amounts halved the same
+        # way the land halved. Behavioral history/counters stay with the real
+        # player.
+        curA = self.current_largest_unresolved_emergence_by_player[pA]
+        curB = self.current_largest_unresolved_emergence_by_player[pB]
+        self.current_largest_unresolved_emergence_by_player[pA] = (
+            UnresolvedEmergenceData((curB.amount + 1) // 2, curB.tile) if curB is not None else None)
+        self.current_largest_unresolved_emergence_by_player[pB] = (
+            UnresolvedEmergenceData((curA.amount + 1) // 2, curA.tile) if curA is not None else None)
+        histEmergA = self.largest_unresolved_emergence_history_by_player[pA]
+        histEmergB = self.largest_unresolved_emergence_history_by_player[pB]
+        self.largest_unresolved_emergence_history_by_player[pA] = {
+            turn: UnresolvedEmergenceData((e.amount + 1) // 2, e.tile)
+            for turn, e in histEmergB.items()}
+        self.largest_unresolved_emergence_history_by_player[pB] = {
+            turn: UnresolvedEmergenceData((e.amount + 1) // 2, e.tile)
+            for turn, e in histEmergA.items()}
+
+        # assumed average tile values describe the territory that swapped -
+        # halved like the transferred armies (float estimate)
+        avgA = self.assumed_player_average_tile_values[pA]
+        avgB = self.assumed_player_average_tile_values[pB]
+        self.assumed_player_average_tile_values[pA] = avgB / 2.0
+        self.assumed_player_average_tile_values[pB] = avgA / 2.0
+
+        # singleton FFA teams: the LIVE fog pools are territorial estimates -
+        # they swap AND halve with the land (the transferred armies arrive at
+        # ceil(raw/2)); sign-preserving ceil keeps legitimate negative
+        # accounting; fog_city_COUNT swaps unchanged (cities don't halve).
+        # Mixed-team pools are shared and can't be split, so only singleton
+        # memberships get exact per-player swaps.
+        teamA = self._team_lookup_by_player[pA]
+        teamB = self._team_lookup_by_player[pB]
+        statsA = self.current_team_cycle_stats[teamA]
+        statsB = self.current_team_cycle_stats[teamB]
+        if (statsA is not None and statsB is not None
+                and len(statsA.players) == 1 and len(statsB.players) == 1):
+            availA = statsA._approximate_fog_army_available_total
+            availB = statsB._approximate_fog_army_available_total
+            trueA = statsA._approximate_fog_army_available_total_true
+            trueB = statsB._approximate_fog_army_available_total_true
+            cityArmyA = statsA.approximate_fog_city_army
+            cityArmyB = statsB.approximate_fog_city_army
+            statsA._approximate_fog_army_available_total = (availB + 1) // 2
+            statsB._approximate_fog_army_available_total = (availA + 1) // 2
+            statsA._approximate_fog_army_available_total_true = (trueB + 1) // 2
+            statsB._approximate_fog_army_available_total_true = (trueA + 1) // 2
+            statsA.approximate_fog_city_army = (cityArmyB + 1) // 2
+            statsB.approximate_fog_city_army = (cityArmyA + 1) // 2
+            statsA.fog_city_count, statsB.fog_city_count = (
+                statsB.fog_city_count, statsA.fog_city_count)
 
     def _update_team_cycle_stats_relative_to_last_cycle(
         self,
@@ -1620,7 +1895,12 @@ class OpponentTracker(object):
         if player == -2:
             player = tile.player
 
+        # Tests: Tests/test_GeneralTrade.py - a team's stats can be absent on
+        # the first analysis pass for it (e.g. map loaded mid-cycle); read the
+        # legitimate live scoreboard rather than silently dropping the event.
         teamScores = self.current_team_scores[currentCycleStats.team]
+        if teamScores is None:
+            teamScores = self.map.get_team_stats_by_team_id(currentCycleStats.team)
         cityDistanceWasteApprox = max(0, 3 * (teamScores.cityCount - 1)) - max(0, 6 * (teamScores.cityCount - 2))
         cityOffset = currentCycleStats.approximate_fog_city_army - cityDistanceWasteApprox
         teamTotalFogEmergenceEstAvailableTrue = currentCycleStats.approximate_fog_army_available_total_true + cityOffset
@@ -1685,8 +1965,16 @@ class OpponentTracker(object):
             # where the fuck did the magic -4 and + 2 below come from?
             if emergence >= teamTotalFogEmergenceEstAvailable + cityDistanceWasteApprox - 4 and not (tile.delta.gainedSight and tile.army < emergence):
                 maxDist = max(1, teamTotalFogEmergenceEstAvailable + cityDistanceWasteApprox - emergence + 2) * 2
-                self.view_info.add_info_line(f'BC emgnce {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable}+cityWaste{cityDistanceWasteApprox}, CONF WITHIN {maxDist} general limit to {tile}')
-                self.send_general_distance_notification(maxDist, tile, generalConfidence=teamScores.cityCount == 1)
+                # Tests: Tests/test_GeneralTrade.py::test_sim__general_trade__continued_play -
+                # our own general position is always known, so emergence
+                # ACCOUNTING still applies for self above, but
+                # uncertain-general-position inference is only meaningful for
+                # other players: never notify our own ArmyTracker eliminator
+                # (it asserts on self). Domain eligibility boundary, not error
+                # suppression - the assertions inside general inference stay.
+                if player != self.map.player_index:
+                    self.view_info.add_info_line(f'BC emgnce {emergence} VS teamTotalFogEmergenceEst {teamTotalFogEmergenceEstAvailable}+cityWaste{cityDistanceWasteApprox}, CONF WITHIN {maxDist} general limit to {tile}')
+                    self.send_general_distance_notification(maxDist, tile, generalConfidence=teamScores.cityCount == 1, emergingPlayer=player)
 
         logbook.info(
             f'E+: {repr(tile)} - p{player} team[{currentCycleStats.team}] emergence {emergence} reducing approximate_fog_army_available_total')
@@ -2165,9 +2453,19 @@ class OpponentTracker(object):
             if isSerious and self.view_info:
                 self.view_info.add_info_line(f'----FIXED sumWithFog {sumWithFog} score {curTurnScores.score} - fog {currentCycleStats.approximate_fog_army_available_total}, city {currentCycleStats.approximate_fog_city_army}')
 
-    def send_general_distance_notification(self, maxDist: int, tile: Tile, generalConfidence: bool):
+    def send_general_distance_notification(self, maxDist: int, tile: Tile, generalConfidence: bool, emergingPlayer: int) -> None:
+        """
+        Notifies registered emergence listeners that `emergingPlayer` had an
+        emergence event at `tile` that bounds their general position within
+        `maxDist` distance of it.
+
+        @param maxDist: max distance the emerging player's general could be from the tile.
+        @param tile: the tile the emergence occurred at.
+        @param generalConfidence: whether the bound is certain (team has no unknown cities).
+        @param emergingPlayer: the attributed emerging player index (may differ from the tile's current owner, e.g. after captures or a general trade).
+        """
         for notification in self.outbound_emergence_notifications:
-            notification(maxDist, tile, generalConfidence)
+            notification(maxDist, tile, generalConfidence, emergingPlayer)
 
     def get_team_unknown_city_count_by_player(self, player: int) -> int:
         """

@@ -19,6 +19,7 @@ from PerformanceTimer import PerformanceTimer
 from StrategyModels.ExpansionPotential import ExpansionPotential
 from Territory import TerritoryClassifier
 from .OpponentTracker import OpponentTracker
+from .RoundProjection import project_round_outcome
 from base.client.map import MapBase, Tile
 
 
@@ -648,16 +649,18 @@ class WinConditionAnalyzer(object):
 
         ourStats = self.opponent_tracker.get_current_team_scores_by_player(self.map.player_index)
         enemyStats = self.opponent_tracker.get_current_team_scores_by_player(self.target_player)
-        cityValue = self.map.remainingCycleTurns // 2
-        ourProjectedEconomy = ourStats.tileCount + ourStats.cityCount * cityValue
-        enemyProjectedEconomy = enemyStats.tileCount + enemyStats.cityCount * cityValue
+        # Tests/test_CityRoundDecisions.py::test_should_not_invent_enemy_cities_or_force_all_in_while_chipping_neutral_city
+        # Physical round projection (end-of-round tiles/cities/army and next-cycle
+        # income) replaces the old weighted cumulative_econ_value arithmetic: buying
+        # a city must not read as losing the ROUND when the recurring income it
+        # buys keeps next-cycle income competitive.
+        outcome = project_round_outcome(
+            self.map, ourStats, enemyStats, expansion_plan, enemy_expansion_plan, bot.timings.cycleTurns)
 
-        ourExpansionEconomy = expansion_plan.cumulative_econ_value
-        enemyExpansionEconomy = enemy_expansion_plan.cumulative_econ_value
-        ourProjectedEconomy += ourExpansionEconomy
-        enemyProjectedEconomy += enemyExpansionEconomy
-        ourProjectedArmy = ourStats.standingArmy + ourProjectedEconomy
-        enemyProjectedArmy = enemyStats.standingArmy + enemyProjectedEconomy
+        ourProjectedEconomy = outcome.friendly.next_cycle_income
+        enemyProjectedEconomy = outcome.enemy.next_cycle_income
+        ourProjectedArmy = outcome.friendly.army
+        enemyProjectedArmy = outcome.enemy.army
         projectedEconomyGap = enemyProjectedEconomy - ourProjectedEconomy
         economyLost = ourProjectedEconomy < enemyProjectedEconomy * economyRatioRequired and projectedEconomyGap >= minimumEconomyGap
         armyLost = ourProjectedArmy < enemyProjectedArmy * armyRatioRequired
@@ -665,7 +668,8 @@ class WinConditionAnalyzer(object):
         logbook.info(
             f'WCA_PROJECTED_ROUND_LOSS turn={self.map.turn} '
             f'ourProjectedEconomy={ourProjectedEconomy:.2f} enemyProjectedEconomy={enemyProjectedEconomy:.2f} '
-            f'ourExpansionEconomy={ourExpansionEconomy:.2f} enemyExpansionEconomy={enemyExpansionEconomy:.2f} '
+            f'ourProjectedEndTiles={outcome.friendly.tile_count} enemyProjectedEndTiles={outcome.enemy.tile_count} '
+            f'ourProjectedCities={outcome.friendly.city_count} enemyProjectedCities={outcome.enemy.city_count} '
             f'projectedEconomyGap={projectedEconomyGap:.2f} '
             f'economyRatioRequired={economyRatioRequired:.2f} '
             f'ourProjectedArmy={ourProjectedArmy} enemyProjectedArmy={enemyProjectedArmy} '

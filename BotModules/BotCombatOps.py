@@ -567,8 +567,12 @@ class BotCombatOps:
     def get_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if not BotStateQueries.is_all_in(bot):
             return None
-        if bot.win_condition_analyzer.projected_loss_all_in_active:
-            return None
+        # Tests/test_AllIn.py::test_should_not_idle_during_projected_loss_all_in_with_uncertain_enemy_general
+        # The projected-loss flag must NOT suppress the generic all-in gather: the
+        # specialized projected-loss gather already runs earlier (bot_ek0x45 ~1540)
+        # and this call is the correct FALLBACK when that gather skips or fails —
+        # the old unconditional early-return here is what produced the t134-149
+        # idle turns in the live TtVz86M3i repro.
 
         mode = 'PCST'
 

@@ -16,8 +16,11 @@ from bot_ek0x45 import EklipZBot
 
 
 class ArmyInterceptionTests(TestBase):
+    USE_V2_INTERCEPTION: bool = False
+
     def __init__(self, methodName: str = ...):
         super().__init__(methodName)
+        self.use_v2_interception = ArmyInterceptionTests.USE_V2_INTERCEPTION
 
     # test_should_recognize_to_either_split_or_delay
     # test_should_recognize_multi_threat_and_intercept_at_choke__prevent_right_and_up
@@ -38,6 +41,7 @@ class ArmyInterceptionTests(TestBase):
         bot.info_render_army_emergence_values = False
         bot.army_interceptor.log_debug = True
         bot.army_interceptor.log_eval_debug = True
+        bot.army_interceptor.use_v2_interception = self.use_v2_interception
         if clearCurPath:
             bot.curPath = None
 

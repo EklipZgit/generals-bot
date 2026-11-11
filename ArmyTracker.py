@@ -21,7 +21,7 @@ from MapMatrix import MapMatrixSet, TileSet
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import *
 from Path import Path
-from base.client.map import Tile, TILE_OBSTACLE, TileDelta, Player, MODIFIER_TORUS, MAX_ALLY_SPAWN_DISTANCE, MIN_ALLY_SPAWN_DISTANCE
+from base.client.map import Tile, TILE_OBSTACLE, TileDelta, Player, MODIFIER_TORUS, MAX_ALLY_SPAWN_DISTANCE, MIN_ALLY_SPAWN_DISTANCE, GeneralTrade
 
 if typing.TYPE_CHECKING:
     from Strategy.OpponentTracker import OpponentTracker
@@ -273,7 +273,23 @@ class ArmyTracker(object):
 
         self.fogPaths = []
 
+        # Tests: Tests/test_GeneralTrade.py - a general trade is an atomic
+        # ownership swap of both players' land, not a sequence of moves; the
+        # mass flip events must not feed the movement/flip inference machinery
+        # for the two traded players, but unrelated players' real moves/flips
+        # this turn still process normally (handle_general_trade already
+        # rebuilt the traded pair's tracked state).
+        # Tests: Tests/test_FfaGeneralTrade.py - filter against the union of
+        # ALL traded pairs this turn, not just the compat first
+        tradedPlayers = self.map.traded_players_this_turn
+        if tradedPlayers:
+            self._flipped_tiles = {
+                tile for tile in self._flipped_tiles
+                if tile.delta.oldOwner not in tradedPlayers and tile.delta.newOwner not in tradedPlayers}
+
         with self.perf_timer.begin_move_event('ArmyTracker army movement'):
+            # swap-direction unexplained deltas were already normalized to 0 by
+            # the map's trade repair, so only real unrelated moves enter here
             self.track_army_movement()
 
         with self.perf_timer.begin_move_event('ArmyTracker non-neutral flipped tiles'):
@@ -1456,8 +1472,206 @@ class ArmyTracker(object):
     def notify_seen_player_tile(self, tile: Tile):
         self._flipped_tiles.add(tile)
 
-    def notify_concrete_emergence(self, maxDist: int, emergingTile: Tile, confidentFromGeneral: bool):
-        player = emergingTile.player
+    def handle_general_trade(self, trade: GeneralTrade) -> None:
+        """
+        Rebuilds army-tracker state for a mutual general capture (general
+        trade) detected by MapBase.update: scraps every tracked army belonging
+        to either traded player (their owners/amounts are all stale after the
+        atomic land swap), collapses the opponent's valid general positions to
+        the now-known new enemy general, and clears pending flip events so the
+        bulk transfer is not misclassified as moves/combat.
+        Tests: Tests/test_GeneralTrade.py test_sim__general_trade__bot_fog_state.
+        @param trade: the GeneralTrade detected on this turn's map update.
+        """
+        tradedPlayers = (trade.player, trade.opponent)
+        isSelfTrade = trade.player == self.map.player_index or trade.opponent == self.map.player_index
+
+        if isSelfTrade:
+            for army in list(self.armies.values()):
+                if army.tile is None:
+                    continue
+                if army.tile.player in tradedPlayers or army.tile.delta.oldOwner in tradedPlayers:
+                    # discard stale fog-prediction reverts BEFORE scrapping so
+                    # they cannot revert the map-repaired trade tiles back to
+                    # guesses
+                    army.fogTileReverts = {}
+                    self.scrap_army(army, scrapEntangled=True)
+        else:
+            # Tests: Tests/test_FfaGeneralTrade.py - an OBSERVED trade must
+            # PRESERVE the pair's tracked fog armies: remap each army's owner
+            # and scale its remembered value (raw=value+1, halved then -1;
+            # visible armies take the authoritative current tile.army-1) and
+            # transform its fog-prediction reverts the same way. Scrapping
+            # would destroy real spatial knowledge the server just told us
+            # exchanged hands.
+            self._transform_observer_traded_armies(trade)
+            # every piece of player-indexed territorial/spatial knowledge
+            # transfers wholesale between the pair (historical tiles
+            # included); behavioral identity stays with the real player.
+            self._swap_traded_player_state(trade.player, trade.opponent)
+            self._swap_traded_player_misc(trade.player, trade.opponent)
+            # Tests: Tests/test_FfaGeneralTrade.py - after the state swap,
+            # collapse each pair member's candidate positions to a singleton
+            # when their (swapped) general is concretely known.
+            for playerIdx in tradedPlayers:
+                knownGen = self.map.generals[playerIdx]
+                if knownGen is not None and knownGen.isGeneral:
+                    validPositions = self.valid_general_positions_by_player[playerIdx]
+                    validPositions.raw[:] = [False] * len(validPositions.raw)
+                    validPositions.add(knownGen)
+            return
+
+        # Tests: Tests/test_GeneralTrade.py + Tests/test_FfaGeneralTrade.py -
+        # for a self trade the WHOLE historical sets exchange too (our former
+        # land is now the opponent's recorded history and vice versa), then
+        # the now-known new enemy general collapses to a singleton.
+        self._swap_traded_player_state(trade.player, trade.opponent)
+        for playerIdx in tradedPlayers:
+            playerGen = self.map.generals[playerIdx]
+            validPositions = self.valid_general_positions_by_player[playerIdx]
+            if playerGen is not None and playerGen.isGeneral:
+                validPositions.raw[:] = [False] * len(validPositions.raw)
+                validPositions.add(playerGen)
+
+    def _swap_traded_player_state(self, pA: int, pB: int) -> None:
+        """
+        Exchanges every player-indexed territorial/spatial field between the
+        two traded players: seen/visible tile sets, emergence event records,
+        connector/connected sets, emergence location maps, valid general
+        positions, tiles-ever-owned history, and expansion counts. Behavioral
+        identity (aggression, launch timings) stays with the real player.
+        Tests: Tests/test_FfaGeneralTrade.py test_map__ffa_trade__tracker_object_identities_swap.
+        """
+        # tuple-swap every spatial field at once
+        self.valid_general_positions_by_player[pA], self.valid_general_positions_by_player[pB] = (
+            self.valid_general_positions_by_player[pB], self.valid_general_positions_by_player[pA])
+        self.tiles_ever_owned_by_player[pA], self.tiles_ever_owned_by_player[pB] = (
+            self.tiles_ever_owned_by_player[pB], self.tiles_ever_owned_by_player[pA])
+        self.seen_tiles_by_player[pA], self.seen_tiles_by_player[pB] = (
+            self.seen_tiles_by_player[pB], self.seen_tiles_by_player[pA])
+        self.visible_tiles_by_player[pA], self.visible_tiles_by_player[pB] = (
+            self.visible_tiles_by_player[pB], self.visible_tiles_by_player[pA])
+        self.seen_player_lookup[pA], self.seen_player_lookup[pB] = (
+            self.seen_player_lookup[pB], self.seen_player_lookup[pA])
+        self.uneliminated_emergence_events[pA], self.uneliminated_emergence_events[pB] = (
+            self.uneliminated_emergence_events[pB], self.uneliminated_emergence_events[pA])
+        self.unrecaptured_emergence_events[pA], self.unrecaptured_emergence_events[pB] = (
+            self.unrecaptured_emergence_events[pB], self.unrecaptured_emergence_events[pA])
+        self.uneliminated_emergence_event_city_perfect_info[pA], self.uneliminated_emergence_event_city_perfect_info[pB] = (
+            self.uneliminated_emergence_event_city_perfect_info[pB], self.uneliminated_emergence_event_city_perfect_info[pA])
+        self.discovered_enemy_land_connector_tiles[pA], self.discovered_enemy_land_connector_tiles[pB] = (
+            self.discovered_enemy_land_connector_tiles[pB], self.discovered_enemy_land_connector_tiles[pA])
+        self.connectedByPlayer[pA], self.connectedByPlayer[pB] = (
+            self.connectedByPlayer[pB], self.connectedByPlayer[pA])
+        self.coreConnectedByPlayer[pA], self.coreConnectedByPlayer[pB] = (
+            self.coreConnectedByPlayer[pB], self.coreConnectedByPlayer[pA])
+        self.player_connected_tiles[pA], self.player_connected_tiles[pB] = (
+            self.player_connected_tiles[pB], self.player_connected_tiles[pA])
+        self.unconnectable_tiles[pA], self.unconnectable_tiles[pB] = (
+            self.unconnectable_tiles[pB], self.unconnectable_tiles[pA])
+        self.emergenceLocationMap[pA], self.emergenceLocationMap[pB] = (
+            self.emergenceLocationMap[pB], self.emergenceLocationMap[pA])
+        self.initial_expansion_tile_counts[pA], self.initial_expansion_tile_counts[pB] = (
+            self.initial_expansion_tile_counts[pB], self.initial_expansion_tile_counts[pA])
+
+    def _transform_observer_traded_armies(self, trade: GeneralTrade) -> None:
+        """
+        Transforms tracked armies belonging to an OBSERVED traded pair in
+        place (never scrapped - the bulk swap is real information). Walks
+        EVERY army plus all reachable entangledArmies refs as a worklist so
+        each army object is processed exactly once, independently (cycles in
+        the entanglement graph are handled by the seen-id set). Only armies
+        whose own .player belongs to the pair are transformed - a third
+        party's army sitting on traded land is NOT theirs. Per army: remap
+        .player between the pair; scale remembered .value (raw-1 convention:
+        ceil((value+1)/2)-1) for fog armies, or the authoritative current
+        tile.army-1 for visible ones; scale its own .entangledValue once the
+        same way; and rewrite its FogTileRevert entries only when the
+        revert's owner belongs to the pair - pair-owned reverts on
+        authoritatively repaired tiles are dropped (they'd undo the swap),
+        pair-owned reverts elsewhere get owner+halved-army, and unrelated
+        players' reverts are left completely alone.
+        Tests: Tests/test_FfaGeneralTrade.py
+        """
+        pA, pB = trade.player, trade.opponent
+        traded = (pA, pB)
+        seen: typing.Set[int] = set()
+        worklist: typing.List[Army] = list(self.armies.values())
+
+        def remapPlayer(playerIdx: int) -> int:
+            """Returns the swapped owner for a traded-pair index."""
+            if playerIdx == pA:
+                return pB
+            if playerIdx == pB:
+                return pA
+            return playerIdx
+
+        while worklist:
+            army = worklist.pop()
+            if id(army) in seen:
+                continue
+            seen.add(id(army))
+            # reach every entangled ref exactly once
+            worklist.extend(army.entangledArmies)
+            if army.tile is None:
+                continue
+            if army.player not in traded:
+                continue
+            army.player = remapPlayer(army.player)
+            # general tiles aren't halved (unhalved capture leftover), so a
+            # fog army parked on one keeps an estimate, not a halved value
+            if army.tile.isGeneral:
+                army.value = max(0, army.tile.army - 1)
+            elif army.tile.visible:
+                army.value = max(0, army.tile.army - 1)
+            else:
+                army.value = max(0, (army.value + 2) // 2 - 1)
+            if army.entangledValue is not None:
+                army.entangledValue = max(0, (army.entangledValue + 2) // 2 - 1)
+            for revertTile, revert in list(army.fogTileReverts.items()):
+                if revert.player in traded:
+                    # a pair-owned revert on an authoritatively repaired tile
+                    # would undo the server swap - drop it
+                    del army.fogTileReverts[revertTile]
+                else:
+                    continue  # unrelated player's revert: leave untouched
+
+    def _swap_traded_player_misc(self, pA: int, pB: int) -> None:
+        """
+        Swaps the remaining per-player bookkeeping for a traded pair:
+        should_recalc flags force a rebuild on both sides, and
+        players_with_incorrect_tile_predictions remaps membership so stale
+        prediction flags follow the player who now owns that territory.
+        Tests: Tests/test_FfaGeneralTrade.py
+        """
+        self.should_recalc_fog_land_by_player[pA] = True
+        self.should_recalc_fog_land_by_player[pB] = True
+        newIncorrect: typing.Set[int] = set()
+        for idx in self.players_with_incorrect_tile_predictions:
+            if idx == pA:
+                newIncorrect.add(pB)
+            elif idx == pB:
+                newIncorrect.add(pA)
+            else:
+                newIncorrect.add(idx)
+        self.players_with_incorrect_tile_predictions = newIncorrect
+
+    def notify_concrete_emergence(self, maxDist: int, emergingTile: Tile, confidentFromGeneral: bool, player: int) -> None:
+        """
+        Handles an emergence notification from the OpponentTracker: limits the
+        ATTRIBUTED emerging player's possible general positions to within
+        `maxDist` of the tile the emergence happened at.
+
+        The attributed player is carried through from the event rather than
+        derived from the tile's current owner, because the owner may have
+        changed since the emergence was generated (e.g. captures or a
+        general trade) - see Tests/test_GeneralTrade.py.
+
+        @param maxDist: max distance the emerging player's general could be from the tile.
+        @param emergingTile: the tile the emergence occurred at.
+        @param confidentFromGeneral: whether the bound is certain (team has no unknown cities).
+        @param player: the attributed emerging player index.
+        """
         self.unrecaptured_emergence_events[player].add(emergingTile)
         self._limit_general_position_to_within_tile_and_distance(player, emergingTile, maxDist, alsoIncreaseEmergence=False, skipIfLongerThanExisting=True, overrideCityPerfectInfo=confidentFromGeneral)
         if confidentFromGeneral:

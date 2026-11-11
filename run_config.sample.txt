@@ -40,14 +40,15 @@ test_align_right=False
 current_gen_python_path=python3.14
 # Python executable used for external or older bot repositories.
 legacy_python_path=python
+# Alternate bots live in a separate generals-alt-bots folder alongside generals-bot.
 # Path to the Sora bot entrypoint.
-sora_bot_path=C:\Bots\Sora_AI\run_bot.py
+sora_bot_path=C:\Bots\generals-alt-bots\Sora_AI\run_bot.py
 # Path to the blob bot entrypoint.
-blob_bot_path=C:\Bots\generals-blob-and-path\bot_blob.py
+blob_bot_path=C:\Bots\generals-alt-bots\generals-blob-and-path\bot_blob.py
 # Path to the path bot entrypoint.
-path_bot_path=C:\Bots\generals-blob-and-path\bot_path_collect.py
+path_bot_path=C:\Bots\generals-alt-bots\generals-blob-and-path\bot_path_collect.py
 # Root folder containing historical bot checkpoints / versions.
-historical_bots_root=C:\Bots\generals-bot-historical
+historical_bots_root=C:\Bots\generals-alt-bots\generals-bot-historical
 # Mirror target used by Create-Checkpoint.
 checkpoint_mirror_root=C:\Bots\generals-bot-checkpoint
 # Backup target root used by Create-Checkpoint / Run-BotCheckpoint.

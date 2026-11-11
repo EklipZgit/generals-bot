@@ -1,10 +1,11 @@
 """Regression tests for run-bot.ps1 launcher path validation and temp script lifecycle.
 
 Each test spawns an isolated pwsh subprocess that loads only the function
-definitions from the real run-bot.ps1 via the PowerShell AST parser, so the real
-run_config.txt, real bot paths, real log folders, and the user-owned
-block_bot.txt are never read or touched and no bot interpreter or game process
-is ever launched (Start-Process is stubbed to inspect the generated script).
+definitions from the real run-bot.ps1 via the PowerShell AST parser. Launcher
+tests use fixture config and paths, leaving real log folders and the user-owned
+block_bot.txt untouched. One optional source-only viewer check reads the real
+run_config.txt to locate the external blob/path viewer. No bot interpreter or
+game process is launched (Start-Process is stubbed to inspect generated scripts).
 All filesystem fixtures are generated fresh per test via tempfile.mkdtemp under
 C:\\cascade-debug-output\\generals-bot and left on disk as evidence.
 """
@@ -44,9 +45,6 @@ HISTORICAL_ENTRYPOINTS: list[tuple[str, str]] = [
 
 _MARKER_PATTERN: re.Pattern[str] = re.compile(r'^[A-Z_0-9]+$')
 _GUID_STEM_PATTERN: re.Pattern[str] = re.compile(r'^[0-9a-f]{32}$')
-
-# External blob/path bot viewer source; a local machine path outside the repo.
-BLOB_PATH_VIEWER: str = r'C:\old-bots\generals-blob-and-path\base\viewer.py'
 
 HUMAN_LIVE_BOT_COMMANDS: list[str] = [
     'Run-Human -left -game 1v1 -sleepMax 600 -cpuAffinityMask P',
@@ -151,13 +149,14 @@ class RunBotLauncherTests(unittest.TestCase):
         _LOG.info('fixture root: {}', self.fixture_root)
 
     def _run_pwsh(self, script: str) -> PwshResult:
-        """Runs the given script under pwsh -NoProfile -NonInteractive -Command.
+        """Runs pwsh with terminating errors so path failures cannot look successful.
 
         :param script: PowerShell source executed as the -Command payload.
         :return: Captured return code and stream text.
         """
+        # test_terminal_tabs_read_repo_and_alt_paths_from_config must fail on path errors.
         proc = subprocess.run(
-            ['pwsh', '-NoProfile', '-NonInteractive', '-Command', script],
+            ['pwsh', '-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference = 'Stop'\n" + script],
             capture_output=True,
             text=True,
             timeout=180)
@@ -184,25 +183,29 @@ class RunBotLauncherTests(unittest.TestCase):
     def _load_functions_prelude(self) -> str:
         """Builds a pwsh prelude loading only run-bot.ps1 function definitions.
 
-        The real script is parsed with the PowerShell AST parser and each
-        top-level function is defined via Invoke-Expression, so the script's
-        top-level Initialize-RunConfig call (and hence the real run_config.txt)
-        never runs. The script-level state the functions read is set manually
-        to per-test fixture values. A Get-RunConfigFilePath override is needed
-        because AST-loaded functions have an empty $PSScriptRoot which would
-        make Join-Path throw. Test-Path/Get-Content are overridden only for
-        the 'block_bot.txt' leaf so the user-owned real file is never touched
-        and the suite behaves identically whether or not bots are blocked.
+        Only AST-extracted function definitions are written to a fixture script
+        and sourced, giving the functions a real $PSScriptRoot without running
+        the launcher's top-level Initialize-RunConfig call. Script state and
+        Get-RunConfigFilePath are set to per-test fixtures. Test-Path/Get-Content
+        are overridden only for the 'block_bot.txt' leaf so the user-owned real
+        file is never touched and tests behave identically with bots blocked.
         """
         return f"""
 $scriptTokens = $null
 $scriptParseErrors = $null
 $scriptAst = [System.Management.Automation.Language.Parser]::ParseFile({_ps_literal(RUN_BOT_PS1)}, [ref]$scriptTokens, [ref]$scriptParseErrors)
-foreach ($definition in $scriptAst.EndBlock.Statements) {{
+if ($scriptParseErrors.Count -ne 0) {{ throw 'run-bot.ps1 has PowerShell parse errors.' }}
+$functionDefinitions = foreach ($definition in $scriptAst.EndBlock.Statements) {{
     if ($definition -is [System.Management.Automation.Language.FunctionDefinitionAst]) {{
-        Invoke-Expression $definition.Extent.Text
+        $definition.Extent.Text
     }}
 }}
+# test_terminal_tabs_read_repo_and_alt_paths_from_config and
+# test_all_configured_bot_entrypoint_paths_exist need a real script root,
+# not the empty $PSScriptRoot produced by Invoke-Expression.
+$functionPath = {_ps_literal(os.path.join(self.fixture_root, 'launcher-functions.ps1'))}
+[IO.File]::WriteAllText($functionPath, [string]::Join([Environment]::NewLine, $functionDefinitions))
+. $functionPath
 $Script:RunConfig = @{{
     repo_root = {_ps_literal(self.fake_repo)}
     log_folder = {_ps_literal(self.log_dir)}
@@ -305,7 +308,80 @@ try {{
         self.assertNotIn('SLEEP', markers)
         self.assertNotIn('COMPLETED', markers)
 
-    def _temp_launch_script(self, simulate_played: bool) -> str:
+    def test_alt_tabs_use_configured_launcher_without_relative_imports(self) -> None:
+        """Alternate tabs must rely on the shared config-based launcher import."""
+        script = f"""
+{self._load_functions_prelude()}
+function Start-RunBotWindowsTerminalTab {{
+    param($WindowName, $Command)
+    Write-Output "WINDOW|$WindowName"
+    Write-Output "LAUNCH|$Command"
+}}
+function Start-Sleep {{ param($Seconds) }}
+Start-WindowsTerminalAltBots
+"""
+        markers = self._markers(self._run_pwsh(script))
+        self.assertEqual(markers.get('WINDOW'), ['AltBots'] * 7)
+        commands = markers.get('LAUNCH', [])
+        self.assertEqual(len(commands), 7)
+        self.assertEqual(commands[:6], [
+            'Run-Blob -game ffa',
+            'Run-Path -game ffa',
+            'Run-Path -game 1v1 -SleepMax 60',
+            'Run-Blob -game 1v1 -SleepMax 60',
+            'Run-SoraAI -game ffa',
+            'Run-SoraAI -game 1v1 -SleepMax 60',
+        ])
+        for command in commands:
+            self.assertNotIn('run-bot.ps1', command)
+        self.assertIn(
+            os.path.join(self.hist_root, 'generals-bot-2023-07-24', 'bot_ek0x45.py'),
+            commands[-1])
+
+    def test_terminal_tabs_read_repo_and_alt_paths_from_config(self) -> None:
+        """The config, not the current directory, must determine script and bot paths."""
+        configured_repo = os.path.join(self.fixture_root, "configured repo's checkout")
+        with open(self.fixture_config_path, 'w', encoding='utf-8') as file_handle:
+            file_handle.write(
+                '# Independent checkout and alternate-bot locations.\n'
+                f'repo_root = {configured_repo}\n'
+                f'sora_bot_path = {self.sora_bot}\n'
+                f'blob_bot_path = {self.blob_bot}\n'
+                f'path_bot_path = {self.path_bot}\n'
+                f'historical_bots_root = {self.hist_root}\n')
+        script = f"""
+{self._load_functions_prelude()}
+$Script:RunConfig = $null
+function wt {{
+    $encodedIndex = [Array]::IndexOf($args, '-EncodedCommand') + 1
+    $decoded = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($args[$encodedIndex]))
+    Write-Output "TAB_SCRIPT|$decoded"
+    $parseTokens = $null
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseInput($decoded, [ref]$parseTokens, [ref]$parseErrors)
+    Write-Output "PARSE_ERRORS|$($parseErrors.Count)"
+}}
+Start-RunBotWindowsTerminalTab -WindowName 'ConfigTest' -Command 'Run-Blob' -LoadGameResultUtils
+Write-Output "SORA|$(Get-SoraBotPath)"
+Write-Output "BLOB|$(Get-BlobBotPath)"
+Write-Output "PATH|$(Get-PathBotPath)"
+Write-Output "HISTORICAL|$(Get-HistoricalBotsRoot)"
+"""
+        markers = self._markers(self._run_pwsh(script))
+        tab_script = markers['TAB_SCRIPT'][0]
+        self.assertIn(f'Set-Location {_ps_literal(configured_repo)}', tab_script)
+        self.assertIn(f". {_ps_literal(os.path.join(configured_repo, 'run-bot.ps1'))}", tab_script)
+        self.assertIn(
+            f". {_ps_literal(os.path.join(configured_repo, 'game-result-analysis-utils.ps1'))}",
+            tab_script)
+        self.assertNotIn(r'.\run-bot.ps1', tab_script)
+        self.assertEqual(markers.get('PARSE_ERRORS'), ['0'])
+        self.assertEqual(markers.get('SORA'), [self.sora_bot])
+        self.assertEqual(markers.get('BLOB'), [self.blob_bot])
+        self.assertEqual(markers.get('PATH'), [self.path_bot])
+        self.assertEqual(markers.get('HISTORICAL'), [self.hist_root])
+
+    def _temp_launch_script(self, simulate_played: bool, arguments: str = '') -> str:
         """Builds a pwsh payload that runs Run-BotOnce with all launch effects stubbed.
 
         Redirects TMP/TEMP to a fixture dir containing spaces before .NET
@@ -314,6 +390,7 @@ try {{
 
         :param simulate_played: When True the stubbed Start-Process creates the
             matching .played marker so Run-BotOnce should return True.
+        :param arguments: Additional launcher arguments, including server selection.
         :return: Full PowerShell test payload.
         """
         played_flag = '$true' if simulate_played else '$false'
@@ -347,6 +424,9 @@ function Start-Process {{
         [void]$global:Markers.Add("HAS_PRIVATE|$($scriptContent -match "-g', 'private'")")
         [void]$global:Markers.Add("HAS_CPU_MASK|$($scriptContent.Contains('[IntPtr]::new(16)'))")
         [void]$global:Markers.Add("HAS_BOT_PATH|$($scriptContent.Contains('fake_bot.py'))")
+        $serverMatch = [regex]::Match($scriptContent, "'-server', '(local|bot|na)'")
+        [void]$global:Markers.Add("SERVER|$($serverMatch.Groups[1].Value)")
+        [void]$global:Markers.Add("HAS_PUBLIC|$($scriptContent.Contains('--public'))")
         if ($scriptContent -match "Start-Process -FilePath '([^']+)'") {{
             [void]$global:Markers.Add("INTERP|$($Matches[1])")
         }}
@@ -359,7 +439,7 @@ function Start-Process {{
     }}
 }}
 $global:SimulatePlayed = {played_flag}
-$result = Run-BotOnce -name 'LauncherTestBot' -game 'ffa' -path {_ps_literal(self.fake_bot_path)} -noui -nolog -noTextLog -privateGame -roomID 'room99' -cpuAffinityMask '4'
+$result = Run-BotOnce -name 'LauncherTestBot' -game 'ffa' -path {_ps_literal(self.fake_bot_path)} -noui -nolog -noTextLog -privateGame -roomID 'room99' -cpuAffinityMask '4' {arguments}
 foreach ($marker in $global:Markers) {{ Write-Output $marker }}
 Write-Output "RESULT|$result"
 Write-Output "LEFTOVER_PS1|$(if ($global:LastPs1) {{ Test-Path -LiteralPath $global:LastPs1 }} else {{ 'Unknown' }})"
@@ -521,6 +601,142 @@ Write-Output "TEMPDIR_CREATED|$(Test-Path -LiteralPath {_ps_literal(os.path.join
         result = self._run_pwsh(self._temp_launch_script(simulate_played=False))
         self._assert_launch_markers(self._markers(result), 'False')
 
+    def test_run_botonce_serializes_server_and_preserves_public_alias(self) -> None:
+        """Serialize one canonical destination; explicit Server wins over legacy public."""
+        for arguments, expected in [
+            ('', 'bot'), ('-public', 'na'), ('-Server local', 'local'),
+            ('-Server bot -public', 'bot'), ('-Server na', 'na'),
+            ('-Server LOCAL', 'local'),
+        ]:
+            with self.subTest(arguments=arguments):
+                markers = self._markers(self._run_pwsh(self._temp_launch_script(False, arguments)))
+                self.assertEqual(markers.get('SERVER'), [expected])
+                self.assertEqual(markers.get('HAS_PUBLIC'), ['False'])
+
+    def test_all_run_helpers_forward_server_and_preserve_default_destinations(self) -> None:
+        """Generic/alternate helpers retain bot defaults, Human helpers retain NA."""
+        script = f"""
+{self._load_functions_prelude()}
+$Script:RunConfig['checkpoint_backup_root'] = {_ps_literal(os.path.join(self.fixture_root, 'checkpoints'))}
+function Create-Checkpoint {{ param($backup) }}
+function Run-BotOnce {{
+    param($name, $game, [switch]$public, [switch]$right, $privateGame, $roomID,
+          [switch]$noui, $path, $userID, [switch]$nolog, [switch]$noTextLog,
+          [switch]$publicLobby, $cpuAffinityMask, [string]$Server)
+    Write-Host "DESTINATION|$Server"
+    throw 'SENTINEL_LOOP_BREAK'
+}}
+$helpers = @('Run-Bot', 'Run-BotCheckpoint', 'Run-Path', 'Run-Blob',
+             'Run-SoraAI', 'Run-SoraAlt', 'Run-SoraAITeammate',
+             'Run-Human', 'Run-HumanTeammate', 'Run-Teammate')
+foreach ($helper in $helpers) {{
+    foreach ($selection in @('default', 'local', 'bot', 'na', 'legacy', 'override')) {{
+        $invokeArgs = @{{}}
+        $parameters = (Get-Command $helper).Parameters
+        if ($parameters.ContainsKey('game')) {{ $invokeArgs['game'] = @('1v1') }}
+        if ($selection -in @('local', 'bot', 'na')) {{ $invokeArgs['Server'] = $selection }}
+        if ($selection -in @('legacy', 'override')) {{
+            if ($parameters.ContainsKey('botServer')) {{ $invokeArgs['botServer'] = $true }}
+            else {{ $invokeArgs['public'] = $true }}
+        }}
+        if ($selection -eq 'override') {{ $invokeArgs['Server'] = 'local' }}
+        Write-Output "CASE|$helper|$selection"
+        try {{ & $helper @invokeArgs }} catch {{
+            if ($_.Exception.Message -ne 'SENTINEL_LOOP_BREAK') {{ throw }}
+        }}
+    }}
+}}
+Write-Output 'CASES_COMPLETED|True'
+"""
+        markers = self._markers(self._run_pwsh(script))
+        self.assertEqual(markers.get('CASES_COMPLETED'), ['True'])
+        cases = markers.get('CASE', [])
+        destinations = markers.get('DESTINATION', [])
+        self.assertEqual(len(cases), 60)
+        self.assertEqual(len(destinations), len(cases))
+        human_helpers = ('Run-Human', 'Run-HumanTeammate', 'Run-Teammate')
+        for case, destination in zip(cases, destinations):
+            helper, selection = case.split('|')
+            expected = selection
+            if selection == 'default':
+                expected = 'na' if helper in human_helpers else 'bot'
+            elif selection == 'legacy':
+                expected = 'bot' if helper in human_helpers else 'na'
+            elif selection == 'override':
+                expected = 'local'
+            self.assertEqual(destination, expected, case)
+
+    def test_invalid_server_is_rejected_before_launching_for_all_helpers_and_fleets(self) -> None:
+        """Parameter validation must fail before bot processes, tabs, or copies can start."""
+        script = f"""
+{self._load_functions_prelude()}
+function wt {{ throw 'UNEXPECTED_TERMINAL_LAUNCH' }}
+function Start-Process {{ throw 'UNEXPECTED_PROCESS_LAUNCH' }}
+function Start-Sleep {{ param($Seconds) }}
+function Create-Checkpoint {{ throw 'UNEXPECTED_CHECKPOINT_COPY' }}
+$helpers = @('Run-BotOnce', 'Run-Bot', 'Run-BotCheckpoint', 'Run-Path', 'Run-Blob',
+             'Run-SoraAI', 'Run-SoraAlt', 'Run-SoraAITeammate',
+             'Run-Human', 'Run-HumanTeammate', 'Run-Teammate',
+             'Start-RunBotWindowsTerminalTab', 'Start-WindowsTerminalAltBots',
+             'Start-WindowsTerminalHistoricalBots', 'Start-WindowsTerminalBigFfaBots',
+             'Start-WindowsTerminalBigTeamBots', 'Start-WindowsTerminalLiveBots',
+             'Start-WindowsTerminalBotServer2v2Bots', 'Start-WindowsTerminalBotServerLiveBots')
+foreach ($helper in $helpers) {{
+    $invokeArgs = @{{ Server = 'invalid' }}
+    if ($helper -eq 'Start-RunBotWindowsTerminalTab') {{ $invokeArgs['WindowName'] = 'OfflineTest' }}
+    try {{
+        & $helper @invokeArgs
+        throw 'INVALID_SERVER_ACCEPTED'
+    }} catch {{
+        # The concrete validation exception is internal; assert its public error ID instead.
+        if ($_.FullyQualifiedErrorId -notlike 'ParameterArgumentValidationError,*') {{ throw }}
+        Write-Output "INVALID_REJECTED|$helper"
+    }}
+}}
+Write-Output 'CASES_COMPLETED|True'
+"""
+        markers = self._markers(self._run_pwsh(script))
+        self.assertEqual(markers.get('CASES_COMPLETED'), ['True'])
+        self.assertEqual(len(markers.get('INVALID_REJECTED', [])), 19)
+
+    def test_all_fleets_forward_explicit_server_to_every_tab(self) -> None:
+        """Every fleet can override its mixed historical defaults without dropping tabs."""
+        script = f"""
+{self._load_functions_prelude()}
+function Start-Sleep {{ param($Seconds) }}
+function Start-RunBotWindowsTerminalTab {{
+    param($WindowName, $Command, [switch]$LoadGameResultUtils, $Server)
+    Write-Output "FLEET_SERVER|$Server"
+}}
+foreach ($server in @('local', 'bot', 'na')) {{
+    foreach ($fleet in @('Start-WindowsTerminalAltBots', 'Start-WindowsTerminalHistoricalBots',
+                        'Start-WindowsTerminalBigFfaBots', 'Start-WindowsTerminalBigTeamBots',
+                        'Start-WindowsTerminalLiveBots', 'Start-WindowsTerminalBotServer2v2Bots',
+                        'Start-WindowsTerminalBotServerLiveBots')) {{
+        & $fleet -Server $server
+    }}
+}}
+"""
+        markers = self._markers(self._run_pwsh(script))
+        self.assertEqual(markers.get('FLEET_SERVER'), ['local'] * 80 + ['bot'] * 80 + ['na'] * 80)
+
+    def test_terminal_tab_appends_server_override_to_legacy_commands(self) -> None:
+        """Fleet overrides must survive command strings containing public/botServer aliases."""
+        script = f"""
+{self._load_functions_prelude()}
+function wt {{
+    $encodedIndex = [Array]::IndexOf($args, '-EncodedCommand') + 1
+    $decoded = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($args[$encodedIndex]))
+    Write-Output "TAB_SCRIPT|$decoded"
+}}
+Start-RunBotWindowsTerminalTab -WindowName 'Test' -Command 'Run-Human -botServer' -Server local
+Start-RunBotWindowsTerminalTab -WindowName 'Test' -Command 'Run-Blob -public' -Server bot
+"""
+        scripts = self._markers(self._run_pwsh(script)).get('TAB_SCRIPT', [])
+        self.assertEqual(len(scripts), 2)
+        self.assertIn('Run-Human -botServer -Server local', scripts[0])
+        self.assertIn('Run-Blob -public -Server bot', scripts[1])
+
     def test_run_botonce_temp_scripts_use_unique_guid_names(self) -> None:
         """Back-to-back launches must generate distinct GUID-named temp scripts."""
         script = f"""
@@ -655,16 +871,28 @@ foreach ($marker in $global:Markers) {{ Write-Output $marker }}
                 parameters[key] = val
         return parameters
 
-    @unittest.skipUnless(os.path.isfile(BLOB_PATH_VIEWER), 'external blob/path viewer not installed')
     def test_blob_and_path_viewer_has_no_screenshot_writer(self) -> None:
         """The blob/path viewer must be display-only: no screenshot writer, dir, or thread.
 
         Pure source inspection (AST + compile); the viewer module and pygame are
         never imported so no window, network, or filesystem writes can occur.
         """
-        with open(BLOB_PATH_VIEWER, 'rb') as file_handle:
+        config_path = os.path.normpath(os.path.join(REPO_ROOT, '..', 'run_config.txt'))
+        if not os.path.isfile(config_path):
+            self.skipTest('external blob/path viewer config not installed')
+        # Follow blob_bot_path so moving the external checkout cannot silently skip this check.
+        script = f"""
+{self._load_functions_prelude()}
+$Script:RunConfig = $null
+function Get-RunConfigFilePath {{ return {_ps_literal(config_path)} }}
+Write-Output "VIEWER|$(Join-Path (Split-Path (Get-BlobBotPath) -Parent) 'base\\viewer.py')"
+"""
+        viewer_path = self._markers(self._run_pwsh(script))['VIEWER'][0]
+        if not os.path.isfile(viewer_path):
+            self.skipTest(f'external blob/path viewer not installed at {viewer_path}')
+        with open(viewer_path, 'rb') as file_handle:
             source = file_handle.read()
-        compile(source, BLOB_PATH_VIEWER, 'exec')
+        compile(source, viewer_path, 'exec')
         text = source.decode('utf-8', errors='replace')
         tree = ast.parse(text)
 

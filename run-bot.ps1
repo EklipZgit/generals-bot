@@ -232,9 +232,16 @@ function Start-RunBotWindowsTerminalTab {
         [Parameter(Mandatory = $true)]
         [string]$WindowName,
         [string]$Command,
-        [switch]$LoadGameResultUtils
+        [switch]$LoadGameResultUtils,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server
     )
 
+    # UnitTests/test_RunBotLauncher.py::test_terminal_tab_appends_server_override_to_legacy_commands
+    # An explicit fleet selection overrides each command's legacy destination defaults.
+    if ($PSBoundParameters.ContainsKey('Server') -and -not [string]::IsNullOrWhiteSpace($Command)) {
+        $Command += " -Server $($Server.ToLowerInvariant())"
+    }
     $repoRoot = Get-ConfiguredRepoRoot
     $runBotPath = Join-Path $repoRoot 'run-bot.ps1'
     $analysisUtilsPath = Join-Path $repoRoot 'game-result-analysis-utils.ps1'
@@ -318,6 +325,28 @@ function Resolve-CpuAffinityMask {
 }
 
 
+function Resolve-RunBotServer {
+    Param(
+        [System.Collections.IDictionary]$Parameters,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Default = 'bot'
+    )
+
+    # UnitTests/test_RunBotLauncher.py::test_all_run_helpers_forward_server_and_preserve_default_destinations
+    # Explicit destinations take precedence; old switches retain their original meaning.
+    if ($Parameters.ContainsKey('Server')) {
+        return $Parameters['Server'].ToLowerInvariant()
+    }
+    if ($Parameters['botServer']) {
+        return 'bot'
+    }
+    if ($Parameters['public']) {
+        return 'na'
+    }
+    return $Default
+}
+
+
 function Run-BotOnce {
     Param(
         $name,
@@ -332,10 +361,13 @@ function Run-BotOnce {
         [switch]$nolog,
         [switch]$noTextLog,
         [switch]$publicLobby,
-        $cpuAffinityMask = [IntPtr]::Zero
+        $cpuAffinityMask = [IntPtr]::Zero,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'bot'
     )
 
     $ErrorActionPreference = 'Stop'
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters
 
     # UnitTests/test_RunBotLauncher.py::test_run_botonce_invalid_path_throws_before_launcher_work
     # Fail fast on a bad -path before the userID lookup, block_bot check, temp dir, or
@@ -397,9 +429,10 @@ function Run-BotOnce {
     if ($noui) { [void] $arguments.Add("--no-ui") }
     if ($nolog) { [void] $arguments.Add("--no-log") }
     if ($noTextLog) { [void] $arguments.Add("--no-text-log") }
-    if ($public) {
-        [void] $arguments.Add("--public")
-    }
+    # UnitTests/test_RunBotLauncher.py::test_run_botonce_serializes_server_and_preserves_public_alias
+    # Serialize only the canonical flag, avoiding contradictory Python CLI aliases.
+    [void] $arguments.Add("-server")
+    [void] $arguments.Add($Server)
 
     $arguments = $arguments.ToArray()
     $argString = $([string]::Join(" ", $arguments))
@@ -630,19 +663,22 @@ function Run-SoraAI {
         [switch]$nolog,
         [switch]$noTextLog,
         [int]$sleepMax = 3,
-        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
+        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'bot'
     )
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters
     while ($true)
     {
         $userId = 'EKSORA'
-        if ($public)
+        if ($Server -eq 'na')
         {
             $userId = 'SmurfySmurfette'
         }
 
         foreach ($g in $game)
         {
-            $playedGame = run-botonce -game $g -name "Sora AI" -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
+            $playedGame = run-botonce -game $g -name "Sora AI" -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask -Server $Server
             if ($playedGame) {
                 SleepLeastOfTwo -sleepMax $sleepMax
             }
@@ -659,8 +695,11 @@ function Run-SoraAlt {
         [switch]$nolog,
         [switch]$noTextLog,
         [int]$sleepMax = 3,
-        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
+        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'bot'
     )
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters
     while ($true)
     {
         $userId = 'soraAlt1Abc'
@@ -688,7 +727,7 @@ function Run-SoraAlt {
 
         foreach ($g in $game)
         {
-            $playedGame = run-botonce -game $g -name $name -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask
+            $playedGame = run-botonce -game $g -name $name -userID $userId -path (Get-SoraBotPath) -public:$public -nolog:$nolog -noTextLog:$noTextLog -cpuAffinityMask $cpuAffinityMask -Server $Server
             if ($playedGame) {
                 SleepLeastOfTwo -sleepMax $sleepMax
             }
@@ -699,32 +738,45 @@ function Run-SoraAlt {
 
 function Run-SoraAITeammate {
     Param(
-        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
+        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask,
+        [switch]$public,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'bot'
     )
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters
     while ($true)
     {
-        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path (Get-SoraBotPath) -nolog -public:$public -cpuAffinityMask $cpuAffinityMask
+        run-botonce -game 'team' -name "Sora_ai_2" -userID "EKSORA2" -path (Get-SoraBotPath) -nolog -public:$public -cpuAffinityMask $cpuAffinityMask -Server $Server
     }
 }
 
 
 function Start-WindowsTerminalAltBots {
     Param(
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server
     )
+    # UnitTests/test_RunBotLauncher.py::test_all_fleets_forward_explicit_server_to_every_tab
+    # Omission preserves the fleet's existing mix of bot and human destinations.
+    $serverSplat = @{}
+    if ($PSBoundParameters.ContainsKey('Server')) {
+        $serverSplat['Server'] = $Server
+    }
 
     $windowName = 'AltBots'
 
-    # starts a windows terminal that runs the FFA bots and a second instance of Sora AI that joins 1v1s
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-Blob -game ffa'
+    # UnitTests/test_RunBotLauncher.py::test_alt_tabs_use_configured_launcher_without_relative_imports
+    # The shared tab helper imports run-bot.ps1 from the configured repo_root.
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa' @serverSplat
     # time for the terminal window to open
     start-sleep -seconds 3
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-Path -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-Path -game 1v1 -SleepMax 60'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-Blob -game 1v1 -SleepMax 60'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-SoraAI -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command '. .\run-bot.ps1; Run-SoraAI -game 1v1 -SleepMax 60'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game 1v1 -SleepMax 60' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game 1v1 -SleepMax 60' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game 1v1 -SleepMax 60' @serverSplat
     
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command ". .\run-bot.ps1; run-bot -game ffa, 1v1, 1v1, 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, 1v1, 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')" @serverSplat
 }
 
 
@@ -732,14 +784,22 @@ function Start-WindowsTerminalAltBots {
 # starts a windows terminal that runs many historical versions of EklipZ_ai
 function Start-WindowsTerminalHistoricalBots {
     Param(
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server
     )
+    # UnitTests/test_RunBotLauncher.py::test_all_fleets_forward_explicit_server_to_every_tab
+    # Omission preserves the fleet's existing mix of bot and human destinations.
+    $serverSplat = @{}
+    if ($PSBoundParameters.ContainsKey('Server')) {
+        $serverSplat['Server'] = $Server
+    }
 
     $windowName = 'HistBots'
 
     <#
     original timings and bugs from 2019, with connection code fixed
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, 1v1, 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, 1v1, 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')" @serverSplat
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -752,7 +812,7 @@ function Start-WindowsTerminalHistoricalBots {
     de-prioritize fog undiscovered upon discovering nearby neutrals.
         Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, 1v1, ffa -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, 1v1, ffa -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')" @serverSplat
     <#
     Hopefully defense off-by-one threat detection fixed
     Additional panic gather defense added, defense now negatives all tiles in shortest path on attack path
@@ -761,23 +821,23 @@ function Start-WindowsTerminalHistoricalBots {
     gather to enemy tiles inside territory more aggressively
     play turns 25-50 more aggressively (too aggressively?)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')" @serverSplat
     <#
     improved 'vision tile' kill gathers to only gather for the quickexpand turns, and are included in the main gather phase with a 2
         tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')" @serverSplat
     <#
     semi-optimal first 25, unit tests
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')" @serverSplat
     <#
     tweaked gathers taking neutral / enemy tiles to include extra gather moves.
     tweaked initial expansion.
     tweaked optimal_expansion to include move-half when appropriate and draw the boundaries for when move-half is limited to closer-only moves and when it is limited to flankpath-or-closer-only moves.
     reduced neutral city aggressiveness right before launch timings.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, 1v1, ffa -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')" @serverSplat
 
     <#
     more optimal first 25
@@ -793,7 +853,7 @@ function Start-WindowsTerminalHistoricalBots {
     Bugfixed tile delta issues
     iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')" @serverSplat
     <#
     loads of fog / engine bugfixes but still not MCTS working.
     Tweaked attack timings.
@@ -801,7 +861,7 @@ function Start-WindowsTerminalHistoricalBots {
     Brute force army engine time cutoff.
     Dropped file logging.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')" @serverSplat
     <#
     MCTS based army engine.
     2v2
@@ -811,7 +871,7 @@ function Start-WindowsTerminalHistoricalBots {
     defense gather forward instead of back
     found-no-move mcts (need to tune back for historical bots I think)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa, ffa, 1v1, ffa, 1v1 -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')" @serverSplat
 }
 
 
@@ -819,14 +879,22 @@ function Start-WindowsTerminalHistoricalBots {
 # starts a windows terminal that runs many historical versions of EklipZ_ai
 function Start-WindowsTerminalBigFfaBots {
     Param(
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server
     )
+    # UnitTests/test_RunBotLauncher.py::test_all_fleets_forward_explicit_server_to_every_tab
+    # Omission preserves the fleet's existing mix of bot and human destinations.
+    $serverSplat = @{}
+    if ($PSBoundParameters.ContainsKey('Server')) {
+        $serverSplat['Server'] = $Server
+    }
 
     $windowName = 'BigFFA'
 
     <#
     original timings and bugs from 2019, with connection code fixed
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')" @serverSplat
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -839,7 +907,7 @@ function Start-WindowsTerminalBigFfaBots {
     de-prioritize fog undiscovered upon discovering nearby neutrals.
         Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')" @serverSplat
     <#
     Hopefully defense off-by-one threat detection fixed
     Additional panic gather defense added, defense now negatives all tiles in shortest path on attack path
@@ -848,23 +916,23 @@ function Start-WindowsTerminalBigFfaBots {
     gather to enemy tiles inside territory more aggressively
     play turns 25-50 more aggressively (too aggressively?)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')" @serverSplat
     <#
     improved 'vision tile' kill gathers to only gather for the quickexpand turns, and are included in the main gather phase with a 2
         tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')" @serverSplat
     <#
     semi-optimal first 25, unit tests
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')" @serverSplat
     <#
     tweaked gathers taking neutral / enemy tiles to include extra gather moves.
     tweaked initial expansion.
     tweaked optimal_expansion to include move-half when appropriate and draw the boundaries for when move-half is limited to closer-only moves and when it is limited to flankpath-or-closer-only moves.
     reduced neutral city aggressiveness right before launch timings.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')" @serverSplat
 
     <#
     more optimal first 25
@@ -880,7 +948,7 @@ function Start-WindowsTerminalBigFfaBots {
     Bugfixed tile delta issues
     iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')" @serverSplat
     <#
     loads of fog / engine bugfixes but still not MCTS working.
     Tweaked attack timings.
@@ -888,7 +956,7 @@ function Start-WindowsTerminalBigFfaBots {
     Brute force army engine time cutoff.
     Dropped file logging.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')" @serverSplat
     <#
     MCTS based army engine.
     2v2
@@ -898,48 +966,48 @@ function Start-WindowsTerminalBigFfaBots {
     defense gather forward instead of back
     found-no-move mcts (need to tune back for historical bots I think)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game ffa -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')" @serverSplat
 
     <#
     ffa only 2
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog' @serverSplat
 
     <#
     ffa only 3
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog' @serverSplat
 
     <#
     ffa only 4
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog' @serverSplat
 
     <#
     ffa only 2
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i2" -right -noui -nolog' @serverSplat
 
     <#
     ffa only 3
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i3" -right -noui -nolog' @serverSplat
 
     <#
     ffa only 4
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai_i4" -right -noui -nolog' @serverSplat
 
     <#
     ffa only
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai" -right -nolog'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai" -right -nolog' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game ffa' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game ffa' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game ffa' @serverSplat
 }
 
 
@@ -947,7 +1015,15 @@ function Start-WindowsTerminalBigFfaBots {
 # starts a windows terminal that runs many bots in the big team queue
 function Start-WindowsTerminalBigTeamBots {
     Param(
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server
     )
+    # UnitTests/test_RunBotLauncher.py::test_all_fleets_forward_explicit_server_to_every_tab
+    # Omission preserves the fleet's existing mix of bot and human destinations.
+    $serverSplat = @{}
+    if ($PSBoundParameters.ContainsKey('Server')) {
+        $serverSplat['Server'] = $Server
+    }
 
     $windowName = 'BigTeam'
 
@@ -955,7 +1031,7 @@ function Start-WindowsTerminalBigTeamBots {
     <#
     original timings and bugs from 2019, with connection code fixed
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')" @serverSplat
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -968,7 +1044,7 @@ function Start-WindowsTerminalBigTeamBots {
     de-prioritize fog undiscovered upon discovering nearby neutrals.
         Increase army emergence fog distance to 10 from 6, first 3 tiles into undiscovered get same rating
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_13' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-29' -BotFile 'bot_ek0x45.py')" @serverSplat
     <#
     Hopefully defense off-by-one threat detection fixed
     Additional panic gather defense added, defense now negatives all tiles in shortest path on attack path
@@ -977,23 +1053,23 @@ function Start-WindowsTerminalBigTeamBots {
     gather to enemy tiles inside territory more aggressively
     play turns 25-50 more aggressively (too aggressively?)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_12' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-31' -BotFile 'bot_ek0x45.py')" @serverSplat
     <#
     improved 'vision tile' kill gathers to only gather for the quickexpand turns, and are included in the main gather phase with a 2
         tile exclusion radius around them to prioritize killing them over gather path gather movement if adequate tile counts are near them.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_11' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-04' -BotFile 'BotHost.py')" @serverSplat
     <#
     semi-optimal first 25, unit tests
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_10' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-07' -BotFile 'BotHost.py')" @serverSplat
     <#
     tweaked gathers taking neutral / enemy tiles to include extra gather moves.
     tweaked initial expansion.
     tweaked optimal_expansion to include move-half when appropriate and draw the boundaries for when move-half is limited to closer-only moves and when it is limited to flankpath-or-closer-only moves.
     reduced neutral city aggressiveness right before launch timings.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_09' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-08' -BotFile 'BotHost.py')" @serverSplat
 
     <#
     more optimal first 25
@@ -1009,7 +1085,7 @@ function Start-WindowsTerminalBigTeamBots {
     Bugfixed tile delta issues
     iterative gather pruning (still sometimes gathers stupid small bits at end for some reason...?)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_08' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-08-26' -BotFile 'BotHost.py')" @serverSplat
 
     <#
     loads of fog / engine bugfixes but still not MCTS working.
@@ -1018,7 +1094,7 @@ function Start-WindowsTerminalBigTeamBots {
     Brute force army engine time cutoff.
     Dropped file logging.
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_07' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-09-15' -BotFile 'BotHost.py')" @serverSplat
 
     <#
     MCTS based army engine.
@@ -1029,48 +1105,48 @@ function Start-WindowsTerminalBigTeamBots {
     defense gather forward instead of back
     found-no-move mcts (need to tune back for historical bots I think)
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game bigteam -name 'EklipZ_ai_06' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-10-23' -BotFile 'BotHost.py')" @serverSplat
 
     <#
     bigteam only 2
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog' @serverSplat
 
     <#
     bigteam only 3
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog' @serverSplat
 
     <#
     bigteam only 4
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog' @serverSplat
 
     <#
     bigteam only 2
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i2" -right -noui -nolog' @serverSplat
 
     <#
     bigteam only 3
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i3" -right -noui -nolog' @serverSplat
 
     <#
     bigteam only 4
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai_i4" -right -noui -nolog' @serverSplat
 
     <#
     bigteam only
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai" -right -nolog'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game bigteam'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game bigteam'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game bigteam'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game bigteam'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game bigteam'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game bigteam'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game bigteam -name "EklipZ_ai" -right -nolog' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game bigteam' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Blob -game bigteam' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game bigteam' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Path -game bigteam' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game bigteam' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-SoraAI -game bigteam' @serverSplat
 }
 
 
@@ -1079,8 +1155,16 @@ function Start-WindowsTerminalBigTeamBots {
 function Start-WindowsTerminalLiveBots {
     Param(
         [switch]$NonHumanExeOnly,
-        [switch]$OnlyHumanExe
+        [switch]$OnlyHumanExe,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server
     )
+    # UnitTests/test_RunBotLauncher.py::test_all_fleets_forward_explicit_server_to_every_tab
+    # Omission preserves the fleet's existing mix of bot and human destinations.
+    $serverSplat = @{}
+    if ($PSBoundParameters.ContainsKey('Server')) {
+        $serverSplat['Server'] = $Server
+    }
 
     # UnitTests/test_RunBotLauncher.py::test_live_bots_rejects_conflicting_filters_before_opening_tabs
     # Reject contradictory selections before opening any terminal tabs.
@@ -1093,7 +1177,7 @@ function Start-WindowsTerminalLiveBots {
     <#
     dev tab
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -LoadGameResultUtils
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -LoadGameResultUtils @serverSplat
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -1104,92 +1188,52 @@ function Start-WindowsTerminalLiveBots {
         <#
         Human 1v1
         #>
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game 1v1 -sleepMax 600 -cpuAffinityMask P'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game 1v1 -sleepMax 600 -cpuAffinityMask P' @serverSplat
 
         <#
         Human ffa
         #>
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -right -game ffa -sleepMax 120 -cpuAffinityMask P'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -right -game ffa -sleepMax 120 -cpuAffinityMask P' @serverSplat
 
         <#
         Human 2v2 partners
         #>
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 4'
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui -cpuAffinityMask 6'
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 90 -left -nolog -cpuAffinityMask 8'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 4' @serverSplat
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-HumanTeammate -game team -right -sleepMax 60 -nolog -noui -cpuAffinityMask 6' @serverSplat
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 90 -left -nolog -cpuAffinityMask 8' @serverSplat
         # SECOND teammate for local testing:
         # run-teammate -sleepMax 1 -left -name Teammate2.exe
 
         <# Teammate in team lobby #>
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask 10'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 1 -left -roomID teammate -nolog -cpuAffinityMask 10' @serverSplat
     }
 
     # weak bots
     if (-not $OnlyHumanExe) {
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public -noui'
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public -noui'
-        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-SoraAlt -public -sleepMax 120'
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-blob -game 1v1 -sleepMax 120 -name "QueueT" -public -noui' @serverSplat
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-path -game 1v1 -sleepMax 120 -name "a98i40pwpfah" -public -noui' @serverSplat
+        Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-SoraAlt -public -sleepMax 120' @serverSplat
     }
 
     # <#
     # Human in custom lobby with custom maps
     # #>
-    # wt -w $windowName new-tab pwsh -NoExit -c {
-    #     cd "D:/2019_reformat_Backup/generals-bot/";
-    #     . ./run-bot.ps1;
-    #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap1 -nolog'
-    #     try {
-    #         Invoke-Expression $command
-    #     } finally {
-    #         Write-Host $command
-    #         Start-Sleep -Seconds 1
-    #     }
-    # }
+    # Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap1 -nolog'
 
     # <#
     # Human in custom lobby with custom maps
     # #>
-    # wt -w $windowName new-tab pwsh -NoExit -c {
-    #     cd "D:/2019_reformat_Backup/generals-bot/";
-    #     . ./run-bot.ps1;
-    #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap2 -nolog'
-    #     try {
-    #         Invoke-Expression $command
-    #     } finally {
-    #         Write-Host $command
-    #         Start-Sleep -Seconds 1
-    #     }
-    # }
+    # Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeCustMap2 -nolog'
 
     # # <#
     # # Human in custom lobby with alt tiles
     # # #>
-    # # wt -w $windowName new-tab pwsh -NoExit -c {
-    # #     cd "D:/2019_reformat_Backup/generals-bot/";
-    # #     . ./run-bot.ps1;
-    # #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1 -nolog'
-    # #     try {
-    # #         Invoke-Expression $command
-    # #     } finally {
-    # #         Write-Host $command
-    # #         Start-Sleep -Seconds 1
-    # #     }
-    # # }
+    # Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeAltTiles1 -nolog'
 
     # <#
     # Human in custom lobby with normal setup
     # #>
-    # wt -w $windowName new-tab pwsh -NoExit -c {
-    #     cd "D:/2019_reformat_Backup/generals-bot/";
-    #     . ./run-bot.ps1;
-    #     $command = 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal1 -nolog'
-    #     try {
-    #         Invoke-Expression $command
-    #     } finally {
-    #         Write-Host $command
-    #         Start-Sleep -Seconds 1
-    #     }
-    # }
+    # Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -left -game custom -sleepMax 1 -roomID Human.exeNormal1 -nolog'
 
     # ALT TESTING
     # Run-Human -name 'HaltWhoGoesThere' -game custom -private -sleepMax 1 -roomID Human.exeNormal1 -cpuAffinityMask 0
@@ -1201,22 +1245,30 @@ function Start-WindowsTerminalLiveBots {
 # starts a windows terminal that runs the standard live bots and opens dev tabs
 function Start-WindowsTerminalBotServer2v2Bots {
     Param(
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server
     )
+    # UnitTests/test_RunBotLauncher.py::test_all_fleets_forward_explicit_server_to_every_tab
+    # Omission preserves the fleet's existing mix of bot and human destinations.
+    $serverSplat = @{}
+    if ($PSBoundParameters.ContainsKey('Server')) {
+        $serverSplat['Server'] = $Server
+    }
 
     $windowName = 'Bot2v2Bots'
 
     <#
     Human 2v2 partners
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 0'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Human -game team -right -sleepMax 5 -nolog -botServer -cpuAffinityMask 0' @serverSplat
 
 
     # time for the terminal window to open
     start-sleep -seconds 3
 
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-HumanTeammate -game team -right -sleepMax 10 -nolog -noui -botServer -cpuAffinityMask 2'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 10 -left -nolog -botServer -cpuAffinityMask 4'
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 10 -left -nolog -name Teammate2.exe -botServer -cpuAffinityMask 6'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-HumanTeammate -game team -right -sleepMax 10 -nolog -noui -botServer -cpuAffinityMask 2' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 10 -left -nolog -botServer -cpuAffinityMask 4' @serverSplat
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'Run-Teammate -sleepMax 10 -left -nolog -name Teammate2.exe -botServer -cpuAffinityMask 6' @serverSplat
 }
 
 
@@ -1225,13 +1277,21 @@ function Start-WindowsTerminalBotServer2v2Bots {
 # starts a windows terminal that runs the standard live bots and opens dev tabs
 function Start-WindowsTerminalBotServerLiveBots {
     Param(
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server
     )
+    # UnitTests/test_RunBotLauncher.py::test_all_fleets_forward_explicit_server_to_every_tab
+    # Omission preserves the fleet's existing mix of bot and human destinations.
+    $serverSplat = @{}
+    if ($PSBoundParameters.ContainsKey('Server')) {
+        $serverSplat['Server'] = $Server
+    }
 
     $windowName = 'BotServerLiveBots'
     <#
     dev tab
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -LoadGameResultUtils
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -LoadGameResultUtils @serverSplat
 
     # time for the terminal window to open
     start-sleep -seconds 3
@@ -1239,41 +1299,31 @@ function Start-WindowsTerminalBotServerLiveBots {
     <#
     FFA
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai" -right'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game ffa -name "EklipZ_ai" -right' @serverSplat
 
     <#
     1v1 only
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game 1v1 -name "EklipZ_ai" -right'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game 1v1 -name "EklipZ_ai" -right' @serverSplat
 
     <#
     public ek 14
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py')" @serverSplat
 
     # <#
     # 1v1 ffa cycler
     # #>
-    # wt -w $windowName new-tab pwsh -NoExit -c {
-    #     cd "D:/2019_reformat_Backup/generals-bot/";
-    #     . ./run-bot.ps1;
-    #     $command = 'run-bot -game 1v1, 1v1, ffa, 1v1 -name "EklipZ_ai" -right'
-    #     try {
-    #         Invoke-Expression $command
-    #     } finally {
-    #         Write-Host $command
-    #         Start-Sleep -Seconds 1
-    #     }
-    # }
+    # Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game 1v1, 1v1, ffa, 1v1 -name "EklipZ_ai" -right'
     <#
     private ek 14
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py') -privateGame testing"
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command "run-bot -game 1v1 -name 'EklipZ_ai_14' -noui -nolog -path $(Get-HistoricalBotPath -VersionFolder 'generals-bot-2023-07-24' -BotFile 'bot_ek0x45.py') -privateGame testing" @serverSplat
 
     <#
     private live
     #>
-    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game 1v1 -name "EklipZ_ai" -left -privateGame testing'
+    Start-RunBotWindowsTerminalTab -WindowName $windowName -Command 'run-bot -game 1v1 -name "EklipZ_ai" -left -privateGame testing' @serverSplat
 }
 
 
@@ -1290,13 +1340,16 @@ function Run-Path {
         # viewer window opens, while an explicit -noui:$false still enables it.
         [switch]$noui = $true,
         [int]$sleepMax = 3,
-        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
+        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'bot'
     )
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters
     while ($true)
     {
         foreach ($g in $game)
         {
-            $playedGame = run-botonce -game $g -name $name -path (Get-PathBotPath) -nolog:$nolog -noTextLog:$noTextLog -noui:$noui -public:$public -cpuAffinityMask $cpuAffinityMask
+            $playedGame = run-botonce -game $g -name $name -path (Get-PathBotPath) -nolog:$nolog -noTextLog:$noTextLog -noui:$noui -public:$public -cpuAffinityMask $cpuAffinityMask -Server $Server
             if ($playedGame) {
                 SleepLeastOfTwo -sleepMax $sleepMax
             }
@@ -1318,13 +1371,16 @@ function Run-Blob {
         # viewer window opens, while an explicit -noui:$false still enables it.
         [switch]$noui = $true,
         [int]$sleepMax = 3,
-        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask
+        $cpuAffinityMask = $Script:CheapBotCpuAffinityMask,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'bot'
     )
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters
     while ($true)
     {
         foreach ($g in $game)
         {
-            $playedGame = run-botonce -game $g -name $name -path (Get-BlobBotPath) -nolog:$nolog -noTextLog:$noTextLog -noui:$noui -public:$public -cpuAffinityMask $cpuAffinityMask
+            $playedGame = run-botonce -game $g -name $name -path (Get-BlobBotPath) -nolog:$nolog -noTextLog:$noTextLog -noui:$noui -public:$public -cpuAffinityMask $cpuAffinityMask -Server $Server
             if ($playedGame) {
                 SleepLeastOfTwo -sleepMax $sleepMax
             }
@@ -1348,8 +1404,11 @@ function Run-Bot {
         [switch]$noTextLog,
         [switch]$publicLobby,
         $sleepMax = 30,
-        $cpuAffinityMask = [IntPtr]::Zero
+        $cpuAffinityMask = [IntPtr]::Zero,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'bot'
     )
+    $PSBoundParameters['Server'] = Resolve-RunBotServer -Parameters $PSBoundParameters
     if ($privateGame -is [string]) {
         if (-not $roomID) {
             $roomID = $privateGame
@@ -1387,8 +1446,11 @@ function Run-BotCheckpoint {
         [switch]$nocopy,
         [switch]$nolog,
         [switch]$noTextLog,
-        [switch]$publicLobby
+        [switch]$publicLobby,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'bot'
     )
+    $PSBoundParameters['Server'] = Resolve-RunBotServer -Parameters $PSBoundParameters
     if ($privateGame -is [string]) {
         if (-not $roomID) {
             $roomID = $privateGame
@@ -1445,14 +1507,18 @@ function Run-Human {
         [switch] $noTextLog,
         $name = 'Human.exe',
         [switch] $botServer,
-        $cpuAffinityMask = 0
+        $cpuAffinityMask = 0,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'na'
     )
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters -Default 'na'
     $splat = @{
         noui = $noui
         right = -not $left
         nolog = $nolog
         noTextLog = $noTextLog
         public = -not $botServer
+        Server = $Server
         cpuAffinityMask = $cpuAffinityMask
     }
     while ($true)
@@ -1495,8 +1561,11 @@ function Run-HumanTeammate {
         [switch] $nolog,
         [switch] $noTextLog,
         [switch] $botServer,
-        $cpuAffinityMask = 2
+        $cpuAffinityMask = 2,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'na'
     )
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters -Default 'na'
 
     $splat = @{
         noui = $noui
@@ -1505,6 +1574,7 @@ function Run-HumanTeammate {
         nolog = $nolog
         noTextLog = $noTextLog
         public = -not $botServer
+        Server = $Server
         cpuAffinityMask = $cpuAffinityMask
     }
 
@@ -1525,8 +1595,11 @@ function Run-Teammate {
         [switch] $noTextLog,
         $name = "Teammate.exe",
         [switch] $botServer,
-        $cpuAffinityMask = 4
+        $cpuAffinityMask = 4,
+        [ValidateSet('local', 'bot', 'na')]
+        [string]$Server = 'na'
     )
+    $Server = Resolve-RunBotServer -Parameters $PSBoundParameters -Default 'na'
 
     $userId = 'efgBuddy.exe'
     if ($name -ne 'Teammate.exe') {
@@ -1541,6 +1614,7 @@ function Run-Teammate {
         nolog = $nolog
         noTextLog = $noTextLog
         public = -not $botServer
+        Server = $Server
         cpuAffinityMask = $cpuAffinityMask
     }
 
@@ -1564,4 +1638,3 @@ function Run-Teammate {
         Start-Sleep -Seconds $sleepTime
     }
 }
-

@@ -41,7 +41,8 @@ Places where it is lacking as a Generals player:
 - [ ] Install Dependencies: `pip3 install -r requirements.txt`
 - [ ] The dependency list is set up for Python 3.14 using `pygame-ce` (imported in code as `pygame`) and newer native-extension package versions such as `numba>=0.64.0`, `pyzmq>=27.1.0`, and `pybind11>=3.0.0`
 - [ ] Build the compiled extensions in-place: `python setup.py build_ext --inplace`
-- [ ] Update all the hardcoded paths to whatever you want them to be on your system, see https://github.com/EklipZgit/generals-bot/commit/76b114c4d6bd551dd273fe9192e82a5690ea260e
+- [ ] Copy `run_config.sample.txt` to `run_config.txt` one directory above this repository and set the paths for your machine. Human.exe and `run-bot.ps1` share this configuration; `repo_root` locates the launcher and current bot.
+- [ ] If running alternate bots, place their checkouts in a sibling `generals-alt-bots` folder containing `Sora_AI`, `generals-blob-and-path`, and `generals-bot-historical`. Set `sora_bot_path`, `blob_bot_path`, `path_bot_path`, and `historical_bots_root` in `run_config.txt` to these locations.
 
 ## Usage
 
@@ -50,6 +51,24 @@ Powershell:
 . .\run-bot.ps1  # note the . .\, this imports all functions in the file into the current powershell session
 run-bot -game 1v1, 1v1, 1v1, ffa, ffa -name "EklipZ_ai" -right
 ```
+
+All bot entrypoints accept `-server local|bot|na` (default: `bot`):
+`local` uses `localhost:8080`, `bot` uses `botws.generals.io`, and `na` uses
+`ws.generals.io`. No endpoint constants need editing.
+
+All `Run-*` bot helpers and `Start-WindowsTerminal*Bots` fleets accept `-Server`:
+
+```powershell
+Run-Human -game 1v1 -Server local
+Run-Blob -game ffa -Server bot
+Start-WindowsTerminalLiveBots -OnlyHumanExe -Server local
+```
+
+Omitting `-Server` preserves each launcher's existing destination. Human.exe
+helpers default to NA; generic and alternate helpers default to bot. `-botServer`
+and `-public` remain supported, but an explicit `-Server` overrides either alias.
+A fleet override applies to every bot tab, including historical and 2v2 bots.
+
 Ask me questions in discord! @EklipZ#3166 https://discord.gg/tchBMdN
 
 DO NOT run this on the human servers when it is not working. The reason bots were banned on the human server was due to poor/crashing/afk/random-move bots taking up games on the human server which led to boring games and wasted peoples time. Do not contribute to that problem. Get everything working on the bot server, and get your bot up to par where it is at least challenging to play against for some humans before even considering running it on the Human server. Thank you!

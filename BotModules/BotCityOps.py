@@ -580,6 +580,12 @@ class BotCityOps:
                 if tryPath:
                     BotRendering.mark_tile(bot, city, alpha=50)
                     bot.info(f'Trying city {city}, bonus {bonus}, score {baseScore:.1f} (*bonus {scoreVal:.1f})')
+                else:
+                    # Live game 0ES5f2iai t280-427 logged 'No neutral city found...' ~150 turns in a row with visible neutral cities nearby and no way to tell which gate rejected them.
+                    logbook.info(
+                        f'NEUT_CITY_REJECT {city} scoreVal {scoreVal:.2f} vs best {maxScoreNeutVal:.2f}, '
+                        f'distRatio {score.general_distances_ratio:.2f} vs thresh {cityDistanceRatioThresh:.2f}, inSafePocket {inSafePocket}, '
+                        f'relevance {score.city_relevance_score:.3f} vs cutoff {relevanceCutoff:.3f}')
             if tryPath:
                 path = BotPathingUtils.get_path_to_targets(
                     bot,
@@ -1707,7 +1713,7 @@ class BotCityOps:
                         f"We shouldn't be taking more neutral cities, we're too defenseless right now.")
             else:
                 logbook.info(
-                        f"Skipped neut cities. in_gather_split(bot._map.turn) {bot.timings.in_gather_split(bot._map.turn)} and (player.cityCount < targetPlayer.cityCount {genPlayer.cityCount < targetPlayer.cityCount} or proactivelyTakeCity {proactivelyTakeCity})")
+                        f"Skipped neut cities. in_gather_split(bot._map.turn) {bot.timings.in_gather_split(bot._map.turn)} and (player.cityCount < targetPlayer.cityCount {genPlayer.cityCount < targetPlayer.cityCount} or proactivelyTakeCity {proactivelyTakeCity}) and safeFromThreat {safeFromThreat}")
         return False
 
     @staticmethod

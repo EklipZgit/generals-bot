@@ -117,6 +117,24 @@ def source_tree(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding='utf-8-sig'), filename=str(path))
 
 
+def is_server_routing_assignment(node: ast.stmt) -> bool:
+    """True for top-level constructor statements that resolve server/public_server."""
+    targets: list[ast.expr] = []
+    if isinstance(node, ast.Assign):
+        targets = list(node.targets)
+    elif isinstance(node, ast.AnnAssign) and node.value is not None:
+        targets = [node.target]
+    for target in targets:
+        if isinstance(target, ast.Name) and target.id == 'public_server':
+            return True
+        if (isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == 'self'
+                and target.attr == 'server'):
+            return True
+    return False
+
+
 def parser_from_source(path: Path) -> argparse.ArgumentParser:
     """Execute only parser declarations, excluding imports, game startup, and I/O."""
     statements: list[ast.stmt] = []
@@ -218,7 +236,13 @@ class ServerSelectionTests(unittest.TestCase):
                 constructor = next(
                     node for node in owner.body
                     if isinstance(node, ast.FunctionDef) and node.name == '__init__')
-                routing = ast.Module(body=[resolver] + constructor.body[:2], type_ignores=[])
+                # Select the routing statements rather than assuming fixed positions:
+                # GeneralsClient.__init__ anchors queue timing before resolving the server.
+                routing = ast.Module(
+                    body=[resolver] + [
+                        node for node in constructor.body
+                        if is_server_routing_assignment(node)],
+                    type_ignores=[])
                 for selected, legacy_public, expected in [
                     (None, False, 'bot'), (None, True, 'na'),
                     ('local', True, 'local'), ('bot', True, 'bot'), ('na', False, 'na'),

@@ -1,0 +1,60 @@
+|   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   
+M               M   M       a1  a1  a1  a1              a1  a1  a1  a1
+    M           M   M       a1  M   M   a1  C45 M   M   M   C47 a1  a1
+        M                   a1  C44     a1  M   a1  M   M   a1  a1  M
+M               M           M       M   a1  a1  a1  a1  a1  a1  a1  aG2 M   M
+                        M               a1  a1      a1  a2  a12 a1  M
+        M           M           M   a1  a1          a1  M                       M
+                M                               a1  a1      M   M               M
+M                       b1  b1      a3          a1  M   C48         C49
+M   M                   b1  b1  a1  a1      b10 a1
+    M       M           M       a1  a1  M   b1                      M
+                        M       b1  a1  b1  b1  M
+                M               b1  b1  b1                      M   M       C44
+                            b1  b1  b1  b1  M   M           M
+            M               b1  b1  b1      C48     M
+M               M       M   b1  b1          b1
+                    M       M   b1  b2  b1  b1  C49 M           C44 M
+    M   M   M       M   M   b1  b1  b1  b1  b1  b1  b1  b1          C44
+M   M       M       M   b1  bG8 b1  b1  b1  b1  M           M       M   M
+M               M       M   b1  b1  C47 b1  b1  M       C45     M
+|   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   
+turn=89
+player_index=1
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=0
+mode=1v1
+aUsername=EklipZ
+aStars=78
+aScore=59
+aTiles=44
+aStandingArmy=15
+aCityCount=1
+aGeneral=17,3
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=120
+aDelta25Tiles=29
+aDelta25Score=38
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=85
+aKnowsKingLocation=False
+bUsername=Human.exe
+bStars=78
+bScore=61
+bTiles=44
+bStandingArmy=17
+bCityCount=1
+bGeneral=7,17
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=30
+bDelta25Tiles=28
+bDelta25Score=40
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=89
+bKnowsKingLocation=False

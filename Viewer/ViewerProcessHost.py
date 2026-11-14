@@ -119,6 +119,18 @@ class ViewerHost(object):
 
         return False
 
+    # UnitTests/test_ViewerHostFailFast.py::test_has_viewer_exited_tracks_process_liveness
+    # keeps exited viewer processes from being treated as a usable renderer.
+    def has_viewer_exited(self) -> bool:
+        """Return whether a started viewer has closed or its process has exited."""
+        if self._bypass:
+            return False
+        if not self._started:
+            return False
+
+        self.handle_viewer_events()
+        return self._closed_by_user is not None or not self.process.is_alive()
+
     def send_update_to_viewer(self, viewInfo: ViewInfo, map: MapBase, isComplete: bool = False):
         if self._bypass:
             return
@@ -181,7 +193,8 @@ class ViewerHost(object):
             if self._closed_by_user is None:
                 self._closed_by_user = False
 
-    def wait_viewer_initialized(self):
+    def wait_viewer_initialized(self) -> None:
+        """Wait for viewer initialization and fail fast if it closes or exits."""
         if self._bypass:
             return
         if self._recieved_init_ack:
@@ -194,11 +207,21 @@ class ViewerHost(object):
                 if eventType == 'ERROR':
                     logbook.error(eventValue)
                     continue
+                # UnitTests/test_ViewerHostFailFast.py::test_closed_event_fails_initialization_immediately
+                # preserves the viewer's close reason instead of waiting for the initialization timeout.
+                if eventType == 'CLOSED':
+                    self._closed_by_user = eventValue
+                    raise Exception(
+                        f"VIEWER CLOSED BEFORE INITIALIZING closedByUser={eventValue}")
                 if eventType != 'INITIALIZED':
                     raise Exception("UNEXPECTED VIEWER EVENT: " + eventType)
                 self._recieved_init_ack = True
                 break
             except queue.Empty:
+                # UnitTests/test_ViewerHostFailFast.py::test_dead_process_fails_initialization_immediately
+                # aborts the wait as soon as the child exits rather than consuming 15 seconds.
+                if not self.process.is_alive():
+                    raise Exception("VIEWER PROCESS EXITED BEFORE INITIALIZING")
                 time.sleep(0.05)
                 pass
             except BrokenPipeError:

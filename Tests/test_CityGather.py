@@ -2114,3 +2114,32 @@ class CityGatherTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwnedXY(7, 6)
+
+    def test_should_respond_to_enemy_city_capture_by_taking_neutral_city(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_respond_to_enemy_city_capture_by_taking_neutral_city___RzXQbv4_U---0--170.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 170, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=170)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        # Live game Human.exe-1v1-2026-11-12_01-26-13---RzXQbv4_U: enemy b gained its 2nd
+        # city exactly at t170 (bCityGainedTurn=170, bCityCount=2 vs our 1). The bot
+        # selected a GatherCapturePlan on neutral city 8,6 at t170 but the
+        # CITY_ROUND_OPPORTUNITY_COST affordability check rejected it every turn from
+        # t172 onward because the alternative plan dominated on projected round-end
+        # tiles+army (income/city-parity ignored), so the city was only reached at
+        # t216 (and then diverted by a threat-defense bug). The city needs 43 army;
+        # ~8 moves is the theoretical floor here (a7@7,10 is 7 moves away, general
+        # merges cap ~41 assembled by t174), the gather achieves t179. Bound at 12
+        # for search-timing margin — the buggy behavior never captures within it.
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(8, 6)

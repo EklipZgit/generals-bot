@@ -16,6 +16,7 @@ from base.client.map import Tile, new_value_grid, PLAYER_CHAR_BY_INDEX
 
 
 if typing.TYPE_CHECKING:
+    from ArmyTracker import ArmyTracker
     from bot_ek0x45 import EklipZBot
 
 class BotSerialization:
@@ -34,6 +35,8 @@ class BotSerialization:
             bot.is_all_in_losing = BotStateQueries.parse_bool(bot, resume_data[f'bot_is_all_in_losing'])
         if f'bot_all_in_losing_counter' in resume_data:  # ={self.all_in_losing_counter}')
             bot.all_in_losing_counter = int(resume_data[f'bot_all_in_losing_counter'])
+        if f'bot_stealth_cannot_kill_counter' in resume_data:
+            bot.stealth_all_in_cannot_kill_counter = int(resume_data[f'bot_stealth_cannot_kill_counter'])
 
         if f'bot_is_all_in_army_advantage' in resume_data:  # ={self.is_all_in_army_advantage}')
             bot.is_all_in_army_advantage = BotStateQueries.parse_bool(bot, resume_data[f'bot_is_all_in_army_advantage'])
@@ -135,6 +138,18 @@ class BotSerialization:
                 for t in bot._map.get_all_tiles():
                     if t in pUnelim:
                         pUnrecaptured.add(t)
+
+            fairnessKey = f'{char}SpawnFairness'
+            fairnessWeights: MapMatrixInterface[float] | None = None
+            if fairnessKey in resume_data:
+                fairnessWeights = BotSerialization.convert_string_to_float_map_matrix(
+                    bot,
+                    resume_data[fairnessKey])
+            BotSerialization.load_spawn_fairness_weights(
+                bot.armyTracker,
+                player.index,
+                fairnessWeights,
+                resume_data)
 
         if f'TempFogTiles' in resume_data:
             tiles = BotSerialization.convert_string_to_tile_set(bot, resume_data[f'TempFogTiles'])
@@ -259,6 +274,53 @@ class BotSerialization:
     @staticmethod
     def convert_float_tile_2d_array_to_string(bot: EklipZBot, rows: typing.List[typing.List[float]]) -> str:
         return ','.join([f'{rows[tile.x][tile.y]:.2f}' for tile in bot._map.get_all_tiles()])
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_serialization_round_trip_and_missing_matrix_rebuild - restore saved weights directly and rebuild legacy resumes that lack the matrix.
+    @staticmethod
+    def load_spawn_fairness_weights(
+            armyTracker: ArmyTracker,
+            player: int,
+            weights: MapMatrixInterface[float] | None,
+            resume_data: typing.Dict[str, str]) -> None:
+        """Load saved weights, rebuild marked resumes, or disable legacy resumes."""
+        eligible = armyTracker._is_spawn_fairness_active()
+        enemyPlayer = 1 - armyTracker.map.player_index
+
+        if weights is not None:
+            if not eligible:
+                armyTracker.disable_spawn_fairness_for_legacy_resume(
+                    restore_eliminated_positions=False)
+                return
+            armyTracker.spawn_fairness_active = True
+            armyTracker.spawn_fairness_weights_by_player[player] = weights
+            if player == enemyPlayer:
+                armyTracker.spawn_fairness_initialized = True
+                armyTracker._reset_spawn_fairness_eliminated_tiles(enemyPlayer)
+                armyTracker.eliminate_negative_spawn_fairness_positions()
+            return
+
+        hasResumeData = bool(resume_data) or armyTracker.map.resume_data_is_txtmap
+        if not hasResumeData:
+            if eligible:
+                armyTracker.spawn_fairness_active = True
+                if (player == enemyPlayer
+                        and not armyTracker.spawn_fairness_initialized):
+                    armyTracker.initialize_spawn_fairness_weights()
+            return
+
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_island_ids_resume_recomputes_and_reapplies_eliminations - the bot began writing island_ids on 2026-05-06, after the server's 2025-11-22 fair-spawn overhaul; only that marker makes an older resume safe to recompute.
+        if 'island_ids' in resume_data:
+            if eligible:
+                armyTracker.spawn_fairness_active = True
+                if player == enemyPlayer:
+                    armyTracker.initialize_spawn_fairness_weights()
+            return
+
+        if player != enemyPlayer:
+            return
+        validPositionsKey = f'{PLAYER_CHAR_BY_INDEX[player]}ValidGeneralPos'
+        armyTracker.disable_spawn_fairness_for_legacy_resume(
+            restore_eliminated_positions=validPositionsKey not in resume_data)
 
     @staticmethod
     def convert_int_map_matrix_to_string(bot: EklipZBot, mapMatrix: MapMatrixInterface[int]) -> str:

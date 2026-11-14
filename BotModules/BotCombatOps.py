@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+import math
 import typing
 import time
 
@@ -28,10 +30,12 @@ from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import ArmyTracker
 from Gather import Gather
 from Path import Path
+from Interfaces.TilePlanInterface import PathMove
+from Strategy.GeneralTradeEvaluator import GeneralTradeSide, GeneralTradeEvaluation, evaluate_general_trade as _eval_general_trade_pure
 from StrategyModels import ExpansionPotential
 from ViewInfo import PathColorer, TargetStyle
 from Models.Move import Move
-from base.client.map import Tile
+from base.client.map import Tile, Player
 from DangerAnalyzer import ThreatType, ThreatObj
 import typing
 
@@ -52,7 +56,40 @@ def scale(inValue, inBottom, inTop, outBottom, outTop):
     outVal = valRatio * (outTop - outBottom) + outBottom
     return outVal
 
+
+@dataclasses.dataclass(slots=True)
+class _TradeSideProjection:
+    """Projected inputs for one side of a mutual general capture, built by
+    BotCombatOps._project_trade_side and handed to the pure
+    GeneralTradeEvaluator."""
+    sent_army: int
+    general_defense: int
+    total_army: int
+    non_general_tile_count: int
+    known_non_general_armies: typing.Tuple[int, ...]
+    economy_value: float
+
+
 class BotCombatOps:
+
+    # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+    # share the exact fog-defense estimate used by QK with the safe WRP-hunt threshold.
+    @staticmethod
+    def get_fog_defense_amount_available_for_tiles(
+        bot: EklipZBot,
+        target_tiles: typing.Iterable[Tile],
+        enemy_player: int,
+        fog_defense_turns: int = 0,
+        fog_reach_turns: int = 5,
+    ) -> int:
+        """Return the opponent's fog-defense estimate for the requested target tiles."""
+        return BotDefense.determine_fog_defense_amount_available_for_tiles(
+            bot,
+            target_tiles,
+            enemy_player,
+            fogDefenseTurns=fog_defense_turns,
+            fogReachTurns=fog_reach_turns)
+
     @staticmethod
     def check_for_king_kills_and_races(bot: EklipZBot, threat: ThreatObj | None, force: bool = False) -> typing.Tuple[Move | None, Path | None, float]:
         kingKillPath = None
@@ -70,6 +107,8 @@ class BotCombatOps:
 
         threatIsGeneralKill = threat is not None and threat.threatType == ThreatType.Kill and threat.path.tail.tile.isGeneral
 
+        ffaUnattackablePlayers = BotStateQueries.get_ffa_unattackable_players(bot)
+
         enemyGeneral: Tile
         for enemyGeneral in bot.largeTilesNearEnemyKings.keys():
             if enemyGeneral is None or enemyGeneral.player == bot.general.player or enemyGeneral.player in bot._map.teammates:
@@ -82,6 +121,11 @@ class BotCombatOps:
             if enPlayer == -1:
                 enPlayer = bot.targetPlayer
             if enPlayer == -1:
+                continue
+
+            # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: a king-kill
+            # is an attack and may only target players we are allowed to attack.
+            if ffaUnattackablePlayers is not None and enPlayer in ffaUnattackablePlayers:
                 continue
 
             altEnGenPositions = bot.alt_en_gen_positions[enPlayer]
@@ -138,7 +182,12 @@ class BotCombatOps:
 
             if not enemyGeneral.visible:
                 defTurns = 0
-                optTargetArmy = BotDefense.determine_fog_defense_amount_available_for_tiles(bot, altEnGenPositions, enPlayer, fogDefenseTurns=defTurns, fogReachTurns=5)
+                optTargetArmy = BotCombatOps.get_fog_defense_amount_available_for_tiles(
+                    bot,
+                    altEnGenPositions,
+                    enPlayer,
+                    fog_defense_turns=defTurns,
+                    fog_reach_turns=5)
                 newTargetArmyOption = optTargetArmy
 
                 if enemyGeneral.isGeneral:
@@ -175,6 +224,31 @@ class BotCombatOps:
                     noLog=True)
                 logbook.info(f'QK @{enPlayer} turns {qkDist} for targetArmy {max(1, targetArmy)} addlInc {addlIncrement} returned {quickKill}   --  @ {" | ".join([str(t) for t in altEnGenPositions])},  attackNegs {" | ".join([str(t) for t in attackNegTiles])}')
 
+                # Tests/test_AllIn.py::AllInTests.test_should_continue_committed_kill_attack_instead_of_slow_gather:
+                # targetArmy is the same pessimistic fog-defense estimate used for the cutoff;
+                # once it climbs past the committed stack's size the search returns no path at
+                # all and the in-flight attack dies before the continuation gate can see it.
+                # Retry unbounded so the committed route can still be evaluated on its merits.
+                if ((quickKill is None or quickKill.length == 0)
+                        and bot.committed_quick_kill is not None
+                        and bot.committed_quick_kill.tail.tile in altEnGenPositions):
+                    relaxedQuickKill = SearchUtils.dest_breadth_first_target(
+                        bot._map,
+                        altEnGenPositions,
+                        1,
+                        0.05,
+                        qkDist,
+                        attackNegTiles,
+                        bot.general.player,
+                        ignoreGoalArmy=bot.has_defenseless_modifier,
+                        additionalIncrement=addlIncrement,
+                        noLog=True)
+                    if (relaxedQuickKill is not None and relaxedQuickKill.length > 0
+                            and relaxedQuickKill.tail.tile == bot.committed_quick_kill.tail.tile
+                            and relaxedQuickKill.start.tile in bot.committed_quick_kill.tileSet):
+                        logbook.info(f'    QK relaxed retry for committed attack returned {relaxedQuickKill}')
+                        quickKill = relaxedQuickKill
+
                 if quickKill is not None and quickKill.length > 0:
                     connectedTiles, missingRequired = MapSpanningUtils.get_spanning_tree_from_tile_lists(bot._map, altEnGenPositions, set())
                     additionalKillDist = len(connectedTiles)
@@ -201,7 +275,29 @@ class BotCombatOps:
 
                     cutoffKillArmy = max(0, cutoffKillArmy)
 
-                    if quickKill.value > cutoffKillArmy or threatIsGeneralKill:
+                    # Tests/test_AllIn.py::AllInTests.test_should_continue_committed_kill_attack_instead_of_slow_gather:
+                    # cutoffKillArmy is a worst-case fog-defense estimate that drifts +-30+
+                    # army turn to turn as the enemy gather-queue reorders and inflates with
+                    # fresh sightings. When the fresh quickKill continues a kill attack we
+                    # already committed to (same target, path starts on the committed route),
+                    # the risk was priced in at commit time: keep marching while the path
+                    # exists and only bail on HARD new information - the target's visible army
+                    # outgrowing the accepted cutoff. Otherwise the stack parks mid-attack
+                    # while a ~3x slower gather replans from scratch.
+                    isCommittedContinuation = (
+                        bot.committed_quick_kill is not None
+                        and quickKill.tail.tile == bot.committed_quick_kill.tail.tile
+                        and quickKill.start.tile in bot.committed_quick_kill.tileSet)
+                    effectiveKillCutoff = cutoffKillArmy
+                    if isCommittedContinuation:
+                        enemyGeneralFloor = 0
+                        if enemyGeneral.isGeneral:
+                            enemyGeneralFloor = enemyGeneral.army + quickKill.length // 2
+                        effectiveKillCutoff = max(
+                            bot.committed_quick_kill_cutoff,
+                            enemyGeneralFloor)
+
+                    if quickKill.value > effectiveKillCutoff or threatIsGeneralKill:
                         logbook.info(f"    quick-kill path val {quickKill.value} > ({cutoffKillArmy} in {maxEnDefTurns}t) found to kill enemy king w/ additionalKillDist {additionalKillDist}? {str(quickKill)}")
                         ogQuickKill = quickKill
                         ogAdditionalKillDist = additionalKillDist
@@ -245,7 +341,7 @@ class BotCombatOps:
                                 if quickKill != wrpPath:
                                     bot.viewInfo.add_info_line(f'skipped QK wrpPath (addl {additionalKillDist}) was {wrpPath}')
 
-                        killRaceChance = BotCombatOps.get_kill_race_chance(bot, quickKill, enGenProbabilityCutoff=cutoffEmergence + 0.1, turnsToDeath=turnsToDeath, cutoffKillArmy=cutoffKillArmy)
+                        killRaceChance = BotCombatOps.get_kill_race_chance(bot, quickKill, enGenProbabilityCutoff=cutoffEmergence + 0.1, turnsToDeath=turnsToDeath, cutoffKillArmy=cutoffKillArmy, againstPlayer=enPlayer, threat=threat)
                         if threat is None or not threatIsGeneralKill or killRaceChance >= killRaceCutoff:
                             bot.info(f"QK {quickKill.value} {quickKill.length}t kill race chance {killRaceChance:.3f} > {killRaceCutoff:.2f} with cutoffKillArmy {cutoffKillArmy} in {maxEnDefTurns}t +{additionalKillDist} (turns to death {turnsToDeath}) :^)")
                             bot.viewInfo.color_path(PathColorer(quickKill, 255, 240, 79, 244, 5, 200))
@@ -262,6 +358,16 @@ class BotCombatOps:
                                     for t in connectedTiles:
                                         bot.viewInfo.add_targeted_tile(t, TargetStyle.RED, radiusReduction=8)
                                 bot.viewInfo.infoText = f"QK chance {killRaceChance:.2f} {quickKill.value}v > {cutoffKillArmy} in {maxEnDefTurns}t {quickKill.length}t+{additionalKillDist}t :^)"
+                                # Tests/test_AllIn.py::AllInTests.test_should_continue_committed_kill_attack_instead_of_slow_gather:
+                                # remember the committed attack so next turn's fresh eval can
+                                # recognize it as a continuation instead of abandoning it on
+                                # marginal cutoff drift. The anchor cutoff must only update on
+                                # a FRESH commit - a continuation passing under the inflated
+                                # estimate would otherwise ratchet the anchor above the stack's
+                                # remaining value and kill the attack next turn.
+                                bot.committed_quick_kill = quickKill
+                                if not isCommittedContinuation:
+                                    bot.committed_quick_kill_cutoff = cutoffKillArmy
                                 return move, quickKill, killRaceChance
                         elif killRaceChance > kingKillChance:
                             bot.info(f"QK (low chance) {quickKill.value} {quickKill.length}t kill race chance {killRaceChance:.3f} < {killRaceCutoff:.2f} but > kkc {kingKillChance:.2f} (with cutoffKillArmy {cutoffKillArmy} in {maxEnDefTurns}t +{additionalKillDist} (death {turnsToDeath}t) :^(")
@@ -269,8 +375,32 @@ class BotCombatOps:
                             kingKillChance = killRaceChance
                         else:
                             bot.info(f"NO QK {quickKill.value} {quickKill.length}t kill race chance {killRaceChance:.3f} vs cutoff {killRaceCutoff:.2f} with cutoffKillArmy {cutoffKillArmy} in {maxEnDefTurns}t +{additionalKillDist} :(")
+                            # Tests/test_GeneralTradeStrategy.py: an
+                            # UNFAVORABLE same-turn mutual capture is still
+                            # the survival fallback - keep it as backup even
+                            # at chance 0 so BotDefense can force the trade
+                            # when no adequate defense exists.
+                            if (kingKillPath is None and threat is not None and threatIsGeneralKill
+                                    and quickKill.tail.tile.isGeneral and quickKill.tail.tile.player == enPlayer
+                                    and quickKill.length + quickKill.requiredDelay == threat.turns + 1):
+                                kingKillPath = quickKill
                     else:
-                        logbook.info(f" ---quick-kill path val {quickKill.value} < {cutoffKillArmy} in {maxEnDefTurns}t {quickKill.length}t+{additionalKillDist}t @enemy king. Low val. {str(quickKill)}")
+                        # Tests/test_AllIn.py::AllInTests.test_should_continue_committed_kill_attack_instead_of_slow_gather:
+                        # even the committed-attack tolerance could not justify continuing -
+                        # the attack is decisively dead; release the commitment so a fresh
+                        # commit elsewhere isn't held to stale state.
+                        if bot.committed_quick_kill is not None and effectiveKillCutoff != cutoffKillArmy:
+                            bot.committed_quick_kill = None
+                            bot.committed_quick_kill_cutoff = 0
+                        logbook.info(f" ---quick-kill path val {quickKill.value} < {cutoffKillArmy} (effective {effectiveKillCutoff}) in {maxEnDefTurns}t {quickKill.length}t+{additionalKillDist}t @enemy king. Low val. {str(quickKill)}")
+                elif (bot.committed_quick_kill is not None
+                        and bot.committed_quick_kill.tail.tile in altEnGenPositions):
+                    # Tests/test_AllIn.py::AllInTests.test_should_continue_committed_kill_attack_instead_of_slow_gather:
+                    # no path to THIS enemy's committed target at all - the stack died or the
+                    # route is gone; release the commitment. Guarded on the committed tail so
+                    # another enemy's empty search in FFA can't clear a live commitment.
+                    bot.committed_quick_kill = None
+                    bot.committed_quick_kill_cutoff = 0
 
             if not enemyGeneral.isGeneral and not BotTargeting.is_ffa_situation(bot) and len(altEnGenPositions) > 2:
                 continue
@@ -320,9 +450,9 @@ class BotCombatOps:
                     if killPath is not None and killPath.length > 0:
                         killChance = 0.0
                         if killPath and threatIsGeneralKill:
-                            killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
+                            killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath, againstPlayer=enPlayer, threat=threat)
                         logbook.info(f"    depth {depth} path found to kill enemy king? {str(killPath)}")
-                        if threat is None or threat.threatType != ThreatType.Kill or (threatDistCutoff >= killPath.length and killChance > killRaceCutoff):
+                        if threat is None or threat.threatType != ThreatType.Kill or ((threatDistCutoff >= killPath.length or BotCombatOps._is_favorable_general_trade(bot, killPath, threat, enPlayer)) and killChance > killRaceCutoff):
                             logbook.info(f"    DEST BFS K found kill path length {killPath.length} :^)")
                             bot.viewInfo.color_path(PathColorer(killPath, 255, 240, 79, 244, 5, 200))
                             move = Move(killPath.start.tile, killPath.start.next.tile)
@@ -369,8 +499,8 @@ class BotCombatOps:
                 killPath = SearchUtils.dest_breadth_first_target(bot._map, altEnGenGoalPositions, fullKillReq, 0.05, depth, attackNegTiles, bot.general.player, False, 3)
                 killChance = 0.0
                 if killPath:
-                    killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
-                if (killPath is not None and killPath.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or (threatDistCutoff >= killPath.length and killChance > killRaceCutoff)):
+                    killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath, againstPlayer=enPlayer, threat=threat)
+                if (killPath is not None and killPath.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or ((threatDistCutoff >= killPath.length or BotCombatOps._is_favorable_general_trade(bot, killPath, threat, enPlayer)) and killChance > killRaceCutoff)):
                     logbook.info(f"DBFT d{depth} for {fullKillReq}a found kill path length {killPath.length} :^)")
                     bot.curPath = None
                     bot.viewInfo.color_path(PathColorer(killPath, 200, 100, 0))
@@ -409,10 +539,10 @@ class BotCombatOps:
                         negativeTiles=attackNegTiles)
 
                     killChance = 0.0
-                    if killPath:
-                        killChance = BotCombatOps.get_kill_race_chance(bot, killPath, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath)
+                    if path:
+                        killChance = BotCombatOps.get_kill_race_chance(bot, path, enGenProbabilityCutoff=0.3, turnsToDeath=turnsToDeath, againstPlayer=enPlayer, threat=threat)
 
-                    if (path is not None and path.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or ((threatDistCutoff >= path.length or BotStateQueries.is_all_in(bot)) and threat.threatPlayer == enemyGeneral.player and killChance > killRaceCutoff)):
+                    if (path is not None and path.length >= 0) and (threat is None or threat.threatType != ThreatType.Kill or ((threatDistCutoff >= path.length or BotStateQueries.is_all_in(bot) or BotCombatOps._is_favorable_general_trade(bot, path, threat, enPlayer)) and threat.threatPlayer == enemyGeneral.player and killChance > killRaceCutoff)):
                         logbook.info(f"  A_STAR found kill path length {path.length} :^)")
                         bot.viewInfo.color_path(PathColorer(path, 174, 4, 214, 255, 10, 200))
                         bot.curPath = path.get_subsegment(2)
@@ -460,7 +590,346 @@ class BotCombatOps:
     #     return None
 
     @staticmethod
-    def get_kill_race_chance(bot: EklipZBot, generalHuntPath: Path, enGenProbabilityCutoff: float = 0.4, turnsToDeath: int | None = None, cutoffKillArmy: int = 0, againstPlayer: int = None) -> float:
+    def _is_favorable_general_trade(bot: EklipZBot, path: Path, threat: ThreatObj | None, enPlayer: int) -> bool:
+        """True when `path` is a same-turn mutual general capture the trade
+        evaluator rates FAVORABLE. Lets the kill-race search gates admit the
+        same-turn tie even when the legacy threatDistCutoff (real capture
+        turn - 1 with no priority) would reject a path of that length; the
+        re-evaluation keeps the relaxation narrow - a mere chance>0 or a late
+        path does not get widened. Tests: Tests/test_GeneralTradeStrategy.py"""
+        if threat is None or path is None:
+            return False
+        evaluation = BotCombatOps.evaluate_general_trade(bot, path, threat, enPlayer)
+        return evaluation is not None and evaluation.favorable
+
+    @staticmethod
+    def evaluate_general_trade(bot: EklipZBot, attack_path: Path, threat: ThreatObj, against_player: int) -> GeneralTradeEvaluation | None:
+        """
+        Projects whether simultaneously capturing each other's general with
+        `attack_path` (ours) while `threat` (theirs) lands the same turn is a
+        trade we WANT. Returns a GeneralTradeEvaluation, or None when the
+        paths are not a valid mutual general capture or the projection
+        cannot be derived safely - never mutates the board or paths.
+
+        Tests: Tests/test_GeneralTradeStrategy.py
+        """
+        if attack_path is None or threat is None:
+            return None
+        if threat.threatType != ThreatType.Kill:
+            return None
+        us = bot._map.player_index
+        if (against_player < 0 or against_player == us or against_player in bot._map.teammates
+                or bot._map.scores[against_player] is None or bot._map.scores[against_player].dead):
+            return None
+        # the kill path's tail must be that player's KNOWN general and the
+        # threat must land on OUR actual general - no inferred candidates
+        targetGen = attack_path.tail.tile
+        ourGen = bot._map.generals[us] if us < len(bot._map.generals) else None
+        if (not targetGen.isGeneral or targetGen.player != against_player
+                or ourGen is None or threat.path.tail.tile is not ourGen
+                or threat.threatPlayer != against_player):
+            return None
+        # same-tick arrival only (atomic trade); earlier kills are handled by
+        # the ordinary race logic, not the trade evaluator
+        if attack_path.length + attack_path.requiredDelay != threat.turns + 1:
+            return None
+        # the two paths must not cross anywhere except the two general tiles
+        attackTiles = {t for t in attack_path.tileList if not t.isGeneral}
+        threatTiles = {t for t in threat.path.tileList if not t.isGeneral}
+        if attackTiles & threatTiles:
+            return None
+        # Tests/test_GeneralTradeStrategy.py
+        # test__adapter__required_delay_rejected: waiting is not modeled by
+        # the projection - each side's growth window is derived from its own
+        # path length, so a delayed path would be projected against the WRONG
+        # capture turn. Early arrivals are already handled by the race logic.
+        if attack_path.requiredDelay != 0 or threat.path.requiredDelay != 0:
+            logbook.info(f'GeneralTradeEval rejected: requiredDelay paths are unsupported ({attack_path.requiredDelay}/{threat.path.requiredDelay})')
+            return None
+
+        eval_ = BotCombatOps._build_trade_sides(bot, attack_path, threat, against_player)
+        if eval_ is None:
+            return None
+        logbook.info(
+            f'GeneralTradeEval turn {bot._map.turn} paths {attack_path} vs {threat.path}'
+            f' survivors {eval_.our_new_general_army}/{eval_.opponent_new_general_army}'
+            f' postArmies {eval_.our_post_army}/{eval_.opponent_post_army}'
+            f' econGain {eval_.economy_gain} values {eval_.current_position_value:.1f}->{eval_.post_position_value:.1f}'
+            f' favorable {eval_.favorable}')
+        return eval_
+
+    @staticmethod
+    def _sent_army(sourceTile: Tile, halfMove: bool) -> int:
+        """Army a move sends off `sourceTile`: floor(army/2) for a half
+        move (reserve ceil), army-1 for a full move (reserve 1). Matches
+        GameSimulator._execute_move."""
+        return sourceTile.army // 2 if halfMove else sourceTile.army - 1
+
+    @staticmethod
+    def _tick_counts(firstTurn: int, lastTurn: int) -> typing.Tuple[int, int]:
+        """(cityTicks, farmTicks) landing on turns in [firstTurn..lastTurn]:
+        producer increments on even turns, farm increments on %50 turns."""
+        if lastTurn < firstTurn:
+            return 0, 0
+        return lastTurn // 2 - (firstTurn - 1) // 2, lastTurn // 50 - (firstTurn - 1) // 50
+
+    @staticmethod
+    def _project_trade_side(
+            bot: EklipZBot,
+            playerIdx: int,
+            ownPath: Path,
+            enemyPath: Path,
+            ownGenTile: Tile,
+            targetGenTile: Tile,
+            pathValue: float,
+            useCeil: bool) -> _TradeSideProjection | None:
+        """
+        Projects one side of a mutual general capture for the pure evaluator.
+
+        - sent: exact for length-1 paths (source army + full/half move rule).
+          For longer paths Path.value is already the NET leftover on the
+          endpoint after it models the defender as `army + (length-1)//2`, so
+          the arriving stack is recovered as `value + modeledEndpointDefense`
+          (floor for ours, ceil for the enemy threat) - never value itself,
+          never a max(0, ..) clamp: a non-positive net or derived stack means
+          the path cannot capture and the candidate is rejected.
+        - general_defense: the reserve when the general itself is the attack
+          source (the flag stays on the tile), else its current army, plus
+          real parity city ticks in [turn+1 .. turn+deadline-1] (the bonus
+          for the capture turn itself lands after the trade).
+        - total_army: current score plus per-tile parity growth over each
+          tile's actual ownership window, minus defender armies the stack
+          consumes (they die for the owner and cost the stack equally) and
+          minus our non-gen tiles the enemy path captures.
+        - known armies: every concretely-known non-gen tile outside both
+          paths (with its parity growth) plus every path reserve: each tile
+          the stack departs keeps 1 army plus growth from its departure turn
+          until the pre-trade state.
+
+        Returns None whenever the projection cannot be derived consistently -
+        half moves on interior nodes, producers on the path (their parity
+        growth can diverge from Path.value's (i-1)//2 increment convention),
+        teammate or third-party generals on the path, swamps decaying inside
+        the window. Tests: Tests/test_GeneralTradeStrategy.py
+        test__adapter__two_step_projection__*.
+        """
+        turn = bot._map.turn
+        deadline = ownPath.length
+        score = bot._map.scores[playerIdx]
+        player: Player = bot._map.players[playerIdx]
+        teams = bot._map.teams
+        source = ownPath.start.tile
+        if source.army <= 1:
+            logbook.info(f'GeneralTradeEval rejected: attack source {source} cannot move (army {source.army})')
+            return None
+
+        def tile_growth(tile: Tile, firstTurn: int, lastTurn: int) -> int:
+            """Parity growth a tile receives while owned over
+            [firstTurn..lastTurn]: producers +1 on even turns, non-deserts
+            +1 on %50 turns."""
+            cityTicks, farmTicks = BotCombatOps._tick_counts(firstTurn, lastTurn)
+            growth = 0
+            if tile.isCity or tile.isGeneral:
+                growth += cityTicks
+            if not tile.isDesert:
+                growth += farmTicks
+            return growth
+
+        # reserves are (tile, departureStep, baseReserve): every tile our
+        # stack departs ends owned by us holding its leftover plus
+        # post-departure growth. The source keeps army-sent (ceil on a half
+        # move); interior nodes always send full and keep 1.
+        reserves: typing.List[typing.Tuple[Tile, int, int]] = []
+        stackCombatLoss = 0   # defender armies the stack consumes - die for the owner and cost the stack equally
+        sourceReserve = source.army - BotCombatOps._sent_army(source, ownPath.start.move_half)
+        if ownPath.length == 1:
+            sent = BotCombatOps._sent_army(source, ownPath.start.move_half)
+            reserves.append((source, 1, sourceReserve))
+        else:
+            if ownPath.start.move_half:
+                # Path.value's half rounding plus source growth cannot be
+                # inverted back to the arriving stack exactly; only direct
+                # length-1 half moves are supported.
+                # Tests/test_GeneralTradeStrategy.py
+                # test__adapter__multiturn_source_half_rejected
+                logbook.info('GeneralTradeEval rejected: half move off a multi-turn path source cannot be projected')
+                return None
+            if pathValue <= 0:
+                logbook.info('GeneralTradeEval rejected: path net does not take the endpoint')
+                return None
+            node = ownPath.start
+            i = 0
+            while node is not None and node is not ownPath.tail:
+                tile = node.tile
+                if i > 0:
+                    if node.move_half:
+                        logbook.info('GeneralTradeEval rejected: half move on a multi-turn path cannot be projected')
+                        return None
+                    if tile.isGeneral or tile.isCity:
+                        # an interior general means a third-party kill
+                        # mid-path; interior producers' parity growth can
+                        # diverge from the (i-1)//2 increment Path.value
+                        # modeled, so neither is projectable
+                        logbook.info(f'GeneralTradeEval rejected: interior producer/general {tile} on path')
+                        return None
+                    if tile.player == playerIdx:
+                        # a gathered own tile produces until it departs at
+                        # turn T+i; Path.value gives non-producers no
+                        # increment, so farm production here would diverge
+                        if not tile.isDesert and tile_growth(tile, turn + 1, turn + i) > 0:
+                            logbook.info(f'GeneralTradeEval rejected: own tile {tile} produces before its departure')
+                            return None
+                    elif tile.player >= 0 and teams is not None and teams[tile.player] == teams[playerIdx]:
+                        logbook.info(f'GeneralTradeEval rejected: teammate tile {tile} on path cannot be projected')
+                        return None
+                    else:
+                        # enemy/neutral defender: consumed at arrival turn
+                        # T+i; it produces until then (same divergence guard)
+                        if not tile.isDesert and tile_growth(tile, turn + 1, turn + i - 1) > 0:
+                            logbook.info(f'GeneralTradeEval rejected: defender {tile} produces before capture')
+                            return None
+                        stackCombatLoss += tile.army
+                reserves.append((tile, i + 1, 1 if i > 0 else sourceReserve))
+                node = node.next
+                i += 1
+            modeledEndpointDefense = targetGenTile.army + (ownPath.length - 1) // 2
+            sent = (math.ceil(pathValue) if useCeil else math.floor(pathValue)) + modeledEndpointDefense
+            if sent <= 0:
+                logbook.info('GeneralTradeEval rejected: derived stack is non-positive')
+                return None
+
+        # our non-gen tiles on the ENEMY path are captured and their armies
+        # destroyed: they leave our total and our non-gen tile count
+        lostTileArmies = 0
+        tilesLostCount = 0
+        enNode = enemyPath.start
+        j = 0
+        while enNode is not None and enNode is not enemyPath.tail:
+            tile = enNode.tile
+            if tile.player == playerIdx:
+                if tile.isSwamp and BotCombatOps._tick_counts(turn + 1, turn + j - 1)[0] > 0:
+                    logbook.info(f'GeneralTradeEval rejected: our swamp {tile} decays before the enemy captures it')
+                    return None
+                lostTileArmies += tile.army + tile_growth(tile, turn + 1, turn + j - 1)
+                tilesLostCount += 1
+            enNode = enNode.next
+            j += 1
+
+        genGrowth = tile_growth(ownGenTile, turn + 1, turn + deadline - 1)
+        if ownGenTile is source:
+            # the flag stays on the tile: only the reserve it leaves behind
+            # defends, and the tile keeps producing on its tick turns
+            general_defense = ownGenTile.army - BotCombatOps._sent_army(ownGenTile, ownPath.start.move_half) + genGrowth
+        else:
+            general_defense = ownGenTile.army + genGrowth
+
+        ownPathTiles = {node.tile for node in BotCombatOps._iter_path_nodes(ownPath)}
+        enemyPathTiles = {node.tile for node in BotCombatOps._iter_path_nodes(enemyPath)}
+
+        totalGrowth = 0
+        knownArmies: typing.List[int] = []
+        for tile in bot._map.get_all_tiles():
+            if tile.player != playerIdx or tile.isGeneral:
+                continue
+            if tile in ownPathTiles or tile in enemyPathTiles:
+                continue  # reserves and path losses are accounted separately
+            growth = tile_growth(tile, turn + 1, turn + deadline - 1)
+            if tile.isSwamp and BotCombatOps._tick_counts(turn + 1, turn + deadline - 1)[0] > 0:
+                logbook.info(f'GeneralTradeEval rejected: owned swamp {tile} decays inside the window')
+                return None
+            totalGrowth += growth
+            if tile.visible or (tile.discovered and not tile.isTempFogPrediction):
+                knownArmies.append(tile.army + growth)
+
+        # the general produces like any owned tile - its growth is part of
+        # the projected total even though it is accounted as defense
+        totalGrowth += genGrowth
+
+        capturedCount = 0
+        for resTile, depStep, baseReserve in reserves:
+            if resTile is ownGenTile:
+                continue  # its reserve IS the general defense
+            growth = tile_growth(resTile, turn + depStep, turn + deadline - 1)
+            if resTile.isSwamp and BotCombatOps._tick_counts(turn + depStep, turn + deadline - 1)[0] > 0:
+                logbook.info(f'GeneralTradeEval rejected: swamp reserve {resTile} decays inside the window')
+                return None
+            knownArmies.append(baseReserve + growth)
+            totalGrowth += growth
+            if resTile.player != playerIdx:
+                capturedCount += 1
+
+        total = score.total + totalGrowth - stackCombatLoss - lostTileArmies
+        nonGenCount = score.tiles - 1 - tilesLostCount + capturedCount
+        if total < 0 or nonGenCount < 0:
+            # stale fog-owned predictions or over-estimated defender armies
+            # produced an impossible forecast - reject, never clamp into the
+            # pure model (it would rightly raise on the negative primitive)
+            logbook.info(f'GeneralTradeEval rejected: inconsistent forecast (total {total}, nonGenCount {nonGenCount})')
+            return None
+        economy = float(player.tileCount - player.desertCount + player.cityCount * 30)
+        return _TradeSideProjection(
+            sent_army=sent,
+            general_defense=general_defense,
+            total_army=total,
+            non_general_tile_count=nonGenCount,
+            known_non_general_armies=tuple(knownArmies),
+            economy_value=economy)
+
+    @staticmethod
+    def _iter_path_nodes(path: Path) -> typing.Iterator[PathMove]:
+        """Yields every node of a Path from start to tail."""
+        node = path.start
+        while node is not None:
+            yield node
+            node = node.next
+
+    @staticmethod
+    def _build_trade_sides(bot: EklipZBot, attack_path: Path, threat: ThreatObj, against_player: int) -> GeneralTradeEvaluation | None:
+        """Builds the two projected GeneralTradeSides and calls the pure
+        evaluator. See _project_trade_side for the projection model; a side
+        that cannot be projected consistently rejects the whole candidate."""
+        us = bot._map.player_index
+        ourGenTile = bot._map.generals[us]
+        theirGenTile = attack_path.tail.tile
+
+        ourProj = BotCombatOps._project_trade_side(
+            bot, us, attack_path, threat.path, ourGenTile, theirGenTile,
+            attack_path.value, useCeil=False)
+        if ourProj is None:
+            return None
+        enProj = BotCombatOps._project_trade_side(
+            bot, against_player, threat.path, attack_path, theirGenTile, ourGenTile,
+            threat.threatValue, useCeil=True)
+        if enProj is None:
+            return None
+
+        ours = GeneralTradeSide(
+            total_army=ourProj.total_army,
+            general_defense=ourProj.general_defense,
+            sent_army=ourProj.sent_army,
+            non_general_tile_count=ourProj.non_general_tile_count,
+            known_non_general_armies=ourProj.known_non_general_armies,
+            economy_value=ourProj.economy_value)
+        opponent = GeneralTradeSide(
+            total_army=enProj.total_army,
+            general_defense=enProj.general_defense,
+            sent_army=enProj.sent_army,
+            non_general_tile_count=enProj.non_general_tile_count,
+            known_non_general_armies=enProj.known_non_general_armies,
+            economy_value=enProj.economy_value)
+
+        result = _eval_general_trade_pure(ours, opponent)
+        if result is None:
+            logbook.info(
+                f'GeneralTradeEval turn {bot._map.turn} rejected: projection'
+                f' inconsistent or capture fails (ourTotal {ours.total_army}'
+                f' sent {ours.sent_army} genDef {ours.general_defense};'
+                f' enTotal {opponent.total_army} sent {opponent.sent_army}'
+                f' genDef {opponent.general_defense})')
+        return result
+
+    @staticmethod
+    def get_kill_race_chance(bot: EklipZBot, generalHuntPath: Path, enGenProbabilityCutoff: float = 0.4, turnsToDeath: int | None = None, cutoffKillArmy: int = 0, againstPlayer: int | None = None, threat: ThreatObj | None = None) -> float:
         if generalHuntPath is None:
             return 0.0
 
@@ -475,13 +944,40 @@ class BotCombatOps:
 
         isOnlyOneSpot = toReveal[0].isGeneral
 
-        if turnsToDeath is not None and bot.opponent_tracker.winning_on_economy():
+        # Tests/test_GeneralTradeStrategy.py: a VALID same-turn mutual
+        # capture on both known generals is evaluated as a trade, using the
+        # REAL capture turn (threat.turns+1, no priority padding) instead of
+        # the legacy deadline - we may WANT the trade even when losing.
+        bilateralTrade = (
+            threat is not None and threat.threatType == ThreatType.Kill
+            and generalHuntPath.tail.tile.isGeneral
+            and generalHuntPath.tail.tile.player == againstPlayer
+            and threat.threatPlayer == againstPlayer
+            and bot._map.generals[bot._map.player_index] is not None
+            and threat.path.tail.tile is bot._map.generals[bot._map.player_index])
+
+        if turnsToDeath is not None and not bilateralTrade and bot.opponent_tracker.winning_on_economy(againstPlayer=againstPlayer):
             # we don't want a general trade.
             turnsToDeath -= 1
 
         if isOnlyOneSpot:
             if turnsToDeath is None:
                 return 1.0
+            if bilateralTrade:
+                realCapture = threat.turns + 1
+                arrival = generalHuntPath.length + generalHuntPath.requiredDelay
+                if arrival < realCapture:
+                    logbook.info(f'We win the race outright, {arrival}t vs real capture {realCapture}t')
+                    return 1.0
+                if arrival == realCapture:
+                    tradeEval = BotCombatOps.evaluate_general_trade(bot, generalHuntPath, threat, againstPlayer)
+                    if tradeEval is not None and tradeEval.favorable:
+                        logbook.info(f'We WIN the general trade {tradeEval.our_post_army}v{tradeEval.opponent_post_army} econGain {tradeEval.economy_gain}')
+                        return 1.0
+                    logbook.info('Mutual general capture evaluated UNFAVORABLE - not a proactive trade')
+                    return 0.0
+                logbook.info(f'We lose the race, {arrival}t vs real capture {realCapture}t')
+                return 0.0
             if generalHuntPath.length < turnsToDeath:
                 logbook.info(f'We win the race, {generalHuntPath.length}t vs turnsToDeath {turnsToDeath}t')
                 return 1.0
@@ -506,7 +1002,7 @@ class BotCombatOps:
         reachedCount = 0
         tooFarToKillTiles = []
         for tile in toReveal:
-            emgVal = 1 + bot.armyTracker.get_tile_emergence_for_player(tile, bot.targetPlayer)
+            emgVal = 1 + bot.armyTracker.get_tile_emergence_for_player(tile, againstPlayer)
             sumTotal += emgVal
             killDist = rawKillDistByTileMatrix.raw[tile.tile_index]
             if killDist < turnsToDeath:
@@ -563,6 +1059,30 @@ class BotCombatOps:
 
     #     return friendlyPath, enemyPath, result
 
+    # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+    # share the legacy attack-cycle timing formula with hidden-general stealth gathers.
+    @staticmethod
+    def get_all_in_hit_general_turns(bot: EklipZBot) -> int:
+        """Return the existing all-in attack-cycle target timing."""
+        hit_general_in_turns = (
+            bot.all_in_army_advantage_cycle
+            - bot.all_in_army_advantage_counter % bot.all_in_army_advantage_cycle
+            - 5)
+        if bot.is_all_in_army_advantage:
+            hit_general_in_turns = hit_general_in_turns % 25 + 5
+        return hit_general_in_turns
+
+    # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+    # preserve a committed stealth route while clearing pending gathers after an all-in reset.
+    @staticmethod
+    def _clear_uncommitted_stealth_all_in_state(bot: EklipZBot) -> None:
+        """Clear only uncommitted stealth gather state."""
+        state = bot.stealth_all_in
+        if state is not None and state.committed_route is None:
+            bot.stealth_all_in = None
+            bot.curPath = None
+            bot.curPathPrio = -1
+
     @staticmethod
     def get_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if not BotStateQueries.is_all_in(bot):
@@ -574,12 +1094,8 @@ class BotCombatOps:
         # the old unconditional early-return here is what produced the t134-149
         # idle turns in the live TtVz86M3i repro.
 
-        mode = 'PCST'
-
-        hitGeneralInTurns = bot.all_in_army_advantage_cycle - bot.all_in_army_advantage_counter % bot.all_in_army_advantage_cycle - 5
-        if bot.is_all_in_army_advantage:
-            hitGeneralInTurns = hitGeneralInTurns % 25 + 5
-            mode = 'GATH'
+        mode = 'GATH' if bot.is_all_in_army_advantage else 'PCST'
+        hitGeneralInTurns = BotCombatOps.get_all_in_hit_general_turns(bot)
         flankAllInMove = BotCombatOps.try_find_flank_all_in(bot, hitGeneralInTurns)
 
         if flankAllInMove:
@@ -659,6 +1175,11 @@ class BotCombatOps:
                     bot.is_all_in_army_advantage = False
                     bot.all_in_army_advantage_counter = 0
                     bot.all_in_city_behind = False
+                    # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack__long:
+                    # prevent the projected-loss latch from re-enabling a ceased PCST all-in.
+                    bot.win_condition_analyzer.projected_loss_all_in_active = False
+                    bot.win_condition_analyzer.projected_loss_all_in_target = None
+                    BotCombatOps._clear_uncommitted_stealth_all_in_state(bot)
                 return None
 
             move = gathCapPlan.get_first_move()
@@ -1236,6 +1757,13 @@ class BotCombatOps:
             if cityAdjCount > 5:
                 break
 
+        # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: these tiles
+        # feed needToKill gather targets, which are attacks; drop tiles owned by enemies we may
+        # not attack.
+        ffaUnattackablePlayers = BotStateQueries.get_ffa_unattackable_players(bot)
+        if ffaUnattackablePlayers is not None:
+            keyTiles = set(t for t in keyTiles if t.player not in ffaUnattackablePlayers)
+
         return keyTiles
 
     @staticmethod
@@ -1679,13 +2207,16 @@ class BotCombatOps:
         general = bot.general
         if general is None:
             bot.is_all_in_losing = False
+            BotCombatOps._clear_uncommitted_stealth_all_in_state(bot)
             return False
 
         if bot.targetPlayer == -1:
             bot.is_all_in_losing = False
+            BotCombatOps._clear_uncommitted_stealth_all_in_state(bot)
             return False
 
         if not BotStateQueries.is_all_in(bot) and bot.force_far_gathers:
+            BotCombatOps._clear_uncommitted_stealth_all_in_state(bot)
             return False
 
         customRatioOffset = 0.0
@@ -1773,6 +2304,8 @@ class BotCombatOps:
             bot.enemy_expansion_plan = None
 
         bot._minAllowableArmy = 1
+        if not bot.is_all_in_losing:
+            BotCombatOps._clear_uncommitted_stealth_all_in_state(bot)
         return bot.is_all_in_losing
 
     @staticmethod

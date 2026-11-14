@@ -667,6 +667,13 @@ class BotCityOps:
         tiles = [s for s, score in bot.cityAnalyzer.get_sorted_enemy_scores() if s not in prioTiles and score.general_distances_ratio < cutoffDistanceRatio]
 
         prioTiles.extend(tiles)
+
+        # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: enemy-city
+        # kill/contest plans are attacks and may only target cities of players we may attack.
+        ffaUnattackablePlayers = BotStateQueries.get_ffa_unattackable_players(bot)
+        if ffaUnattackablePlayers is not None:
+            prioTiles = [t for t in prioTiles if t.player not in ffaUnattackablePlayers]
+
         return prioTiles
 
     @staticmethod
@@ -1673,6 +1680,7 @@ class BotCityOps:
                 or bot.threat.threatValue <= bot.threat.turns
                 or (bot.threat.turns > 6 and not bot.threat.path.start.tile.visible)
                 or not bot.threat.path.tail.tile.isGeneral
+                or BotCityOps._city_take_completes_before_kill_threat_lands(bot, targetCity, cityCost)
         )
         if not safeFromThreat:
             bot.viewInfo.add_info_line("Will not proactively take cities due to the existing threat....")
@@ -1715,6 +1723,49 @@ class BotCityOps:
                 logbook.info(
                         f"Skipped neut cities. in_gather_split(bot._map.turn) {bot.timings.in_gather_split(bot._map.turn)} and (player.cityCount < targetPlayer.cityCount {genPlayer.cityCount < targetPlayer.cityCount} or proactivelyTakeCity {proactivelyTakeCity}) and safeFromThreat {safeFromThreat}")
         return False
+
+    @staticmethod
+    def _city_take_completes_before_kill_threat_lands(
+            bot: EklipZBot,
+            targetCity: Tile | None,
+            cityCost: int
+    ) -> bool:
+        """
+        Tests/test_BotBehavior.py::test_should_take_neutral_city_instead_of_intercepting_distant_threat:
+        A kill threat on the general that is still many turns out should not cause us to abandon a
+        nearly-complete committed neutral city capture: the take finishes long before the threat can
+        reach the general, leaving a reaction window to organize defense afterward. Without this, a
+        barely-threshold Kill threat (threatValue > turns) suppresses the neutral city option even
+        when the risk/defense analysis above explicitly allowed the capture DESPITE the danger, and
+        a mediocre intercept then wins by default.
+
+        Returns True only when the target city is part of the recently-updated committed capture
+        plan, a friendly tile already holds enough army to finish the capture, and the threat lands
+        strictly after the capture completes plus a defense reaction slack.
+        """
+        if (
+                bot.threat is None
+                or targetCity is None
+                or targetCity not in bot.city_capture_plan_tiles
+                or bot.city_capture_plan_last_updated < bot._map.turn - 2
+        ):
+            return False
+        turnsToTake: int | None = None
+        for tile in bot._map.players[bot.general.player].tiles:
+            if tile.army >= cityCost:
+                dist = bot._map.get_distance_between(tile, targetCity)
+                if turnsToTake is None or dist < turnsToTake:
+                    turnsToTake = dist
+        if turnsToTake is None:
+            return False
+        completesBefore = bot.threat.turns > turnsToTake + 6
+        if completesBefore:
+            logbook.info(
+                f'CITY_SAFETY_THREAT_TAKE_OK turn={bot._map.turn} targetCity={targetCity.x},{targetCity.y} '
+                f'turnsToTake={turnsToTake} threatTurns={bot.threat.turns} threatValue={bot.threat.threatValue} '
+                f'threatStart={bot.threat.path.start.tile}'
+            )
+        return completesBefore
 
     @staticmethod
     def get_city_contestation_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> typing.Tuple[Move | None, int, int, typing.List[GatherTreeNode]]:

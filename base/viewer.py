@@ -24,6 +24,7 @@ import BotLogging
 from ArmyAnalyzer import *
 
 from ViewInfo import ViewInfo, BorderGradient
+from base.client.generals import VIEWER_ZOMBIE_TIMEOUT_SECONDS
 from base.client.map import MapBase, Score
 
 MIN_WINDOW_WIDTH = 16
@@ -354,7 +355,7 @@ class GeneralsViewer(object):
 
     def run_main_viewer_loop(self, alignTop=True, alignLeft=True):
         MapBase.DO_NOT_RANDOMIZE = True
-        termSec = 600
+        termSec = VIEWER_ZOMBIE_TIMEOUT_SECONDS
         while not self._receivedUpdate:  # Wait for first update
             try:
                 viewInfo, map, isComplete = self._inbound_update_queue.get(block=True, timeout=15.0)
@@ -372,7 +373,8 @@ class GeneralsViewer(object):
                     logbook.info(f'GeneralsViewer zombied with no game start, self-terminating after {termSec} seconds')
                     time.sleep(1.0)
 
-                    self.send_closed_event(killedByUserClose=False)  # this causes the bot itself to die when it finally starts a game after being in queue for a long time.
+                    # The main process should have left the queue by now; this path only fires if it crashed or hung.
+                    self.send_closed_event(killedByUserClose=False)
                     self._killed = True
                     self._receivedUpdate = True
                     time.sleep(1.0)
@@ -1938,4 +1940,3 @@ class GeneralsViewer(object):
                           (point.x, point.y))
         self._screen.blit(translation,
                           (point.x, point.y))
-

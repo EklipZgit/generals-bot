@@ -27,7 +27,7 @@ from BotModules.BotRendering import BotRendering
 
 from Viewer.ViewerProcessHost import ViewerHost
 
-FORCE_NO_VIEWER = True     # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
+FORCE_NO_VIEWER = False     # if you want the bot GUI to stop distracting you from work but you dont want to stop and restart all the bot shells with noUI, flip this flag and it will force the GUI off :)
 FORCE_PRIVATE = False       # if you're making changes that are gonna break the bot and want to force it to only play in private rooms temporarily but dont want to kill all the shell loops, flip this flag, and it will keep restarting and wait for the flag to be flipped back before queuing again (except private games).
 
 
@@ -88,6 +88,21 @@ class BotHostBase(object):
     def run_viewer_loop(self):
         logbook.info("attempting to start viewer loop")
         self._viewer.start()
+
+    # UnitTests/test_ViewerHostFailFast.py::test_has_viewer_exited_tracks_process_liveness
+    # disables a dead renderer so later moves do not wait on its initialization or send path.
+    def _disable_viewer_if_exited(self) -> None:
+        """Disable a viewer process that exited without a user-requested close."""
+        if (
+                self.has_viewer
+                and self._viewer is not None
+                and self._viewer.has_viewer_exited()
+                and self._viewer._closed_by_user is not True):
+            logbook.error(
+                f'VIEWER EXITED WITHOUT USER CLOSE '
+                f'(closedByUser={self._viewer._closed_by_user}), '
+                'disabling viewer for rest of game so moves are never blocked')
+            self.has_viewer = False
 
     def make_move(self, currentMap: MapBase, updateReceivedTime: float):
         # todo most of this logic / timing / whatever should move into EklipZbot...
@@ -187,6 +202,7 @@ class BotHostBase(object):
                 with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
                     self.save_txtmap(currentMap)
 
+            self._disable_viewer_if_exited()
             if self.has_viewer and self._viewer is not None:
                 with moveTimer.begin_event(f'Sorting perfevents for {currentMap.turn} update to Viewer'):
                     self.eklipz_bot.viewInfo.perfEvents.extend(moveTimer.get_events_organized_longest_to_shortest(limit=30, indentSize=2))
@@ -245,6 +261,7 @@ class BotHostBase(object):
                 with moveTimer.begin_event(f'Dump {currentMap.turn}.txtmap to disk'):
                     self.save_txtmap(currentMap)
 
+            self._disable_viewer_if_exited()
             if self.has_viewer and self._viewer is not None:
                 # with moveTimer.begin_event(f'Prep vi for render {currentMap.turn}'):
                 #     self.eklipz_bot.prep_view_info_for_render(None)

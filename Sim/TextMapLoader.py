@@ -19,7 +19,13 @@ import typing
 from Army import Army, FogTileRevert
 from Path import Path
 from SearchUtils import count
-from base.client.map import Tile, TILE_EMPTY, TILE_MOUNTAIN, MapBase, PLAYER_CHAR_INDEX_PAIRS
+from base.client.map import (
+    MapBase,
+    normalize_spawn_fairness_option,
+    PLAYER_CHAR_INDEX_PAIRS,
+    TILE_EMPTY,
+    TILE_MOUNTAIN,
+    Tile)
 from base.client.tile import TILE_OBSERVATORY, TILE_LOOKOUT
 
 
@@ -166,6 +172,10 @@ class TextMapLoader(object):
                 mods.append(str(i))
         if len(mods) > 0:
             lines.append(f'modifiers={",".join(mods)}')
+
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_spawn_fairness_option_txtmap_round_trip - preserve non-default server spawn-fairness options in saved maps.
+        if map.spawn_fairness_option != 0.5:
+            lines.append(f'spawn_fairness={map.spawn_fairness_option}')
 
         return '\n'.join([line.rstrip() for line in lines])
 
@@ -437,7 +447,10 @@ class TextMapLoader(object):
         return reverts
 
     @staticmethod
-    def load_map_data_into_map(map: MapBase, data: typing.Dict[str, str]):
+    def load_map_data_into_map(map: MapBase, data: typing.Dict[str, str]) -> None:
+        """Restore optional map metadata from a txtmap header."""
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_legacy_resume_without_island_ids_disables_fairness - mark txtmaps even when their metadata section is empty.
+        map.resume_data_is_txtmap = True
         playerCharMap = TextMapLoader.get_player_char_index_map()
         # set the base scores in case the map doesn't have the string data
         for player in map.players:
@@ -468,6 +481,10 @@ class TextMapLoader(object):
             mods = data['modifiers'].split(',')
             for mod in mods:
                 map.modifiers_by_id[int(mod)] = True
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_spawn_fairness_option_txtmap_round_trip - restore the option before trackers are built from txtmaps.
+        if 'spawn_fairness' in data:
+            map.spawn_fairness_option = normalize_spawn_fairness_option(
+                float(data['spawn_fairness']))
 
         if 'is_custom_map' in data:
             map.is_custom_map = bool(data['is_custom_map'])

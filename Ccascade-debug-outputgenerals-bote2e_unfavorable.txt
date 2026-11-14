@@ -1,0 +1,19 @@
+F
+======================================================================
+FAIL: test__e2e__unfavorable_trade_defends_when_viable (Tests.test_GeneralTradeStrategy.GeneralTradeStrategyE2ETests.test__e2e__unfavorable_trade_defends_when_viable)
+No enemy economy lead + a viable defense: the bot must NOT burn
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\src\generals-bot\Tests\test_GeneralTradeStrategy.py", line 307, in test__e2e__unfavorable_trade_defends_when_viable
+    self.assertFalse(
+    ~~~~~~~~~~~~~~~~^
+        self._is_trade_move(ourMove),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f'unfavorable trade must not be proactive while defense is viable, bot moved {ourMove}')
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false : unfavorable trade must not be proactive while defense is viable, bot moved 13,6 -> 13,5
+
+----------------------------------------------------------------------
+Ran 1 test in 0.239s
+
+FAILED (failures=1)

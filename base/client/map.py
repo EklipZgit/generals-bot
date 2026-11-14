@@ -296,6 +296,14 @@ class DistanceMapper:
         raise NotImplementedError()
 
 
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_threshold_option_semantics_and_relaxation - match JavaScript's `value || 0.5` default for absent and zero options.
+def normalize_spawn_fairness_option(value: float | None) -> float:
+    """Apply the server's default semantics to a spawn-fairness option."""
+    if value is None or value == 0.0:
+        return 0.5
+    return value
+
+
 class MapBase(object):
     DO_NOT_RANDOMIZE: bool = False
     """Static property to prevent randomizing the tile adjacency matrix."""
@@ -326,6 +334,7 @@ class MapBase(object):
         self.deserts: typing.Set[Tile] = set()
         self.modifiers_by_id = [False for i in range(30)]
         self.is_custom_map: bool = False
+        self.spawn_fairness_option: float = 0.5
         self.use_basic_city_counter = False
         if modifiers:
             for m in modifiers:
@@ -449,6 +458,8 @@ class MapBase(object):
 
         self.resume_data: typing.Dict[str, str] = {}
         """Data for resuming a game in unit test. Unused in normal games."""
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_legacy_resume_without_island_ids_disables_fairness - distinguish empty txtmaps from live spawn-in maps.
+        self.resume_data_is_txtmap: bool = False
 
         self.unexplained_deltas = {}
         self.moved_here_set = set()
@@ -520,6 +531,11 @@ class MapBase(object):
         self.__dict__.setdefault('_pre_trade_city_counts', [])
         self.__dict__.setdefault('_anonymous_trade_turns', set())
         self.__dict__.setdefault('_self_trade_notification_opponent', -1)
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_legacy_resume_without_island_ids_disables_fairness - old pickled maps need an explicit empty resume-data state.
+        self.__dict__.setdefault('resume_data', {})
+        self.__dict__.setdefault('resume_data_is_txtmap', False)
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_spawn_fairness_option_txtmap_round_trip - legacy pickled maps predate the typed spawn option.
+        self.__dict__.setdefault('spawn_fairness_option', 0.5)
         self.notify_tile_captures = []
         self.notify_tile_deltas = []
         self.notify_city_found = []
@@ -3940,11 +3956,18 @@ class Map(MapBase):
             teams = start_data['teams']
 
         mods = []
+        spawnFairnessOption: float = 0.5
         opts = {}
         if 'options' in start_data:
             opts = start_data['options']
             if 'modifiers' in opts:
                 mods = opts['modifiers']
+
+            # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_threshold_option_semantics_and_relaxation - normalize the transmitted option using the server's zero-as-default behavior.
+            rawSpawnFairness = opts.get('spawn_fairness')
+            if rawSpawnFairness is not None:
+                spawnFairnessOption = normalize_spawn_fairness_option(
+                    float(rawSpawnFairness))
 
             gameSpeed = 1.0
             if 'game_speed' in opts:
@@ -3956,6 +3979,7 @@ class Map(MapBase):
                 raise Exception(f"Refusing to play game at game speed {gameSpeed}")
 
         super().__init__(start_data['playerIndex'], teams, start_data['usernames'], data['turn'], map_grid_y_x, replay_url, start_data['replay_id'], mods)
+        self.spawn_fairness_option = spawnFairnessOption
 
         self._parse_chess_clock(start_data, mods)
 

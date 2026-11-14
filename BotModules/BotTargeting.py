@@ -10,7 +10,9 @@ import ExpandUtils
 import logbook
 
 import SearchUtils
-from ArmyTracker import ArmyTracker
+from ArmyTracker import (
+    ArmyTracker,
+    spawn_fairness_prediction_value)
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotPathingUtils import BotPathingUtils
 from BotModules.BotComms import BotComms
@@ -575,6 +577,14 @@ class BotTargeting:
                 if player.index != bot.general.player and not player.dead and player.index not in bot._map.teammates:
                     return player.index
 
+        # Tests/test_FFA.py::test_should_exclusively_attack_player_that_attacks_us_in_early_ffa:
+        # while exclusive FFA targeting is active we stay locked on the locked attacker /
+        # clear-kill player instead of re-scoring candidates.
+        if bot.ffa_exclusive_target_lock != -1 and not bot._map.players[bot.ffa_exclusive_target_lock].dead:
+            return bot.ffa_exclusive_target_lock
+
+        ffaUnattackablePlayers = BotStateQueries.get_ffa_unattackable_players(bot)
+
         allAfk = len(BotTargeting.get_afk_players(bot)) >= bot._map.remainingPlayers - 1 - len(bot._map.teammates)
         if allAfk or bot._map.is_2v2:
             playerScore = -10000000
@@ -598,6 +608,11 @@ class BotTargeting:
         for player in bot._map.players:
             seenPlayer = SearchUtils.count(player.tiles, lambda t: t.visible) > 0
             if player.dead or player.index == bot._map.player_index or not seenPlayer or player.index in bot._map.teammates:
+                continue
+
+            # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: revealed
+            # enemies that are not attacking us (and not AFK/locked) cannot be selected as targets.
+            if ffaUnattackablePlayers is not None and player.index in ffaUnattackablePlayers:
                 continue
 
             curScore = 300
@@ -788,10 +803,11 @@ class BotTargeting:
             bot: EklipZBot,
             undiscoveredCounterDepth: int,
             minSpawnDistance: int
-    ) -> MapMatrixInterface[int]:
+    ) -> MapMatrixInterface[float]:
+        """Build a pre-contact general-location value grid."""
         localMaxTile = bot.general
         maxAmount: int = -1
-        grid = MapMatrix(bot._map, 0)
+        grid = MapMatrix(bot._map, 0.0)
 
         genDists = bot._map.get_distance_matrix_including_obstacles(bot.general)
 
@@ -806,6 +822,15 @@ class BotTargeting:
             return tile_meets_criteria_for_value_around_general(t) and genDists.raw[t.tile_index] >= minSpawnDistance and (bot.teammate_general is None or BotPathingUtils.distance_from_teammate(bot, t) >= minSpawnDistance)
 
         for tile in bot._map.pathable_tiles:
+            tileIndex = tile.tile_index
+            spawnFairnessWeight: float = 0.0
+            spawnFairnessPlayer = bot.targetPlayer
+            if spawnFairnessPlayer == -1:
+                spawnFairnessPlayer = 1 - bot._map.player_index
+            if bot.armyTracker.spawn_fairness_active:
+                spawnFairnessWeight = bot.armyTracker.spawn_fairness_weights_by_player[
+                    spawnFairnessPlayer].raw[tileIndex]
+
             if tile_meets_criteria_for_general(tile):
                 genDist = genDists.raw[tile.tile_index] / 2
                 distFromCenter = BotPathingUtils.get_distance_from_board_center(bot, tile, center_ratio=0.25)
@@ -829,6 +854,10 @@ class BotTargeting:
                 SearchUtils.breadth_first_foreach(bot._map, [tile], undiscoveredCounterDepth, count_undiscovered, noLog=True)
 
                 grid.raw[tile.tile_index] = counter.value + initScore
+                # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_prediction_contribution_clamps_negative_weights - add only positive fairness evidence to pre-contact values.
+                if bot.armyTracker.spawn_fairness_active:
+                    grid.raw[tile.tile_index] += spawn_fairness_prediction_value(
+                        spawnFairnessWeight)
                 if bot.info_render_general_undiscovered_prediction_values:
                     bot.viewInfo.bottomRightGridText.raw[tile.tile_index] = f'c{counter.value}'
 
@@ -866,6 +895,25 @@ class BotTargeting:
 
         maxTile = bot.general
         values = MapMatrix(bot._map, 0.0)
+        emergenceDistanceBonus: MapMatrixInterface[float] | None = None
+        if bot.shortest_path_to_target_player is None:
+            logbook.info(
+                'Skipping emergence distance bonus because the shortest path to the target player is unavailable')
+        else:
+            expectedGeneralDistance = bot.shortest_path_to_target_player.length
+            emergenceDistanceBonus = bot.armyTracker.build_emergence_distance_bonus_matrix(
+                bot.targetPlayer,
+                expectedGeneralDistance)
+            sourceCount = len(
+                bot.armyTracker.get_emergence_distance_sums(
+                    bot.targetPlayer).source_tiles)
+            maxBonusTile = max(
+                bot._map.tiles_by_index,
+                key=lambda tile: emergenceDistanceBonus.raw[tile.tile_index])
+            maxBonus = emergenceDistanceBonus.raw[maxBonusTile.tile_index]
+            logbook.info(
+                f'Emergence distance bonus sources={sourceCount} '
+                f'D={expectedGeneralDistance} max={maxBonusTile} value={maxBonus:.1f}')
 
         if bot.armyTracker.connectedByPlayer[bot.targetPlayer] is not None:
             range = bot._map.rows / 3
@@ -886,8 +934,19 @@ class BotTargeting:
 
             foundValue = values.raw[tile.tile_index]
 
+            spawnFairnessWeight: float = bot.armyTracker.spawn_fairness_weights_by_player[
+                bot.targetPlayer].raw[tile.tile_index]
+
             if not bot.armyTracker.valid_general_positions_by_player[bot.targetPlayer][tile]:
                 continue
+
+            # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_prediction_contribution_clamps_negative_weights - add the scaled positive fairness signal only after validity filtering.
+            if bot.armyTracker.spawn_fairness_active:
+                foundValue += spawn_fairness_prediction_value(spawnFairnessWeight)
+
+            if emergenceDistanceBonus is not None:
+                bonus = emergenceDistanceBonus.raw[tile.tile_index]
+                foundValue += bonus
 
             if bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile] > 0:
                 foundValue += bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile] * 10

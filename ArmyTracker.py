@@ -9,22 +9,202 @@ from __future__ import annotations
 
 import itertools
 import typing
+from collections import deque
+from dataclasses import dataclass
+
+import numpy as np
 
 import DebugHelper
 import SearchUtils
 from Algorithms import MapSpanningUtils
 from Army import Army
 from BoardAnalyzer import BoardAnalyzer
-from Interfaces import TileSet
+from Interfaces import MapMatrixInterface, TileSet
 from Models import Move
-from MapMatrix import MapMatrixSet, TileSet
+from MapMatrix import MapMatrix, MapMatrixSet, TileSet
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import *
 from Path import Path
-from base.client.map import Tile, TILE_OBSTACLE, TileDelta, Player, MODIFIER_TORUS, MAX_ALLY_SPAWN_DISTANCE, MIN_ALLY_SPAWN_DISTANCE, GeneralTrade
+from base.client.map import (
+    MAX_ALLY_SPAWN_DISTANCE,
+    MIN_ALLY_SPAWN_DISTANCE,
+    MODIFIER_TORUS,
+    GeneralTrade,
+    Player,
+    Tile,
+    TileDelta,
+    TILE_OBSTACLE,
+    normalize_spawn_fairness_option)
 
 if typing.TYPE_CHECKING:
     from Strategy.OpponentTracker import OpponentTracker
+
+
+EMERGENCE_DISTANCE_BONUS_EXPONENT: float = 0.5
+EMERGENCE_DISTANCE_BONUS_ENABLED: bool = True
+SPAWN_FAIRNESS_ENABLED: bool = True
+SPAWN_FAIRNESS_MIN_RELAXATION_ATTEMPTS: int = 20
+SPAWN_FAIRNESS_REACH_PROBABILITY_CUTOFF: float = 1e-4
+SPAWN_FAIRNESS_PREDICTION_SCALE: float = 20.0
+SPAWN_FAIRNESS_ELIMINATION_MARGIN: float = 0.1
+SPAWN_FAIRNESS_HUNTING_SCALE: float = 2.0
+SPAWN_FAIRNESS_MAX_DEPTH: int = 15
+SPAWN_FAIRNESS_MAX_PAIR_SAMPLES: int = 1_000_000
+
+
+@dataclass(slots=True)
+class EmergenceDistanceSums:
+    distance_sum: MapMatrixInterface[int]
+    reach_count: MapMatrixInterface[int]
+    source_tiles: set[Tile]
+
+
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_server_reference_scores_and_acceptance - keep the server score formula independently testable.
+def spawn_fairness_score_from_counts(counts_by_distance: typing.Sequence[int]) -> float:
+    """Score a spawn from server-compatible distance counts."""
+    countsByDistance = list(counts_by_distance)
+    countsByDistance[1] = min(3, countsByDistance[1])
+    currentRangeValue = int(1.18 ** SPAWN_FAIRNESS_MAX_DEPTH)
+    score = 0.0
+    for distance in range(1, SPAWN_FAIRNESS_MAX_DEPTH):
+        score += currentRangeValue * countsByDistance[distance]
+        currentRangeValue /= 1.18 if distance < 7 else 1.10
+        if distance < 5:
+            currentRangeValue /= 1.6
+    return score
+
+
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_threshold_option_semantics_and_relaxation - match the server's per-attempt fairness relaxation.
+def spawn_fairness_threshold(fairness_option: float, attempt_index: int) -> float:
+    """Return the server's 1v1 pair-acceptance threshold at an attempt index."""
+    relaxedOption = fairness_option - 0.005 * attempt_index
+    return 1.0 - (1.0 - relaxedOption) ** 4.0 - 0.02
+
+
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_server_reference_scores_and_acceptance - compare score pairs with the server's symmetric ratio.
+def spawn_fairness_ratio(first_score: float, second_score: float) -> float:
+    """Return the symmetric lower-to-higher spawn score ratio."""
+    return min(
+        first_score / max(1.0, second_score),
+        second_score / max(1.0, first_score))
+
+
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_server_reference_scores_and_acceptance - classify accepted pairs using the authoritative threshold.
+def spawn_fairness_pair_is_accepted(
+        first_score: float,
+        second_score: float,
+        fairness_option: float,
+        attempt_index: int) -> bool:
+    """Return whether a score pair passes the server threshold."""
+    threshold = spawn_fairness_threshold(fairness_option, attempt_index)
+    return threshold <= 0.0 or spawn_fairness_ratio(first_score, second_score) >= threshold
+
+
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_weight_band_and_negative_weights_eliminate_candidates - preserve linear weights below zero instead of clamping them.
+def spawn_fairness_weight(
+        ratio: float,
+        threshold_base: float,
+        threshold_min: float) -> float:
+    """Map a fairness ratio to its unbounded spawn-location weight."""
+    if ratio >= threshold_base:
+        return 1.0
+    return (ratio - threshold_min) / (threshold_base - threshold_min)
+
+
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_prediction_contribution_clamps_negative_weights - keep fairness prediction contribution non-negative.
+def spawn_fairness_prediction_value(weight: float) -> float:
+    """Return the configured positive-only prediction contribution of a weight."""
+    return max(0.0, weight) * SPAWN_FAIRNESS_PREDICTION_SCALE
+
+
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_hunting_contribution_uses_two_emergence_scale - scale hunting-path fairness to two unit emergence contributions.
+def spawn_fairness_hunting_value(weight: float) -> float:
+    """Return the positive-only spawn-fairness hunting contribution."""
+    return max(0.0, weight) * SPAWN_FAIRNESS_HUNTING_SCALE
+
+
+# UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_turn_one_computation_stays_below_150ms - estimate the server's relaxation level from separated ordered spawn pairs.
+# The server retries up to 1000 times and T reaches zero near attempt 99 for the default option; use the rare-reach level as the effective zero, with a 20-attempt floor to protect the true spawn from estimate error.
+def estimate_spawn_fairness_relaxation(
+        scores: typing.Sequence[float],
+        coordinates: typing.Sequence[tuple[int, int]],
+        fairness_option: float) -> tuple[int, float]:
+    """Estimate the final useful threshold using ordered valid-spawn pairs."""
+    scoreValues = np.asarray(scores, dtype=np.float64)
+    coordinateValues = np.asarray(coordinates, dtype=np.int32)
+    tileCount = scoreValues.size
+    if tileCount == 0:
+        firstZeroAttempt = 0
+        return firstZeroAttempt, spawn_fairness_threshold(fairness_option, firstZeroAttempt)
+
+    pairCount = tileCount * tileCount
+    if pairCount > SPAWN_FAIRNESS_MAX_PAIR_SAMPLES:
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_turn_one_computation_stays_below_150ms - sample ordered pairs by stable flat indices to cap large-map memory and work.
+        flattenedPairIndexes = np.linspace(
+            0,
+            pairCount - 1,
+            num=SPAWN_FAIRNESS_MAX_PAIR_SAMPLES,
+            dtype=np.int64)
+        firstIndexes = flattenedPairIndexes // tileCount
+        secondIndexes = flattenedPairIndexes % tileCount
+        firstScores = scoreValues[firstIndexes]
+        secondScores = scoreValues[secondIndexes]
+        distanceX = np.abs(
+            coordinateValues[firstIndexes, 0] - coordinateValues[secondIndexes, 0])
+        distanceY = np.abs(
+            coordinateValues[firstIndexes, 1] - coordinateValues[secondIndexes, 1])
+    else:
+        firstScores = scoreValues[:, np.newaxis]
+        secondScores = scoreValues[np.newaxis, :]
+        distanceX = np.abs(
+            coordinateValues[:, np.newaxis, 0] - coordinateValues[np.newaxis, :, 0])
+        distanceY = np.abs(
+            coordinateValues[:, np.newaxis, 1] - coordinateValues[np.newaxis, :, 1])
+
+    pairRatios = np.minimum(
+        firstScores / np.maximum(1.0, secondScores),
+        secondScores / np.maximum(1.0, firstScores))
+    eligiblePairRatios = pairRatios[(distanceX + distanceY) >= 15]
+    eligiblePairCount = eligiblePairRatios.size
+
+    firstZeroAttempt = 0
+    while spawn_fairness_threshold(fairness_option, firstZeroAttempt) > 0.0:
+        firstZeroAttempt += 1
+
+    reachProbability = 1.0
+    smallestRareAttempt: int | None = None
+    for attempt in range(firstZeroAttempt + 1):
+        if reachProbability < SPAWN_FAIRNESS_REACH_PROBABILITY_CUTOFF:
+            smallestRareAttempt = attempt
+            break
+        if attempt == firstZeroAttempt:
+            break
+        threshold = spawn_fairness_threshold(fairness_option, attempt)
+        acceptedPairCount = int(np.count_nonzero(eligiblePairRatios >= threshold))
+        acceptanceChance = (
+            acceptedPairCount / eligiblePairCount
+            if eligiblePairCount > 0
+            else 0.0)
+        reachProbability *= 1.0 - acceptanceChance
+
+    nMax = firstZeroAttempt
+    if smallestRareAttempt is not None:
+        nMax = min(
+            firstZeroAttempt,
+            max(SPAWN_FAIRNESS_MIN_RELAXATION_ATTEMPTS, smallestRareAttempt))
+    return nMax, spawn_fairness_threshold(fairness_option, nMax)
+
+
+@dataclass(slots=True)
+class SpawnFairnessAnalysis:
+    """Summary of the per-tile spawn-fairness analysis for one enemy player."""
+    weights: MapMatrix[float]
+    our_score: float
+    threshold_base: float
+    threshold_min: float
+    n_max: int
+    fairness_option: float
+    active: bool
 
 
 class PlayerAggressionTracker(object):
@@ -65,6 +245,18 @@ class ArmyTracker(object):
 
         self.valid_general_positions_by_player: typing.List[MapMatrixSet] = [MapMatrixSet(map) for _ in self.map.players]
         """The true/false matrix of valid general positions by player"""
+        self.spawn_fairness_weights_by_player: typing.List[MapMatrix[float]] = [
+            MapMatrix(self.map, 0.0)
+            for _ in self.map.players
+        ]
+        self.spawn_fairness_active: bool = self._is_spawn_fairness_active()
+        self.spawn_fairness_initialized: bool = False
+        self.spawn_fairness_legacy_notice_logged: bool = False
+        self.spawn_fairness_eliminated_tiles_by_player: list[set[Tile]] = [
+            set()
+            for _ in self.map.players
+        ]
+
         #
         # self.player_fog_connections: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
         # """The tiles we assume are connecting """
@@ -88,6 +280,14 @@ class ArmyTracker(object):
 
         self.unrecaptured_emergence_events: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
         """The set of emergence events from which an army emerged and the target player still owns the tile. ONLY counts when we didn't find an obvious emergence path for the player."""
+
+        self.emergence_distance_sums_by_player: typing.List[EmergenceDistanceSums] = [
+            EmergenceDistanceSums(
+                distance_sum=MapMatrix(self.map, 0),
+                reach_count=MapMatrix(self.map, 0),
+                source_tiles=set())
+            for _ in self.map.players
+        ]
 
         self.discovered_enemy_land_connector_tiles: typing.List[typing.Set[Tile]] = [set() for player in self.map.players]
 
@@ -119,6 +319,11 @@ class ArmyTracker(object):
         self.updated_city_tiles: typing.Set[Tile] = set()
         self.unconnectable_tiles: typing.List[typing.Set[Tile]] = [set() for p in self.map.players]
         self.player_connected_tiles: typing.List[typing.Set[Tile]] = [set() for p in self.map.players]
+        self.fog_disproved_tiles_by_player: typing.List[typing.Set[Tile]] = [set() for p in self.map.players]
+        """Fog tiles that neutral-discovery floods (drop_incorrect_player_fog_around) claimed as closer to
+        proven-neutral ground than to this player's evidence, so the fog-land fill must not convert them
+        into temp predictions for the player. They may still be pathed through for connectivity - only
+        conversion is disproved. Entries are dropped lazily once the tile is discovered or visible."""
         self.players_with_incorrect_tile_predictions: typing.Set[int] = set()
         """Cities that were revealed or changed players or mountains that were fog-guess-cities will get stuck here during map updates."""
 
@@ -191,6 +396,212 @@ class ArmyTracker(object):
         if '_over_elimination_resets_in_progress' not in self.__dict__:
             self._over_elimination_resets_in_progress = set()
 
+        if 'emergence_distance_sums_by_player' not in self.__dict__:
+            self.emergence_distance_sums_by_player = [
+                EmergenceDistanceSums(
+                    distance_sum=MapMatrix(self.map, 0),
+                    reach_count=MapMatrix(self.map, 0),
+                    source_tiles=set())
+                for _ in self.map.players
+            ]
+        else:
+            for distanceSums in self.emergence_distance_sums_by_player:
+                distanceSums.distance_sum.raw = [0] * len(self.map.tiles_by_index)
+                distanceSums.reach_count.raw = [0] * len(self.map.tiles_by_index)
+                distanceSums.source_tiles.clear()
+
+        if 'spawn_fairness_weights_by_player' not in self.__dict__:
+            self.spawn_fairness_weights_by_player = [
+                MapMatrix(self.map, 0.0)
+                for _ in self.map.players
+            ]
+            self.spawn_fairness_active = self._is_spawn_fairness_active()
+            self.spawn_fairness_initialized = False
+        else:
+            if 'spawn_fairness_active' not in self.__dict__:
+                self.spawn_fairness_active = self._is_spawn_fairness_active()
+            if 'spawn_fairness_initialized' not in self.__dict__:
+                self.spawn_fairness_initialized = True
+        if 'spawn_fairness_legacy_notice_logged' not in self.__dict__:
+            self.spawn_fairness_legacy_notice_logged = False
+        if 'spawn_fairness_eliminated_tiles_by_player' not in self.__dict__:
+            self.spawn_fairness_eliminated_tiles_by_player = [
+                set()
+                for _ in self.map.players
+            ]
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_fairness_is_inactive_for_ffa_and_custom_maps - gate the signal to known-general standard 1v1 maps only.
+    def _is_spawn_fairness_active(self) -> bool:
+        """Return whether this map uses the supported 1v1 spawn-fairness model."""
+        if not SPAWN_FAIRNESS_ENABLED:
+            return False
+        if len(self.map.players) != 2 or self.map.is_2v2 or self.map.is_custom_map:
+            return False
+        if self.map.is_player_on_team_with(0, 1):
+            return False
+        return self.map.generals[self.map.player_index] is not None
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_server_reference_scores_and_acceptance - classify mountains, cities, lookouts, and observatories as spawn-time walls.
+    def _is_spawn_fairness_wall(self, tile: Tile) -> bool:
+        """Classify spawn-time terrain walls using tile-model fields available to the bot."""
+        return (
+            tile.isObstacle
+            or tile.isMountain
+            or tile.isCity
+            or tile.isLookout
+            or tile.isObservatory)
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_server_reference_scores_and_acceptance - mirror valid generated spawns by requiring a non-wall exit.
+    def _get_valid_spawn_fairness_tiles(self) -> list[Tile]:
+        """Return plain-land spawn candidates with at least one open exit."""
+        validSpawnTiles: list[Tile] = []
+        for tile in self.map.tiles_by_index:
+            if self._is_spawn_fairness_wall(tile):
+                continue
+            if not any(
+                    not self._is_spawn_fairness_wall(neighbor)
+                    for neighbor in tile.movable):
+                continue
+            validSpawnTiles.append(tile)
+        return validSpawnTiles
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_server_reference_scores_and_acceptance - mirror the server's depth-15 BFS through spawn-time empty terrain.
+    def count_spawn_fairness_distances(self, general: Tile) -> list[int]:
+        """Count reachable spawn-time land tiles at distances zero through fourteen."""
+        countsByDistance = [0] * SPAWN_FAIRNESS_MAX_DEPTH
+        distances = [-1] * len(self.map.tiles_by_index)
+        distances[general.tile_index] = 0
+        frontier: deque[Tile] = deque([general])
+
+        while frontier:
+            current = frontier.popleft()
+            currentDistance = distances[current.tile_index]
+            countsByDistance[currentDistance] += 1
+            nextDistance = currentDistance + 1
+            if nextDistance == SPAWN_FAIRNESS_MAX_DEPTH:
+                continue
+
+            for neighbor in current.movable:
+                neighborIndex = neighbor.tile_index
+                if distances[neighborIndex] != -1:
+                    continue
+                if self._is_spawn_fairness_wall(neighbor):
+                    continue
+                distances[neighborIndex] = nextDistance
+                frontier.append(neighbor)
+
+        return countsByDistance
+
+    def score_spawn_fairness_tile(self, tile: Tile) -> float:
+        """Return the server-compatible spawn fairness score for a map tile."""
+        return spawn_fairness_score_from_counts(
+            self.count_spawn_fairness_distances(tile))
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_server_reference_scores_and_acceptance - build the whole-game matrix from the candidate score and retry-threshold model.
+    def build_spawn_fairness_analysis(self) -> SpawnFairnessAnalysis:
+        """Compute candidate weights and the estimated server relaxation point."""
+        weights = MapMatrix(self.map, 0.0)
+        fairnessOption = normalize_spawn_fairness_option(
+            self.map.spawn_fairness_option)
+        thresholdBase = spawn_fairness_threshold(fairnessOption, 0)
+
+        if not self._is_spawn_fairness_active():
+            return SpawnFairnessAnalysis(
+                weights=weights,
+                our_score=0.0,
+                threshold_base=thresholdBase,
+                threshold_min=thresholdBase,
+                n_max=0,
+                fairness_option=fairnessOption,
+                active=False)
+
+        ourGeneral = self.map.generals[self.map.player_index]
+        if ourGeneral is None:
+            return SpawnFairnessAnalysis(
+                weights=weights,
+                our_score=0.0,
+                threshold_base=thresholdBase,
+                threshold_min=thresholdBase,
+                n_max=0,
+                fairness_option=fairnessOption,
+                active=False)
+
+        validSpawnTiles = self._get_valid_spawn_fairness_tiles()
+        scores = [
+            self.score_spawn_fairness_tile(tile)
+            for tile in validSpawnTiles
+        ]
+        ourScore = self.score_spawn_fairness_tile(ourGeneral)
+        coordinates = [
+            (tile.x, tile.y)
+            for tile in validSpawnTiles
+        ]
+        nMax, thresholdMin = estimate_spawn_fairness_relaxation(
+            scores,
+            coordinates,
+            fairnessOption)
+
+        for tile, score in zip(validSpawnTiles, scores):
+            ratio = spawn_fairness_ratio(score, ourScore)
+            weights.raw[tile.tile_index] = spawn_fairness_weight(
+                ratio,
+                thresholdBase,
+                thresholdMin)
+
+        return SpawnFairnessAnalysis(
+            weights=weights,
+            our_score=ourScore,
+            threshold_base=thresholdBase,
+            threshold_min=thresholdMin,
+            n_max=nMax,
+            fairness_option=fairnessOption,
+            active=True)
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_serialization_round_trip_and_missing_matrix_rebuild - compute once at spawn-in and reapply negative eliminations after legacy state loads.
+    def initialize_spawn_fairness_weights(self) -> SpawnFairnessAnalysis:
+        """Compute and store the enemy spawn-fairness matrix for this game."""
+        analysis = self.build_spawn_fairness_analysis()
+        self.spawn_fairness_active = analysis.active
+        if analysis.active:
+            enemyPlayer = 1 - self.map.player_index
+            self._reset_spawn_fairness_eliminated_tiles(enemyPlayer)
+            self.spawn_fairness_weights_by_player[enemyPlayer] = analysis.weights
+        else:
+            for playerIndex in range(len(self.spawn_fairness_weights_by_player)):
+                self._reset_spawn_fairness_eliminated_tiles(playerIndex)
+                self.spawn_fairness_weights_by_player[playerIndex] = MapMatrix(
+                    self.map,
+                    0.0)
+        self.spawn_fairness_initialized = True
+        self.eliminate_negative_spawn_fairness_positions()
+        return analysis
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_weight_band_and_negative_weights_eliminate_candidates - remove rejected candidates after the existing minimum-distance filter.
+    def eliminate_negative_spawn_fairness_positions(self) -> None:
+        """Remove negative-weight tiles from the enemy's valid general positions."""
+        if not self.spawn_fairness_active:
+            return
+
+        enemyPlayer = 1 - self.map.player_index
+        weights = self.spawn_fairness_weights_by_player[enemyPlayer]
+        validPositions = self.valid_general_positions_by_player[enemyPlayer]
+        negativeCount = 0
+        examples: list[str] = []
+        for tile in self.map.tiles_by_index:
+            if weights.raw[tile.tile_index] >= -SPAWN_FAIRNESS_ELIMINATION_MARGIN:
+                continue
+            negativeCount += 1
+            if validPositions.raw[tile.tile_index]:
+                self.spawn_fairness_eliminated_tiles_by_player[enemyPlayer].add(tile)
+            validPositions.raw[tile.tile_index] = False
+            if len(examples) < 5:
+                examples.append(str(tile))
+
+        if negativeCount > 0:
+            logbook.info(
+                f'SPAWN_FAIRNESS_ELIMINATION player={enemyPlayer} '
+                f'negativeTiles={negativeCount} examples={examples}')
+
     # distMap used to determine how to move armies under fog
     def scan_movement_and_emergences(
             self,
@@ -252,6 +663,18 @@ class ArmyTracker(object):
                 logbook.info('armyTracker last turn wasnt set, exclusively scanning for new armies to avoid pushing fog tiles around on the turn the map was loaded up')
                 self.lastTurn = turn
                 self.find_new_armies()
+                # Tests/test_Expansion.py::ExpansionTests.test_should_expand_while_enemy_stack_sweeps_and_thrusts:
+                # The early return above skips the seen_player_lookup update below, so imported
+                # continuation maps (which load mid-game with enemy tiles already visible) evaluated
+                # the first turn's decisions as though the enemy had never been seen, causing
+                # _get_furthest_apart_3_enemy_general_locations to inject 3 spread-out general
+                # candidates instead of the emergence-narrowed set the live game had. That wildly
+                # inflated quick-kill additionalKillDist/cutoffKillArmy and made the sim reject kill
+                # races the live bot accepted. In real games this is a no-op: on the first scan no
+                # enemy owns visible tiles yet anyway.
+                for player in self.map.players:
+                    if len(player.tiles) > 0:
+                        self.seen_player_lookup[player.index] = True
                 return
 
             self.lastTurn = turn
@@ -1545,6 +1968,9 @@ class ArmyTracker(object):
         # tuple-swap every spatial field at once
         self.valid_general_positions_by_player[pA], self.valid_general_positions_by_player[pB] = (
             self.valid_general_positions_by_player[pB], self.valid_general_positions_by_player[pA])
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_general_trade_swaps_spawn_fairness_matrices - keep per-player fairness weights aligned with swapped territorial state.
+        self.spawn_fairness_weights_by_player[pA], self.spawn_fairness_weights_by_player[pB] = (
+            self.spawn_fairness_weights_by_player[pB], self.spawn_fairness_weights_by_player[pA])
         self.tiles_ever_owned_by_player[pA], self.tiles_ever_owned_by_player[pB] = (
             self.tiles_ever_owned_by_player[pB], self.tiles_ever_owned_by_player[pA])
         self.seen_tiles_by_player[pA], self.seen_tiles_by_player[pB] = (
@@ -1557,6 +1983,8 @@ class ArmyTracker(object):
             self.uneliminated_emergence_events[pB], self.uneliminated_emergence_events[pA])
         self.unrecaptured_emergence_events[pA], self.unrecaptured_emergence_events[pB] = (
             self.unrecaptured_emergence_events[pB], self.unrecaptured_emergence_events[pA])
+        self.emergence_distance_sums_by_player[pA], self.emergence_distance_sums_by_player[pB] = (
+            self.emergence_distance_sums_by_player[pB], self.emergence_distance_sums_by_player[pA])
         self.uneliminated_emergence_event_city_perfect_info[pA], self.uneliminated_emergence_event_city_perfect_info[pB] = (
             self.uneliminated_emergence_event_city_perfect_info[pB], self.uneliminated_emergence_event_city_perfect_info[pA])
         self.discovered_enemy_land_connector_tiles[pA], self.discovered_enemy_land_connector_tiles[pB] = (
@@ -1569,6 +1997,8 @@ class ArmyTracker(object):
             self.player_connected_tiles[pB], self.player_connected_tiles[pA])
         self.unconnectable_tiles[pA], self.unconnectable_tiles[pB] = (
             self.unconnectable_tiles[pB], self.unconnectable_tiles[pA])
+        self.fog_disproved_tiles_by_player[pA], self.fog_disproved_tiles_by_player[pB] = (
+            self.fog_disproved_tiles_by_player[pB], self.fog_disproved_tiles_by_player[pA])
         self.emergenceLocationMap[pA], self.emergenceLocationMap[pB] = (
             self.emergenceLocationMap[pB], self.emergenceLocationMap[pA])
         self.initial_expansion_tile_counts[pA], self.initial_expansion_tile_counts[pB] = (
@@ -1946,6 +2376,9 @@ class ArmyTracker(object):
         genMapRaw = self._boardAnalysis.intergeneral_analysis.aMap.raw
 
         alliedPlayers = self.map.get_teammates(cityPlayer)
+        # Tests/test_FogLandBuilder.py test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+        # a tile the neutral flood disproved for this player can't be their fog city either.
+        disprovedTiles = self._get_active_fog_disproved_tiles(cityPlayer)
 
         def valFunc(
                 thisTile: Tile,
@@ -1965,6 +2398,9 @@ class ArmyTracker(object):
                     return None
 
             if thisTile.visible or thisTile == tile or dist == 0:
+                return None
+
+            if thisTile in disprovedTiles:
                 return None
 
             isPotentialFogCity = thisTile.isCity and thisTile.isNeutral
@@ -3382,6 +3818,19 @@ class ArmyTracker(object):
 
         isDroppingChainedBadFog = forPlayer != -1
         if isDroppingChainedBadFog:
+            # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+            # the -1 (neutral-discovery) wave must flood FIRST, ahead of the ever-owned territory waves.
+            # Previously it was appended last, so every ever-owned seed's BFS claimed `visited` across the
+            # whole predicted region before the -1 wave could reach it - including the neutral tile itself,
+            # which gets pulled into the visible-ring seed expansion (neg1 wave popped 0 tiles in testing).
+            # Because only curPlayer == -1 entries trigger reset_temp_tile_marked + should_recalc_fog_land,
+            # the function was a no-op and dead fog predictions survived until some unrelated later recalc.
+            # This is only done for a proven-wrong prediction (isDroppingChainedBadFog): for a never-owned
+            # neutral (forPlayer == -1) the -1 claim is weak voronoi evidence, and flooding first steals
+            # `visited` claims from the player waves - enough to perturb rebuild topology
+            # (test_should_not_over_emerge_fog_island_dips is already flaky from island-id randomization,
+            # so the else branch below deliberately keeps the -1 seed starved/last as it always was).
+            q.append((-1, neutralTile))
             allFogTilesNearby = self.tiles_ever_owned_by_player[forPlayer].copy()
 
             def foreachFunc(t: Tile):
@@ -3402,10 +3851,13 @@ class ArmyTracker(object):
                 SearchUtils.breadth_first_foreach(self.map, list(tileSet), playerTileAdvantageDepth, foreachFunc=foreachFunc, noLog=True)
                 for tile in allFogTilesNearby:
                     q.append((p, tile))
+            # -1 appended last in the never-owned-neutral case, matching the historical starved wave.
+            q.append((-1, neutralTile))
 
+        # forPlayer == -1 has no meaningful player_connected_tiles index (-1 aliases the LAST player's
+        # set) but that aliasing is embedded historical behavior; 'fixing' it to a union protects extra
+        # tiles from reset and shifts rebuild topology. Kept identical.
         forPlayerRequiredConnected = self.player_connected_tiles[forPlayer]
-
-        q.append((-1, neutralTile))
 
         visited = set()
         while q:
@@ -3425,9 +3877,20 @@ class ArmyTracker(object):
                 if isDroppingChainedBadFog:
                     if curPlayer == -1 and curTile.player == forPlayer and curTile not in forPlayerRequiredConnected:
                         self.should_recalc_fog_land_by_player[curTile.player] = True
+                        # Tests/test_FogLandBuilder.py test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+                        # disprove the tile for forPlayer BEFORE the reset clears its player mark so the
+                        # fog-land fill can never convert it back into a temp prediction. Only tiles that
+                        # were actually predicted for forPlayer are disproved (not the whole claimed
+                        # voronoi region): blanketing the region shifts rebuilt fog topology enough to
+                        # redirect fog-army emergence attribution
+                        # (test_should_not_over_emerge_fog_island_dips). Emergence/ever-owned tiles are
+                        # exempt - hard 'was really there' evidence outranks the voronoi claim
+                        # (test_should_build_land_between_known_emergences).
+                        if (curTile not in self.uneliminated_emergence_events[forPlayer]
+                                and curTile not in self.unrecaptured_emergence_events[forPlayer]
+                                and curTile not in self.tiles_ever_owned_by_player[forPlayer]):
+                            self.fog_disproved_tiles_by_player[forPlayer].add(curTile)
                         self.reset_temp_tile_marked(curTile)
-                    if curPlayer == -1:
-                        self.emergenceLocationMap[forPlayer][curTile] = 0
                 else:
                     if curTile.player != -1 and curPlayer != curTile.player and curTile not in forPlayerRequiredConnected and curTile.player != -1:
                         self.should_recalc_fog_land_by_player[curTile.player] = True
@@ -3738,14 +4201,133 @@ class ArmyTracker(object):
         for p, playerElims in enumerate(self.uneliminated_emergence_events):
             self.re_limit_player_gen_locations(p, playerElims)
 
-    def re_limit_player_gen_locations(self, player: int, playerElimEvents: typing.Dict[Tile, int]):
+    def re_limit_player_gen_locations(self, player: int, playerElimEvents: typing.Dict[Tile, int]) -> None:
+        """Replay elimination events and rebuild their accumulated emergence distances."""
         # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_move_our_own_general_around_the_board_randomly - replayed emergence limits are enemy fog predictions and must not relimit authoritative friendly generals.
         if player == self.map.player_index or player in self.map.teammates:
             return
+
+        # UnitTests/test_EmergenceDistanceSums.py::EmergenceDistanceSumsTests.test_relimit_counts_full_distance_without_extending_elimination - keep the replay's sums local so a re-entrant over-elimination reset cannot replace or double-count the outer replay.
+        distanceSums = EmergenceDistanceSums(
+            distance_sum=MapMatrix(self.map, 0),
+            reach_count=MapMatrix(self.map, 0),
+            source_tiles=set())
+        self.emergence_distance_sums_by_player[player] = distanceSums
         for prevElimTile, prevElimDist in playerElimEvents.items():
             cityPerfectInfo = prevElimTile in self.uneliminated_emergence_event_city_perfect_info[player]
             logbook.info(f'RE-eliminating p{player} t{prevElimTile} d{prevElimDist}, perfectCity{cityPerfectInfo}')
-            self._limit_general_position_to_within_tile_and_distance(player, prevElimTile, prevElimDist, alsoIncreaseEmergence=False, overrideCityPerfectInfo=cityPerfectInfo, bypass2v2Partner=True)  # alsoIncreaseEmergence=self.map.turn < 56)
+            self._limit_general_position_to_within_tile_and_distance(
+                player,
+                prevElimTile,
+                prevElimDist,
+                alsoIncreaseEmergence=False,
+                overrideCityPerfectInfo=cityPerfectInfo,
+                bypass2v2Partner=True,
+                distanceSums=distanceSums)
+            distanceSums.source_tiles.add(prevElimTile)
+        self.emergence_distance_sums_by_player[player] = distanceSums
+
+    # UnitTests/test_EmergenceDistanceSums.py::EmergenceDistanceSumsTests.test_discovered_neutral_wall_blocks_sources - keep source and limiter traversal blockers identical.
+    def _should_stop_general_emergence_bfs(
+            self,
+            tile: Tile,
+            everOwned: set[Tile],
+            hasPerfectInfoOfPlayerCities: bool) -> bool:
+        """Apply the shared tile-blocking rules used by emergence distance searches."""
+        if tile.discoveredAsNeutral and tile not in everOwned:
+            return True
+        return (
+            (tile.isCostlyNeutralCity and (tile.visible or hasPerfectInfoOfPlayerCities))
+            or tile.isMountain
+            or (tile.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities)
+            or tile.isGeneral)
+
+    def _accumulate_emergence_source_distances(
+            self,
+            player: int,
+            source: Tile,
+            distanceSums: EmergenceDistanceSums) -> None:
+        """Accumulate true BFS distances from one emergence source into the matrices."""
+        uneliminatedEvents = self.uneliminated_emergence_events[player]
+        if source in uneliminatedEvents:
+            hasPerfectInfoOfPlayerCities = (
+                source in self.uneliminated_emergence_event_city_perfect_info[player])
+        else:
+            hasPerfectInfoOfPlayerCities = self.has_perfect_information_of_player_cities(player)
+        everOwned = self.tiles_ever_owned_by_player[player]
+
+        def accumulate(tile: Tile, bfsDist: int) -> bool:
+            """Record this source's true distance before applying its traversal blockers."""
+            tileIndex = tile.tile_index
+            distanceSums.distance_sum.raw[tileIndex] += bfsDist + 1
+            distanceSums.reach_count.raw[tileIndex] += 1
+            return self._should_stop_general_emergence_bfs(
+                tile,
+                everOwned,
+                hasPerfectInfoOfPlayerCities)
+
+        startingTiles = {
+            movable
+            for movable in source.movable
+            if not movable.isObstacle
+        }
+        SearchUtils.breadth_first_foreach_dist_fast_free_swamp_no_default_skip(
+            self.map,
+            startingTiles,
+            len(self.map.tiles_by_index),
+            accumulate)
+
+    # UnitTests/test_EmergenceDistanceSums.py::EmergenceDistanceSumsTests.test_accessor_adds_sources_and_rebuilds_after_removal - update on source additions and rebuild after any removal.
+    def get_emergence_distance_sums(self, player: int) -> EmergenceDistanceSums:
+        """Return emergence distance sums matching the player's current source tiles."""
+        sourceTiles = (
+            set(self.uneliminated_emergence_events[player].keys())
+            | self.unrecaptured_emergence_events[player])
+        distanceSums = self.emergence_distance_sums_by_player[player]
+        if sourceTiles == distanceSums.source_tiles:
+            return distanceSums
+
+        if distanceSums.source_tiles < sourceTiles:
+            missingSources = sourceTiles - distanceSums.source_tiles
+            for source in missingSources:
+                self._accumulate_emergence_source_distances(player, source, distanceSums)
+                distanceSums.source_tiles.add(source)
+            return distanceSums
+
+        distanceSums.distance_sum.raw = [0] * len(self.map.tiles_by_index)
+        distanceSums.reach_count.raw = [0] * len(self.map.tiles_by_index)
+        distanceSums.source_tiles.clear()
+        for source in sourceTiles:
+            self._accumulate_emergence_source_distances(player, source, distanceSums)
+            distanceSums.source_tiles.add(source)
+        return distanceSums
+
+    # UnitTests/test_EmergenceDistanceSums.py::EmergenceDistanceSumsTests.test_bonus_matrix_formula_and_disable_flag - use the neutral-distance contribution for every source that cannot reach a tile.
+    def build_emergence_distance_bonus_matrix(
+            self,
+            player: int,
+            expectedGeneralDistance: int) -> MapMatrixInterface[float]:
+        """Build the emergence distance-sum bonus for every map tile."""
+        bonusMatrix = MapMatrix(self.map, 0.0)
+        if not EMERGENCE_DISTANCE_BONUS_ENABLED:
+            return bonusMatrix
+
+        distanceSums = self.get_emergence_distance_sums(player)
+        sourceCount = len(distanceSums.source_tiles)
+        if sourceCount == 0:
+            return bonusMatrix
+
+        expectedDistanceSum = expectedGeneralDistance * sourceCount
+        for tile in self.map.tiles_by_index:
+            tileIndex = tile.tile_index
+            reachCount = distanceSums.reach_count.raw[tileIndex]
+            effectiveSum = (
+                distanceSums.distance_sum.raw[tileIndex]
+                + (sourceCount - reachCount) * expectedGeneralDistance)
+            bonusMatrix.raw[tileIndex] = max(
+                0,
+                expectedDistanceSum - effectiveSum) ** EMERGENCE_DISTANCE_BONUS_EXPONENT
+        return bonusMatrix
 
     def _handle_flipped_discovered_as_neutrals(self):
         with self.perf_timer.begin_move_event('handling discovered-as-neutral'):
@@ -3782,7 +4364,8 @@ class ArmyTracker(object):
             skipIfLongerThanExisting: bool = False,
             overrideCityPerfectInfo: bool | None = None,
             emergenceAmount: int = -1,
-            bypass2v2Partner: bool = False):
+            bypass2v2Partner: bool = False,
+            distanceSums: EmergenceDistanceSums | None = None) -> None:
 
         if not bypass2v2Partner and self.map.is_2v2:
             teammates = self.map.get_teammates_no_self(player)
@@ -3813,7 +4396,14 @@ class ArmyTracker(object):
             emergenceAmount = max(20, 5000 / self.map.turn)
             # emergenceAmount = max(20, self.map.turn / 2)
 
-        elims = self._limit_general_position_to_within_tiles_and_distance(player, [tile], maxDist, alsoIncreaseEmergence, overrideCityPerfectInfo=overrideCityPerfectInfo, emergenceAmount=emergenceAmount)
+        elims = self._limit_general_position_to_within_tiles_and_distance(
+            player,
+            [tile],
+            maxDist,
+            alsoIncreaseEmergence,
+            overrideCityPerfectInfo=overrideCityPerfectInfo,
+            emergenceAmount=emergenceAmount,
+            distanceSums=distanceSums)
         shouldSave = elims > 0 or len(playerUnelim) < 3
 
         if shouldSave and (existingLimit is None or existingLimit > maxDist):
@@ -3830,7 +4420,17 @@ class ArmyTracker(object):
         if elims > 0:
             self._check_over_elimination(player)
 
-    def _limit_general_position_to_within_tiles_and_distance(self, player: int, tiles: typing.List[Tile], maxDist: int, alsoIncreaseEmergence: bool = True, overrideCityPerfectInfo: bool | None = None, emergenceAmount: int = -1, dontCountSwamps: bool = True) -> int:
+    def _limit_general_position_to_within_tiles_and_distance(
+            self,
+            player: int,
+            tiles: typing.List[Tile],
+            maxDist: int,
+            alsoIncreaseEmergence: bool = True,
+            overrideCityPerfectInfo: bool | None = None,
+            emergenceAmount: int = -1,
+            dontCountSwamps: bool = True,
+            distanceSums: EmergenceDistanceSums | None = None) -> int:
+        """Limit candidates and optionally accumulate unbounded source distances."""
         validSet = set()
 
         # ONLY USE FOR EMERGENCE
@@ -3854,29 +4454,27 @@ class ArmyTracker(object):
         emgMap = self.emergenceLocationMap[player]
         everOwned = self.tiles_ever_owned_by_player[player]
 
-        if alsoIncreaseEmergence:
-            def limiter(t: Tile, dist: int) -> bool:
-                if validPositions.raw[t.tile_index]:
-                    validSet.add(t.tile_index)
-                    launchDistDiff = abs(launchDist - dist)
-                    launchDistFactor = (divOffset + launchDistDiff)
-                    launchEmergence = emFactor // launchDistFactor
-                    emgMap.raw[t.tile_index] += launchEmergence
-                if t.discoveredAsNeutral and t not in everOwned:  # and (t.visible or self.map.turn < 50)   # should be solved without the visible check by adding the lost-sight-ever-owned-by-player hack to allow pathing through the fog now.
-                    return True
-                if (t.isCostlyNeutralCity and (t.visible or hasPerfectInfoOfPlayerCities)) or t.isMountain or (t.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities) or t.isGeneral:
-                    return True
-                return False
+        def limiter(t: Tile, dist: int) -> bool:
+            tileIndex = t.tile_index
+            if distanceSums is not None:
+                distanceSums.distance_sum.raw[tileIndex] += dist + 1
+                distanceSums.reach_count.raw[tileIndex] += 1
+            if dist <= maxDist - 1:
+                if validPositions.raw[tileIndex]:
+                    validSet.add(tileIndex)
+                    if alsoIncreaseEmergence:
+                        launchDistDiff = abs(launchDist - dist)
+                        launchDistFactor = (divOffset + launchDistDiff)
+                        launchEmergence = emFactor // launchDistFactor
+                        emgMap.raw[tileIndex] += launchEmergence
+            return self._should_stop_general_emergence_bfs(
+                t,
+                everOwned,
+                hasPerfectInfoOfPlayerCities)
 
-        else:
-            def limiter(t: Tile, dist: int) -> bool:
-                if validPositions.raw[t.tile_index]:
-                    validSet.add(t.tile_index)
-                if t.discoveredAsNeutral and t not in everOwned:  # and (t.visible or self.map.turn < 50)   # should be solved without the visible check by adding the lost-sight-ever-owned-by-player hack to allow pathing through the fog now.
-                    return True
-                if (t.isCostlyNeutralCity and (t.visible or hasPerfectInfoOfPlayerCities)) or t.isMountain or (t.isUndiscoveredObstacle and hasPerfectInfoOfPlayerCities) or t.isGeneral:
-                    return True
-                return False
+        searchDepth = maxDist - 1
+        if distanceSums is not None:
+            searchDepth = len(self.map.tiles_by_index)
 
         starting = set()
         for tile in tiles:
@@ -3889,13 +4487,13 @@ class ArmyTracker(object):
             SearchUtils.breadth_first_foreach_dist_fast_free_swamp_no_default_skip(
                 self.map,
                 [t for t in starting],
-                maxDist - 1,
+                searchDepth,
                 limiter)
         else:
             SearchUtils.breadth_first_foreach_dist_fast_no_default_skip(
                 self.map,
                 [t for t in starting],
-                maxDist - 1,
+                searchDepth,
                 limiter)
 
         if len(validSet) == 0:
@@ -3975,6 +4573,46 @@ class ArmyTracker(object):
 
                     if distances[tile] == 1000 and not self.map.is_custom_map:
                         mm.discard(tile)
+
+        # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_legacy_resume_without_island_ids_disables_fairness - island_ids marks maps written after the bot's 2026-05-06 serializer change, which followed the server's 2025-11-22 fair-spawn overhaul.
+        if not self.spawn_fairness_active:
+            self.spawn_fairness_initialized = True
+        elif (not self.map.resume_data
+              and not self.map.resume_data_is_txtmap):
+            self.initialize_spawn_fairness_weights()
+        else:
+            hasSavedSpawnFairness = any(
+                key.endswith('SpawnFairness')
+                for key in self.map.resume_data)
+            if hasSavedSpawnFairness or 'island_ids' in self.map.resume_data:
+                self.spawn_fairness_initialized = False
+            else:
+                self.disable_spawn_fairness_for_legacy_resume()
+
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_legacy_resume_without_island_ids_disables_fairness - clear stale matrices and restore any starts eliminated before legacy resume data was recognized.
+    def disable_spawn_fairness_for_legacy_resume(
+            self,
+            restore_eliminated_positions: bool = True) -> None:
+        """Disable legacy fairness and undo its candidate removals when needed."""
+        enemyPlayer = 1 - self.map.player_index
+        if restore_eliminated_positions:
+            for tile in self.spawn_fairness_eliminated_tiles_by_player[enemyPlayer]:
+                self.valid_general_positions_by_player[enemyPlayer].raw[
+                    tile.tile_index] = True
+        self.spawn_fairness_eliminated_tiles_by_player[enemyPlayer].clear()
+        for weights in self.spawn_fairness_weights_by_player:
+            weights.raw[:] = [0.0] * len(self.map.tiles_by_index)
+        if (self._is_spawn_fairness_active()
+                and not self.spawn_fairness_legacy_notice_logged):
+            logbook.info(
+                'Disabling spawn fairness for legacy resume without island_ids')
+            self.spawn_fairness_legacy_notice_logged = True
+        self.spawn_fairness_active = False
+        self.spawn_fairness_initialized = True
+
+    def _reset_spawn_fairness_eliminated_tiles(self, player: int) -> None:
+        """Forget the transient candidate removals before rebuilding a matrix."""
+        self.spawn_fairness_eliminated_tiles_by_player[player].clear()
 
     def find_territory_bisection_paths(self, targetPlayer: int) -> typing.Tuple[MapMatrixInterface[bool], MapMatrixInterface[int], typing.List[Path]]:
         bisectPaths = []
@@ -4761,6 +5399,13 @@ class ArmyTracker(object):
         @param outputTilesToBeConverted:
         @return:
         """
+        # Tests/test_FogLandBuilder.py test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+        # tiles disproved by neutral-discovery floods (drop_incorrect_player_fog_around) may still be
+        # pathed THROUGH for connectivity, but must never be converted back into this player's temp
+        # predictions. This is deliberately NOT a bannedTiles union: banning them from the spanning
+        # tree / fill BFS corrupts emergence accumulation and expansion pathing
+        # (test_should_not_over_emerge_fog_island_dips / test_should_track_army_into_the_fog).
+        nonConvertibleTiles = self._get_active_fog_disproved_tiles(player)
         secondIterConnected = connectedTiles.copy()
         if pathToPotentialEnGeneral is not None:
             secondIterConnected.update(pathToPotentialEnGeneral.tileList)
@@ -4783,15 +5428,15 @@ class ArmyTracker(object):
                 numMissingCities -= 1
                 outputTilesToBeConverted.add(potCity)
                 logbook.info(f'setting fog city {potCity} to be player owned in _fill_land_from_connected_tiles_for_player. Connecting it.')
-                self.determine_tiles_to_fill_in(outputTilesToBeConverted, nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1)  # +1 because the final tile is already part of our connected set
+                self.determine_tiles_to_fill_in(outputTilesToBeConverted, nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1, nonConvertibleTiles=nonConvertibleTiles)  # +1 because the final tile is already part of our connected set
 
             # here we make sure our connected tiles also connect to the enemy general
             nearGenBan.discard(pathToPotentialEnGeneral.tail.tile)
-            self.determine_tiles_to_fill_in([approxEnGen], nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1)  # +1 because the final tile is already part of our connected set
+            self.determine_tiles_to_fill_in([approxEnGen], nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1, nonConvertibleTiles=nonConvertibleTiles)  # +1 because the final tile is already part of our connected set
             # we want to start our second whole expansiony thingy from these new tiles, too, because probably they've expanded backwards some.
             secondIterConnected = list(itertools.chain.from_iterable([connectedTiles, outputTilesToBeConverted]))
 
-        self.determine_tiles_to_fill_in(secondIterConnected, bannedTiles, outputTilesToBeConverted, numTilesToFillIn)
+        self.determine_tiles_to_fill_in(secondIterConnected, bannedTiles, outputTilesToBeConverted, numTilesToFillIn, nonConvertibleTiles=nonConvertibleTiles)
         currentTileAmount = SearchUtils.Counter(1)
         if len(playerExpectedFogTileCounts) > 0:
             currentTileAmount.value = max(playerExpectedFogTileCounts.keys())
@@ -4813,7 +5458,10 @@ class ArmyTracker(object):
             if tile.isGeneral or tile.isCostlyNeutralCity:
                 return
 
-            if tile not in outputTilesToBeConverted:
+            # Tests/test_FogLandBuilder.py test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+            # disproved tiles are never converted, but returning isObstacle still lets the BFS traverse
+            # them so predictions beyond the disproved region remain reachable.
+            if tile not in outputTilesToBeConverted or tile in nonConvertibleTiles:
                 return tile.isObstacle
 
             tile.isTempFogPrediction = True
@@ -4864,21 +5512,46 @@ class ArmyTracker(object):
 
         return max(0, unkCount)
 
+    def _get_active_fog_disproved_tiles(self, player: int) -> typing.Set[Tile]:
+        """
+        Returns the player's fog-disproved tile set after lazily dropping stale entries: tiles that
+        became discovered or visible since the neutral flood claimed them, or that gained hard
+        'was really there' evidence (emergence events / tiles ever owned) - new evidence outranks
+        an older voronoi claim.
+
+        @param player:
+        @return: the live disproved set (mutated in place by the purge)
+        """
+        disprovedTiles = self.fog_disproved_tiles_by_player[player]
+        if len(disprovedTiles) == 0:
+            return disprovedTiles
+        uneliminated = self.uneliminated_emergence_events[player]
+        unrecaptured = self.unrecaptured_emergence_events[player]
+        everOwned = self.tiles_ever_owned_by_player[player]
+        for tile in list(disprovedTiles):
+            if (tile.discovered or tile.visible or tile in uneliminated
+                    or tile in unrecaptured or tile in everOwned):
+                disprovedTiles.discard(tile)
+        return disprovedTiles
+
     def determine_tiles_to_fill_in(
             self,
             connectedDark: typing.Iterable[Tile],
             bannedTiles: typing.Set[Tile],
             tilesToConvertToAddTo: typing.Set[Tile],
             numTilesToFillIn: int,
+            nonConvertibleTiles: typing.Set[Tile] | None = None,
             # tilesToPathButNotInclude: typing.Set[Tile]
     ):
         beforeCount = len(tilesToConvertToAddTo)
         connectedDarkList = list(connectedDark)
         preseededConnectedDark = 0
+        if nonConvertibleTiles is None:
+            nonConvertibleTiles = set()
         skips = set(bannedTiles)
         skips.difference_update(connectedDarkList)
         for tile in connectedDarkList:
-            if not tile.discovered and tile.player == -1:
+            if not tile.discovered and tile.player == -1 and tile not in nonConvertibleTiles:
                 tilesToConvertToAddTo.add(tile)
                 preseededConnectedDark += 1
 
@@ -4908,13 +5581,18 @@ class ArmyTracker(object):
             for deferredTile in deferredVisionEdgeTileSet:
                 if len(tilesToConvertToAddTo) >= numFillTilesNeeded:
                     return
+                if deferredTile in nonConvertibleTiles:
+                    continue
                 tilesToConvertToAddTo.add(deferredTile)
 
         def findFunc(tile: Tile, army: float, dist: int) -> bool:
             if len(tilesToConvertToAddTo) >= numFillTilesNeeded:
                 return True
 
-            if tile.player == -1 and tile not in tilesToConvertToAddTo and not tile.isSwamp:
+            # Tests/test_FogLandBuilder.py test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+            # disproved tiles stay traversable (they are not in skips) so the fill can reach tiles
+            # beyond them, but they are never added to tilesToConvertToAddTo.
+            if tile.player == -1 and tile not in tilesToConvertToAddTo and not tile.isSwamp and tile not in nonConvertibleTiles:
                 if is_vision_edge_tile(tile):
                     if tile not in deferredVisionEdgeTileSet and tile not in connectedDark:
                         deferredVisionEdgeTileSet.add(tile)
@@ -5234,4 +5912,3 @@ class ArmyTracker(object):
                 return True
 
         return False
-

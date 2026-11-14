@@ -296,6 +296,41 @@ class BotExpansionOpsCrashRegressionTests(unittest.TestCase):
 
         self.assertEqual(0.08, matrix.raw[flankTail.tile_index])
 
+    def test_standard_weight_matrix_unreachable_gen_candidate_dist_does_not_nuke_frontier(self):
+        """
+        Reproduces the live-game expansion collapse from game N92iSpgIx (t145-185):
+        _get_standard_expansion_capture_weight_matrix applies an excessDist penalty
+        of -0.10 * (enDist - inter_general_distance - numEnGenPos) per tile, where
+        enDist comes from build_distance_map_matrix seeded at the enemy general
+        candidate positions. Those candidates are undiscovered fog tiles, so when
+        they are sealed inside fog/obstacle pockets (or the candidate list is
+        empty), the BFS dead-ends and the map reads the 1000 'unreachable'
+        sentinel nearly everywhere. The sentinel then produced ~-49.5 per tile,
+        every expansion path scored -145..-193, EXP AVAIL stayed 0 for the rest
+        of the round, and the bot gathered for ~40 turns instead of taking land.
+        """
+        frontierTile = _StubTile(tile_index=10, x=2, y=1, visible=True, player=-1, army=0, discovered=True)
+        bot = _build_weight_matrix_bot(enemy_attack_path=None, gather_path=None)
+        bot._map.get_all_tiles = lambda: [frontierTile]
+        bot._map.get_distance_between = lambda a, b: 8
+        bot._map.is_tile_friendly = lambda tile: False
+        bot._map.is_player_on_team_with = lambda a, b: False
+        bot.general = _StubTile(tile_index=0, x=0, y=0, player=0, isNeutral=False)
+        bot.board_analysis.inter_general_distance = 12
+        bot.board_analysis.intergeneral_analysis = SimpleNamespace(
+            is_choke=lambda tile: False,
+            pathWayLookupMatrix=SimpleNamespace(raw=[None] * 64))
+        bot.board_analysis.flankable_fog_area_matrix = set()
+        bot.enemy_expansion_plan_tile_path_cap_values = {}
+        bot._alt_en_gen_position_distances = {1: SimpleNamespace(raw=[1000] * 64)}
+        bot.territories.is_tile_in_friendly_territory = lambda tile: False
+
+        matrix = BotExpansionOpsModule.BotExpansionOps._get_standard_expansion_capture_weight_matrix(bot)
+
+        # The 1000 unreachable sentinel must not be treated as a literal distance.
+        # Bounded penalties (pathway -10, small terrain terms) are fine; -59 is not.
+        self.assertGreater(matrix.raw[frontierTile.tile_index], -20)
+
     def test_build_expansion_plan_logs_zero_length_option(self):
         """
         Reproduces ZeroDivisionError at the 'FE: econValue/length' bot.info log line

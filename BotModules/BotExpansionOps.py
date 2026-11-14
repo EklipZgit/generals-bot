@@ -145,6 +145,12 @@ class BotExpansionOps:
             skipTiles = set()
         else:
             distMap, skipTiles = BotExpansionOps.get_first_25_expansion_distance_priority_map(bot, )
+        # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: the f25 plan
+        # BFS treats skipTiles as impassable, which keeps city-expand plans from routing through
+        # (and thereby capturing) unattackable revealed enemy land.
+        ffaUnattackableTiles = BotStateQueries.get_ffa_unattackable_tiles(bot)
+        if len(ffaUnattackableTiles) > 0:
+            skipTiles.update(ffaUnattackableTiles)
         displayDistMap = distMap[0] if isinstance(distMap, list) else distMap
 
         if bot.city_expand_plan is None or len(bot.city_expand_plan.plan_paths) == 0:
@@ -259,6 +265,14 @@ class BotExpansionOps:
             move = BotPathingUtils.get_first_path_move(bot, curPath)
             bot.info(f'Expand plan {bot.city_expand_plan.tile_captures} path move {move}')
 
+            # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: plans built
+            # before the reveal (or before a lock change) can contain unattackable enemy tiles;
+            # drop the whole path rather than execute a capture we are not allowed to make.
+            if move is not None and move.dest.player >= 0 and BotStateQueries.is_tile_ffa_unattackable(bot, move.dest):
+                logbook.info(f'FFA_EXCL dropping f25 plan path {curPath} because {move.dest} (p{move.dest.player}) is unattackable')
+                bot.city_expand_plan.plan_paths.pop(0)
+                return None
+
             collidedWithEnemyAndWastingArmy = move.source.player != move.dest.player and (move.dest.player != -1 or move.dest.isCity) and move.source.army - 1 <= move.dest.army or move.dest.player in bot._map.teammates
             if move.dest.isMountain:
                 collidedWithEnemyAndWastingArmy = True
@@ -276,6 +290,11 @@ class BotExpansionOps:
                         if bot.teammate_general is not None:
                             expansionNegatives.update(bot._map.players[bot.teammate_general.player].tiles)
                         expansionNegatives.add(bot.general)
+                        # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa:
+                        # this fallback plan is also non-attack expansion and must respect the ban.
+                        ffaUnattackableTiles = BotStateQueries.get_ffa_unattackable_tiles(bot)
+                        if len(ffaUnattackableTiles) > 0:
+                            expansionNegatives.update(ffaUnattackableTiles)
                         expUtilPlan = ExpandUtils.get_round_plan_with_expansion(
                             bot._map,
                             bot.general.player,
@@ -399,6 +418,14 @@ class BotExpansionOps:
 
         expansionNegatives = defenseCriticalTileSet.copy()
         logbook.info(f'DEFENSE_NEG_COPY context=try_find_expansion_move source=defenseCriticalTileSet copiedTiles={[str(t) for t in expansionNegatives]}')
+        # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: expansion is a
+        # non-attack producer, so it must neither capture nor path through tiles owned by
+        # unattackable revealed enemies (crossing their land is only allowed on attack paths
+        # toward the locked target, which do not come from the expansion planner).
+        ffaUnattackableTiles = BotStateQueries.get_ffa_unattackable_tiles(bot)
+        if len(ffaUnattackableTiles) > 0:
+            logbook.info(f'FFA_EXCL expansion banning {len(ffaUnattackableTiles)} tiles of unattackable players')
+            expansionNegatives.update(ffaUnattackableTiles)
         splitTurn = bot.timings.get_turn_in_cycle(bot._map.turn)
         if (
             # (
@@ -736,12 +763,18 @@ class BotExpansionOps:
 
                                 # Clone the bonus matrix so we don't mutate the shared one
                                 bonusCapturePointMatrixForFlow = bonusCapturePointMatrix.copy()
-                                econBonus = float(remainingCycleTurns) // 2 + 5
+                                econBonus = float(remainingCycleTurns) // 2  # + 5   ## wtf was the +5 here for???
                                 econBonusPerTile = econBonus / len(enemyFogAttackFromTiles)
                                 for tile in enemyFogAttackFromTiles:
-                                    armyOverrideMatrix.raw[tile.tile_index] = perTileArmy
+                                    # Tests/test_Expansion.py::ExpansionTests.test_should_expand_up_enemy_column_to_round_end:
+                                    # only fog-NEUTRAL tiles get the predicted-army override. Enemy tiles already carry a
+                                    # believed army value (eg 9,8 known a4) and splitting predictedArmy across the fog list
+                                    # REPLACED that belief with a smaller number (14//5=2), making the boundary tile look
+                                    # cheaper to capture than our own intel says and feeding phantom edge-combo paths.
+                                    if tile.player == -1:
+                                        armyOverrideMatrix.raw[tile.tile_index] = perTileArmy
+                                        bot.viewInfo.midLeftGridText.raw[tile.tile_index] = f'a{perTileArmy}'
                                     bonusCapturePointMatrixForFlow.raw[tile.tile_index] += econBonusPerTile
-                                    bot.viewInfo.midLeftGridText.raw[tile.tile_index] = f'a{perTileArmy}'
                                     bot.viewInfo.bottomMidLeftGridText.raw[tile.tile_index] = f'e{econBonusPerTile:.2f}'
 
                                 logbook.info(
@@ -1103,10 +1136,31 @@ class BotExpansionOps:
         alternativeOutcome = project_round_outcome(
             bot._map, ourStats, enemyStats, alternative, bot.enemy_expansion_plan, bot.timings.cycleTurns)
 
+        # Tests/test_CityGather.py::test_should_respond_to_enemy_city_capture_by_taking_neutral_city:
+        # the veto must not fire when skipping the city concedes the economy to the
+        # enemy, either on projected income or on city count. Dominance on round-end
+        # tiles+army alone is a tautology against any ~40-army purchase (not spending
+        # always yields more army and usually more tiles), so it cannot tell "slow
+        # city while winning the econ race" (TtVz86M3i t115, altIncome 104 >= enemy 87,
+        # cities 1v1) from "must buy to keep pace" (RzXQbv4_U t170, enemy just took a
+        # 2-city lead: altIncome ~111 <= enemy ~114, cities 1v2). Income uses the
+        # CANDIDATE-side enemy projection: alternativeOutcome.enemy is suppressed by
+        # the alternative's contested enemy-tile captures, which are neither durable
+        # nor guaranteed, so it makes skipping look income-safe when it isn't.
+        incomeRaceConceded = (alternativeOutcome.friendly.next_cycle_income
+                              <= candidate.enemy.next_cycle_income)
+        cityRaceConceded = (alternativeOutcome.friendly.city_count
+                            < candidate.enemy.city_count)
+        # Panic backstop: even while conceding the economy, the veto stays available
+        # when the purchase leaves us catastrophically out-armied.
+        armyCatastrophic = candidate.friendly.army < candidate.enemy.army * 0.7
+        concededEconomy = (incomeRaceConceded or cityRaceConceded) and not armyCatastrophic
         rejected = (alternativeOutcome.friendly.tile_count > candidate.friendly.tile_count
-                    and alternativeOutcome.friendly.army > candidate.friendly.army)
+                    and alternativeOutcome.friendly.army > candidate.friendly.army
+                    and not concededEconomy)
         logbook.info(
             f'CITY_ROUND_OPPORTUNITY_COST turn={bot._map.turn} city={str(targetTile)} rejected={rejected} '
+            f'incomeRaceConceded={incomeRaceConceded} cityRaceConceded={cityRaceConceded} armyCatastrophic={armyCatastrophic} '
             f'candTiles={candidate.friendly.tile_count} candCities={candidate.friendly.city_count} '
             f'candArmy={candidate.friendly.army:.1f} candIncome={candidate.friendly.next_cycle_income:.1f} '
             f'altTiles={alternativeOutcome.friendly.tile_count} altCities={alternativeOutcome.friendly.city_count} '
@@ -2274,6 +2328,18 @@ class BotExpansionOps:
             bot._alt_en_gen_position_distances[bot.targetPlayer] = enPotentialGenDistances
         tgPlayerTerritoryDists = bot.territories.territoryDistances[bot.targetPlayer]
 
+        # UnitTests.test_fix_botexpansion_crashes.BotExpansionOpsCrashRegressionTests.test_standard_weight_matrix_unreachable_gen_candidate_dist_does_not_nuke_frontier:
+        # enDist == 1000 is build_distance_map_matrix's "unreachable" sentinel, not a real distance:
+        # gen candidates are undiscovered fog tiles, so when they are sealed inside fog/obstacle
+        # pockets (or the candidate list is empty) the BFS dead-ends and nearly the whole map reads
+        # 1000. Feeding the sentinel through the excessDist penalty below stamped ~-50 per tile across
+        # the entire frontier, making every expansion plan negative (live game N92iSpgIx: EXP AVAIL 0
+        # for 40+ turns while the opponent expanded). Unreachable tiles are treated as 'as far as the
+        # farthest reachable tile' so they rank no better than real distances without being nuked.
+        # Computed lazily inside the tile loop below (first excessDist > 0 hit) so stubbed matrices
+        # without tiles never touch inter_general_distance, same as the old inline expression.
+        maxExcessEnGenDist = None
+
         if dontRevealCities:
             bot.viewInfo.add_info_line(f'!@! expansion avoiding revealing cities')
             for city in bot.win_condition_analyzer.defend_cities:
@@ -2474,7 +2540,14 @@ class BotExpansionOps:
 
             excessDist = enPotentialGenDistances.raw[tile.tile_index] - bot.board_analysis.inter_general_distance - numEnGenPos
             if excessDist > 0:
-                bonus -= 0.10 * excessDist / max(2, len(genPosesToConsider))
+                if maxExcessEnGenDist is None:
+                    maxReachableEnGenDist = 0
+                    for scanTile in bot._map.get_all_tiles():
+                        scanEnDist = enPotentialGenDistances.raw[scanTile.tile_index]
+                        if scanEnDist < 1000 and scanEnDist > maxReachableEnGenDist:
+                            maxReachableEnGenDist = scanEnDist
+                    maxExcessEnGenDist = max(0, maxReachableEnGenDist - bot.board_analysis.inter_general_distance - numEnGenPos)
+                bonus -= 0.10 * min(excessDist, maxExcessEnGenDist) / max(2, len(genPosesToConsider))
 
             if bot._map.is_tile_friendly(tile):
                 if tile.army < 2:

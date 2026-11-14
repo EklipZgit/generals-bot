@@ -1,0 +1,59 @@
+|     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     
+a4    M     M     M     a4    a5    a5    a5    a5    M     a5    M     a4    b3    M     b2    bC11
+a3    a4    M     a2    a2    aG6   a2    a2    a5    a5    a4    a4    b4    b3    b2    b2    bC9
+M     a4    a2    a2    a3    a3    M     a2    a4    a4    a6    C43   M     b3    b2    b2    bC10
+a5    a4    a2    a3    a3    a3    a2    a2    b4    C46   M                 M     b2    b3    M     M     M
+a5    a3    a2    M     M     a2    aC106 a2    b2    b2    C41   M     M     b2    b2    b2    b2    b2    b2    b2
+a5    a5    a2    a2    a2    a3    a3    a3    b2    b2    b2    b2    b31   b2    M     b2    b2    b2    b2    b2
+      M     a2    M     aC30  a38   b4    b4    b2    M     M     M     b2    b2    b2    b2    b2    b2    b2    b2
+            a2    a5    M     a2    M     M     b22   a2    b6    M     bC8   b2    b3    bG32  b3    M           b2
+a2    a2    a2    M     a2    a2    a3    M     a3    a2    M           M     M     b6    b6    b3    M     M     M
+M     a2    a2    a2    a2    a3    a3    a3    b3    a2    a2    M                 M     M     b3    b3    b3    M
+a3    a3    a2    a3    a2    M     a3    b3    b3    M     M     C45         M           b5    b4    b3    b3    M
+a3    a3    a2    a3    a2    a3    M     M     M                                   M     M     b4    b3    b3    b3
+C45   a3    a2    a2    a5          M                                         M     M     b4    b4    M     M     M
+a4    a4    M     a3          M                                   b3    b3    b4    b5    b4    b4    b4    M
+M                                   M           M                       b3    b3    b4    b5    b4    b4    M     M
+                                                      M           M                 M     b5    b9    M           M
+                  M                       M     M                                               b3    M           M
+M                       M                                                           M           b3
+|     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     
+turn=450
+player_index=0
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=1v1
+aUsername=Human.exe
+aStars=77
+aScore=450
+aTiles=93
+aStandingArmy=357
+aCityCount=3
+aGeneral=5,1
+aDead=False
+aLeftGame=True
+aLeftGameTurn=592
+aAggressionFactor=0
+aDelta25Tiles=-4
+aDelta25Score=105
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=450
+aKnowsKingLocation=False
+bUsername=vitusc
+bStars=65
+bScore=374
+bTiles=90
+bStandingArmy=284
+bCityCount=5
+bGeneral=15,7
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=184
+bDelta25Tiles=7
+bDelta25Score=92
+bCityGainedTurn=438
+bCityLostTurn=430
+bLastSeenMoveTurn=450
+bKnowsKingLocation=False

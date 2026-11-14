@@ -34,6 +34,10 @@ class GeneralsClientHost(object):
         # Save Config
 
         self._seen_update: bool = False
+        # UnitTests/test_GeneralsClientQueueCancel.py::test_idle_queue_deadline_anchored_to_queue_wait_start_not_get_updates_call
+        # records the deadline before the viewer is started so queue timeout always comes first.
+        self._queue_wait_start_time: float = time.perf_counter()
+        """Recorded before the viewer starts so the client's queue deadline is always earlier than the viewer's zombie deadline."""
         self._updateMethod = updateMethod
         self._game: generals.GeneralsClient | None = None
 
@@ -87,6 +91,12 @@ class GeneralsClientHost(object):
                 logbook.info(f'gameThread is dead. BREAKING OUT OF _running LOOP BECAUSE {elapsed:.2f} seconds elapsed...?')
                 self._running = False
 
+            # UnitTests/test_ProcessSuicide.py - the game thread can remain blocked in
+            # ws.recv() after the client terminates, so run() must not wait on it.
+            if self._game is not None and self._game.terminated:
+                logbook.info('game client terminated. BREAKING OUT OF _running LOOP')
+                self._running = False
+
             if elapsed > 1800:
                 logbook.info(f'BREAKING OUT OF _running LOOP BECAUSE {elapsed:.2f} seconds elapsed...?')
                 self._running = False
@@ -103,11 +113,23 @@ class GeneralsClientHost(object):
         time.sleep(4.0)
         logbook.info('ok, killing process')
         time.sleep(0.1)
-        sys.exit(0)
+        # UnitTests/test_ProcessSuicide.py::test_suicide_thread_calls_os_exit_not_sys_exit
+        # sys.exit() in a daemon thread only kills that thread - it never exits the
+        # process. The interpreter's shutdown path can wedge indefinitely on
+        # multiprocessing finalizers (queue feeder joins, child process joins), so the
+        # last resort must be a hard os._exit that skips all finalization.
+        os._exit(0)
 
     def _start_game_thread(self):
         # Create Game (spawns other threads and stuff...)
-        self._game = generals.GeneralsClient(self._userId, self._name, self._gameType, gameid=self._privateRoomID, public_server=self._public_server, server=self._server)
+        self._game = generals.GeneralsClient(
+            self._userId,
+            self._name,
+            self._gameType,
+            gameid=self._privateRoomID,
+            public_server=self._public_server,
+            server=self._server,
+            queue_wait_start_time=self._queue_wait_start_time)
 
         logbook.info("game thread start...?")
         updateLoopExitReason = "get_updates generator exhausted without exception"

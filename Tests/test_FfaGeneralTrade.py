@@ -475,6 +475,7 @@ def _make_stub_client() -> GeneralsClient:
     client.mode = 'ffa'
     client.logFolder = 'C:\\cascade-debug-output\\generals-bot'
     client._ws = None
+    client._queue_cancel_deadline = None
     return client
 
 

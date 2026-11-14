@@ -19,10 +19,34 @@ import ssl
 import threading
 import time
 
-from websocket import create_connection, WebSocketConnectionClosedException
+from websocket import create_connection, WebSocketConnectionClosedException, WebSocketTimeoutException
 
 import BotLogging
 from .map import MapBase, MODIFIER_TORUS, MODIFIER_WATCHTOWER, MODIFIER_CHESS_CLOCK
+
+# UnitTests/test_GeneralsClientQueueCancel.py::test_queue_idle_timeout_shorter_than_viewer_zombie_timeout
+# keeps queue cancellation ahead of the viewer's crash-detection deadline.
+VIEWER_ZOMBIE_TIMEOUT_SECONDS: float = 600.0
+"""How long the viewer waits for its first update before assuming the main process is dead and self-terminating."""
+QUEUE_IDLE_TIMEOUT_SECONDS: float = VIEWER_ZOMBIE_TIMEOUT_SECONDS - 60.0
+"""How long the client waits in queue before canceling, leaving margin for the viewer crash-detection timeout."""
+QUEUE_CANCEL_GAME_START_GRACE_SECONDS: float = 2.0
+"""Time to wait for a game start after canceling the queue."""
+GAME_START_UPDATE_TIMEOUT_SECONDS: float = 90.0
+"""Time to wait for the first game_update after game startup begins before terminating.
+
+A pre_game_start/game_start can be followed by the server aborting the match back
+into the queue, which must not leave the client waiting forever - the queue idle
+deadline no longer applies once game startup is flagged, and socket.io heartbeats
+keep both the killswitch and the server-side queue entry alive.
+"""
+
+if (
+        QUEUE_IDLE_TIMEOUT_SECONDS
+        + QUEUE_CANCEL_GAME_START_GRACE_SECONDS
+        >= VIEWER_ZOMBIE_TIMEOUT_SECONDS):
+    raise AssertionError(
+        "Queue idle timeout and cancel grace must be shorter than the viewer zombie timeout")
 
 # UnitTests/test_ServerSelection.py::test_clients_select_endpoints_without_mutating_global_state
 # Server selection belongs to each connection, never mutable module-level overrides.
@@ -74,7 +98,19 @@ class GeneralsClient(object):
             gameid: str | None =None,
             force_start=False,
             public_server=False,
-            server: str | None = None):
+            server: str | None = None,
+            queue_wait_start_time: float | None = None):
+        """Initialize a client and anchor queue timeout measurement before connection setup.
+
+        :param queue_wait_start_time: Optional monotonic queue-entry time supplied by the host
+            before the viewer process starts; defaults to the current monotonic time.
+        """
+        # UnitTests/test_GeneralsClientQueueCancel.py::test_idle_queue_deadline_anchored_to_queue_wait_start_not_get_updates_call
+        # preserves queue time spent before connection setup and get_updates.
+        self._queue_wait_start_time: float = (
+            queue_wait_start_time
+            if queue_wait_start_time is not None
+            else time.perf_counter())
         self.server: str = resolve_server(server, public_server)
         public_server = self.server == 'na'
         self.terminated: bool = False
@@ -121,6 +157,25 @@ class GeneralsClient(object):
         self._gameid = gameid  # Set Game ID
 
         self._seen_update = False
+        # UnitTests/test_GeneralsClientQueueCancel.py::test_game_start_after_cancel_is_played
+        # tracks that queue deadlines stop applying once game startup begins.
+        self._game_starting: bool = False
+        """True after the server indicates game startup has begun."""
+        # UnitTests/test_GeneralsClientQueueCancel.py::test_idle_queue_timeout_sends_cancel_then_terminates_after_grace
+        # and ::test_game_start_after_cancel_is_played verify the idle threshold and grace state.
+        self.queue_idle_timeout_seconds: float = QUEUE_IDLE_TIMEOUT_SECONDS
+        """Time without game updates before a queued client asks to leave."""
+        self.queue_cancel_game_start_grace_seconds: float = QUEUE_CANCEL_GAME_START_GRACE_SECONDS
+        """Time to wait for a game start after cancelling the queue."""
+        self._queue_cancel_deadline: float | None = None
+        """Set once cancel has been sent; terminate if no game starts by then."""
+        # UnitTests/test_GeneralsClientQueueCancel.py::test_pre_game_start_without_game_update_terminates
+        # bounds the wait for a real game once startup is flagged, since a
+        # pre_game_start can be aborted back into the queue.
+        self.game_start_update_timeout_seconds: float = GAME_START_UPDATE_TIMEOUT_SECONDS
+        """Time to wait for the first game_update after game startup begins."""
+        self._game_start_deadline: float | None = None
+        """Set once game startup begins; terminate if no game_update arrives by then."""
         self._move_id = 1
         self._stars = []
         self.map: MapBase = None
@@ -358,12 +413,87 @@ class GeneralsClient(object):
         tIndex = y1 * cols + x1
         self._send(["ping_tile", tIndex])
 
+    # UnitTests/test_GeneralsClientQueueCancel.py::test_idle_queue_cancels_without_any_heartbeats
+    # and ::test_idle_queue_deadline_anchored_to_queue_wait_start_not_get_updates_call
+    # identify the queue-waiting state independently of heartbeat receipt.
+    def _is_waiting_in_queue(self) -> bool:
+        """Return whether no game update or game-start event has been received."""
+        return not self._seen_update and not self._game_starting
+
+    # UnitTests/test_GeneralsClientQueueCancel.py::test_idle_queue_timeout_sends_cancel_then_terminates_after_grace
+    # and ::test_chatty_queue_still_terminates_after_grace verify one cancel starts a fixed grace.
+    def _begin_queue_cancel(self) -> None:
+        """Leave the queue and start the bounded wait for a game to form."""
+        elapsed_seconds = time.perf_counter() - self._queue_wait_start_time
+        logbook.info(
+            f"No game updates after {elapsed_seconds:.2f} seconds "
+            f"(idle timeout {self.queue_idle_timeout_seconds:.2f} seconds); "
+            "sending cancel and waiting for a game start")
+        self._send(["cancel"])
+        self._queue_cancel_deadline = (
+            time.perf_counter() + self.queue_cancel_game_start_grace_seconds)
+        self._ws.settimeout(self.queue_cancel_game_start_grace_seconds)
+
+    # UnitTests/test_GeneralsClientQueueCancel.py::test_game_start_after_cancel_is_played verifies
+    # that a pre-game message marks startup and restores normal websocket receive behavior.
+    def _on_game_starting(self) -> None:
+        """Clear a pending queue-cancel deadline when a game starts."""
+        self._game_starting = True
+        if self._queue_cancel_deadline is not None:
+            logbook.info("Game started after queue cancel; continuing to play it")
+            self._queue_cancel_deadline = None
+        # UnitTests/test_GeneralsClientQueueCancel.py::test_pre_game_start_without_game_update_terminates
+        # keeps an exit deadline armed until the first real game_update arrives.
+        if self._game_start_deadline is None:
+            self._game_start_deadline = (
+                time.perf_counter() + self.game_start_update_timeout_seconds)
+
     def get_updates(self) -> typing.Generator[typing.Tuple[str, dict], typing.Any, typing.Any]:
-        idleTimeout = 900  # 15 minutes
-        startTime = time.perf_counter()
         exitReason = "get_updates loop exited without explicit reason"
         lastRawMessage = None
+
+        # UnitTests/test_GeneralsClientQueueCancel.py::test_idle_queue_timeout_sends_cancel_then_terminates_after_grace
+        # and ::test_chatty_queue_still_terminates_after_grace verify one fixed deadline.
+        def check_queue_cancel_deadline() -> None:
+            """Set the exit reason and raise when the queue-cancel deadline has passed."""
+            nonlocal exitReason
+            if (
+                    self._queue_cancel_deadline is not None
+                    and time.perf_counter() >= self._queue_cancel_deadline):
+                exitReason = (
+                    "Left queue after idling too long; no game start within grace period")
+                raise ValueError(exitReason)
+
         while True:
+            # UnitTests/test_GeneralsClientQueueCancel.py::test_idle_queue_cancels_without_any_heartbeats
+            # and ::test_idle_queue_deadline_anchored_to_queue_wait_start_not_get_updates_call
+            # drive recv timeouts from the queue-entry deadline rather than incoming heartbeats.
+            if (
+                    self._is_waiting_in_queue()
+                    and self._queue_cancel_deadline is None):
+                idle_deadline = (
+                    self._queue_wait_start_time + self.queue_idle_timeout_seconds)
+                remaining = idle_deadline - time.perf_counter()
+                if remaining <= 0.0:
+                    self._begin_queue_cancel()
+                else:
+                    self._ws.settimeout(max(remaining, 0.01))
+
+            # UnitTests/test_GeneralsClientQueueCancel.py::test_pre_game_start_without_game_update_terminates
+            # A flagged game start that never produces a game_update means the match
+            # was aborted; terminate instead of waiting on heartbeats forever.
+            elif (
+                    self._game_starting
+                    and not self._seen_update):
+                remaining = self._game_start_deadline - time.perf_counter()
+                if remaining <= 0.0:
+                    exitReason = (
+                        f"no game_update after game start within "
+                        f"{self.game_start_update_timeout_seconds:.2f} seconds; terminating")
+                    logbook.info(exitReason)
+                    raise ValueError(exitReason)
+                self._ws.settimeout(max(remaining, 0.01))
+
             try:
                 msg = self._ws.recv()
                 lastRawMessage = msg
@@ -381,6 +511,21 @@ class GeneralsClient(object):
                 lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
                 logbook.info(''.join('!! ' + line for line in lines))  # Log it or whatever here
                 break
+            except WebSocketTimeoutException:
+                if self._queue_cancel_deadline is not None:
+                    remaining = self._queue_cancel_deadline - time.perf_counter()
+                    if remaining <= 0.0:
+                        check_queue_cancel_deadline()
+                    self._ws.settimeout(max(remaining, 0.01))
+                    continue
+                if self._is_waiting_in_queue():
+                    continue
+                # UnitTests/test_GeneralsClientQueueCancel.py::test_pre_game_start_without_game_update_terminates
+                # recv timeouts while awaiting the first game_update loop back to the
+                # game-start deadline check above.
+                if self._game_starting and not self._seen_update:
+                    continue
+                raise
             except:
                 exitReason = "unexpected exception in get_updates recv"
                 logbook.info(
@@ -390,6 +535,14 @@ class GeneralsClient(object):
                 )
                 raise
 
+            check_queue_cancel_deadline()
+            if (
+                    self._is_waiting_in_queue()
+                    and self._queue_cancel_deadline is None
+                    and time.perf_counter()
+                    >= self._queue_wait_start_time + self.queue_idle_timeout_seconds):
+                self._begin_queue_cancel()
+
             if not msg.strip():
                 logbook.info("not msg strip: " + json.dumps(msg))
                 continue
@@ -397,8 +550,6 @@ class GeneralsClient(object):
             # ignore heartbeats and connection acks
             if msg in {"2", "3"}:
                 # logbook.info("2, 3 40, 41 ignored, " + json.dumps(msg))
-                if not self._seen_update and time.perf_counter() - startTime > idleTimeout:
-                    raise ValueError('Reconnecting, idle for too long...')
                 continue
 
             logbook.info(f"{self._get_log_time()} - WS recv: {json.dumps(msg)}")
@@ -426,7 +577,11 @@ class GeneralsClient(object):
                 logbook.info("msg was not list, " + json.dumps(msg))
                 continue
 
-            if msg[0] == "game_start":
+            if msg[0] == "pre_game_start":
+                logbook.info("Pre-game start received")
+                self._on_game_starting()
+            elif msg[0] == "game_start":
+                self._on_game_starting()
                 logbook.info(f"Game info: {msg[1]}")
                 self.start_data = msg[1]
                 print("logging????")
@@ -452,6 +607,10 @@ class GeneralsClient(object):
                         logbook.info(
                             "!!!!!!!!!!\n!!!!!!!!!!!!!\n!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!\ncouldn't write EARLY LOGS to file")
             elif msg[0] == "game_update":
+                if not self._seen_update:
+                    # The first real update ends every startup deadline; restore the
+                    # blocking receive that steady game flow relies on.
+                    self._ws.settimeout(None)
                 self._seen_update = True
                 # Simulate abuser
                 # self._send(['leave_game'])
@@ -603,7 +762,10 @@ class GeneralsClient(object):
             logbook.error(f'error shutting down in killswitch elapsed timer.')
             logbook.error(traceback.format_exc())
         logbook.info('peace nerd')
-        sys.exit(2)
+        # UnitTests/test_ProcessSuicide.py::test_killswitch_calls_os_exit_after_comms_silence
+        # sys.exit() in a daemon thread only kills that thread - use a hard exit so a
+        # wedged interpreter shutdown can never leave a zombie process behind.
+        os._exit(2)
 
     def _terminate(self):
         if self.terminated:

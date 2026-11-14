@@ -147,7 +147,10 @@ class BotGatherOps:
         gatherTargets = bot.target_player_gather_targets.copy()
         gatherTargets = bot.defensive_spanning_tree.copy()
         path = BotPathingUtils.get_path_to_targets(bot, gatherTargets, fromTile=bot.win_condition_analyzer.best_target_player_attack_target, preferEnemy=not bot.all_in_city_behind and not bot.is_all_in_losing, avoidEnemyVision=True, avoidUsingExpandables=True)
-        gatherTargets.update(path.tileList)
+        # get_path_to_targets returns None when no route reaches the gather targets (seen crashing
+        # live + in Tests/test_BotBehavior.py baselines); None means nothing to add, not an error.
+        if path is not None:
+            gatherTargets.update(path.tileList)
         if bot.likely_kill_push and bot.enemy_attack_path is not None:
             gatherTargets = bot.enemy_attack_path.tileSet.copy()
             bot.info(f'LIKELY_KILL_PUSH_GATHER_TARGETS using enemy_attack_path targets count={len(gatherTargets)} path={bot.enemy_attack_path}')
@@ -472,6 +475,26 @@ class BotGatherOps:
         turnOffset = bot._map.turn + bot.timings.offsetTurns
         turnCycleOffset = turnOffset % bot.timings.cycleTurns
 
+        # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: gathers that
+        # are not themselves attacks (no enemy tile among the start tiles) may not route through
+        # unattackable enemy land - skipTiles are treated as impassable by the gather searches.
+        # Gathers aimed at enemy tiles keep full traversal because crossing third-party land to
+        # reach the locked target is legal.
+        attackGather = False
+        if startTiles is not None:
+            for startTile in startTiles:
+                if startTile is not None and startTile.player >= 0 and BotStateQueries.is_tile_enemy(bot, startTile):
+                    attackGather = True
+                    break
+        ffaBannedGatherTiles: typing.Set[Tile] = set()
+        if not attackGather:
+            ffaBannedGatherTiles = BotStateQueries.get_ffa_unattackable_tiles(bot)
+            if len(ffaBannedGatherTiles) > 0:
+                if skipTiles is None:
+                    skipTiles = set(ffaBannedGatherTiles)
+                else:
+                    skipTiles = set(skipTiles).union(ffaBannedGatherTiles)
+
         # When not defending economy and not likely kill push, delay cities/generals (gather them last)
         # When defending economy or likely kill push, do NOT delay cities
         delayCities = not bot.defend_economy and not (bot.likely_kill_push and len(bot._map.players[bot._map.player_index].cities) > 1)
@@ -517,7 +540,7 @@ class BotGatherOps:
             else:
                 skipFunc = None
                 if BotStateQueries.is_still_ffa_and_non_dominant(bot):
-                    skipFunc = lambda tile, tilePriorityObject: not tile.discovered
+                    skipFunc = lambda tile, tilePriorityObject: not tile.discovered or tile in ffaBannedGatherTiles
 
                 startTileStr = 'no start tiles'
                 if startTiles and len(startTiles) > 0:

@@ -47,6 +47,9 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
         map_grid_y_x=playerMap,
         replay_url='42069',
         modifiers=[i for i, m in enumerate(map_raw.modifiers_by_id) if m])
+    # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_simulator_player_map_retains_resume_markers - preserve txtmap resume markers while keeping live-start maps unmarked.
+    map.resume_data = map_raw.resume_data.copy()
+    map.resume_data_is_txtmap = map_raw.resume_data_is_txtmap
 
     map.is_custom_map = map_raw.is_custom_map
     map.swamps = {map.tiles_by_index[t.tile_index] for t in map_raw.tiles_by_index if t.isSwamp}
@@ -778,6 +781,9 @@ class GameSimulatorHost(object):
             botChatter = lambda message, teamChat, i=i: self.enqueue_chat_message(player=i, message=message, teamChat=teamChat)
             botHost = BotHostBase(char, botMover, botPinger, botChatter, 'test', noUi=not hasUi, alignBottom=True, throw=True, useTestViewerPositions=True)
 
+            # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+            # force background WRP work to complete inline so simulator moves are deterministic.
+            botHost.eklipz_bot.run_background_work_synchronously = True
             self.bot_hosts[i] = botHost
 
         self.sim._update_scores()
@@ -1330,4 +1336,3 @@ class GameSimulatorHost(object):
     def reset_move_queue(self):
         self.move_queue = [[] for player in self.sim.players]
         self.sim.moves = [None for player in self.sim.players]
-

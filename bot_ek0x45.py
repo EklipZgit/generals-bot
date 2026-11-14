@@ -59,10 +59,18 @@ from BotModules.BotRendering import BotRendering
 from BotModules.BotRepetition import BotRepetition
 from BotModules.BotSerialization import BotSerialization
 from BotModules.BotStateQueries import BotStateQueries
+from BotModules.BotStealthAllIn import (
+    BotStealthAllIn,
+    StealthRouteDefenseInterrupt,
+    StealthAllInState,
+    StealthWrpJob,
+    WrpWorkerProcess,
+)
 from BotModules.BotTimings import BotTimings
 from BotModules.BotTargeting import BotTargeting
 from Sim.TextMapLoader import TextMapLoader
 from Strategy import OpponentTracker, WinConditionAnalyzer, CaptureLineTracker
+from Strategy.GeneralTradeEvaluator import GeneralTradeEvaluation
 from Strategy.WinConditionAnalyzer import WinCondition
 from StrategyModels import CycleStatsData, ExpansionPotential
 from ViewInfo import ViewInfo, PathColorer, TargetStyle
@@ -125,6 +133,10 @@ class EklipZBot(object):
         self.targetPlayerLeafMoves: typing.List[Move] = []
         """All moves by the target player that could capture adjacent."""
 
+        self.ffa_exclusive_target_lock: int = -1
+        """While BotStateQueries.is_ffa_exclusive_targeting_active holds, the one enemy player we are
+        committed to attacking exclusively (Tests/test_FFA.py FFA pacifism tests). -1 = nobody."""
+
         self.attackFailedTurn = 0
         self.countFailedQuickAttacks = 0
         self.countFailedHighDepthAttacks = 0
@@ -156,6 +168,42 @@ class EklipZBot(object):
         self.is_winning_gather_cyclic: bool = False
 
         self.is_all_in_losing = False
+        # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+        # simulation must run background WRP work synchronously for deterministic route assertions.
+        self.run_background_work_synchronously: bool = False
+        # Feature flag for BotStealthAllIn (stealth losing all-in + undefendable WRP hunt). Enabled for live
+        # games per user request; Tests/test_AllIn.py stealth/hunt tests also turn it on explicitly.
+        self.enable_stealth_all_in: bool = True
+        self.stealth_all_in: StealthAllInState | None = None
+        self.stealth_all_in_generation: int = 0
+        # Tests/test_AllIn.py::AllInTests.test_should_all_in_along_short_top_path_instead_of_long_bottom_flank:
+        # when the direct attack route beats every hidden flank on the 3:1 surprise-vs-delay
+        # cost model, suppress the flank search for a few turns instead of re-running it each turn.
+        self.stealth_all_in_direct_preferred_until_turn: int = -1
+        # Tests/test_AllIn.py::AllInTests.test_should_finish_losing_all_in_attack_instead_of_replanning_forever:
+        # consecutive projected-launch-kill-failure turns for the current uncommitted stealth
+        # plan; when it reaches BotStealthAllIn.CANNOT_KILL_GATHER_TURNS_BEFORE_DIVE the plan
+        # stops demanding a verified kill and dives the assembled stack anyway.
+        self.stealth_all_in_cannot_kill_counter: int = 0
+        # Tests/test_AllIn.py::AllInTests.test_should_continue_committed_kill_attack_instead_of_slow_gather:
+        # the quick-kill eval re-runs from scratch every turn against a pessimistic
+        # fog-defense cutoff, so one turn of estimate drift used to drop an in-flight
+        # kill attack and leave the stack parked while a 3x slower gather replanned.
+        # Once a kill path commits we remember it (and the cutoff accepted at commit
+        # time) and let the fresh eval continue the march unless hard new information
+        # - a dead route or a visibly reinforced general - says the attack is dead.
+        self.committed_quick_kill: Path | None = None
+        self.committed_quick_kill_cutoff: int = 0
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # keep the asynchronous undefendable-hunt job and per-turn throttle on the bot instance.
+        self.stealth_hunt_job: StealthWrpJob | None = None
+        self.stealth_hunt_target_player: int = -1
+        self.stealth_hunt_last_evaluation_turn: int = -1
+        self.stealth_hunt_last_evaluated_army: int = 0
+        self.stealth_hunt_excluded_start_tile_indexes: set[int] = set()
+        self.stealth_hunt_render_path: Path | None = None
+        self.last_stealth_route_defense_interrupt: StealthRouteDefenseInterrupt | None = None
+        self.wrp_worker_process: WrpWorkerProcess | None = None
         self.all_in_army_advantage_counter: int = 0
         self.all_in_army_advantage_cycle: int = 35
         self.is_all_in_army_advantage: bool = False
@@ -436,6 +484,10 @@ class EklipZBot(object):
         self.info_render_board_analysis_zones: bool = True
         self.info_render_city_priority_debug_info: bool = False
         self.info_render_general_undiscovered_prediction_values: bool = False
+        self.info_render_general_prediction_spawn_fairness_weights: bool = True
+        """Print the spawn fairness contribution in the bottom left corner of tiles, one decimal place"""
+        self.info_render_general_prediction_emergence_locality_weights: bool = True
+        """Print the value in the top right corner of tiles for the emergence locality contribution of general prediction weight, one decimal place"""
         self.info_render_tile_deltas: bool = False
         self.info_render_tile_states: bool = False
         self.info_render_expansion_matrix_values: bool = False
@@ -1081,6 +1133,7 @@ class EklipZBot(object):
 
     # STEP2: Stay in EklipZBotV2.py. Central post-prep decision tree coordinating combat, defense, city capture, expansion, and continuation logic; keep on shell and delegate subroutines out.
     def pick_move_after_prep(self, is_lag_move=False):
+        BotStealthAllIn.poll_wrp_worker_results(self)
         with self.perf_timer.begin_move_event('calculating general danger / threats'):
             BotDefense.calculate_general_danger(self)
 
@@ -1110,9 +1163,14 @@ class EklipZBot(object):
             threat = self.dangerAnalyzer.fastestVisionThreat
 
         #  # # # #   ENEMY KING KILLS
+        stealthRouteCommittedAtStart = (
+            self.stealth_all_in is not None
+            and self.stealth_all_in.committed_route is not None)
         with self.perf_timer.begin_move_event('Checking for king kills and races'):
             killMove, kingKillPath, raceChance = BotCombatOps.check_for_king_kills_and_races(self, threat)
-            if killMove is not None:
+            # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+            # defer to QK whenever it has a move, but never interrupt a committed stealth route.
+            if killMove is not None and not stealthRouteCommittedAtStart:
                 return killMove
 
         defenseCriticalTileSet = set()
@@ -1134,6 +1192,38 @@ class EklipZBot(object):
 
         if self.is_all_in_losing:
             logbook.info(f"~~~ ___ {self.get_elapsed()}\n   YO WE ALL IN DAWG\n~~~ ___")
+
+        stealthRouteAborted = False
+        if stealthRouteCommittedAtStart:
+            committedRouteMove = BotStealthAllIn.get_committed_route_move(
+                self,
+                threat,
+                defenseCriticalTileSet,
+                kingKillPath,
+                raceChance)
+            if committedRouteMove is not None:
+                return committedRouteMove
+            stealthRouteAborted = self.stealth_all_in is None
+        elif not BotStealthAllIn.is_stealth_all_in_active(self):
+            BotStealthAllIn.clear_uncommitted_state(self)
+
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # evaluate an undefendable hunt before city, expansion, and later QK planning can take over.
+        if not stealthRouteAborted and not stealthRouteCommittedAtStart:
+            huntMove = BotStealthAllIn.get_undefendable_hunt_move(
+                self,
+                threat,
+                defenseCriticalTileSet,
+                kingKillPath,
+                raceChance)
+            if huntMove is not None:
+                return huntMove
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # fall back to the precomputed QK move when no undefendable hunt commits.
+        if (killMove is not None
+                and (not stealthRouteCommittedAtStart
+                     or self.stealth_all_in is None)):
+            return killMove
 
         # if not self.isAllIn() and (threat.turns > -1 and self.dangerAnalyzer.anyThreat):
         #    armyAmount = (self.general_min_army_allowable() + enemyNearGen) * 1.1 if threat is None else threat.threatValue + general.army + 1
@@ -1188,7 +1278,17 @@ class EklipZBot(object):
                     self.timings = BotTimings.get_timings(self)
 
         defenseSavePath: Path | None = None
-        if not self.is_all_in_losing and threat is not None and threat.threatType != ThreatType.Vision:
+        # Tests/test_GeneralTradeStrategy.py
+        # test__e2e__all_in_losing_still_defends_unfavorable: a VALID mutual
+        # general capture backup must still trigger the defense search even
+        # when all_in_losing would otherwise skip it entirely - a viable
+        # defense beats an unfavorable trade. Evaluated once before the
+        # defense block so the fallback below can reuse it.
+        mutualCaptureEval: GeneralTradeEvaluation | None = None
+        if kingKillPath is not None and threat is not None and threat.threatType == ThreatType.Kill:
+            mutualCaptureEval = BotCombatOps.evaluate_general_trade(self, kingKillPath, threat, threat.threatPlayer)
+        if (threat is not None and threat.threatType != ThreatType.Vision
+                and (not self.is_all_in_losing or (mutualCaptureEval is not None and not mutualCaptureEval.favorable))):
             with self.perf_timer.begin_move_event(f'THREAT DEFENSE {threat.turns} {str(threat.path.start.tile)}'):
                 defenseMove, defenseSavePath = BotDefense.get_defense_moves(self, defenseCriticalTileSet, kingKillPath, raceChance)
 
@@ -1202,6 +1302,28 @@ class EklipZBot(object):
                         return defenseMove
                     else:
                         self.viewInfo.add_info_line(f'BYPASSING DEF REP {str(defenseMove)} :(')
+
+        # Tests/test_GeneralTradeStrategy.py
+        # test__e2e__unfavorable_trade_forced_survival_fallback: when a Kill
+        # threat produced no adequate defense, a mutual general capture
+        # backup (incl. an UNFAVORABLE general trade, which check_for_king
+        # _kills deliberately returns at chance 0) is the only line where we
+        # survive. Take it before the expansion/city branches below can burn
+        # the source tile on a non-defensive move and before the
+        # attackingWithSelectedExpansionPlan veto in the delayed block can
+        # suppress it. Narrow to VALID evaluated mutual captures only so
+        # ordinary chance-0 backup paths keep their old delayed ordering.
+        if (kingKillPath is not None and threat is not None and threat.threatType == ThreatType.Kill
+                and kingKillPath.start.next is not None
+                and mutualCaptureEval is not None):
+            blocks = self.blocking_tile_info.get(kingKillPath.start.tile)
+            if not (blocks and kingKillPath.start.next.tile in blocks.blocked_destinations):
+                self.info(f"    Survival mutual-capture fallback {str(kingKillPath)} (no adequate defense)")
+                self.viewInfo.color_path(PathColorer(kingKillPath, 158, 158, 158, 255, 10, 200))
+                # get_first_move preserves the evaluated path's move_half -
+                # a half-move trade sends a different stack than a full move
+                # and was priced accordingly
+                return kingKillPath.get_first_move()
 
         if self._map.turn < 100:
             isNoExpansionGame = ((len(self._map.swamps) > 0 or len(self._map.deserts) > 0) and BotExpansionOps.get_unexpandable_ratio(self, ) > 0.7)
@@ -1539,6 +1661,30 @@ class EklipZBot(object):
                 self.info(f'Pass thru EXP int! {move} {self.expansion_plan.selected_option}')
                 return move
 
+        # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+        # run hidden gathering before exploration and immediately execute any newly committed route.
+        if (not stealthRouteAborted
+                and BotStealthAllIn.is_stealth_all_in_active(self)
+                and (self.stealth_all_in is None
+                     or self.stealth_all_in.committed_route is None)):
+            stealthMove = BotStealthAllIn.get_stealth_all_in_move(
+                self,
+                defenseCriticalTileSet)
+            if stealthMove is not None:
+                return stealthMove
+            if (self.stealth_all_in is not None
+                    and self.stealth_all_in.committed_route is not None
+                    and self.stealth_all_in.committed_turn == self._map.turn):
+                committedMove = BotStealthAllIn.get_committed_route_move(
+                    self,
+                    threat,
+                    defenseCriticalTileSet,
+                    kingKillPath,
+                    raceChance)
+                if committedMove is not None:
+                    return committedMove
+                stealthRouteAborted = self.stealth_all_in is None
+
         with self.perf_timer.begin_move_event('try_get_enemy_territory_exploration_continuation_move'):
             expNegs = set(defenseCriticalTileSet)
             logbook.info(f'DEFENSE_NEG_COPY context=enemy_territory_exploration_continuation source=defenseCriticalTileSet copiedTiles={[str(t) for t in expNegs]}')
@@ -1834,6 +1980,12 @@ class EklipZBot(object):
             # self.targetPlayerExpectedGeneralLocation.player = self.player
             self.largeTilesNearEnemyKings[self.targetPlayerExpectedGeneralLocation] = []
 
+        # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: refresh the
+        # exclusive-FFA lock BEFORE scanning leaf/city moves and BEFORE target recalculation below,
+        # so every producer this turn agrees on which revealed enemies are unattackable.
+        BotStateQueries.update_ffa_exclusive_target_lock(self)
+        ffaUnattackablePlayers = BotStateQueries.get_ffa_unattackable_players(self)
+
         for tile in self._map.tiles_by_index:
             if self._map.is_tile_enemy(tile) and self._map.generals[tile.player] is None:
                 for nextTile in tile.movable:
@@ -1846,6 +1998,10 @@ class EklipZBot(object):
             if tile.player == self._map.player_index:
                 for nextTile in tile.movable:
                     if not self._map.is_tile_friendly(nextTile) and not nextTile.isObstacle and not nextTile.isSwamp and (not nextTile.isDesert or nextTile.player >= 0):
+                        # Tests/test_FFA.py FFA pacifism tests: leaf moves are non-attack expansion
+                        # moves and must never capture tiles of unattackable revealed enemies.
+                        if ffaUnattackablePlayers is not None and nextTile.player in ffaUnattackablePlayers:
+                            continue
                         mv = Move(tile, nextTile)
                         self.leafMoves.append(mv)
                         if tile.army - 1 > nextTile.army and tile.army > 1:
@@ -1859,6 +2015,10 @@ class EklipZBot(object):
                         if not self._map.is_tile_on_team_with(nextTile, self.targetPlayer) and not nextTile.isObstacle and tile.army - 1 > nextTile.army and tile.army > 1:
                             self.targetPlayerLeafMoves.append(Move(tile, nextTile))
                 if tile.isCity and self._map.is_tile_enemy(tile):
+                    # Tests/test_FFA.py FFA pacifism tests: unattackable enemies' cities are not
+                    # valid capture targets for city kill/contest plans either.
+                    if ffaUnattackablePlayers is not None and tile.player in ffaUnattackablePlayers:
+                        continue
                     self.enemyCities.append(tile)
             elif tile.army < -1:
                 heapq.heappush(largeNegativeNeutralTiles, (tile.army, tile))
@@ -1965,11 +2125,27 @@ class EklipZBot(object):
         self.shortest_path_to_target_player = None
         self.target_player_gather_path = None
         self.target_player_gather_targets = None
+        # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+        # discard pending target-specific gathers but leave an already committed route untouched.
+        BotStealthAllIn.clear_uncommitted_state(self)
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # discard WRP jobs that were planned for the previous target player.
+        BotStealthAllIn.clear_pending_hunt_job(self)
+        self.stealth_hunt_excluded_start_tile_indexes.clear()
+        self.stealth_all_in_cannot_kill_counter = 0
+        # Tests/test_AllIn.py::AllInTests.test_should_continue_committed_kill_attack_instead_of_slow_gather:
+        # a committed kill attack against the old target is meaningless for the new one.
+        self.committed_quick_kill = None
+        self.committed_quick_kill_cutoff = 0
 
 
     # STEP2: Stay in EklipZBotV2.py or move to a dedicated resume/debug module late. This restores broad bot/runtime state across trackers, timings, paths, and debug serialization.
     def load_resume_data(self, resume_data: typing.Dict[str, str]):
-        return BotSerialization.load_resume_data(self, resume_data)
+        result = BotSerialization.load_resume_data(self, resume_data)
+        # Tests/test_AllIn.py resume support: a committed WRP route saved mid-all-in must keep
+        # executing after load; restored here (not inside BotSerialization) to avoid a module cycle.
+        BotStealthAllIn.load_committed_route_from_resume_data(self, resume_data)
+        return result
 
     # STEP2: Stay in EklipZBotV2.py initially, then potentially split across BotTargeting/BotTimings/BotComms later. This recalculates shared target/gather/flank state used by many modules.
     def recalculate_player_paths(self, force: bool = False):

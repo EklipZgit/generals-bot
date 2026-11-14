@@ -105,3 +105,7 @@ def test_grouped_knapsack__logged_repro(self):
 --- Live game log analysis ---
 1. To analyze live game log folders (txtmaps + ~40MB bot log), use the debug-live-game-logs skill (.devin/skills/debug-live-game-logs/SKILL.md) and the LiveGameAnalysis/ tools (GameStatsGenerator.py, GameLogTool.py). Never read the raw log file directly.
 
+
+--- Live code safety ---
+1. The user runs LIVE games directly off this working tree. Once code is saved it is live. Never leave code in a state that can throw in normal games: finish each edit completely before saving (no half-wired helpers, no calls to unimplemented functions, no nonexistent attributes such as map.width/height - MapBase uses cols/rows), py_compile touched files immediately, and smoke-test the changed code path with a relevant test right after each functional change.
+

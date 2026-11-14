@@ -134,8 +134,22 @@ class BotDefense:
 
             if interceptMove is not None and intOption is not None and (intOption.econValue / intOption.length > 1.0):
                 vt = intOption.econValue / intOption.length
-                bot.info(f'def int move against {threat.path.start.tile} vt {vt:.2f} ({intOption.econValue:.2f}/{intOption.length}), blk {intOption.damage_blocked:.1f}, wci {intOption.worst_case_intercept_moves}, bci {intOption.best_case_intercept_moves}, rt {intOption.recapture_turns}')
-                return interceptMove, interceptPath
+                # Tests/test_BotBehavior.py::test_should_take_neutral_city_instead_of_intercepting_distant_threat:
+                # A barely-threshold intercept that cannibalizes the army of a pending higher-value
+                # plan option (e.g. a nearly-complete neutral city capture) should not blindly
+                # override it: the plan beats the intercept in the normal option comparison anyway.
+                # Defer to the gather-defense analysis below -- it still returns this same intercept
+                # (or another defense move) when the threat is genuinely urgent, but delays when
+                # defense is trivially achievable, letting the better plan win.
+                conflictingPlanVt = BotDefense._get_conflicting_plan_option_value_per_turn(bot, interceptPath.tileSet)
+                if conflictingPlanVt > vt:
+                    bot.info(
+                        f'def int move against {threat.path.start.tile} vt {vt:.2f} DEFERRED: intercept steals '
+                        f'tiles from pending plan option vt {conflictingPlanVt:.2f} '
+                        f'({intOption.econValue:.2f}e/{intOption.length}t), running gather-defense analysis instead')
+                else:
+                    bot.info(f'def int move against {threat.path.start.tile} vt {vt:.2f} ({intOption.econValue:.2f}/{intOption.length}), blk {intOption.damage_blocked:.1f}, wci {intOption.worst_case_intercept_moves}, bci {intOption.best_case_intercept_moves}, rt {intOption.recapture_turns}')
+                    return interceptMove, interceptPath
 
             isRealThreat = True
             isEconThreat = not threat.path.tail.tile.isGeneral
@@ -476,6 +490,22 @@ class BotDefense:
                     BotGatherOps.get_gather_to_target_tile(bot, bot.targetPlayerExpectedGeneralLocation, 1.0, threat.turns)
 
         return None, None
+
+    @staticmethod
+    def _get_conflicting_plan_option_value_per_turn(bot: EklipZBot, interceptPathTiles: typing.Set[Tile]) -> float:
+        """
+        Best econValue/length among pending city plan options that share tiles with the given
+        intercept path -- i.e. plans the intercept would cannibalize by moving that army. These
+        are the options that compete with the intercept in the normal option comparison (see
+        BotExpansionOps.addlOptions: opt ntCity / enCity / quickKillCity vs opt int). The
+        intercept early-return in get_defense_moves uses this to avoid preempting a better
+        pending plan with a barely-threshold intercept.
+        """
+        bestVt = 0.0
+        for planOption in (bot.city_capture_plan_option, bot.contest_city_plan_option, bot.quick_kill_city_plan_option):
+            if planOption is not None and len(planOption.tileSet.intersection(interceptPathTiles)) > 0:
+                bestVt = max(bestVt, planOption.econValue / max(planOption.length, 1))
+        return bestVt
 
     @staticmethod
     def build_intercept_plans(bot: EklipZBot, negTiles: typing.Set[Tile] | None = None) -> typing.Dict[Tile, typing.Any]:

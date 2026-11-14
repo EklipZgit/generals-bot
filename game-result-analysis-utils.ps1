@@ -96,6 +96,132 @@ function Get-ConfiguredBotLogsRoot {
 $null = Initialize-RunConfig
 
 
+function Get-GeneralsRepoPath {
+    $defaultGeneralsRepo = [System.IO.Path]::GetFullPath((Join-Path (Get-ConfiguredRepoRoot) '..\generals'))
+    return Get-RunConfigPathValue -Key 'generals_repo' -Default $defaultGeneralsRepo
+}
+
+
+function Get-GeneralsEventsRepoPath {
+    $defaultGeneralsEventsRepo = [System.IO.Path]::GetFullPath((Join-Path (Get-GeneralsRepoPath) 'generals-events'))
+    return Get-RunConfigPathValue -Key 'generals_events_repo' -Default $defaultGeneralsEventsRepo
+}
+
+
+function Get-ReplayServerFromLogFolder {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$LogFolderPath
+    )
+
+    # The bot log records the websocket it connected to; that identifies which
+    # region's replay bucket/backup holds the game. Detection only tunes the
+    # order the dumper probes sources in - 'auto' always works, just slower.
+    $logFile = Get-ChildItem -Path $LogFolderPath -Filter '_*.txt' -ErrorAction Ignore | Select-Object -First 1
+    if ($null -eq $logFile)
+    {
+        return 'auto'
+    }
+
+    if (Select-String -Path $logFile.FullName -Pattern 'botws\.generals\.io|bot\.generals\.io' -List -Quiet)
+    {
+        return 'bot'
+    }
+    if (Select-String -Path $logFile.FullName -Pattern 'euws\.generals\.io|eu\.generals\.io' -List -Quiet)
+    {
+        return 'eu'
+    }
+    if (Select-String -Path $logFile.FullName -Pattern 'ws://localhost|ws://127\.0\.0\.1|localhost:8080|127\.0\.0\.1:8080' -List -Quiet)
+    {
+        return 'loc'
+    }
+    if (Select-String -Path $logFile.FullName -Pattern 'ws\.generals\.io|us\.generals\.io' -List -Quiet)
+    {
+        return 'na'
+    }
+
+    return 'auto'
+}
+
+
+function Invoke-ReplayTrueMapDump {
+    Param(
+        [Parameter(Mandatory = $true)]
+        $Map,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Turn,
+
+        [Parameter(Mandatory = $true)]
+        [int]$PlayerIndex
+    )
+
+    # Grouped log folders are named "<desc>---<replayId>"; without that suffix
+    # there is no replay to pull the true board state from.
+    $replayId = ($Map.Directory.BaseName -split '---') | Select-Object -Last 1
+    if ([string]::IsNullOrWhiteSpace($replayId) -or $replayId -eq $Map.Directory.BaseName)
+    {
+        return $null
+    }
+
+    $generalsEventsRepo = Get-GeneralsEventsRepoPath
+    $dumper = Join-Path (Get-ConfiguredRepoRoot) 'ReplayTools\ReplayTxtmapDump.js'
+    if (-not (Test-Path $dumper))
+    {
+        Write-Warning "ReplayTxtmapDump.js not found at $dumper; skipping true-state dump."
+        return $null
+    }
+
+    if ($null -eq (Get-Command node -ErrorAction SilentlyContinue))
+    {
+        Write-Warning "node not on PATH; skipping true-state replay dump for $replayId."
+        return $null
+    }
+
+    $trueMapPath = Join-Path $Map.Directory.FullName "$($Map.BaseName).truemap.txtmap"
+    $giorPath = Join-Path $Map.Directory.FullName "$replayId.gior"
+    $server = Get-ReplayServerFromLogFolder -LogFolderPath $Map.Directory.FullName
+
+    # ReplayTxtmapDump walks S3 -> server /api/replay backup (only when
+    # /api/serverSettings reports aws_replay_saving_down) -> S3, checks the
+    # local replay_data/ outage fallback first, simulates to $Turn, and
+    # refuses to write a "true" map that contradicts the bot's visible tiles.
+    # A .gior already sitting in the log folder is reused instead of
+    # re-downloading.
+    $nodeArgs = @($dumper)
+    if (Test-Path $giorPath)
+    {
+        $nodeArgs += @('--replay-file', $giorPath)
+    }
+    else
+    {
+        $nodeArgs += @(
+            '--replay-id', $replayId,
+            '--server', $server,
+            '--save-replay', $giorPath
+        )
+    }
+    $nodeArgs += @(
+        '--turn', "$Turn",
+        '--player-index', "$PlayerIndex",
+        '--generals-events-repo', $generalsEventsRepo,
+        '--out', $trueMapPath,
+        '--copy-data-from', $Map.FullName
+    )
+    Write-Host "dumping true map state for replay $replayId turn $Turn (server=$server)"
+    $dumpOutput = & node @nodeArgs 2>&1
+    $dumpOutput | ForEach-Object { Write-Host "    $_" }
+
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $trueMapPath))
+    {
+        Write-Warning "true-state dump failed for replay $replayId turn $Turn; generating test without a truemap."
+        return $null
+    }
+
+    return Get-Item $trueMapPath
+}
+
+
 function Copy-Turn25StartResultsToUnitTest {
     Param(
         $DestFolder = $(Join-Path (Join-Path (Get-ConfiguredRepoRoot) 'Tests') 'EarlyExpandUtilsTestMaps/SampleTurn25MapsToTryToBeat'),
@@ -318,6 +444,22 @@ function Create-TestContinuingGameFrom {
     $newName = "$($TestName)___$newName.txtmap"
     $map | Copy-Item -Destination "$DestFolder/$newName" -ErrorAction Stop
 
+    # Pull the replay for this game and dump the TRUE board state at this turn
+    # as a sibling .truemap.txtmap. The generated test keeps the bot's exported
+    # map for vision + resume state but runs the simulator against real state,
+    # so wrong fog guesses get corrected by actually-discovered tiles instead
+    # of being baked into the sim's ground truth.
+    $trueMapName = $null
+    if ($player -ne 'unk')
+    {
+        $trueMap = Invoke-ReplayTrueMapDump -Map $map -Turn ([int]$turn) -PlayerIndex ([int]$player)
+        if ($null -ne $trueMap)
+        {
+            $trueMapName = $newName -replace '\.txtmap$', '.truemap.txtmap'
+            $trueMap | Copy-Item -Destination "$DestFolder/$trueMapName" -ErrorAction Stop
+        }
+    }
+
     $testFile = "$DestFolderRoot/test_$TestCategory.py"
     $testFileContent = Get-Content $testFile -Raw -ErrorAction Stop
 
@@ -332,13 +474,24 @@ function Create-TestContinuingGameFrom {
         ([char]'h') = 0;
     }
 
-    $mapLoader = "map, general, enemyGeneral = self.load_map_and_generals(mapFile, $turn, fill_out_tiles=True)"
+    # The simulator's ground-truth map comes from the replay-dumped truemap
+    # when we have one; the bot's exported mapFile still supplies the fogged
+    # vision map and the serialized bot state the bot resumes from.
+    $simMapFileVar = 'mapFile'
+    $trueMapFileLine = ''
+    if ($null -ne $trueMapName)
+    {
+        $simMapFileVar = 'trueMapFile'
+        $trueMapFileLine = "        trueMapFile = 'GameContinuationEntries/$trueMapName'"
+    }
+
+    $mapLoader = "map, general, enemyGeneral = self.load_map_and_generals($simMapFileVar, $turn, fill_out_tiles=True)"
     $baseAssert = "self.assertNoFriendliesKilled(map, general)"
     $simHostBuilder = 'simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)'
 
 
     if ($is2v2) {
-        $mapLoader = "map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2(mapFile, $turn, fill_out_tiles=True)"
+        $mapLoader = "map, general, allyGen, enemyGeneral, enemyAllyGen = self.load_map_and_generals_2v2($simMapFileVar, $turn, fill_out_tiles=True)"
         $baseAssert = "self.assertNoFriendliesKilled(map, general, allyGen)"
         $simHostBuilder = "simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)"
     }
@@ -348,6 +501,7 @@ function Create-TestContinuingGameFrom {
     def test_$TestName(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
         mapFile = 'GameContinuationEntries/$newName'
+$trueMapFileLine
         $mapLoader
 
         rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=$turn)

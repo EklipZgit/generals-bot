@@ -21,6 +21,20 @@ from itertools import permutations
 from itertools import combinations
 
 
+def _is_uncertain_city_wall(map: MapBase, tile: Tile) -> bool:
+    """
+    Tests/test_AllIn.py::AllInTests.test_should_all_in_along_short_top_path_instead_of_long_bottom_flank:
+    undiscovered predicted cities are walls for WRP routing — their real garrison is unknown, and a
+    committed all-in that paths through one breaks when the fog-city defense outgrows the route's
+    move-legality check (turn-450 repro: the committed route broke on predicted enemy city 14,9).
+    Walled/low-cost city games exempt undiscovered tiles since every wall tile is a city by design.
+    """
+    return (tile.isCity
+            and not tile.discovered
+            and not map.is_walled_city_game
+            and not map.is_low_cost_city_game)
+
+
 def get_watchman_path(map: MapBase, startTile: Tile, toDiscover: typing.Iterable[Tile], timeLimit: float = 1000.0, initialArmy: int = -1) -> Path | None:
     """
     Will be updated with more efficient algorithms in future. Currently an optimized A* approach that searches
@@ -87,7 +101,7 @@ class BasicAStarWRP:
         # Singleton Heuristic; this is quite expensive, something like n^2
         h_singleton = 0
         for tile in node.unseen:
-            h_singleton = max(h_singleton, min(self.map.get_distance_between(node.tile, t) for t in tile.adjacents if not t.isObstacle and not (t.isCity and t.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game)))
+            h_singleton = max(h_singleton, min(self.map.get_distance_between(node.tile, t) for t in tile.adjacents if not t.isObstacle and not _is_uncertain_city_wall(self.map, t)))
 
         return h_singleton
 
@@ -112,7 +126,7 @@ class BasicAStarWRP:
             for neighbor in current_node.tile.movable:
                 # if neighbor in self.closed_list or neighbor.isObstacle:
                 #     continue
-                if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
+                if neighbor.isObstacle or _is_uncertain_city_wall(self.map, neighbor):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
                     continue
 
                 neighbor_node = BasicAStarNode(
@@ -386,7 +400,7 @@ class PivotWRP:
             closedSet.add(current_node)
 
             for neighbor in current_node.tile.movable:
-                if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
+                if neighbor.isObstacle or _is_uncertain_city_wall(self.map, neighbor):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
                     continue
 
                 component = self.component_lookup.raw[neighbor.tile_index]
@@ -455,7 +469,7 @@ class PivotWRP:
         for t in toDiscover:
             numUnseenAdj = 0
             for adj in t.adjacents:
-                if adj.isObstacle or (adj.isCity and adj.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):
+                if adj.isObstacle or _is_uncertain_city_wall(self.map, adj):
                     continue
                 if adj not in toDiscover:
                     continue
@@ -508,12 +522,12 @@ class PivotWRP:
             # component.add(pivot)
             componentWatchers = set()
             for t in pivot.adjacents:
-                if t.isObstacle or (t.isCity and t.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):
+                if t.isObstacle or _is_uncertain_city_wall(self.map, t):
                     continue
 
                 canOnlyPathInThroughAnotherAdj = True
                 for fromTile in t.movable:
-                    if fromTile.isObstacle or (fromTile.isCity and fromTile.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):
+                    if fromTile.isObstacle or _is_uncertain_city_wall(self.map, fromTile):
                         continue
                     if fromTile not in pivot.adjacents and fromTile is not pivot:
                         canOnlyPathInThroughAnotherAdj = False
@@ -738,7 +752,7 @@ class PivotIterativeWRP(PivotWRP):
                 closedSet.add(current_node)
 
                 for neighbor in current_node.tile.movable:
-                    if neighbor.isObstacle or (neighbor.isCity and neighbor.isTempFogPrediction and not self.map.is_walled_city_game and not self.map.is_low_cost_city_game):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
+                    if neighbor.isObstacle or _is_uncertain_city_wall(self.map, neighbor):  # Don't let it path through uncertain predicted cities as those are unlikely to ACTUALLY be routable.
                         continue
 
                     component = self.component_lookup.raw[neighbor.tile_index]

@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import time
 import typing
 
@@ -1879,7 +1879,7 @@ bot_target_player=1
           - fakeNode pushes supply to neutSinks (capacity=tile_count) and to enemy general
           - Neutral islands get demand=tile_count when use_neutral_flow=True
 
-        Cluster B has NO border to friendly/enemy territory — only connects to other neutrals.
+        Cluster B has NO border to friendly/enemy territory â€” only connects to other neutrals.
         The graph should be feasible because fakeNode directly satisfies each neutral's demand.
         """
         import networkx as nx
@@ -2055,3 +2055,153 @@ bot_target_player=1
         # self.assertOwned(12, 8)
         self.assertOwned(12, 7)
         self.assertOwned(12, 6)
+
+    def test_should_not_oscillate_army_between_two_own_tiles_instead_of_capturing_adjacent_enemy_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_oscillate_army_between_two_own_tiles_instead_of_capturing_adjacent_enemy_tiles___mnc5G0YV3---7--114.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 114, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=114)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
+        # live game t114-t138 the 8 army bounced 22,17 <-> 22,18 for 25 turns, each turn picking a 'pull back through the 1-tile neighbor then cap' edge combo
+        #  instead of just capturing the adjacent enemy / neutral tiles directly.
+        capturedNearArmy = [
+            coords for coords in [(23, 17), (24, 17), (23, 18), (24, 18)]
+            if playerMap.GetTile(coords[0], coords[1]).player == general.player
+        ]
+        self.assertGreaterEqual(len(capturedNearArmy), 2, f'expected the 8 army to capture at least 2 of the adjacent tiles within 4 turns, captured {capturedNearArmy}')
+        self.assertNoRepetition(simHost, minForRepetition=1, repetitionPlayer=general.player)
+
+    def test_should_expand_while_enemy_stack_sweeps_and_thrusts(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_expand_while_enemy_stack_sweeps_and_thrusts___N92iSpgIx---1--142.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 142, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=142)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        # no allAfkExceptMapPlayer: the enemy needs a live bot so it keeps expanding for the rest of
+        # the round like the human did - an afk enemy stalls its economy and the WCA projected round
+        # loss that drives the gather-for-kill behavior never materializes.
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap)
+        # live game turn 142: the bot's quick-kill watchman-reveal move 5,12->4,12 (QK 11 1t kill
+        # race chance 1.000) - the WRP ended at 4,12, revealing the 3,11/4,13 general candidates as
+        # non-general and stranding the 12-army stack deep in enemy territory for ~30 turns.
+        simHost.queue_player_moves_str(general.player, '5,12->4,12')
+        # live game turns 143-145: enemy half-moved its 20 stack at 6,9 down through 6,10 -> 6,12
+        # (a9/a7/a5 remaining), leaving ~10 army at 6,9 that later thrust east. 'z' marks the move
+        # INTO a tile as half, so the half-move lands on 6,10 then full-moves onward to 6,12.
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,9->6,10z->6,12  6,9->6,8->9,8->9,7->8,7')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
+        self.assertNoFriendliesKilled(map, general)
+
+        # live game: every expansion plan scored -145..-193 for the rest of the round
+        # (EXP AVAIL 0 for 40+ turns) because the enemy-general-candidate distance map read the
+        # 1000 "unreachable" sentinel across the frontier and the excessDist term stamped ~-49.5 per
+        # tile - the bot gathered (+needToKill) while the enemy expanded, going from +4 tiles ahead
+        # at t142 to -21 behind by t185 (the eventual kill push landed at t186 and won anyway).
+        # -8 guards the live-scale collapse while allowing enemy-bot variance.
+        self.assertTileDifferentialGreaterThan(-8, simHost)
+
+    def test_should_expand_up_enemy_column_to_round_end(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_expand_up_enemy_column_to_round_end___yTMVwRGyQ---1--89.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_expand_up_enemy_column_to_round_end___yTMVwRGyQ---1--89.truemap.txtmap'
+
+        # Turn 89 leaves 11 turns in the round (land income ticks over on the turn-100 update).
+        # Live game: the bot moved the b10 stack 11,8->12,8 on t89, retreated right back out
+        # on t90 (12,8->11,8), wandered to 11,7, and only began the 7,17 general gather on
+        # t99 - far too late to capture anything before the round rolled over. It never
+        # pushed the weakly-held enemy column up x=12 (12,7/12,6, then 12,5 or 13,6) and
+        # never took the neutral 9,14/10,14/10,13 pocket, ending the round -4 tiles.
+        # Sim repro: BOTH variants oscillate the stack 11,8<->12,8 (in/out 3x) for the whole
+        # round and never start the gather - it only reaches 12,6 on t99, picks 12,6->12,5
+        # on t100 (unexecuted), and ends +7 econ vs the proof line's +10.
+        turnsLeftInRound = 100 - 89
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        # Baseline: the econ differential the known-good line produces by round end. The
+        # unforced variant is asserted to do at least this well on its own.
+        proofEconDiff = 10
+
+        for forceOpeningCapture in (True, False):
+            with self.subTest(forceOpeningCapture=forceOpeningCapture):
+                map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 89, fill_out_tiles=True)
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=89)
+
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+                if forceOpeningCapture:
+                    simHost.queue_player_moves_str(general.player, '11,8->12,8')
+                # proof queue - arguably the best play overall: sends the stack west through
+                # the enemy instead of east.
+                # simHost.queue_player_moves_str(general.player, '11,8->8,8')
+                bot = self.get_debug_render_bot(simHost, general.player)
+                playerMap = simHost.get_player_map(general.player)
+
+                self.begin_capturing_logging()
+                winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=turnsLeftInRound)
+                self.stop_capturing_logging()
+                self.assertNoFriendliesKilled(map, general)
+
+                if forceOpeningCapture:
+                    # Once committed on 12,8 the correct line is to bank the general gather
+                    # (7,17->9,17->9,14->10,14->10,13) FIRST in case the opponent recaptures
+                    # the 12,8 stack, then keep pushing the stack up the column. It does not
+                    # need to happen immediately, only by round end.
+                    self.assertOwnedXY(12, 6, 'after the forced 11,8->12,8 capture the bot should keep pushing the stack up the enemy column to 12,6 before round end')
+                    owns12_5 = self.map.At(12, 5).player == general.player
+                    owns13_6 = self.map.At(13, 6).player == general.player
+                    self.assertTrue(owns12_5 or owns13_6, f'expected the bot to continue 12,6->12,5 or 12,6->13,6 by round end (owns12,5={owns12_5} owns13,6={owns13_6})')
+                    self.assertTileDifferentialGreaterThan(proofEconDiff, simHost, 'pushing the enemy column plus normal expansion should leave the round solidly positive on tiles')
+                else:
+                    econDiff = self.get_tile_differential(simHost, general.player, enemyGeneral.player) + 25 * self.get_city_differential(simHost, general.player, enemyGeneral.player)
+                    self.assertTileDifferentialGreaterThan(proofEconDiff, simHost, f'unforced play should earn at least as much econ by round end as the proof line (11,8->12,8 + 7,17->9,17->9,14->10,14->10,13 + 12,8->12,5 = {proofEconDiff})')
+
+    def test_should_gather_general_into_column_pocket_at_turn_94(self):
+        """
+        Turn-94 slice of test_should_expand_up_enemy_column_to_round_end. After the column
+        push finishes (13,6 at t92, 14,6 at t93) the 11-army general at 7,17 should begin the
+        gather toward the 9,14/10,14 pocket (7,17->9,17->9,14->10,14, ~2 econ) instead of
+        spending the turn on the 1-econ external 9,15->10,15->10,14.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        MapBase.DO_NOT_RANDOMIZE = True
+        mapFile = 'GameContinuationEntries/should_expand_up_enemy_column_to_round_end___yTMVwRGyQ---1--89.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_expand_up_enemy_column_to_round_end___yTMVwRGyQ---1--89.truemap.txtmap'
+        self.enable_search_time_limits_and_disable_debug_asserts()
+
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 89, fill_out_tiles=True)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=89)
+
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        # Replay the exact column line the bot itself chose t89-t93 so we land on the
+        # reported t94 position deterministically (one queued edge consumed per turn).
+        simHost.queue_player_moves_str(general.player, '11,8->12,8->12,7->12,6->13,6->14,6')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+
+        FlowExpansion.DIAG_BORDER_PAIR_TILE_COORDS.add((9, 15, 9, 14))
+        move = bot.find_move()
+        FlowExpansion.DIAG_BORDER_PAIR_TILE_COORDS.discard((9, 15, 9, 14))
+
+        self.assertEqual(playerMap.GetTile(7, 17), move.source, 'at t94 the 11-army general should begin the 7,17->9,17->9,14->10,14 gather (~2 econ) rather than pushing the 2-army 9,15 stack into the 1-econ external 9,15->10,15->10,14')

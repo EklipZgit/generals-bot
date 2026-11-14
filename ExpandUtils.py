@@ -2017,14 +2017,35 @@ def find_all_two_move_edge_cap_combinations(
         targetTeam: int = -2,
         bonusMatrix: MapMatrixInterface[float] | None = None,
         shouldLog=True,
+        armyOverrideMatrix: MapMatrixInterface[int] | None = None,
 ) -> typing.List[Path]:
     """
     For every not-one-move-cappable enemy leaf tile that has a non-1 us-tile next to it:
         Check for another us-tile next to it that added to the leafMove one would capture it in a 1-2 combo.
         Check for another us-tile adjacent to our source tile which added would cap, as a path-combo.
 
-    @return:
+    @param map: the map.
+    @param leafMoves: the leaf moves to build edge capture combos off of.
+    @param skipTiles: tiles that may not be used in any produced path.
+    @param searchingPlayer: the player we are expanding as.
+    @param targetTeam: the team whose tiles count as enemy captures.
+    @param bonusMatrix: per-tile econ bonus added to the econValue of every tile in each produced path.
+    @param shouldLog: whether to log the produced paths.
+    @param armyOverrideMatrix: if provided, per-tile army amounts read instead of tile.army (the same matrix flow expansion
+        uses for predicted fog armies), so these combos don't claim captures of tiles the flow considers far more defended.
+    @return: the produced edge capture combo paths.
     """
+
+    # Tests/test_Expansion.py::ExpansionTests.test_should_not_oscillate_army_between_two_own_tiles_instead_of_capturing_adjacent_enemy_tiles:
+    # flow expansion overrides fogged enemy-attack-path tiles with a large predicted army AND gives them a big econ bonus. Using raw tile.army
+    # here produced a fake cheap capture of the bonus tile (22,17->22,18->23,18->24,18 with 24,18 really predicted at ~40 army) that only
+    # existed when the army sat on 22,17, so the bot stepped to 22,18, lost that option, stepped back, and bounced for 25 turns.
+    armyRaw = armyOverrideMatrix.raw if armyOverrideMatrix is not None else None
+
+    def _army(tile: Tile) -> int:
+        if armyRaw is not None:
+            return armyRaw[tile.tile_index]
+        return tile.army
 
     teams = MapBase.get_teams_array(map)
 
@@ -2044,7 +2065,7 @@ def find_all_two_move_edge_cap_combinations(
         if (move.dest.player != -1 and teams[move.dest.player] != targetTeam) or move.source in skipTiles or move.dest in skipTiles:
             continue
 
-        deficit = move.dest.army - move.source.army + 2
+        deficit = _army(move.dest) - _army(move.source) + 2
         if deficit <= 0:
             continue  # these are covered under leafmoves.
 
@@ -2052,7 +2073,7 @@ def find_all_two_move_edge_cap_combinations(
             if adjacentTile.player != searchingPlayer or adjacentTile in skipTiles:
                 continue
 
-            nextTileDeficit = deficit - adjacentTile.army + 1
+            nextTileDeficit = deficit - _army(adjacentTile) + 1
             if nextTileDeficit > 0:
                 continue
 
@@ -2068,29 +2089,36 @@ def find_all_two_move_edge_cap_combinations(
                 for otherEn in move.dest.movableNoObstacles:
                     if otherEn in skipTiles:
                         continue
-                    nextNextDeficit = nextTileDeficit - otherEn.army + 1
+                    # Tests/test_Expansion.py::ExpansionTests.test_should_not_oscillate_army_between_two_own_tiles_instead_of_capturing_adjacent_enemy_tiles:
+                    # capturing the second enemy tile INCREASES the deficit by its army (+1 for the tile left behind). This used to subtract the
+                    # army, so bigger enemy tiles looked easier to double-cap and any adjacent enemy tile always passed.
+                    nextNextDeficit = nextTileDeficit + _army(otherEn) + 1
                     if teams[otherEn.player] == targetTeam and nextNextDeficit <= 0:
-                        path = Path(adjacentTile.army - 1 - deficit)
+                        path = Path(0 - nextNextDeficit)
                         path.add_next(adjacentTile)
                         path.add_next(move.source)
                         path.add_next(move.dest)
                         path.add_next(otherEn)
-                        path.econValue = ENEMY_TILE_CAP_VALUE * 2
+                        # Tests/test_Expansion.py::ExpansionTests.test_should_expand_up_enemy_column_to_round_end:
+                        # move.dest can be NEUTRAL (only otherEn is guaranteed enemy-team). Crediting ENEMY_TILE_CAP_VALUE * 2
+                        # unconditionally paid 2.05 for a neutral capture, inflating pull-back paths like 12,8->11,8->10,8->9,8
+                        # enough to outbid the committed column push and re-trigger the oscillation every turn.
+                        path.econValue = ENEMY_TILE_CAP_VALUE + (ENEMY_TILE_CAP_VALUE if move.dest.player != -1 else 1.0)
                         paths.append(path)
 
-        if move.source.army <= 1:
+        if _army(move.source) <= 1:
             continue
 
         for targetAdjacentFriendlyTile in move.dest.movableNoObstacles:
             if targetAdjacentFriendlyTile.player != searchingPlayer or targetAdjacentFriendlyTile in skipTiles or targetAdjacentFriendlyTile == move.source:
                 continue
 
-            nextTileDeficit = deficit - targetAdjacentFriendlyTile.army + 1
+            nextTileDeficit = deficit - _army(targetAdjacentFriendlyTile) + 1
             if targetAdjacentFriendlyTile.player != searchingPlayer or nextTileDeficit > 0 or targetAdjacentFriendlyTile in skipTiles:
                 continue
 
             doubleCapOnly = False
-            if targetAdjacentFriendlyTile.army - 1 > move.dest.army:
+            if _army(targetAdjacentFriendlyTile) - 1 > _army(move.dest):
                 # this tile is already in leaf moves capturing this tile directly, we don't need to double team it EXCEPT that we can potentially double cap?
                 # for testing double cap, we wouldn't have evaled in the other direction so we can't create duplicate.
                 # continue
@@ -2109,17 +2137,27 @@ def find_all_two_move_edge_cap_combinations(
                 for otherEn in move.dest.movableNoObstacles:
                     if otherEn in skipTiles:
                         continue
-                    nextNextDeficit = nextTileDeficit - otherEn.army + 1
+                    # Tests/test_Expansion.py::ExpansionTests.test_should_not_oscillate_army_between_two_own_tiles_instead_of_capturing_adjacent_enemy_tiles:
+                    # same sign fix as above, the second enemy tile's army adds to the deficit rather than reducing it.
+                    nextNextDeficit = nextTileDeficit + _army(otherEn) + 1
                     if teams[otherEn.player] == targetTeam and nextNextDeficit <= 0:
                         path = MoveListPath([move, Move(targetAdjacentFriendlyTile, move.dest), Move(move.dest, otherEn)])
-                        path.econValue = ENEMY_TILE_CAP_VALUE * 2
+                        # Tests/test_Expansion.py::ExpansionTests.test_should_expand_up_enemy_column_to_round_end:
+                        # same neutral-dest fix as the Path variant above: move.dest may be neutral, only otherEn is confirmed enemy.
+                        path.econValue = ENEMY_TILE_CAP_VALUE + (ENEMY_TILE_CAP_VALUE if move.dest.player != -1 else 1.0)
                         paths.append(path)
 
     if bonusMatrix:
         bonusRaw = bonusMatrix.raw
+        # Tests/test_Expansion.py::ExpansionTests.test_should_expand_up_enemy_column_to_round_end:
+        # the bonus matrix is a CAPTURE bonus — friendly transit tiles in the path (e.g. the army-1 tile the stack
+        # walks back through in pull-back paths like 12,8->11,8->10,8->9,8) must not earn it, otherwise re-entering
+        # our own land inflates the econ value of oscillation-triggering retreat paths.
+        searchingTeam = teams[searchingPlayer]
         for path in paths:
             for tile in path.tileList:
-                path.econValue += bonusRaw[tile.tile_index]
+                if tile.player == -1 or teams[tile.player] != searchingTeam:
+                    path.econValue += bonusRaw[tile.tile_index]
 
     logbook.info(f'find_all_two_move_edge_cap_combinations produced {len(paths)} paths. Exciting!')
 

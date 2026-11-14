@@ -530,6 +530,7 @@ class ArmyFlowExpanderV2:
                     searchingPlayer=self.map.player_index,
                     targetTeam=self.target_team,
                     bonusMatrix=bonusCapturePointMatrix,
+                    armyOverrideMatrix=self.army_override_matrix,
                 )
                 additional_options.extend(addlPaths)
 
@@ -1752,6 +1753,12 @@ class ArmyFlowExpanderV2:
     def _get_friendly_tile_gather_contribution(self, tile: Tile) -> int:
         if self._is_hard_negative_tile(tile):
             return 0
+        # Tests/test_Expansion.py::test_should_gather_general_into_column_pocket_at_turn_94
+        # Only tiles owned by the searching player can deliver army to the border: we can
+        # never move another (teammate) player's army, so their tiles contribute nothing
+        # to a gather even though they sit on the friendly flow stream.
+        if tile.player != self.friendlyGeneral.player:
+            return 0
         return self._get_tile_army(tile) - 1
 
     def _is_hard_negative_tile(self, tile: Tile) -> bool:
@@ -2148,18 +2155,6 @@ class ArmyFlowExpanderV2:
         max_turns = turn_budget
         lookup: typing.List[FlowTurnsEntry | None] = [None] * (max_turns + 1)
 
-        current_turn = 0
-        current_gathered_army = 0
-        current_econ_value = 0.0  # Gather entries have no direct econ value
-        current_army_remaining = 0
-        current_required_army = 0
-        included_target_nodes = []
-        included_friendly_nodes = []
-        incomplete_target_island_id = None
-        incomplete_target_tile_count = 0
-        incomplete_friendly_island_id = None
-        incomplete_friendly_tile_count = 0
-
         # Turn 0 represents the initial border state
         lookup[0] = FlowTurnsEntry(
             turns=0,
@@ -2198,16 +2193,27 @@ class ArmyFlowExpanderV2:
                 return 0.0
             return contribution.sort_score / max(depth + 1, 1)
 
-        bfs_queue: list[tuple[float, int, int, int, int, IslandFlowNode]] = []
+        # The heap tuple carries (neg priority, depth, island id, push sequence,
+        # friendly-1s-traversed count, node, parent node). The parent is stored in the tuple
+        # rather than a side dict because the same island can be enqueued from multiple
+        # parents before being visited; whichever push tuple wins the pop determines the
+        # authoritative ancestor path for that island's gather entries.
+        bfs_queue: list[tuple[float, int, int, int, int, IslandFlowNode, IslandFlowNode | None]] = []
         bfs_sequence = 1
         initial_depth = friendly_node.island.tile_count - 1
         heapq.heappush(
             bfs_queue,
-            (-_get_gather_queue_priority(friendly_node, initial_depth), initial_depth, friendly_node.island.unique_id, bfs_sequence, 0, friendly_node)
+            (-_get_gather_queue_priority(friendly_node, initial_depth), initial_depth, friendly_node.island.unique_id, bfs_sequence, 0, friendly_node, None)
         )
         bfs_visited: set[int] = set()
+        # Authoritative BFS parent for each visited island (border <- node direction),
+        # taken from the push tuple that won the pop. Used to reconstruct ancestor chains.
+        bfs_parent: dict[int, IslandFlowNode] = {}
+        # path_contrib_prefix[iid] = sum of gather contributions along the ancestor path
+        # border -> ... -> this island, including all of this island's own tiles.
+        path_contrib_prefix: dict[int, int] = {}
         while bfs_queue:
-            _, depth, _, _, num_friendly_1s_traversed, node_bfs = heapq.heappop(bfs_queue)
+            _, depth, _, _, num_friendly_1s_traversed, node_bfs, parent_node_bfs = heapq.heappop(bfs_queue)
             iid = node_bfs.island.unique_id
             if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                 logbook.warning(
@@ -2216,7 +2222,7 @@ class ArmyFlowExpanderV2:
                     f"candidate={self._diag_island_summary(node_bfs.island)} depth={depth} "
                     f"specialPenalty={num_friendly_1s_traversed} "
                     f"priority={_get_gather_queue_priority(node_bfs, depth):.4f} "
-                    f"queued={[n.island.unique_id for _, _, _, _, _, n in bfs_queue]} visited={sorted(bfs_visited)}"
+                    f"queued={[n.island.unique_id for _, _, _, _, _, n, _ in bfs_queue]} visited={sorted(bfs_visited)}"
                 )
             if iid in bfs_visited:
                 continue
@@ -2256,6 +2262,8 @@ class ArmyFlowExpanderV2:
                 continue
 
             bfs_visited.add(iid)
+            if parent_node_bfs is not None:
+                bfs_parent[iid] = parent_node_bfs
 
             contrib = friendlyContributionsByIslandId.get(node_bfs.island.unique_id, None)
             if contrib is None:
@@ -2264,20 +2272,53 @@ class ArmyFlowExpanderV2:
             node = contrib.flow_node
             island = node.island
 
-            # Get the island's depth - this represents the minimum turn when we can start
-            # gathering from this island (army from upstream islands needs this many turns
-            # to reach the border). Since we increment current_turn at the start of each tile
-            # loop, we use island_depth - 1 as the baseline.
+            # Path-scoped gather accounting.
+            # Tests/test_Expansion.py::test_should_gather_general_into_column_pocket_at_turn_94
+            # The old global serial `current_turn` clock charged a turn slot for every tile of
+            # every island the BFS popped, including zero-contribution islands on sibling
+            # branches of the gather tree. That delayed a contributor's entry turn well past
+            # its real march distance (the 11-army general was charged turn 6 when marching it
+            # to the border takes 4), pushing the gather+capture plan over the remaining-round
+            # turn budget so a 1-econ external won the knapsack instead.
+            # `depth` already equals the cumulative tile_count along this node's BFS parent
+            # chain (including this island), so this island's first tile sits at path position
+            # depth - tile_count + 1, and each gather entry is keyed to that position. An
+            # entry therefore represents the minimum serial schedule delivering this tile's
+            # contribution to the border along a single path, instead of "every island popped
+            # so far, serialized". Sibling-branch contributors that require their own separate
+            # moves are intentionally not merged into the same entry (understating gathered
+            # army is safe; overstating it produces infeasible plans).
+            if parent_node_bfs is None:
+                ancestor_contrib_sum = 0
+            else:
+                ancestor_contrib_sum = path_contrib_prefix[parent_node_bfs.island.unique_id]
 
-            # Add this island to the gather plan
-            included_friendly_nodes.append(node)
+            # Ancestor chain for this node's entries (border -> ... -> this node). Gather plans
+            # should only contain the islands the delivering army actually traverses.
+            chain_nodes: list[IslandFlowNode] = []
+            chain_cursor: IslandFlowNode | None = node_bfs
+            while chain_cursor is not None:
+                chain_nodes.append(chain_cursor)
+                chain_cursor = bfs_parent.get(chain_cursor.island.unique_id)
+            chain_nodes.reverse()
+            included_friendly_path_nodes = tuple(chain_nodes)
 
-            currentArmy = 0
+            # Full path contribution through every tile of this island, recorded for
+            # descendants' ancestor sums regardless of where this island's own entries
+            # get cut off by max_turns.
+            island_total_contrib = 0
+            for tile in island.tiles_by_army:
+                island_total_contrib += self._get_friendly_tile_gather_contribution(tile)
+            path_contrib_prefix[iid] = ancestor_contrib_sum + island_total_contrib
+
+            path_running_contrib = ancestor_contrib_sum
+            island_start_turn = depth - island.tile_count + 1
 
             # Process each tile individually (like capture lookup)
             i = 0
             for tile in reversed(island.tiles_by_army):
-                if current_turn > max_turns:
+                entry_turn = island_start_turn + i
+                if entry_turn > max_turns:
                     break
                 i += 1
 
@@ -2291,47 +2332,46 @@ class ArmyFlowExpanderV2:
                 # if tile.isCity or tile.isGeneral:
                 #     tile_contribution = max(0, tile_contribution - num_friendly_1s_traversed)
 
-                current_gathered_army += tile_contribution
+                path_running_contrib += tile_contribution
 
                 # We don't need a lookup entry for bad gathers. It cant be more useful than the shorter one, so skip for this level.
                 if tile_contribution <= 0:
-                    current_turn += 1
                     continue
 
                 if not node.island.tiles_by_army[0].player == as_player:
                     if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                         logbook.warning(
                             f"GATHERS_SKIP_NO_OWNED_ROOT: {border_pair.friendly_island_id}->{border_pair.target_island_id} "
-                            f"(cur {island.unique_id}) turn={current_turn} tile={tile} "
-                            f"includedFriends={[self._diag_island_anchor(n.island) for n in included_friendly_nodes]}"
+                            f"(cur {island.unique_id}) turn={entry_turn} tile={tile} "
+                            f"includedFriends={[self._diag_island_anchor(n.island) for n in included_friendly_path_nodes]}"
                         )
-                    current_turn += 1
+                    continue
+
+                # Multiple ancestor paths can place entries on the same turn; keep whichever
+                # delivers more army by that deadline.
+                existing_entry = lookup[entry_turn]
+                if existing_entry is not None and existing_entry.gathered_army >= path_running_contrib:
                     continue
 
                 # if tile_contribution >= 0:
                 # Create entry for this exact turn count
-                lookup[current_turn] = FlowTurnsEntry(
-                    turns=current_turn,
-                    required_army=current_required_army,
-                    econ_value=current_econ_value,
-                    army_remaining=current_army_remaining,
-                    gathered_army=current_gathered_army,
-                    included_friendly_flow_nodes=tuple(included_friendly_nodes),
-                    included_target_flow_nodes=tuple(included_target_nodes),
+                lookup[entry_turn] = FlowTurnsEntry(
+                    turns=entry_turn,
+                    required_army=0,
+                    econ_value=0.0,
+                    army_remaining=0,
+                    gathered_army=path_running_contrib,
+                    included_friendly_flow_nodes=included_friendly_path_nodes,
+                    included_target_flow_nodes=tuple(),
                     incomplete_friendly_island_id=island.unique_id if island.tile_count > i else None,
                     incomplete_friendly_tile_count=island.tile_count - i,
-                    incomplete_target_island_id=incomplete_target_island_id,
-                    incomplete_target_tile_count=incomplete_target_tile_count
+                    incomplete_target_island_id=None,
+                    incomplete_target_tile_count=0
                 )
                 if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                     logbook.info(
-                        f"GATHERS: {border_pair.friendly_island_id}->{border_pair.target_island_id}  (cur {island.unique_id}) - Adding gather entry @{tile} for turn {current_turn} with gathered army {int(current_gathered_army)}, "
-                        f"tile contribution {self._get_friendly_tile_gather_contribution(tile):.2f}, incomplete {lookup[current_turn].incomplete_friendly_tile_count}")
-
-                current_turn += 1
-
-            if current_turn > max_turns:
-                continue
+                        f"GATHERS: {border_pair.friendly_island_id}->{border_pair.target_island_id}  (cur {island.unique_id}) - Adding gather entry @{tile} for turn {entry_turn} with gathered army {int(path_running_contrib)}, "
+                        f"tile contribution {tile_contribution:.2f}, incomplete {lookup[entry_turn].incomplete_friendly_tile_count}")
 
             next_num_friendly_1s_traversed = num_friendly_1s_traversed + sum(
                 1
@@ -2363,12 +2403,18 @@ class ArmyFlowExpanderV2:
                     gather_source_nodes.append(friendlyContributionsByIslandId[neighbor_island.unique_id].flow_node)
 
             for src in gather_source_nodes:
-                if src.island.team == self.team and src.island.unique_id not in bfs_visited:
+                # Islands made entirely of other players' tiles (e.g. a teammate's general
+                # sitting in a corridor) cannot deliver army and cannot be traversed by a
+                # gather: moving our army onto their tile merges it into their ownership
+                # permanently. Never route a gather through them.
+                if (src.island.team == self.team
+                        and src.island.unique_id not in bfs_visited
+                        and any(tile.player == as_player for tile in src.island.tile_set)):
                     next_depth = depth + src.island.tile_count
                     bfs_sequence += 1
                     heapq.heappush(
                         bfs_queue,
-                        (-_get_gather_queue_priority(src, next_depth), next_depth, src.island.unique_id, bfs_sequence, next_num_friendly_1s_traversed, src)
+                        (-_get_gather_queue_priority(src, next_depth), next_depth, src.island.unique_id, bfs_sequence, next_num_friendly_1s_traversed, src, node_bfs)
                     )
                     if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                         logbook.warning(

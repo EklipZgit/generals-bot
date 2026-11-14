@@ -22,6 +22,86 @@ if typing.TYPE_CHECKING:
     import EklipZBot
 
 class BotRendering:
+    # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown
+    # and test_should_commit_wrp_hunt_when_enemy_cannot_defend: render only pending results or route remainder.
+    @staticmethod
+    def get_stealth_wrp_route_for_render(bot: EklipZBot) -> Path | None:
+        """Return the remaining committed route or a completed pending WRP route."""
+        state = bot.stealth_all_in
+        if state is not None and state.committed_route is not None:
+            if state.committed_route.length > 0:
+                return state.committed_route
+            return None
+        if (state is None
+                and bot.stealth_hunt_render_path is not None
+                and bot.stealth_hunt_render_path.length > 0):
+            return bot.stealth_hunt_render_path
+
+        job = (
+            state.wrp_job
+            if state is not None
+            else bot.stealth_hunt_job)
+        # StealthWrpJob.done is a plain bool (not a threading.Event) - every
+        # other caller reads it as `not job.done`. is_set() threw every turn
+        # a hunt job was pending, dropping the move entirely (live t129+).
+        if job is None or not job.done or job.result_tile_indexes is None:
+            return None
+
+        wrp_path = Path()
+        for tile_index in job.result_tile_indexes:
+            wrp_path.add_next(bot._map.tiles_by_index[tile_index])
+        if wrp_path.length == 0:
+            return None
+        if state is None:
+            return wrp_path
+
+        wrp_tiles = wrp_path.tileList
+        if (not wrp_tiles
+                or wrp_tiles[0].tile_index != state.entry_tile.tile_index):
+            return None
+        route = Path()
+        for tile in state.flank_path.tileList:
+            route.add_next(tile)
+        for tile in wrp_tiles[1:]:
+            route.add_next(tile)
+        return route if route.length > 0 else None
+
+    @staticmethod
+    def render_general_prediction_weights_in_view_info(bot: EklipZBot) -> None:
+        """
+        Render the spawn-fairness weight (bottom left, 'sf') and emergence locality bonus (top right, 'ed') of every
+        undiscovered candidate tile for the enemy general prediction, gated by their info_render flags.
+
+        @param bot: the bot whose viewInfo receives the text.
+        """
+        enemyPlayer = bot.targetPlayer
+        if enemyPlayer == -1 and len(bot._map.players) == 2:
+            enemyPlayer = 1 - bot._map.player_index
+        if enemyPlayer == -1:
+            return
+
+        if bot.info_render_general_prediction_spawn_fairness_weights and bot.armyTracker.spawn_fairness_active:
+            weightsRaw = bot.armyTracker.spawn_fairness_weights_by_player[enemyPlayer].raw
+            for tile in bot._map.pathable_tiles:
+                if tile.discovered or tile.isCity:
+                    continue
+                bot.viewInfo.bottomLeftGridText.raw[tile.tile_index] = f'sf{weightsRaw[tile.tile_index]:.1f}'
+
+        if (
+                bot.info_render_general_prediction_emergence_locality_weights
+                and bot.targetPlayer != -1
+                and bot.shortest_path_to_target_player is not None
+        ):
+            bonusMatrix = bot.armyTracker.build_emergence_distance_bonus_matrix(
+                bot.targetPlayer,
+                bot.shortest_path_to_target_player.length)
+            for tile in bot._map.pathable_tiles:
+                if tile.discovered or tile.isCity:
+                    continue
+                bonus = bonusMatrix.raw[tile.tile_index]
+                if bonus > 0:
+                    bot.viewInfo.topRightGridText.raw[tile.tile_index] = f'ed{bonus:.1f}'
+
     @staticmethod
     def prep_view_info_for_render(bot: EklipZBot, move=None):
         viewInfo = bot.viewInfo
@@ -41,6 +121,16 @@ class BotRendering:
         viewInfo.targetPlayer = bot.targetPlayer
         viewInfo.generalApproximations = bot.generalApproximations
         viewInfo.playerTargetScores = bot.playerTargetScores
+
+        stealthWrpRoute = BotRendering.get_stealth_wrp_route_for_render(bot)
+        if stealthWrpRoute is not None:
+            viewInfo.color_path(
+                PathColorer(
+                    stealthWrpRoute,
+                    255, 105, 180,
+                    alpha=255,
+                    alphaDecreaseRate=0,
+                    alphaMinimum=255))
 
         movePath = Path()
         if move is not None:
@@ -62,6 +152,10 @@ class BotRendering:
                     if val != 0:
                         textVal = f"e{val:.1f}"
                         viewInfo.bottomMidRightGridText[tile] = textVal
+
+            # General prediction only re-runs on turns where the prediction is missing or invalidated, and viewInfo
+            # is cleared every turn, so render these stored per-tile contributions here every turn instead.
+            BotRendering.render_general_prediction_weights_in_view_info(bot)
 
             for tile in bot.armyTracker.dropped_fog_tiles_this_turn:
                 viewInfo.add_targeted_tile(tile, TargetStyle.RED)
@@ -438,6 +532,25 @@ class BotRendering:
         data.append(f'bot_cur_path={str(bot.curPath)}')
         if bot.last_move is not None:
             data.append(f'bot_last_move={BotSerialization.convert_move_to_string(bot.last_move)}')
+        # Tests/test_AllIn.py resume support: persist the committed stealth/WRP route so a txtmap
+        # dumped mid-all-in reloads into the same committed state (restored by
+        # BotStealthAllIn.load_committed_route_from_resume_data). str(Path) only contains the
+        # remaining not-yet-walked nodes, which is exactly what must resume.
+        if bot.stealth_all_in is not None and bot.stealth_all_in.committed_route is not None:
+            stealthState = bot.stealth_all_in
+            data.append(f'bot_stealth_committed_route={str(stealthState.committed_route)}')
+            data.append(f'bot_stealth_launch_tile={stealthState.launch_tile.x},{stealthState.launch_tile.y}')
+            data.append(f'bot_stealth_entry_tile={stealthState.entry_tile.x},{stealthState.entry_tile.y}')
+            data.append(f'bot_stealth_flank_path={str(stealthState.flank_path)}')
+            data.append(f'bot_stealth_launch_turn={stealthState.launch_turn}')
+            data.append(f'bot_stealth_committed_turn={stealthState.committed_turn}')
+            data.append(f'bot_stealth_generation={stealthState.generation}')
+            data.append(f'bot_stealth_is_undefendable_hunt={stealthState.is_undefendable_hunt}')
+            data.append(f'bot_stealth_is_truncated_front={stealthState.is_truncated_front}')
+            data.append(f'bot_stealth_is_desperation_dive={stealthState.is_desperation_dive}')
+            data.append(f'bot_stealth_gather_fallback_turns={stealthState.used_normal_gather_fallback_turns}')
+            data.append(f'bot_stealth_all_in_generation={bot.stealth_all_in_generation}')
+        data.append(f'bot_stealth_cannot_kill_counter={bot.stealth_all_in_cannot_kill_counter}')
 
         for player in bot._map.players:
             char = charMap[player.index]
@@ -465,6 +578,8 @@ class BotRendering:
             data.append(f'{char}CityLostTurn={player.cityLostTurn}')
             data.append(f'{char}LastSeenMoveTurn={player.last_seen_move_turn}')
             data.append(f'{char}Emergences={BotSerialization.convert_float_map_matrix_to_string(bot, bot.armyTracker.emergenceLocationMap[player.index])}')
+            # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_serialization_round_trip_and_missing_matrix_rebuild - persist negative weights so resumed games retain hard eliminations.
+            data.append(f'{char}SpawnFairness={BotSerialization.convert_float_map_matrix_to_string(bot, bot.armyTracker.spawn_fairness_weights_by_player[player.index])}')
             data.append(f'{char}ValidGeneralPos={BotSerialization.convert_bool_map_matrix_to_string(bot, bot.armyTracker.valid_general_positions_by_player[player.index])}')
             data.append(f'{char}TilesEverOwned={BotSerialization.convert_tile_set_to_string(bot, bot.armyTracker.tiles_ever_owned_by_player[player.index])}')
             data.append(f'{char}UneliminatedEmergences={BotSerialization.convert_tile_int_dict_to_string(bot, bot.armyTracker.uneliminated_emergence_events[player.index])}')

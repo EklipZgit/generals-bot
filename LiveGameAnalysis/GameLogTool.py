@@ -34,6 +34,7 @@ DEFAULT_OVERVIEW_PATTERNS = (
     r"CITY_ROUND_OPPORTUNITY_COST",
     r"ERROR|Traceback",
     r"LAG GAP",
+    r"STEALTH_ALLIN_",
 )
 _TIMESTAMP_PREFIX = re.compile(r"^\s*\d{2}:\d{2}\.\d+:\s*")
 _TIMINGS_LINE = re.compile(r"\bMOVE\s+\d+\s+TIMINGS:")

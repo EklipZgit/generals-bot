@@ -129,17 +129,25 @@ class ArmyInterceptionV2UnitTests(TestBase):
             scenario.general,
             scenario.enemy_general,
             useDebugLogging=False)
-        max_depth = min(
-            v2_interceptor._get_max_interception_search_depth(
-                v1_plan.threats),
-            turns_left_in_cycle)
+        max_depth = v2_interceptor._get_max_interception_search_depth(
+            v1_plan.threats)
+        allowed_search_region = (
+            v2_interceptor.v2.build_allowed_search_region(v1_plan))
+        choke_search_depths = (
+            v2_interceptor.v2.resolve_choke_search_depths(
+                v1_plan,
+                v1_plan.middlest_intercept_tiles,
+                False))
         threat_reach = v2_interceptor.v2.build_threat_reach_matrix(
             v1_plan,
             max_depth,
-            turns_left_in_cycle)
+            turns_left_in_cycle,
+            choke_search_depths,
+            allowed_search_region)
         friendly_reach = v2_interceptor.v2.build_friendly_multi_source_matrix(
             v1_plan,
-            threat_reach)
+            threat_reach,
+            choke_search_depths)
         layered_reaches = [
             v2_interceptor.v2.build_source_layered_reach(
                 threat_reach,
@@ -151,7 +159,8 @@ class ArmyInterceptionV2UnitTests(TestBase):
             threat_reach,
             friendly_reach,
             layered_reaches,
-            turns_left_in_cycle)
+            turns_left_in_cycle,
+            choke_search_depths)
         candidate_paths = (
             v2_interceptor.v2.reconstruct_candidate_paths(
                 threat_reach,

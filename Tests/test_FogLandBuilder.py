@@ -1,4 +1,4 @@
-import time
+﻿import time
 from Algorithms import MapSpanningUtils
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
@@ -249,3 +249,57 @@ class FogLandBuilderTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwned(-1, playerMap.GetTile(19, 11))
+    def test_should_prune_dead_fog_land_prediction_on_empty_discovery(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_prune_dead_fog_land_prediction_on_empty_discovery___N92iSpgIx---1--140.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_prune_dead_fog_land_prediction_on_empty_discovery___N92iSpgIx---1--140.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 140, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=140)
+
+        # the imported fog state had all of these predicted as enemy 1s when they are
+        # really empty; the reveal must drop the whole disconnected prediction, not
+        # just the two tiles that get sighted.
+        newlyDiscoveredNeutralTiles = [(4, 13), (5, 13)]
+        deadFogPredictionTiles = [
+            (3, 14), (4, 14), (5, 14), (6, 14),
+            (2, 15), (3, 15), (5, 15), (6, 15),
+            (2, 16), (3, 16), (4, 16), (6, 16),
+            (3, 17),
+        ]
+        for x, y in newlyDiscoveredNeutralTiles + deadFogPredictionTiles:
+            self.assertEqual(enemyGeneral.player, rawMap.GetTile(x, y).player,
+                             f'import sanity: ({x},{y}) should have been fog-predicted enemy land')
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        simHost.queue_player_moves_str(general.player, '6,11->6,12->5,12  None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        # exactly two moves land us at turn 142: the turn (4,13) is sighted after
+        # (5,13) was sighted at 141. Any still-standing dead prediction here means
+        # the disproof flood did not trigger the rebuild at the discovery turn.
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertIsNone(winner)
+        self.assertNoFriendliesKilled(map, general)
+
+        for x, y in newlyDiscoveredNeutralTiles:
+            tile = playerMap.GetTile(x, y)
+            self.assertEqual(-1, tile.player, f'discovered tile ({x},{y}) should be empty, not enemy-owned')
+            self.assertEqual(0, tile.army, f'discovered tile ({x},{y}) should be empty, not an enemy 1')
+            self.assertTrue(tile.discovered, f'discovered tile ({x},{y}) should be marked discovered')
+
+        for x, y in deadFogPredictionTiles:
+            tile = playerMap.GetTile(x, y)
+            self.assertEqual(-1, tile.player,
+                             f'dead fog prediction ({x},{y}) should be pruned to neutral once (4,13)/(5,13) proved empty')
+            self.assertFalse(tile.isTempFogPrediction,
+                             f'dead fog prediction ({x},{y}) should not still be temp-predicted enemy land')
+
+        # (3,11) stays on the still-connected side of the 'a' flood claim; the prune
+        # must only kill the fog cut off behind the disproved neutrals, not the
+        # prediction blob that remains anchored to real enemy land.
+        self.assertEqual(enemyGeneral.player, playerMap.GetTile(3, 11).player)

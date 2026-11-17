@@ -113,8 +113,11 @@ class RoundStats:
 
 def load_snapshots(folder: str, log_index: GameLogIndex | None = None) -> list[TurnSnapshot]:
     """Parse numerically sorted txtmaps, optionally joining their log turns."""
+    # Only numeric turn snapshots: auxiliary *.txtmap artifacts (e.g. legacy
+    # <turn>.truemap.txtmap dumps left in game folders by older analysis runs)
+    # would crash the int() sort key.
     map_files = sorted(
-        Path(folder).glob("*.txtmap"),
+        (path for path in Path(folder).glob("*.txtmap") if path.stem.isdigit()),
         key=lambda path: int(path.stem))
     if not map_files:
         raise ValueError(f"No numeric txtmap snapshots found in {folder}")

@@ -228,6 +228,7 @@ def get_round_plan_with_expansion(
         threatBlockingTiles: typing.Dict[Tile, ThreatBlockInfo] | None = None,
         perfTimer: PerformanceTimer | None = None,
         skipKnapsacking: bool = False,
+        preferredCaptureTarget: Tile | None = None,
 ) -> RoundPlan:
     """
     Does 3 phases of knapsacking expansion paths:
@@ -238,6 +239,7 @@ def get_round_plan_with_expansion(
     @param additionalOptionValues: list(approxEconValue, approxTurns, path)
     @param includeExpansionSearch: use the (legacy, soon...?) expansion planner?
     @param skipKnapsacking: if True, bypass cross/non-cross knapsacking (FlowExpansion already handled it)
+    @param preferredCaptureTarget: Optional defensive-corridor frontier to capture before unrelated expansion.
     """
     if additionalOptionValues:
         additionalOptionValues = [v for v in additionalOptionValues if v.requiredDelay + v.length <= turns]
@@ -614,7 +616,8 @@ def get_round_plan_with_expansion(
                         searchingPlayer,
                         friendlyPlayers,
                         territoryMap,
-                        valueOverrides)
+                        valueOverrides,
+                        preferredCaptureTarget=preferredCaptureTarget)
                     if logStuff:
                         logbook.warning(
                             f'EXP_SELECT_CHOSEN first={_format_plan_first_move_for_log(path)} '
@@ -714,7 +717,8 @@ def get_round_plan_with_expansion(
                 searchingPlayer,
                 friendlyPlayers,
                 territoryMap,
-                valueOverrides)
+                valueOverrides,
+                preferredCaptureTarget=preferredCaptureTarget)
 
             otherPaths = [p for p in maxPaths if p != path]
             # UnitTests/test_fix_expandutils_zerodiv.py::ExpandUtilsZeroDivRegressionTests.test_additional_options_zero_length_sort_knapsack:
@@ -3075,7 +3079,14 @@ def find_optimal_expansion_path_to_move_first(
         friendlyPlayers,
         territoryMap,
         valueOverrides: typing.Dict[TilePlanInterface, typing.Tuple[float, int]] | None = None,
+        preferredCaptureTarget: Tile | None = None,
 ) -> TilePlanInterface | None:
+    """Select an executable expansion option, optionally prioritizing a corridor-frontier capture.
+
+    Only actionable GatherCapturePlan captures receive frontier priority. They may bypass
+    generic city-income deferral, but not an explicit requiredDelay. Within each priority
+    class the existing city-capture and economic/uncertainty ordering is unchanged.
+    """
 
     # playerCities = list(map.players[searchingPlayer].cities)
     # if map.players[searchingPlayer].general is not None:
@@ -3095,6 +3106,7 @@ def find_optimal_expansion_path_to_move_first(
     pathTurns: typing.Dict[TilePlanInterface, int] = {}
     pathUncertaintyRatings: typing.Dict[TilePlanInterface, float] = {}
     cityCapturePaths: typing.Set[TilePlanInterface] = set()
+    preferredCapturePaths: set[TilePlanInterface] = set()
     for p in maxPaths:
         thisVal = postPathEvalFunction(p, originalNegativeTiles)
         thisTurns = p.length
@@ -3113,14 +3125,38 @@ def find_optimal_expansion_path_to_move_first(
         if _plan_captures_city(p, friendlyPlayers):
             cityCapturePaths.add(p)
 
+        # UnitTests/test_ExpansionCorridorPriority.py::
+        # test_preferred_capture_target_beats_city_waiting_and_lower_econ_per_turn,
+        # test_real_tree_capture_qualifies_via_tile_set_membership, and
+        # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_attack_early_without_gather_repetition:
+        # prioritize an existing actionable flow capture at the defensive frontier.
+        # A nonfriendly tree tile is an executable capture; approximate_capture_tiles
+        # contains only captures outside that tree. Friendly gathers and external options
+        # with unrelated jobs do not qualify.
+        if (
+                preferredCaptureTarget is not None
+                and preferredCaptureTarget.player not in friendlyPlayers
+                and isinstance(p, GatherCapturePlan)
+                and preferredCaptureTarget in p.tileSet
+                and p.requiredDelay == 0
+                and p.get_first_move() is not None
+        ):
+            preferredCapturePaths.add(p)
+
         if valueOverrides is not None and p in valueOverrides:
             continue
-        shouldWait = p.requiredDelay > 0 or path_has_cities_and_should_wait(
-            p,
-            friendlyPlayers,
-            negativeTiles,
-            territoryMap,
-            remainingTurns)
+        # UnitTests/test_ExpansionCorridorPriority.py::
+        # test_required_delay_plan_never_gets_preference_or_delay_bypass:
+        # a committed defensive-frontier attack must not wait behind unrelated flank moves
+        # just to earn more city income; real plan delays still apply.
+        shouldWait = p.requiredDelay > 0 or (
+                p not in preferredCapturePaths
+                and path_has_cities_and_should_wait(
+                    p,
+                    friendlyPlayers,
+                    negativeTiles,
+                    territoryMap,
+                    remainingTurns))
         if shouldWait:
             waitingPaths.add(p)
 
@@ -3146,13 +3182,21 @@ def find_optimal_expansion_path_to_move_first(
         thisUncertainty = pathUncertaintyRatings[p]
         thisCityCapturePriority = 1 if p in cityCapturePaths else 0
         maxCityCapturePriority = 1 if path in cityCapturePaths else 0
+        thisPreferredCapturePriority = 1 if p in preferredCapturePaths else 0
+        maxPreferredCapturePriority = 1 if path in preferredCapturePaths else 0
 
+        # UnitTests/test_ExpansionCorridorPriority.py::
+        # test_preferred_capture_target_beats_city_waiting_and_lower_econ_per_turn:
+        # corridor progress precedes discretionary economics without changing plan values
+        # or the established ordering when no frontier preference is supplied.
         if (
-                thisCityCapturePriority > maxCityCapturePriority
-                or (
-                    thisCityCapturePriority == maxCityCapturePriority
-                    and thisUncertainty + thisVt > maxUncertainty + maxVt
-                )
+                thisPreferredCapturePriority,
+                thisCityCapturePriority,
+                thisUncertainty + thisVt,
+        ) > (
+                maxPreferredCapturePriority,
+                maxCityCapturePriority,
+                maxUncertainty + maxVt,
         ):
             if p not in waitingPaths:
                 logbook.info(f'    path city{thisCityCapturePriority} vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} > city{maxCityCapturePriority} vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)} and is new best')
@@ -3167,6 +3211,8 @@ def find_optimal_expansion_path_to_move_first(
             logbook.info(f'    -path city{thisCityCapturePriority} vt{thisVt:.2f} uncert{thisUncertainty:.2f} v{thisVal:.2f} < city{maxCityCapturePriority} vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f} {str(p)}')
 
     maxCityCapturePriority = 1 if path in cityCapturePaths else 0
+    if path in preferredCapturePaths:
+        logbook.info(f'EXP_CORRIDOR_PRIORITY target={preferredCaptureTarget} selected={path}')
     logbook.info(f' FIRST PATH (city{maxCityCapturePriority} vt{maxVt:.2f} uncert{maxUncertainty:.2f} v{maxVal:.2f}, deferring city/gen {deferringCityGen}) {str(path)}')
     return path
 

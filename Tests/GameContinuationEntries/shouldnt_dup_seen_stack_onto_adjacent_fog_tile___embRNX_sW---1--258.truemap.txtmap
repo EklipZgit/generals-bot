@@ -1,0 +1,63 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+     M    M                                            M    b4   b4   M    M
+                                                  M    b6   b3   b4   b4   b3   b3
+     M    a4        C40            M    M    b3   b3   b4   M    b4   b4   b2   b3   M
+a4   a4   a4   a4   a4   a4                  b3   b3   b4   b3   b4   b4   b3   M    b4
+a4   a4                            b2        b3   b3   b3   b3   b5   b2   bC8  bG9  b2
+a4   a4   M    M              b2   b2   b3   b3   M    b4   b4   b5   b1   b2   b4   M
+     a4   a4   a5   M    C44  b2   b3                  M    b5   b3   b1   b2   b4   b5
+M    a4   a2   a2   a3   b3   b3                       M    M    M    b55  b2   b7   b2
+          aC20 a2   a3   a3                       b3   b4   b4   b5   b2   M    b5   M
+          a3   a2   a3   a3                  b3   b3   b4   b5   b4   b2   b3   M    M
+     M    a2   a2   a3   b3   M         M    b3   b4   b5   M    b4   b2   b2   b2   b2
+a2   a2   a2   a3   M    b3   b2   M    M    b2   b1   M    b2   M    M    b2   bC7
+a2   a3   a3   a3   a3   a3   a1   a1   a1   a1   b2   a1   a1   M    M    b2   b2   M
+aC22 a3   a3   a3   a2   a2   a2   b4   b2   b2   b1   M    aC21 b2   b23  b1   b1
+a4   a3   a3   M    a2   b2   b3   b3   b2   b3   b3   M    b2   b2   b2   b2   b1
+M    M    a3   M    a2   a4   M    M    b2   b3   b19  M    b2   b2   b2   M    b1
+a2   a2   a3   a3   a2   a4   a4   a4   a3   a3   b1   b2   b2   b2             M
+a2   a2   a2   a2   a2   a4   a4   a4   a3   a3   a3             C44
+     a2   M    a2   a4   a3   a2   M    a3                  M              a2
+     M    a2   a2   M    a3   a2   a2   M    M    M                        a2
+M    a2   a2   a3   a3   a3   M    a2   a2   a2   a2   a2   a2   a2   a2   a2
+     M    a2   aG16 aC16 a4   M    M                   M    M         M    aC25 M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=258
+player_index=1
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=0
+mode=1v1
+aUsername=imp25
+aStars=80
+aScore=411
+aTiles=113
+aStandingArmy=298
+aCityCount=6
+aGeneral=3,21
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=627
+aDelta25Tiles=13
+aDelta25Score=92
+aCityGainedTurn=230
+aCityLostTurn=0
+aLastSeenMoveTurn=257
+aKnowsKingLocation=False
+bUsername=Human.exe
+bStars=77
+bScore=447
+bTiles=119
+bStandingArmy=328
+bCityCount=3
+bGeneral=16,4
+bDead=False
+bLeftGame=True
+bLeftGameTurn=521
+bAggressionFactor=0
+bDelta25Tiles=8
+bDelta25Score=125
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=258
+bKnowsKingLocation=False

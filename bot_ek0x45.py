@@ -34,6 +34,7 @@ from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, FlowExpansio
 from CityAnalyzer import CityAnalyzer, CityScoreData
 from Communication import TeammateCommunicator, TileCompressor
 from DistanceMapperImpl import DistanceMapperImpl
+from FfaGeneralPlacement import FfaGeneralPlacement
 from Gather import GatherCapturePlan
 from GatherAnalyzer import GatherAnalyzer
 from Interfaces import TilePlanInterface, MapMatrixInterface
@@ -50,6 +51,9 @@ from BotModules.BotComms import BotComms
 from BotModules.BotDefense import BotDefense
 from BotModules.BotEventHandlers import BotEventHandlers
 from BotModules.BotExplorationOps import BotExplorationOps
+from BotModules import BotFfaKillGather
+from BotModules import BotFfaEndgame
+from BotModules import BotGeneralSafety
 from BotModules.BotExpansionOps import BotExpansionOps
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotKillTiming import BotKillTiming
@@ -92,6 +96,28 @@ GATHER_SWITCH_POINT = 150
 class EklipZBot(object):
     def __init__(self):
         self.blocking_tile_info: typing.Dict[Tile, ThreatBlockInfo] = {}
+        # Tiles that already donated a half-split to hold a threat block (see
+        # BotDefense.apply_threat_blocking_split_hint_to_move). Their remainder is the
+        # committed garrison - forward planning may not drain it again while the tile is
+        # still a threat-blocking tile.
+        self.block_split_garrison_sources: typing.Set[Tile] = set()
+        # Last turn each committed garrison appeared in blocking_tile_info - the checker
+        # flickers (a tile can drop out for a single turn while threats reroute), so a
+        # garrison stays pinned for a couple turns past its last sighting instead of
+        # being freed the first turn the checker misses it.
+        self.block_split_garrison_last_turn: typing.Dict[Tile, int] = {}
+        # Tiles currently holding the army that split OFF a committed garrison. Tracked
+        # turn-to-turn as it marches so a pending city/contest option continuing it gets
+        # beeline priority over unrelated picks (the recapture must not stall out).
+        self.block_split_outbound_tiles: typing.Set[Tile] = set()
+        # Every tile a committed outbound army has occupied - the directions a committed
+        # garrison must never take (moving into the trail IS abandoning the block, even
+        # on turns when the checker doesn't currently flag that destination).
+        self.block_split_outbound_trail: typing.Set[Tile] = set()
+        # The mission target the committed outbound is marching on (the threatened city
+        # the split was defending/recapturing) - lets the beeline compute the next hop
+        # even on turns when no pending plan option wants to continue the army.
+        self.block_split_outbound_target: Tile | None = None
         self.behavior_end_of_turn_scrim_army_count: int = 5
         self.teams: typing.List[int] = []
         self.contest_data: typing.Dict[Tile, ContestData] = {}
@@ -136,6 +162,26 @@ class EklipZBot(object):
         self.ffa_exclusive_target_lock: int = -1
         """While BotStateQueries.is_ffa_exclusive_targeting_active holds, the one enemy player we are
         committed to attacking exclusively (Tests/test_FFA.py FFA pacifism tests). -1 = nobody."""
+
+        # FFA (>2 living teams) certified kill-gather feature (BotModules/BotFfaKillGather.py).
+        # ffa_kill_gather_state holds the committed literal schedule once a certified option is
+        # selected by flow expansion; _ffa_kill_gather_cache holds per-game search/WRP artifacts.
+        self.ffa_kill_gather_state: BotFfaKillGather.FfaKillGatherState | None = None
+        self._ffa_kill_gather_cache: BotFfaKillGather.FfaKillGatherCache = BotFfaKillGather.FfaKillGatherCache()
+
+        # 3-player FFA endgame policy state (BotModules/BotFfaEndgame.py); the decision is
+        # recomputed each turn and only retaliation_target is serialized into txtmaps.
+        self.ffa_endgame: BotFfaEndgame.FfaEndgameState | None = None
+
+        # General-reveal defense reservation (BotModules/BotGeneralSafety.py).
+        # Always instantiated; every consumer no-ops while GENERAL_SAFETY_ENABLED
+        # is False, so live behavior is unchanged by default.
+        self.general_safety_state: BotGeneralSafety.GeneralSafetyState = BotGeneralSafety.GeneralSafetyState()
+        # Per-selection tag set ONLY at true core defensive returns inside
+        # pick_move_after_prep (threat defense, survival, danger tile, flank,
+        # city-preemptive, general-adjacent nuke, delayed own-kill race). The
+        # general-safety final guard uses it to allow urgent defense spends.
+        self.defense_override_move: bool = False
 
         self.attackFailedTurn = 0
         self.countFailedQuickAttacks = 0
@@ -528,7 +574,13 @@ class EklipZBot(object):
         try:
             move = self.select_move(is_lag_move=is_lag_move)
 
-            if move is not None and move.source.isGeneral and not BotPathingUtils.is_move_safe_valid(self, move, allowNonKill=True):
+            # BotGeneralSafety: a certified gather offer that sources from the
+            # general is exempt from the generic death-move heuristic - the
+            # safety certificate already prices the retained garrison, and the
+            # heuristic cannot model a half donation reinforcing the reserve.
+            if (move is not None and move.source.isGeneral
+                    and not BotGeneralSafety.is_pending_gather_move(self, move)
+                    and not BotPathingUtils.is_move_safe_valid(self, move, allowNonKill=True)):
                 logbook.error(f'TRIED TO PERFORM AN IMMEDIATE DEATH MOVE, INVESTIGATE: {move}')
                 self.info(f'Tried to perform a move that dies immediately. {move}')
                 dangerTiles = BotDefense.get_danger_tiles(self)
@@ -556,6 +608,19 @@ class EklipZBot(object):
                 if not replaced:
                     self.info(f'Replacing with no-op...')
                     move = None
+
+            # Tests/test_FFA.py::FFATests.test_should_attack_aggressor_without_overgathering_or_abandoning_general
+            # The find_move safety fallback above can substitute a fresh general move after
+            # select_move already reconciled; re-apply the ordinary-all-in reserve on the final
+            # move so a replaced general departure still retains the required garrison.
+            move = BotFfaEndgame.reconcile_general_reserve_move(self, move)
+            # BotGeneralSafety consumption must observe the TRUE executed move:
+            # the isGeneral death-move fallback above can still substitute a
+            # different move after select_move returned, so re-apply the
+            # anchor/general guard and only then consume the pending offer.
+            # No-op while GENERAL_SAFETY_ENABLED is False.
+            move = BotGeneralSafety.reconcile_anchor_move(self, move, self.defense_override_move)
+            BotGeneralSafety.note_final_move(self, move)
 
             if self.teammate_communicator is not None:
                 teammate_messages = self.teammate_communicator.produce_teammate_communications()
@@ -791,10 +856,41 @@ class EklipZBot(object):
                 BotCentralDefense.rebuild_intergeneral_analysis_for_central_defense(self)
 
         if not self.is_pre_resume_init_turn:
+            # Joint FFA predicted-general placement refreshes AFTER this turn's
+            # movement/emergence processing and BEFORE any fog-land build, so every
+            # player's fog anchors to their OWN jointly-placed seed instead of the
+            # target player's prediction that used to be passed to every builder.
+            # Regression:
+            # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals
+            self.armyTracker.ffa_general_placement.refresh(self.armyTracker, self.targetPlayer)
+            targetSeedChanged = False
+            if FfaGeneralPlacement.is_original_ffa(self._map) and self.targetPlayer != -1:
+                if self.targetPlayer < len(self.armyTracker.ffa_general_placement.positions):
+                    targetSeed = self.armyTracker.ffa_general_placement.positions[self.targetPlayer]
+                    if targetSeed is not None and targetSeed != self.targetPlayerExpectedGeneralLocation:
+                        self.targetPlayerExpectedGeneralLocation = targetSeed
+                        targetSeedChanged = True
+            # Clear stale temp fog guesses for every player about to rebuild BEFORE
+            # the per-player fills run, so an earlier fill cannot see a later
+            # player's previous-seed blob as still-owned land.
+            self.armyTracker.clear_temp_fog_predictions_for_pending_rebuilds()
+
             with self.perf_timer.begin_move_event('ArmyTracker fog land builder'):
                 fogTileCounts = self.opponent_tracker.get_all_player_fog_tile_count_dict()
+                isOriginalFfa = FfaGeneralPlacement.is_original_ffa(self._map)
+                ffaPositions = self.armyTracker.ffa_general_placement.positions
                 for player in self._map.players:
-                    self.armyTracker.update_fog_prediction(player.index, fogTileCounts[player.index], self.targetPlayerExpectedGeneralLocation)
+                    fogSeed = self.targetPlayerExpectedGeneralLocation
+                    if isOriginalFfa and player.index < len(ffaPositions):
+                        fogSeed = ffaPositions[player.index]
+                    self.armyTracker.update_fog_prediction(player.index, fogTileCounts[player.index], fogSeed)
+
+            # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals:
+            # path recalculation must run only AFTER every player's fog land has been
+            # rebuilt around the new seeds, so island/land anchoring observes the
+            # freshly seeded ownership rather than last turn's stale blobs.
+            if targetSeedChanged:
+                self.recalculate_player_paths(force=True)
 
             self._evaluatedUndiscoveredCache = []
             with self.perf_timer.begin_move_event('get_predicted_target_player_general_location'):
@@ -927,6 +1023,11 @@ class EklipZBot(object):
         for path in self.armyTracker.fogPaths:
             self.viewInfo.color_path(PathColorer(path, 255, 84, 0, 255, 30, 150))
 
+        # TEMPORARY DIAGNOSTIC (general-coloring investigation): per-turn dump
+        # of generals[]/player.general/predicted-position state; remove once
+        # the miscoloring source is identified.
+        BotEventHandlers.log_general_state_debug(self)
+
         self.cached_scrims = {}
 
     # STEP2: Stay in EklipZBotV2.py. High-level pre-move orchestration that coordinates timings, path recalculation, out-of-play mode, all-in state, and dropped-move recovery across many domains.
@@ -934,8 +1035,22 @@ class EklipZBot(object):
         with self.perf_timer.begin_move_event('scan_map_for_large_tiles_and_leaf_moves()'):
             self.scan_map_for_large_tiles_and_leaf_moves()
 
+        # BotGeneralSafety: refresh reveal episodes/forecasts AFTER the scan so
+        # fresh king-location knowledge and opponent-tracker state are current.
+        # No-op while GENERAL_SAFETY_ENABLED is False.
+        BotGeneralSafety.update(self)
+
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left:
+        # a forced FFA all-in commits a survivable route to the selected enemy's general
+        # corridor; the generic timing-cycle reset must not erase that committed spear and
+        # restart the attack several turns behind.
+        preservedFfaPath = self.curPath if BotFfaEndgame.is_forced_all_in(self) else None
         if self.timings and self.timings.get_turn_in_cycle(self._map.turn) == 0:
             BotTimings.timing_cycle_ended(self, )
+            if preservedFfaPath is not None and self.curPath is None:
+                self.curPath = preservedFfaPath
+                self.viewInfo.add_info_line(
+                    f'FFA3 preserve committed all-in route across timing reset: {preservedFfaPath.get_first_move()}')
 
         if self.curPath is not None:
             nextMove = self.curPath.get_first_move()
@@ -971,6 +1086,11 @@ class EklipZBot(object):
         if self.timings is None or self.timings.should_recalculate(self._map.turn):
             with self.perf_timer.begin_move_event('Recalculating Timings...'):
                 self.timings = BotTimings.get_timings(self)
+
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # Refresh the endgame policy after the scan so army-advantage all-in selection below
+        # sees the current neutral-city priority flag.
+        BotFfaEndgame.update_policy(self)
 
         if BotCombatOps.determine_should_winning_all_in(self):
             wasAllIn = self.is_all_in_army_advantage
@@ -1121,21 +1241,81 @@ class EklipZBot(object):
         if not BotStateQueries.is_still_ffa_and_non_dominant(self):
             BotTimings.prune_timing_split_if_necessary(self)
 
+        # BotGeneralSafety: reset the per-selection defense-override tag; only
+        # true core defensive returns inside pick_move_after_prep set it True.
+        self.defense_override_move = False
         move = self.pick_move_after_prep(is_lag_move)
-        self.last_move = move
 
         if move and self.curPath and move.source in self.curPath.tileSet:
             pathNext = self.curPath.get_first_move()
             if move != pathNext and pathNext is not None and move.dest != pathNext.source:
                 self.curPath = None
 
-        return self._stop_holding_clear_moves(move)
+        # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        # central chokepoint so ANY chosen move that would drag a threat-blocking tile
+        # through one of its blocked_destinations leaves the required garrison behind via
+        # move_half instead of abandoning the block (the oscillation the defense gather
+        # then had to yank back). Applied after the curPath check so a converted split
+        # does not falsely invalidate the in-flight path.
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # RETALIATE ignores defense entirely, so the threat-blocking half-move reconciliation
+        # must not constrain its attack move (the move itself is still produced legally).
+        if not BotFfaEndgame.is_retaliating(self):
+            move = BotDefense.apply_threat_blocking_split_hint_to_move(self, move)
+
+        self.last_move = move
+        final_move = self._stop_holding_clear_moves(move)
+        # Tests/test_FFA.py::FFATests.test_should_attack_aggressor_without_overgathering_or_abandoning_general
+        # Enforce the ordinary-all-in general reserve on the ACTUAL final move (post split-hint and
+        # holding-clear) so early QK/stealth/curPath/policy moves cannot strip the required garrison.
+        final_move = BotFfaEndgame.reconcile_general_reserve_move(self, final_move)
+        # BotGeneralSafety final-move backstop: protect the retained general AND
+        # the reserve anchor from ordinary offense (full->half offer, else
+        # block). True defense overrides and the certified safety-gather step
+        # itself are allowed; no-op while GENERAL_SAFETY_ENABLED is False.
+        final_move = BotGeneralSafety.reconcile_anchor_move(self, final_move, self.defense_override_move)
+        # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+        # Record the ACTUAL returned move (post split-hint + holding-clear) for the
+        # committed FFA kill-gather schedule. The feature consumes its pending offer
+        # only when this confirmed move matches; a defense preemption or pass leaves
+        # the cursor untouched so the same step is re-offered next turn. Non-FFA
+        # behavior is untouched (no-op when no kill-gather state is committed).
+        BotFfaKillGather.note_final_move(self, final_move)
+        return final_move
 
     # STEP2: Stay in EklipZBotV2.py. Central post-prep decision tree coordinating combat, defense, city capture, expansion, and continuation logic; keep on shell and delegate subroutines out.
     def pick_move_after_prep(self, is_lag_move=False):
         BotStealthAllIn.poll_wrp_worker_results(self)
+        BotFfaKillGather.poll_wrp_worker(self)
         with self.perf_timer.begin_move_event('calculating general danger / threats'):
             BotDefense.calculate_general_danger(self)
+
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # Refresh kill-threat retaliation now that danger analysis is current, then let TURTLE
+        # (owned-only gather to our general, deliberate pass) preempt every later branch.
+        BotFfaEndgame.update_retaliation(self)
+        # Tests/test_FFA.py::FFATests.test_should_attack_aggressor_without_overgathering_or_abandoning_general
+        # Compute the ordinary-all-in general reserve now that danger analysis and the forced
+        # mode/target are current; reconcile_general_reserve_move enforces it on the final move.
+        BotFfaEndgame.update_general_reserve(self)
+        ffaEndgameCityPriority = BotFfaEndgame.is_prioritizing_neutral_city(self)
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # Under a forced all-in (or ECONOMY neutral-city priority) only a lethal own-general Kill
+        # threat may preempt the attack/city branch; opportunistic king-kills/hunts must also only
+        # ever target the policy enemy, never a bystander.
+        ffaForcedTarget = -1
+        if BotFfaEndgame.is_forced_all_in(self):
+            ffaForcedTarget = BotFfaEndgame.get_state(self).decision.target_player
+        if BotFfaEndgame.get_mode(self) == BotFfaEndgame.FfaEndgameMode.TURTLE:
+            return BotFfaEndgame.get_move(self)
+
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # RETALIATE throws every resource at the latched offender and preempts EVERY defense,
+        # king-kill, city, and economy branch - including committed-route defense interrupts.
+        # get_retaliate_move routes committed/stealth/curPath/generic attack then a deterministic
+        # forward fallback, all evaluated with threat=None and an empty defense set.
+        if BotFfaEndgame.is_retaliating(self):
+            return BotFfaEndgame.get_retaliate_move(self, None, None, 0.0, set())
 
         if self._map.turn <= 4:
             if self._map.has_city_state:
@@ -1162,6 +1342,12 @@ class EklipZBot(object):
         if threat is None and not self.giving_up_counter > 30 and self.dangerAnalyzer.fastestVisionThreat is not None:
             threat = self.dangerAnalyzer.fastestVisionThreat
 
+        # BotGeneralSafety: while a general-reveal reserve stage is unmet, every
+        # nondefensive branch below must not steal the execution window (same
+        # contract as the committed FFA kill-gather guards). No-op while the
+        # feature flag is False.
+        generalSafetyReserving = BotGeneralSafety.is_reserving(self)
+
         #  # # # #   ENEMY KING KILLS
         stealthRouteCommittedAtStart = (
             self.stealth_all_in is not None
@@ -1170,7 +1356,14 @@ class EklipZBot(object):
             killMove, kingKillPath, raceChance = BotCombatOps.check_for_king_kills_and_races(self, threat)
             # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
             # defer to QK whenever it has a move, but never interrupt a committed stealth route.
-            if killMove is not None and not stealthRouteCommittedAtStart:
+            # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+            # While an FFA kill-gather is committed, unrelated opportunistic king-kills must
+            # not waste the execution window; is_committed validates/clears stale state.
+            if (killMove is not None and not stealthRouteCommittedAtStart
+                    and not BotFfaKillGather.is_committed(self)
+                    and not generalSafetyReserving
+                    and not ffaEndgameCityPriority
+                    and (ffaForcedTarget == -1 or killMove.dest.player == ffaForcedTarget)):
                 return killMove
 
         defenseCriticalTileSet = set()
@@ -1209,20 +1402,29 @@ class EklipZBot(object):
 
         # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
         # evaluate an undefendable hunt before city, expansion, and later QK planning can take over.
-        if not stealthRouteAborted and not stealthRouteCommittedAtStart:
+        if not ffaEndgameCityPriority and not stealthRouteAborted and not stealthRouteCommittedAtStart:
             huntMove = BotStealthAllIn.get_undefendable_hunt_move(
                 self,
                 threat,
                 defenseCriticalTileSet,
                 kingKillPath,
                 raceChance)
-            if huntMove is not None:
+            # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+            # unrelated stealth hunts are nondefensive opportunism - skip while committed.
+            if (huntMove is not None and not BotFfaKillGather.is_committed(self)
+                    and not generalSafetyReserving
+                    and not ffaEndgameCityPriority
+                    and (ffaForcedTarget == -1 or huntMove.dest.player == ffaForcedTarget)):
                 return huntMove
         # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
         # fall back to the precomputed QK move when no undefendable hunt commits.
         if (killMove is not None
                 and (not stealthRouteCommittedAtStart
-                     or self.stealth_all_in is None)):
+                     or self.stealth_all_in is None)
+                and not BotFfaKillGather.is_committed(self)
+                and not generalSafetyReserving
+                and not ffaEndgameCityPriority
+                and (ffaForcedTarget == -1 or killMove.dest.player == ffaForcedTarget)):
             return killMove
 
         # if not self.isAllIn() and (threat.turns > -1 and self.dangerAnalyzer.anyThreat):
@@ -1235,6 +1437,22 @@ class EklipZBot(object):
         self.intercept_plans = BotDefense.build_intercept_plans(self, defenseCriticalTileSet)
         for i, interceptPlan in enumerate(self.intercept_plans.values()):
             BotRendering.render_intercept_plan(self, interceptPlan, colorIndex=i)
+
+        # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        # a tile that already donated a half-split to hold a threat block must keep its
+        # remainder; flagging it defense-critical keeps every forward gather (city /
+        # contestation / expansion) from sourcing it, so the only thing it can do is hold.
+        # Done AFTER build_intercept_plans so these tiles do not enter the negTiles blocking
+        # set (which would pin them even after the threat leaves). The pin survives a
+        # couple turns past the tile's last blocking_tile_info sighting because the
+        # checker flickers (a tile can drop out for a single turn while threats reroute);
+        # it frees itself once the threat genuinely stops needing it.
+        for garrisonTile in self.block_split_garrison_sources:
+            if garrisonTile in self.blocking_tile_info:
+                self.block_split_garrison_last_turn[garrisonTile] = self._map.turn
+            if self._map.turn - self.block_split_garrison_last_turn.get(garrisonTile, -99) <= 2 and garrisonTile not in defenseCriticalTileSet:
+                defenseCriticalTileSet.add(garrisonTile)
+                logbook.info(f'DEFENSE_NEG_ADD source=block_split_garrison tile={str(garrisonTile)}')
 
         if not BotStateQueries.is_all_in(self) and not is_lag_move:
             with self.perf_timer.begin_move_event('Expansion quick check'):
@@ -1287,8 +1505,24 @@ class EklipZBot(object):
         mutualCaptureEval: GeneralTradeEvaluation | None = None
         if kingKillPath is not None and threat is not None and threat.threatType == ThreatType.Kill:
             mutualCaptureEval = BotCombatOps.evaluate_general_trade(self, kingKillPath, threat, threat.threatPlayer)
-        if (threat is not None and threat.threatType != ThreatType.Vision
-                and (not self.is_all_in_losing or (mutualCaptureEval is not None and not mutualCaptureEval.favorable))):
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # under a forced all-in or an active neutral-city economy priority, only a lethal
+        # own-general Kill threat may trigger defense; econ/city/vision threats must not
+        # preempt the attack/city branch.
+        lethalGeneralThreat = (threat is not None and threat.threatType == ThreatType.Kill
+                               and threat.path is not None and threat.path.tail is not None
+                               and threat.path.tail.tile is not None and threat.path.tail.tile.isGeneral
+                               and threat.path.tail.tile.player == self.general.player)
+        ffaLethalDefenseOnly = ffaForcedTarget != -1 or ffaEndgameCityPriority
+        # Tests/test_FFA.py::FFATests.test_should_defend_general_during_ffa_all_in:
+        # FFA ALL_IN reuses is_all_in_losing as a forced-mode marker, so it cannot be the
+        # defense-bypass test. A forced policy attack still evaluates a lethal own-general
+        # threat; only true non-FFA losing all-ins (or no viable defense) may skip it.
+        ffaForcedLethalDefense = ffaForcedTarget != -1 and lethalGeneralThreat
+        if ((not ffaLethalDefenseOnly or lethalGeneralThreat)
+                and threat is not None and threat.threatType != ThreatType.Vision
+                and (not self.is_all_in_losing or ffaForcedLethalDefense
+                     or (mutualCaptureEval is not None and not mutualCaptureEval.favorable))):
             with self.perf_timer.begin_move_event(f'THREAT DEFENSE {threat.turns} {str(threat.path.start.tile)}'):
                 defenseMove, defenseSavePath = BotDefense.get_defense_moves(self, defenseCriticalTileSet, kingKillPath, raceChance)
 
@@ -1299,9 +1533,20 @@ class EklipZBot(object):
                         if defenseMove.source in self.largePlayerTiles and self.targetingArmy is None:
                             logbook.info(f'threatDefense overriding targetingArmy with {str(threat.path.start.tile)}')
                             self.targetingArmy = self.get_army_at(threat.path.start.tile)
+                        if ffaForcedLethalDefense:
+                            self.viewInfo.add_info_line(
+                                f'FFA3 defend general during all-in target=p{ffaForcedTarget} '
+                                f'threat=p{threat.threatPlayer}: {defenseMove}')
+                        self.defense_override_move = True
                         return defenseMove
                     else:
                         self.viewInfo.add_info_line(f'BYPASSING DEF REP {str(defenseMove)} :(')
+                elif ffaForcedLethalDefense:
+                    self.viewInfo.add_info_line(
+                        f'FFA3 no viable general defense vs p{threat.threatPlayer}; continue all-in p{ffaForcedTarget}')
+        elif lethalGeneralThreat and self.is_all_in_losing:
+            self.viewInfo.add_info_line(
+                f'ALL_IN_LOSING bypass lethal defense vs p{threat.threatPlayer}')
 
         # Tests/test_GeneralTradeStrategy.py
         # test__e2e__unfavorable_trade_forced_survival_fallback: when a Kill
@@ -1313,7 +1558,8 @@ class EklipZBot(object):
         # attackingWithSelectedExpansionPlan veto in the delayed block can
         # suppress it. Narrow to VALID evaluated mutual captures only so
         # ordinary chance-0 backup paths keep their old delayed ordering.
-        if (kingKillPath is not None and threat is not None and threat.threatType == ThreatType.Kill
+        if ((not ffaLethalDefenseOnly or lethalGeneralThreat)
+                and kingKillPath is not None and threat is not None and threat.threatType == ThreatType.Kill
                 and kingKillPath.start.next is not None
                 and mutualCaptureEval is not None):
             blocks = self.blocking_tile_info.get(kingKillPath.start.tile)
@@ -1323,9 +1569,34 @@ class EklipZBot(object):
                 # get_first_move preserves the evaluated path's move_half -
                 # a half-move trade sends a different stack than a full move
                 # and was priced accordingly
+                self.defense_override_move = True
                 return kingKillPath.get_first_move()
 
-        if self._map.turn < 100:
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # Forced ALL_IN routes committed/stealth/generic attack right after lethal general
+        # defense and before any neutral-city pass-through; it never falls through to city
+        # economy. ECONOMY with a reachable neutral city takes/gathers it here instead.
+        ffaEndgameMode = BotFfaEndgame.get_mode(self)
+        if ffaEndgameMode == BotFfaEndgame.FfaEndgameMode.ALL_IN:
+            return BotFfaEndgame.get_attack_move(self, threat, defenseCriticalTileSet, kingKillPath, raceChance)
+        if ffaEndgameMode == BotFfaEndgame.FfaEndgameMode.ECONOMY and ffaEndgameCityPriority:
+            economyMove = BotFfaEndgame.get_move(self)
+            if economyMove is not None:
+                return economyMove
+            # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+            # a reachable neutral city exists but capture/gather is not ready: deliberately wait
+            # rather than fall through to unrelated offense while city priority remains active.
+            return None
+
+        # While a certified FFA kill-gather is committed, every nondefensive move must be a
+        # literal gather/launch/search/finish step - skip the unrelated expansion/opportunism
+        # returns below so they cannot waste the execution window. Defense gates (THREAT
+        # DEFENSE, survival fallback, DANGER TILES, flank defense, city-preemptive) still run
+        # first and keep priority; the committed move itself is issued after city-preemptive.
+        # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+        ffaKillGatherCommitted = BotFfaKillGather.is_committed(self)
+
+        if self._map.turn < 100 and not ffaKillGatherCommitted and not generalSafetyReserving:
             isNoExpansionGame = ((len(self._map.swamps) > 0 or len(self._map.deserts) > 0) and BotExpansionOps.get_unexpandable_ratio(self, ) > 0.7)
             if isNoExpansionGame or self._map.is_low_cost_city_game:
                 # # assume we must take cities instead, then.
@@ -1350,13 +1621,13 @@ class EklipZBot(object):
                         self.city_expand_plan = None
                         return BotPathingUtils.get_first_path_move(self, path)
 
-        if self._map.turn < 50:
+        if self._map.turn < 50 and not ffaKillGatherCommitted and not generalSafetyReserving:
             if not self._map.is_low_cost_city_game and not self._map.modifiers_by_id[MODIFIER_CITY_STATE]:
                 return BotExpansionOps.make_first_25_move(self)
             else:
                 self.info(f'Byp f25 bc weird_custom {self.is_weird_custom} (walled_city {self._map.is_walled_city_game} or low_cost_city {self._map.is_low_cost_city_game}) or cityState {self._map.modifiers_by_id[MODIFIER_CITY_STATE]}')
 
-        if self._map.turn < 250 and self._map.remainingPlayers > 3:
+        if self._map.turn < 250 and self._map.remainingPlayers > 3 and not ffaKillGatherCommitted and not generalSafetyReserving:
             with self.perf_timer.begin_move_event('Ffa Turtle Move'):
                 move = BotExpansionOps.look_for_ffa_turtle_move(self)
             if move is not None:
@@ -1399,7 +1670,72 @@ class EklipZBot(object):
         if self.board_analysis.central_defense_point is not None:
             self.viewInfo.add_targeted_tile(self.board_analysis.central_defense_point, TargetStyle.TEAL, radiusReduction=2)
 
-        if kingKillPath is not None and threat.threatType == ThreatType.Kill:
+        # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+        # ThreatType.Kill is URGENT DEFENSE (an enemy is killing our general) - the
+        # delayed defense kingKillPath is a legitimate survival trade, NOT the
+        # unrelated opportunism the kill-gather commit suppresses, so it must NOT be
+        # gated by ffaKillGatherCommitted. Defense always keeps priority over the
+        # committed offense move issued later. `threat is not None` matches the
+        # sibling kingKill guards above - kingKillPath can be non-None while threat
+        # is None (e.g. late FFA), which previously crashed on threat.threatType.
+        # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction:
+        # while a stealth all-in / undefendable hunt is in scope the stealth planner owns
+        # the forward stack's direction. This fallback's kingKillPath is a SEPARATE
+        # PivotIterativeWRP tour over the same candidates, so its first step can pick the
+        # opposite direction from the route stealth commits a turn later (once moved the
+        # 115-stack down 15,7->15,8 here, then the committed route walked it back up
+        # 15,8->15,7->15,6 - the down-then-up flip-flop). Suppress the fallback while the
+        # stealth planner can engage; the survival mutual-capture fallback above stays
+        # ungated and committed-route defense interrupts still fire.
+        # determine_should_winning_all_in has hysteresis, so is_all_in_army_advantage can
+        # hold True for a turn mid-episode and release the stack to this tour for exactly
+        # one step before stealth re-engages - the same flip-flop through a narrower door
+        # (observed at t291: 15,7->15,8 then committed 15,8->15,7). The gate therefore keys
+        # on the episode OWNING THE TILE, not on the active predicates.
+        stealthPlannerOwnsDiveStack = False
+        if kingKillPath is not None and threat is not None and threat.threatType == ThreatType.Kill:
+            # The fallback may still fire on OTHER stacks during a losing episode - only the
+            # tile the stealth planner actually owns is reserved. Pre-state the dive candidate
+            # set is exactly _get_forward_dive_stack's eligibility filter (own non-general
+            # tiles with army > predicted fog general army): if this path's start tile is
+            # dive-eligible, moving it lets the QK tour order the same candidates differently
+            # and the stealth route then walks it back (down->up->down flip-flop).
+            stealthDiveTile: Tile | None = None
+            if self.stealth_all_in is not None:
+                if (self.stealth_all_in.committed_route is not None
+                        and self.stealth_all_in.committed_route.start is not None):
+                    stealthDiveTile = self.stealth_all_in.committed_route.start.tile
+                else:
+                    stealthDiveTile = self.stealth_all_in.launch_tile
+            else:
+                # (losing or not advantage) covers BOTH transient-flag flickers: a losing
+                # episode holding through a one-turn advantage=True, and the not-losing
+                # undefendable-hunt window (hunt itself requires not advantage). Only a
+                # genuine winning-advantage turn lets the fallback take the dive stack.
+                stealthEpisodeInScope = (
+                    self.enable_stealth_all_in
+                    and not self.targetPlayerExpectedGeneralLocation.isGeneral
+                    and self.targetPlayer != -1
+                    and not BotStateQueries.is_still_ffa_and_non_dominant(self)
+                    and (self.is_all_in_losing or not self.is_all_in_army_advantage))
+                if stealthEpisodeInScope:
+                    predictedGenArmy = max(
+                        1,
+                        self.opponent_tracker.get_current_cycle_stats_by_player(
+                            self.targetPlayer).approximate_fog_army_available_total)
+                    if (kingKillPath.start.tile.army > predictedGenArmy
+                            and not kingKillPath.start.tile.isGeneral):
+                        stealthDiveTile = kingKillPath.start.tile
+            stealthPlannerOwnsDiveStack = (
+                stealthDiveTile is not None
+                and kingKillPath.start.tile == stealthDiveTile)
+            if stealthPlannerOwnsDiveStack:
+                logbook.info(
+                    f'DELAYED_DEF_KK_GATE turn={self._map.turn} suppressed diveStack={stealthDiveTile} '
+                    f'kkStart={kingKillPath.start.tile} losing={self.is_all_in_losing} '
+                    f'advantage={self.is_all_in_army_advantage} stealthState={self.stealth_all_in is not None}')
+        if (kingKillPath is not None and threat is not None and threat.threatType == ThreatType.Kill
+                and not stealthPlannerOwnsDiveStack):
             attackingWithSavePath = defenseSavePath is not None and defenseSavePath.start.tile == kingKillPath.start.tile
             attackingWithSelectedExpansionPlan = (
                     self.expansion_plan is not None
@@ -1423,6 +1759,7 @@ class EklipZBot(object):
                 self.info(f"    Delayed defense kingKillPath{threatInf}.  {str(kingKillPath)}")
                 self.viewInfo.color_path(PathColorer(kingKillPath, 158, 158, 158, 255, 10, 200))
 
+                self.defense_override_move = True
                 return Move(kingKillPath.start.tile, kingKillPath.start.next.tile)
             else:
                 if defenseSavePath is not None:
@@ -1441,6 +1778,7 @@ class EklipZBot(object):
         with self.perf_timer.begin_move_event('DANGER TILES'):
             dangerTileKillMove = BotDefense.check_for_danger_tile_moves(self)
             if dangerTileKillMove is not None:
+                self.defense_override_move = True
                 return dangerTileKillMove  # already logged to info
 
         with self.perf_timer.begin_move_event('Flank defense / Vision expansion HIGH PRI'):
@@ -1450,6 +1788,7 @@ class EklipZBot(object):
                     self.timings.splitTurns += 1
                     if self.timings.splitTurns > self.timings.launchTiming:
                         self.timings.launchTiming = self.timings.splitTurns
+                self.defense_override_move = True
                 return flankDefMove
 
         fog_risk, fog_army_comp, city_comp, expected_city_spanning_offset = self.opponent_tracker.get_immediate_fog_risk(self.targetPlayer, len(self.friendly_city_spanning_tree))
@@ -1469,7 +1808,14 @@ class EklipZBot(object):
         #         if not BotRepetition.detect_repetition(self, move):
         #             return move
 
-        if self.force_far_gathers and self.force_far_gathers_turns > 0:
+        # Tests/test_AllIn.py::test_should_keep_timed_all_in_over_far_gathers
+        # A timed all-in / cyclic winning gather intentionally positions army far
+        # from the shortest inter-general path; FFG must not override it even if
+        # force_far_gathers was left enabled from an earlier turn.
+        if self.force_far_gathers and self.force_far_gathers_turns > 0 \
+                and not ffaKillGatherCommitted \
+                and not generalSafetyReserving \
+                and not BotStateQueries.is_timed_all_in_or_cyclic_active(self):
             with self.perf_timer.begin_move_event(f'FORCE_FAR_GATHERS {self.force_far_gathers_turns}'):
                 roughTurns = self.force_far_gathers_turns
                 targets = None
@@ -1555,7 +1901,7 @@ class EklipZBot(object):
                 else:
                     self.info(f'FAILED FORCE_FAR_GATHERS min {minTurns}t max {maxTurns}t ideal {roughTurns}t, actual {gcp}')
 
-        if not self.is_weird_custom:
+        if not self.is_weird_custom and not ffaKillGatherCommitted and not generalSafetyReserving:
             second = BotExpansionOps.make_second_25_move(self)
             if second:
                 return second
@@ -1571,9 +1917,10 @@ class EklipZBot(object):
                         nukeMove = Move(largestAdjTile, annoyingTile)
                         self.info(f'Nuking general-adjacent vision tile {str(nukeMove)}, targeting it as targeting army.')
                         self.targetingArmy = self.get_army_at(annoyingTile)
+                        self.defense_override_move = True
                         return nukeMove
 
-        afkPlayerMove = BotExplorationOps.get_move_if_afk_player_situation(self)
+        afkPlayerMove = None if (ffaKillGatherCommitted or generalSafetyReserving) else BotExplorationOps.get_move_if_afk_player_situation(self)
         if afkPlayerMove:
             return afkPlayerMove
 
@@ -1592,7 +1939,43 @@ class EklipZBot(object):
                 cityDefenseMove = BotCityOps.get_city_preemptive_defense_move(self, defenseCriticalTileSet)
             if cityDefenseMove is not None:
                 self.info(f'City preemptive defense move! {str(cityDefenseMove)}')
+                self.defense_override_move = True
                 return cityDefenseMove
+
+        # BotGeneralSafety reserve gather. Reached only after THREAT DEFENSE,
+        # survival fallback, DANGER TILES, flank defense, and city-preemptive
+        # defense have all had priority; every earlier nondefensive return was
+        # skipped while a stage is unmet. A handled result with move=None is a
+        # deliberate wait/pass; READY falls through so normal offense resumes
+        # with the anchor still protected by negatives + the final guard.
+        safetyResult = BotGeneralSafety.get_move(self, defenseCriticalTileSet)
+        if safetyResult.handled:
+            if safetyResult.move is not None:
+                self.info(f'GENERAL SAFETY {safetyResult.reason} {safetyResult.move}')
+                return safetyResult.move
+            return None
+
+        # Offensive consumers below get defenseCriticalTileSet UNION the
+        # reserved anchor + remaining owned gather sources so offense plans
+        # cannot spend the reservation. Defense inputs above keep the original
+        # set - defense is supposed to use the reserved army. Identical to
+        # defenseCriticalTileSet while the feature is off or fully READY with
+        # no remaining sources.
+        offenseNegativeTileSet = BotGeneralSafety.offense_negatives(self, defenseCriticalTileSet)
+
+        # Committed FFA kill-gather execution. Reached only after THREAT DEFENSE,
+        # survival fallback, DANGER TILES, flank defense, and city-preemptive defense
+        # have all had priority; every earlier nondefensive return was skipped while
+        # committed. A handled result with move=None is a deliberate wait/pass; an
+        # abort clears state and falls through to normal selection below.
+        # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+        if ffaKillGatherCommitted:
+            committedResult = BotFfaKillGather.get_committed_move(self, defenseCriticalTileSet)
+            if committedResult.handled:
+                if committedResult.move is not None:
+                    self.info(f'FFA KILL GATHER {committedResult.reason} {committedResult.move}')
+                    return committedResult.move
+                return None
 
         if self.expansion_plan and self.expansion_plan.selected_option is not None:
             selectedCityOption = self.expansion_plan.selected_option
@@ -1669,7 +2052,7 @@ class EklipZBot(object):
                      or self.stealth_all_in.committed_route is None)):
             stealthMove = BotStealthAllIn.get_stealth_all_in_move(
                 self,
-                defenseCriticalTileSet)
+                offenseNegativeTileSet)
             if stealthMove is not None:
                 return stealthMove
             if (self.stealth_all_in is not None
@@ -1686,8 +2069,8 @@ class EklipZBot(object):
                 stealthRouteAborted = self.stealth_all_in is None
 
         with self.perf_timer.begin_move_event('try_get_enemy_territory_exploration_continuation_move'):
-            expNegs = set(defenseCriticalTileSet)
-            logbook.info(f'DEFENSE_NEG_COPY context=enemy_territory_exploration_continuation source=defenseCriticalTileSet copiedTiles={[str(t) for t in expNegs]}')
+            expNegs = set(offenseNegativeTileSet)
+            logbook.info(f'DEFENSE_NEG_COPY context=enemy_territory_exploration_continuation source=offenseNegativeTileSet copiedTiles={[str(t) for t in expNegs]}')
             if WinCondition.DefendEconomicLead in self.win_condition_analyzer.viable_win_conditions:
                 for t in self.win_condition_analyzer.defend_cities:
                     if t not in expNegs:
@@ -1703,7 +2086,7 @@ class EklipZBot(object):
             # already logged
             return largeArmyExpContinuationMove
 
-        projectedLossAllInMove = BotKillTiming.get_projected_loss_all_in_move(self, defenseCriticalTileSet)
+        projectedLossAllInMove = BotKillTiming.get_projected_loss_all_in_move(self, offenseNegativeTileSet)
         if projectedLossAllInMove is not None:
             return projectedLossAllInMove
 
@@ -1720,17 +2103,25 @@ class EklipZBot(object):
             if foundMove:
                 return move  # already logged
 
-        exploreMove = BotExplorationOps.try_find_exploration_move(self, defenseCriticalTileSet)
+        exploreMove = BotExplorationOps.try_find_exploration_move(self, offenseNegativeTileSet)
         if exploreMove is not None:
             return exploreMove  # already logged
 
-        allInMove = BotCombatOps.get_all_in_move(self, defenseCriticalTileSet)
+        allInMove = BotCombatOps.get_all_in_move(self, offenseNegativeTileSet)
         if allInMove:
             # already logged
             return allInMove
 
-        if not self.defend_economy and not self.likely_kill_push:
-            expMove = BotExpansionOps.try_find_main_timing_expansion_move_if_applicable(self, defenseCriticalTileSet)
+        # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_attack_early_without_gather_repetition
+        # (QaFHRLrxn t213) + UnitTests/test_BotExpansionOps.py::BotExpansionOpsDefensiveFlowPathTests:
+        # likely_kill_push flickers as our own gathered army grows; while a stable defensive
+        # corridor exists, iterative flow expansion may still run so the planner does not
+        # alternate between skipping and entering expansion (which pulled the stack back off
+        # the corridor -> 5,17 repetition, first attack t237 vs proof t222). The helper
+        # returns None for non-iterative flow, so legacy flow stays suppressed under LKP.
+        # Defense priority, all-in, and emergency intercept handling are unchanged.
+        if not self.defend_economy and (not self.likely_kill_push or BotExpansionOps.get_defensive_flow_path(self) is not None):
+            expMove = BotExpansionOps.try_find_main_timing_expansion_move_if_applicable(self, offenseNegativeTileSet)
             if expMove is not None:
                 return expMove  # already logged
 
@@ -1759,7 +2150,7 @@ class EklipZBot(object):
                     self._map,
                     list(needToKillTiles),
                     actualGatherTurns,
-                    negativeTiles=defenseCriticalTileSet,
+                    negativeTiles=offenseNegativeTileSet,
                     searchingPlayer=self.general.player,
                     incrementBackward=False,
                     viewInfo=self.viewInfo if self.info_render_gather_values else None,
@@ -1779,6 +2170,7 @@ class EklipZBot(object):
                     self.timings.splitTurns += 1
                     if self.timings.splitTurns > self.timings.launchTiming:
                         self.timings.launchTiming = self.timings.splitTurns
+                self.defense_override_move = True
                 return flankDefMove
 
         # if self.defend_economy:
@@ -1786,7 +2178,7 @@ class EklipZBot(object):
         #     if move is not None:
         #         return move  # already logged
 
-        cyclicAllInMove = BotCombatOps.try_get_cyclic_all_in_move(self, defenseCriticalTileSet)
+        cyclicAllInMove = BotCombatOps.try_get_cyclic_all_in_move(self, offenseNegativeTileSet)
         if cyclicAllInMove:
             return cyclicAllInMove  # already logged
 
@@ -1801,13 +2193,13 @@ class EklipZBot(object):
                 self.info(f"quickExpand leafMove {move}")
                 return move
 
-        expMove = BotExpansionOps._get_expansion_plan_quick_capture_move(self, defenseCriticalTileSet)
+        expMove = BotExpansionOps._get_expansion_plan_quick_capture_move(self, offenseNegativeTileSet)
         if expMove:
             self.info(f"quickCap move {expMove}")
             return expMove
 
-        with self.perf_timer.begin_move_event(f'MAIN GATHER OUTER, negs {[str(t) for t in defenseCriticalTileSet]}'):
-            gathMove = BotGatherOps.try_find_gather_move(self, threat, defenseCriticalTileSet, self.leafMoves, needToKillTiles)
+        with self.perf_timer.begin_move_event(f'MAIN GATHER OUTER, negs {[str(t) for t in offenseNegativeTileSet]}'):
+            gathMove = BotGatherOps.try_find_gather_move(self, threat, offenseNegativeTileSet, self.leafMoves, needToKillTiles)
 
         if gathMove is not None:
             # already logged / perf countered internally
@@ -1866,7 +2258,7 @@ class EklipZBot(object):
                     targets.extend(self.targetPlayerObj.tiles)
                 else:
                     targets.extend(t for t in self._map.get_all_tiles() if t.player == -1 and not t.isObstacle)
-                negatives = defenseCriticalTileSet.copy()
+                negatives = offenseNegativeTileSet.copy()
                 negatives.update(self.target_player_gather_targets)
                 # Tests/test_AllIn.py::test_should_not_idle_during_projected_loss_all_in_with_uncertain_enemy_general
                 # launchTiming - turnInCycle goes negative once the cycle is past
@@ -1960,11 +2352,21 @@ class EklipZBot(object):
         generalApproximations = [[0, 0, 0, None] for i in range(len(self._map.generals))]
         for tile in general.adjacents:
             if self._map.is_tile_enemy(tile):
-                self._map.players[tile.player].knowsKingLocation = True
+                # BotGeneralSafety (Tests/test_FFA.py t179 general-safety cases):
+                # stamp the turn each enemy (and same-team player) first learns our
+                # general location so general-safety episodes trigger only on a FRESH
+                # reveal. Old fixtures loading knowsKingLocation=True directly never
+                # transition here and keep king_location_revealed_turn=-1 (no-op).
+                revealedPlayers = [self._map.players[tile.player]]
                 if self._map.teams is not None:
-                    for teamPlayer in self._map.players:
-                        if self._map.teams[teamPlayer.index] == self._map.teams[tile.player]:
-                            teamPlayer.knowsKingLocation = True
+                    revealedPlayers = [
+                        teamPlayer for teamPlayer in self._map.players
+                        if self._map.teams[teamPlayer.index] == self._map.teams[tile.player]]
+                for revealPlayer in revealedPlayers:
+                    wasKnown = revealPlayer.knowsKingLocation
+                    revealPlayer.knowsKingLocation = True
+                    if not wasKnown and revealPlayer.king_location_revealed_turn == -1:
+                        revealPlayer.king_location_revealed_turn = self._map.turn
 
         if self.teammate_general is not None:
             for tile in self.teammate_general.adjacents:
@@ -1980,11 +2382,31 @@ class EklipZBot(object):
             # self.targetPlayerExpectedGeneralLocation.player = self.player
             self.largeTilesNearEnemyKings[self.targetPlayerExpectedGeneralLocation] = []
 
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # Refresh the endgame policy BEFORE the exclusive-lock/unattackable queries below so they
+        # see this turn's mode/target; city-priority evaluation is deferred to the authoritative
+        # pre-pick refresh so the expensive neutral-city path search runs only once per turn.
+        BotFfaEndgame.update_policy(self, evaluateCityPriority=False)
+
         # Tests/test_FFA.py::test_should_not_attack_unprovoked_enemies_in_early_ffa: refresh the
         # exclusive-FFA lock BEFORE scanning leaf/city moves and BEFORE target recalculation below,
         # so every producer this turn agrees on which revealed enemies are unattackable.
         BotStateQueries.update_ffa_exclusive_target_lock(self)
         ffaUnattackablePlayers = BotStateQueries.get_ffa_unattackable_players(self)
+
+        # Tests/test_FFA.py::test_should_snap_kill_nearby_ffa_general_after_enemy_army_loss:
+        # when the exclusive lock is an enemy whose general location is unknown, seed
+        # largeTilesNearEnemyKings with a representative predicted-general candidate (already
+        # owned by the locked player in the fog prediction, added as-is) so the quick-kill
+        # evaluator below checks that inferred target instead of only the possibly unrelated
+        # targetPlayerExpectedGeneralLocation entry added above.
+        lockedTargetPlayer = self.ffa_exclusive_target_lock
+        if lockedTargetPlayer != -1:
+            lockedTargetGeneral = self._map.generals[lockedTargetPlayer]
+            if (lockedTargetGeneral is None or not lockedTargetGeneral.isGeneral) and self.alt_en_gen_positions[lockedTargetPlayer]:
+                inferredGeneralTile = self.alt_en_gen_positions[lockedTargetPlayer][0]
+                if inferredGeneralTile.player == lockedTargetPlayer and inferredGeneralTile not in self.largeTilesNearEnemyKings:
+                    self.largeTilesNearEnemyKings[inferredGeneralTile] = []
 
         for tile in self._map.tiles_by_index:
             if self._map.is_tile_enemy(tile) and self._map.generals[tile.player] is None:
@@ -2063,6 +2485,12 @@ class EklipZBot(object):
 
         self.generalApproximations = generalApproximations
 
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # Refresh the 3-player FFA endgame policy now that general approximations are current
+        # so calculate_target_player below and the unattackable-player query see this turn's mode.
+        # City-priority evaluation is deferred to the single authoritative pre-pick refresh.
+        BotFfaEndgame.update_policy(self, evaluateCityPriority=False)
+
         # UnitTests/test_TargetPlayerRetargeting.py::TargetPlayerRetargetingTests covers dead-target retargeting and all-in reset here because stale all-in state must not survive changing from a killed FFA target to their living teammate or a newly calculated target.
         oldTgPlayer = self.targetPlayer
         self.targetPlayer = self._calculate_target_player_considering_dead_current_target()
@@ -2073,6 +2501,11 @@ class EklipZBot(object):
         if self.targetPlayer != oldTgPlayer:
             if oldTgPlayer != -1:
                 self._reset_all_in_state_after_target_player_change(oldTgPlayer, self.targetPlayer)
+                # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+                # the target reset above clears the forced all-in flags; re-assert the endgame
+                # policy immediately so target-relative state stays consistent until the
+                # authoritative pre-pick refresh re-evaluates city priority.
+                BotFfaEndgame.update_policy(self, evaluateCityPriority=False)
             self._lastTargetPlayerCityCount = 0
             if self.targetPlayer >= 0:
                 self._lastTargetPlayerCityCount = self.opponent_tracker.get_current_team_scores_by_player(self.targetPlayer).cityCount
@@ -2140,11 +2573,19 @@ class EklipZBot(object):
 
 
     # STEP2: Stay in EklipZBotV2.py or move to a dedicated resume/debug module late. This restores broad bot/runtime state across trackers, timings, paths, and debug serialization.
-    def load_resume_data(self, resume_data: typing.Dict[str, str]):
-        result = BotSerialization.load_resume_data(self, resume_data)
+    def load_resume_data(self, resume_data: typing.Dict[str, str], skip_island_restore: bool = False):
+        result = BotSerialization.load_resume_data(self, resume_data, skip_island_restore=skip_island_restore)
         # Tests/test_AllIn.py resume support: a committed WRP route saved mid-all-in must keep
         # executing after load; restored here (not inside BotSerialization) to avoid a module cycle.
         BotStealthAllIn.load_committed_route_from_resume_data(self, resume_data)
+        # FFA kill-gather committed state resumes the same literal schedule.
+        BotFfaKillGather.load_state(self, resume_data)
+        # General-safety reservation episodes/anchor/gather resume likewise;
+        # missing fields in old fixtures restore the default inactive state.
+        BotGeneralSafety.load_state(self, resume_data)
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # the latched retaliation target survives mid-route txtmap resumes.
+        BotFfaEndgame.load_state(self, resume_data)
         return result
 
     # STEP2: Stay in EklipZBotV2.py initially, then potentially split across BotTargeting/BotTimings/BotComms later. This recalculates shared target/gather/flank state used by many modules.

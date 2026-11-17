@@ -1,0 +1,162 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+     C41  M              M              M    M         M              M              M         M    M    b4   b2   b2   b2   bG23
+          M                   M    M         C41       M              M         M         C46  M         M    b2   b2   b2   bC27
+               M                        M              M    M         M                   M         M    M    b2   b2   b2   b2
+                    M                                       C41  h2   h1   h1   h1   h49  b4   b2   b2   M    b15  b4   b2   b2
+          M    h6   h6   M    M                   M         M    h2   M                   b3   bC40 bC39 M    b3   M    bC28 M
+     M         C46  h3   h2   h4   h5                       M    h2   C41  M    M    b4   b4   b4   b2   b2   b2   b2   b2   b2
+M                   h2   h2   C42  C42                 h2   h2   h2   h2   h2   h2   h2   M    b5   M    b4   b3   M    b3   b2
+M    M         h2   h2   h2   h2   h2   h2   h2   h2   h2   h3   M    h2   b4   M    h2   b1   M    h1   M    b3   b4   b3   b5
+M              M    h2   h2   M    M         M         h3   M    h3   h2   b4   M    M    b1   b1   h1   h1   h1   h1   b3   b3
+     M    h7   h3   h3   h2   h3   h3   M    h6   M    h1   h1   h1   h1   h1   b4   h1   h1   h1   h1   b4   b3   h81  M    b3
+M    h7   h3   h3   M    h7   h6   h3   h3   h1   h1   h1   C42  M    N7   h1   M    h1   C45  M    h1        M    b3   b3   b3
+h3   h3   h3   h4   h4   h6   h6   M    M    h1   M    N5   N5        N2   h1   h1   h1   M         M              M    b3   b3
+h3   h4   h8   hC61 h3   h3   h2   h2   h2   h1   N2   N2   C34  N2   N2   N5   M    h1   M              M    M    b3   b3   b3
+hG69 M    h4   h4   h5   M    h2   C46  h4   h4   h4        N3   N2   N2   N2   N2   N2   N2        M    b3   b3   b3   b3
+h5   h4   h4   h4   h5   M    h2   h7   h4   C46  M         N3   N3   N2                            bC78 b1   b1   b1   b1   b1
+h5   hC71 h4   h9   M    h4   h2        h10  h3   M              N3   N2             M    M         M    b3   bC3       M    b1
+h5   h4   h5   h4   N3   h4   h2   M    h6   h3   M              N3   N2             M         M    b3   b3   b1   M    bC10 b1
+N4   M    h6   h4   M    h4   hC22 h11  h7   C42                 N3   N2   N2   M              M    M    b3   bC4  b1   M    b1
+N4   N4   M    M         M    h2   h2   M         C44       M    N3   N3   N2   M         M              M    b1   b3   b3   b1
+h5   N4   h5   M         M    h2   M              M    M         N3   N3   N2   M                             b1   b1   b1   b1
+M    h5   h4   M              M    M                   M    M    N3   N3   M    M                        M    b1        b3   M
+h5   N4   M    h4             M                   N2   N3   N7   N3   C46                                M    b1   M    b3
+h5   h4   h4   h4                                 M    N3   N3   N3   N2   M         M              C50       M         b3
+h7   M    h4   N4        M                        M    N3   N3   N3   N2   M    M    M                             M    b3
+h4   h4   h4   M                        M         M    N3   N2   C48  C42                                          b3   b3
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=432
+player_index=7
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=ffa
+aUsername=Clayboy198
+aStars=30
+aScore=0
+aTiles=0
+aStandingArmy=0
+aCityCount=0
+aDead=True
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=-39
+aDelta25Score=-99
+aCityGainedTurn=107
+aCityLostTurn=228
+aLastSeenMoveTurn=0
+aKnowsKingLocation=False
+bUsername=gotcha:)
+bStars=46
+bScore=490
+bTiles=100
+bStandingArmy=390
+bCityCount=9
+bGeneral=25,0
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=30
+bDelta25Tiles=-2
+bDelta25Score=215
+bCityGainedTurn=414
+bCityLostTurn=382
+bLastSeenMoveTurn=403
+bKnowsKingLocation=False
+cUsername=jpl
+cStars=42
+cScore=0
+cTiles=0
+cStandingArmy=0
+cCityCount=0
+cDead=True
+cLeftGame=True
+cLeftGameTurn=327
+cAggressionFactor=133
+cDelta25Tiles=-44
+cDelta25Score=-121
+cCityGainedTurn=364
+cCityLostTurn=366
+cLastSeenMoveTurn=315
+cKnowsKingLocation=True
+dUsername=Add
+dStars=26
+dScore=0
+dTiles=0
+dStandingArmy=0
+dCityCount=0
+dDead=True
+dLeftGame=True
+dLeftGameTurn=66
+dAggressionFactor=0
+dDelta25Tiles=-24
+dDelta25Score=-47
+dCityGainedTurn=0
+dCityLostTurn=2
+dLastSeenMoveTurn=0
+dKnowsKingLocation=False
+eUsername=bruh10012
+eStars=21
+eScore=0
+eTiles=0
+eStandingArmy=0
+eCityCount=0
+eDead=True
+eLeftGame=True
+eLeftGameTurn=30
+eAggressionFactor=0
+eDelta25Tiles=-1
+eDelta25Score=-16
+eCityGainedTurn=0
+eCityLostTurn=2
+eLastSeenMoveTurn=0
+eKnowsKingLocation=False
+fUsername=ahrange
+fStars=39
+fScore=0
+fTiles=0
+fStandingArmy=0
+fCityCount=0
+fDead=True
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=3
+fDelta25Tiles=-39
+fDelta25Score=-52
+fCityGainedTurn=140
+fCityLostTurn=2
+fLastSeenMoveTurn=135
+fKnowsKingLocation=True
+gUsername=wzytrq1314520
+gStars=0
+gScore=0
+gTiles=0
+gStandingArmy=0
+gCityCount=0
+gDead=True
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=0
+gDelta25Tiles=-19
+gDelta25Score=-46
+gCityGainedTurn=0
+gCityLostTurn=2
+gLastSeenMoveTurn=0
+gKnowsKingLocation=False
+hUsername=Human.exe
+hStars=56
+hScore=822
+hTiles=152
+hStandingArmy=670
+hCityCount=4
+hGeneral=0,13
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=0
+hDelta25Tiles=16
+hDelta25Score=205
+hCityGainedTurn=0
+hCityLostTurn=0
+hLastSeenMoveTurn=432
+hKnowsKingLocation=False

@@ -3388,3 +3388,287 @@ class DefenseTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwnedXY(14, 7)
+
+    def test_should_not_split_intercept_army_and_should_retake_cities(self) -> None:
+        # Repro of Human.exe-1v1-2026-11-15_02-20-32---8lCA7C85i turn 423:
+        # the 93-stack at 3,4 is the whole defense gather against the enemy's
+        # b131 push up the middle. In the live game BotDefense's post-selection
+        # split branch halved the 3,4->3,5 gather because of an overbroad
+        # garrison reservation (blockInfo=3,4:11@2,4|3,5, mission 8,7), which
+        # weakened the chosen interception. Correct play sends the entire
+        # stack out of 3,4 as a full (non-half) move and keeps or retakes both
+        # cities within 20 turns.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_split_intercept_army_and_should_retake_cities___8lCA7C85i---0--423.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_not_split_intercept_army_and_should_retake_cities___8lCA7C85i---0--423.truemap.txtmap'
+
+        self.begin_capturing_logging()
+        for enemyMoves in [
+            '7,11->7,7->8,7->8,2->4,2->4,4',
+            '7,11->7,8->7,7z->8,7->8,2->4,2->4,4',
+            '7,11->7,8->7,7z->8,7->8,2->9,2->9,6->8,6->8,7  7,8->7,7->8,7',
+            '7,11->7,8->7,7z->8,7  7,8->4,8->4,7->2,7->2,4->4,4',
+            '7,11->7,8->4,8->4,7->2,7->2,4->4,4',
+            '7,11->7,8->4,8->4,7->5,7->5,5->8,5->8,7',
+        ]:
+            with self.subTest(enemyMoves=enemyMoves):
+                map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 423, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=423)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, enemyMoves)
+                self.get_debug_render_bot(simHost, general.player)
+
+                # # proof, can handle all of them from 5,6 here without dying or catastrophic damage
+                # simHost.queue_player_moves_str(general.player, '3,4->3,5->2,5->2,7->5,7->5,6')
+
+                playerIndex = general.player
+                simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
+
+                with self.subTest(assertion='no_friendlies_killed'):
+                    self.assertNoFriendliesKilled(map, general)
+                with self.subTest(assertion='city_5_5_owned'):
+                    self.assertEqual(
+                        playerIndex,
+                        map.At(5, 5).player,
+                        'city 5,5 must remain ours after 20 turns')
+                with self.subTest(assertion='city_8_7_owned'):
+                    self.assertEqual(
+                        playerIndex,
+                        map.At(8, 7).player,
+                        'city 8,7 must be ours after 20 turns')
+                with self.subTest(assertion='first_3_4_departure_not_half'):
+                    firstDeparture: Move | None = None
+                    for appliedMove in simHost.sim.players[playerIndex].move_history:
+                        if appliedMove is not None and appliedMove.source.x == 3 and appliedMove.source.y == 4:
+                            firstDeparture = appliedMove
+                            break
+                    self.assertIsNotNone(
+                        firstDeparture,
+                        'no applied move ever departed from 3,4')
+                    self.assertFalse(
+                        firstDeparture.move_half,
+                        f'first 3,4 departure must move the whole stack, not half: {firstDeparture}')
+
+                with self.subTest(assertion='five_seven_departure_half_iff_enemy_split'):
+                    # when the enemy splits at 7,8 (a 'z' script) the best move for
+                    # the intercept stack arriving at 5,7 is 5,7->5,6z - half keeps
+                    # marching and half stays to cover the second branch; with no
+                    # enemy split the whole stack goes. Only counts a big departure
+                    # (>=30 army_moved) - 5,7 also holds a small unrelated stack that
+                    # pokes 4,7 early and is not the intercept stack.
+                    enemySplit = 'z' in enemyMoves
+                    fiveSevenDeparture: Move | None = None
+                    for appliedMove in simHost.sim.players[playerIndex].move_history:
+                        if (appliedMove is not None
+                                and appliedMove.source.x == 5 and appliedMove.source.y == 7
+                                and appliedMove.army_moved is not None and appliedMove.army_moved >= 30):
+                            fiveSevenDeparture = appliedMove
+                            break
+                    self.assertIsNotNone(
+                        fiveSevenDeparture,
+                        'the intercept stack never departed from 5,7')
+                    if enemySplit:
+                        self.assertEqual(
+                            (5, 6),
+                            (fiveSevenDeparture.dest.x, fiveSevenDeparture.dest.y),
+                            f'against an enemy split the 5,7 stack should send half north to 5,6: {fiveSevenDeparture}')
+                    self.assertEqual(
+                        enemySplit,
+                        fiveSevenDeparture.move_half,
+                        f'5,7 stack departure must be a half split iff the enemy split at 7,8: {fiveSevenDeparture} (enemySplit={enemySplit})')
+
+    def test_should_immediately_set_up_interception_instead_of_gathering_backwards(self) -> None:
+        # Repro of Human.exe-1v1-2026-11-15_02-20-32---8lCA7C85i turn 421:
+        # the enemy is pushing 6,12->7,12->7,11. In the live game the bot
+        # skipped the solo interception because elapsed search time was .130,
+        # then gathered backwards 2,4->3,4 instead of immediately setting up
+        # the interception route 4,4->3,4->2,4.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_immediately_set_up_interception_instead_of_gathering_backwards___8lCA7C85i---0--421.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_immediately_set_up_interception_instead_of_gathering_backwards___8lCA7C85i---0--421.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 421, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=421)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '6,12->7,12->7,11')
+
+        # proof - scripted correct play verified via external harness
+        # (init_only scripted queue, drives only general.player):
+        #   simHost.queue_player_moves_str(general.player, '4,4->3,4->2,4')
+        self.get_debug_render_bot(simHost, general.player)
+
+        playerIndex = general.player
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+        self.assertNoFriendliesKilled(map, general)
+
+        moveHistory = simHost.sim.players[playerIndex].move_history
+        self.assertGreaterEqual(
+            len(moveHistory),
+            2,
+            'expected at least 2 applied turns of move history')
+        firstMove = moveHistory[0]
+        self.assertIsNotNone(firstMove, 'no move was applied on the first turn')
+        self.assertEqual(
+            (4, 4),
+            (firstMove.source.x, firstMove.source.y),
+            'first applied move must depart from 4,4')
+        self.assertEqual(
+            (3, 4),
+            (firstMove.dest.x, firstMove.dest.y),
+            'first applied move must arrive at 3,4')
+        self.assertFalse(firstMove.move_half, 'first applied move must be a full move, not a split')
+
+        secondMove = moveHistory[1]
+        self.assertIsNotNone(secondMove, 'no move was applied on the second turn')
+        self.assertEqual(
+            (3, 4),
+            (secondMove.source.x, secondMove.source.y),
+            'second applied move must depart from 3,4')
+        self.assertEqual(
+            (2, 4),
+            (secondMove.dest.x, secondMove.dest.y),
+            'second applied move must arrive at 2,4')
+        self.assertFalse(secondMove.move_half, 'second applied move must be a full move, not a split')
+
+    def test_should_take_certified_intercept_despite_missing_threat_next(self) -> None:
+        # Repro of Human.exe-1v1-2026-11-15_02-20-32---8lCA7C85i turn 423/430:
+        # with the full gather parked at 5,7 the interceptor selects 5,7->5,6
+        # (worst-case intercept in 3 moves vs the threat deadline, friendly
+        # army reaching the intercept exceeding the threat value), but
+        # check_defense_intercept_move's final isMissing gate rejects it for
+        # not stepping onto the threat's immediate next square and the bot
+        # retreats 5,7->4,7 instead. A certified multi-turn catch must not be
+        # rejected merely for the geometric miss.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_split_intercept_army_and_should_retake_cities___8lCA7C85i---0--423.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_not_split_intercept_army_and_should_retake_cities___8lCA7C85i---0--423.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 423, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=423)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,11->7,7->8,7->8,2->4,2->4,4')
+        simHost.queue_player_moves_str(general.player, '3,4->3,5->2,5->2,7->5,7')
+        self.get_debug_render_bot(simHost, general.player)
+
+        playerIndex = general.player
+        self.begin_capturing_logging()
+        simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
+        self.assertNoFriendliesKilled(map, general)
+
+        moveHistory = simHost.sim.players[playerIndex].move_history
+        self.assertGreaterEqual(
+            len(moveHistory),
+            8,
+            'expected 7 queued prefix moves plus the first free bot move')
+        freeMove = moveHistory[7]
+        self.assertIsNotNone(freeMove, 'no move was applied on the first free bot turn')
+        self.assertEqual(
+            (5, 7),
+            (freeMove.source.x, freeMove.source.y),
+            'first free move must depart from the 5,7 stack')
+        self.assertEqual(
+            (5, 6),
+            (freeMove.dest.x, freeMove.dest.y),
+            'first free move must take the certified 5,7->5,6 interception, not retreat')
+        self.assertFalse(freeMove.move_half, 'first free move must be a full move, not a split')
+
+    def test_should_split_certified_intercept_to_hold_other_enemy_branch(self) -> None:
+        # Repro of Human.exe-1v1-2026-11-15_02-20-32---8lCA7C85i turn 423,
+        # enemy scripts for cases 1-3 of
+        # test_should_not_split_intercept_army_and_should_retake_cities:
+        # these pushes field a SECOND enemy stack (the 7,8->... branch, or
+        # the 7,7z split feeding it) alongside the main 7,11->...->4,4 kill
+        # threat. Once the certified 5,7->5,6 interception is available the
+        # bot must send it as a HALF move so the leftover 5,7 garrison still
+        # holds the other enemy branch, instead of committing the whole
+        # stack out of 5,7.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_split_intercept_army_and_should_retake_cities___8lCA7C85i---0--423.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_not_split_intercept_army_and_should_retake_cities___8lCA7C85i---0--423.truemap.txtmap'
+
+        self.begin_capturing_logging()
+        for enemyMoves in [
+            '7,11->7,8->7,7z->8,7->8,2->4,2->4,4',
+            '7,11->7,8->7,7z->8,7->8,2->9,2->9,6->8,6->8,7  7,8->7,7->8,7',
+            '7,11->7,8->7,7z->8,7  7,8->4,8->4,7->2,7->2,4->4,4',
+        ]:
+            with self.subTest(enemyMoves=enemyMoves):
+                map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 423, fill_out_tiles=True)
+
+                rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=423)
+
+                self.enable_search_time_limits_and_disable_debug_asserts()
+                simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+                simHost.queue_player_moves_str(enemyGeneral.player, enemyMoves)
+                # proof - scripted split verified achievable via queued moves:
+                #   simHost.queue_player_moves_str(general.player, '3,4->3,5->2,5->2,7->5,7->5,6z')
+                simHost.queue_player_moves_str(general.player, '3,4->3,5->2,5->2,7->5,7')
+                self.get_debug_render_bot(simHost, general.player)
+
+                playerIndex = general.player
+                simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=8)
+                self.assertNoFriendliesKilled(map, general)
+
+                moveHistory = simHost.sim.players[playerIndex].move_history
+                self.assertGreaterEqual(
+                    len(moveHistory),
+                    8,
+                    'expected 7 queued prefix moves plus the first free bot move')
+                freeMove = moveHistory[7]
+                self.assertIsNotNone(freeMove, 'no move was applied on the first free bot turn')
+                self.assertEqual(
+                    (5, 7),
+                    (freeMove.source.x, freeMove.source.y),
+                    'first free move must depart from the 5,7 stack')
+                self.assertEqual(
+                    (5, 6),
+                    (freeMove.dest.x, freeMove.dest.y),
+                    'first free move must take the certified 5,7->5,6 interception')
+                self.assertTrue(
+                    freeMove.move_half,
+                    'first free move must be a HALF move so the 5,7 garrison holds the other enemy branch')
+
+                tile57 = map.At(5, 7)
+                self.assertEqual(
+                    playerIndex,
+                    tile57.player,
+                    '5,7 must still be ours after the half move')
+                self.assertGreater(
+                    tile57.army,
+                    1,
+                    'half-move outbound must leave a >1 garrison on 5,7')
+
+    def test_should_reinforce_city_instead_of_intercepting_when_threat_lands_now(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_reinforce_city_instead_of_intercepting_when_threat_lands_now___aDGJc7F9T---0--330.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_reinforce_city_instead_of_intercepting_when_threat_lands_now___aDGJc7F9T---0--330.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 330, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=330)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 25 turns after turn 330
+        # simHost.queue_player_moves_str(general.player, '15,5->14,5  15,2->15,3->15,2->14,2->14,1->13,1->12,1->11,1->10,1->9,1  none  14,5->14,4  13,4->14,4  9,8->9,9  18,3->18,4  17,3->17,4  20,5->19,5->19,4  20,1->20,2->20,3  20,9->20,8->20,7->20,6  14,4->14,3  20,6->20,5')  # replay line for Human.exe
+        simHost.queue_player_moves_str(1, '12,6->13,6->13,5  7,3->8,3  none  6,1->7,1->8,1->8,2->8,3->8,2->8,1->9,1->10,1->11,1->12,1->13,1  9,2->10,2->11,2->12,2->12,3->12,4->13,4  none  none  none  5,2->6,2')  # replay moves: q4523654
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # proof
+        # simHost.queue_player_moves_str(general.player, '15,5->14,5  14,5->13,5')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
+        self.assertNoFriendliesKilled(map, general)
+
+        cityTile = map.At(13, 5)
+        self.assertEqual(general.player, cityTile.player, 'city 13,5 must still be ours - 14,5->13,5 reinforcement saves/retakes it from the 58-army hit')
+        self.assertTrue(cityTile.isCity, '13,5 should still be a city')

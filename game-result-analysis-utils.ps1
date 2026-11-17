@@ -108,6 +108,52 @@ function Get-GeneralsEventsRepoPath {
 }
 
 
+function Get-ReplayDumpCacheRoot {
+    # Replay-derived analysis artifacts (.gior downloads, .truemap.txtmap dumps)
+    # live here instead of inside the game log folders: writing into a grouped
+    # log folder bumps its LastWriteTime, which makes long-finished games look
+    # freshly modified in Explorer's sort-by-date. Entries auto-expire - see
+    # Clear-OldReplayDumpCache.
+    return 'C:\cascade-debug-output\generals-bot\replay-dump-cache'
+}
+
+
+function Get-ReplayDumpCacheFolder {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$ReplayId
+    )
+
+    $folder = Join-Path (Get-ReplayDumpCacheRoot) $ReplayId
+    if (-not (Test-Path $folder)) {
+        $null = New-Item -ItemType Directory -Path $folder -Force
+    }
+    return $folder
+}
+
+
+function Clear-OldReplayDumpCache {
+    # Cached dumps are disposable (re-downloaded/re-dumped on demand), so
+    # entries older than MaxAgeDays are deleted instead of accumulating.
+    Param(
+        [int]$MaxAgeDays = 7
+    )
+
+    $root = Get-ReplayDumpCacheRoot
+    if (-not (Test-Path $root)) {
+        return
+    }
+    $cutoff = (Get-Date).AddDays(-$MaxAgeDays)
+    Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt $cutoff } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    # Drop per-replay folders left empty by the file sweep.
+    Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.GetFileSystemInfos().Count -eq 0 } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+
 function Get-ReplayServerFromLogFolder {
     Param(
         [Parameter(Mandatory = $true)]
@@ -153,7 +199,17 @@ function Invoke-ReplayTrueMapDump {
         [int]$Turn,
 
         [Parameter(Mandatory = $true)]
-        [int]$PlayerIndex
+        [int]$PlayerIndex,
+
+        [int]$MovesTurns = 25,
+
+        # ScanRecentGamesForFogDesyncs.ps1 fallback: dumps the sim state without
+        # cross-checking the bot's visible tiles (needed when the client viewed
+        # the board rotated 90 degrees and every orientation fails the verify -
+        # a pre-existing ReplayTxtmapDump gap). The truemap is written in
+        # canonical orientation; callers must validate turn alignment via the
+        # dumped {c}Score/{c}Tiles footers themselves.
+        [switch]$NoVerify
     )
 
     # Grouped log folders are named "<desc>---<replayId>"; without that suffix
@@ -178,20 +234,37 @@ function Invoke-ReplayTrueMapDump {
         return $null
     }
 
-    $trueMapPath = Join-Path $Map.Directory.FullName "$($Map.BaseName).truemap.txtmap"
-    $giorPath = Join-Path $Map.Directory.FullName "$replayId.gior"
+    # Cache cleanup is once per session - a fog-desync scan can invoke this
+    # dozens of times and the sweep is pure waste on repeat calls.
+    if (-not $Script:ReplayDumpCacheCleaned) {
+        Clear-OldReplayDumpCache
+        $Script:ReplayDumpCacheCleaned = $true
+    }
+
+    # Dump artifacts go to the replay cache, never the game log folder (see
+    # Get-ReplayDumpCacheRoot). The <turn>.truemap.txtmap naming convention is
+    # kept, just under <cache>/<replayId>/.
+    $cacheFolder = Get-ReplayDumpCacheFolder -ReplayId $replayId
+    $trueMapPath = Join-Path $cacheFolder "$($Map.BaseName).truemap.txtmap"
+    $giorPath = Join-Path $cacheFolder "$replayId.gior"
+    $legacyGiorPath = Join-Path $Map.Directory.FullName "$replayId.gior"
     $server = Get-ReplayServerFromLogFolder -LogFolderPath $Map.Directory.FullName
 
     # ReplayTxtmapDump walks S3 -> server /api/replay backup (only when
     # /api/serverSettings reports aws_replay_saving_down) -> S3, checks the
     # local replay_data/ outage fallback first, simulates to $Turn, and
     # refuses to write a "true" map that contradicts the bot's visible tiles.
-    # A .gior already sitting in the log folder is reused instead of
-    # re-downloading.
+    # A cached .gior is reused instead of re-downloading; a .gior left in the
+    # log folder by older runs is still read (read-only), but new downloads
+    # always land in the cache.
     $nodeArgs = @($dumper)
     if (Test-Path $giorPath)
     {
         $nodeArgs += @('--replay-file', $giorPath)
+    }
+    elseif (Test-Path $legacyGiorPath)
+    {
+        $nodeArgs += @('--replay-file', $legacyGiorPath)
     }
     else
     {
@@ -208,8 +281,33 @@ function Invoke-ReplayTrueMapDump {
         '--out', $trueMapPath,
         '--copy-data-from', $Map.FullName
     )
+    if ($NoVerify)
+    {
+        $nodeArgs += '--no-verify'
+    }
+    if ($MovesTurns -gt 0)
+    {
+        $nodeArgs += @('--moves-turns', "$MovesTurns")
+    }
     Write-Host "dumping true map state for replay $replayId turn $Turn (server=$server)"
     $dumpOutput = & node @nodeArgs 2>&1
+
+    # MOVES|<playerIndex>|<queue_player_moves_str>|<username> marker lines list
+    # the moves each player successfully executed over the next MovesTurns
+    # turns, in the same coordinates as the dumped truemap.
+    $movesByPlayer = @()
+    foreach ($line in $dumpOutput)
+    {
+        if ("$line".StartsWith('MOVES|'))
+        {
+            $parts = "$line".Substring(6).Split('|', 3)
+            $movesByPlayer += [PSCustomObject]@{
+                PlayerIndex = [int]$parts[0]
+                Moves = $parts[1]
+                Username = $parts[2]
+            }
+        }
+    }
     $dumpOutput | ForEach-Object { Write-Host "    $_" }
 
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $trueMapPath))
@@ -218,7 +316,7 @@ function Invoke-ReplayTrueMapDump {
         return $null
     }
 
-    return Get-Item $trueMapPath
+    return [PSCustomObject]@{ Map = (Get-Item $trueMapPath); Moves = $movesByPlayer }
 }
 
 
@@ -380,7 +478,9 @@ function Create-TestContinuingGameFrom {
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 
-        $DestFolderRoot = $(Join-Path (Get-ConfiguredRepoRoot) 'Tests')
+        $DestFolderRoot = $(Join-Path (Get-ConfiguredRepoRoot) 'Tests'),
+
+        [int]$MovesTurns = 25
     )
 
     $TestName = $TestName.Replace(' ', '_')
@@ -450,13 +550,15 @@ function Create-TestContinuingGameFrom {
     # so wrong fog guesses get corrected by actually-discovered tiles instead
     # of being baked into the sim's ground truth.
     $trueMapName = $null
+    $replayMoves = $null
     if ($player -ne 'unk')
     {
-        $trueMap = Invoke-ReplayTrueMapDump -Map $map -Turn ([int]$turn) -PlayerIndex ([int]$player)
-        if ($null -ne $trueMap)
+        $dumpResult = Invoke-ReplayTrueMapDump -Map $map -Turn ([int]$turn) -PlayerIndex ([int]$player) -MovesTurns $MovesTurns
+        if ($null -ne $dumpResult)
         {
             $trueMapName = $newName -replace '\.txtmap$', '.truemap.txtmap'
-            $trueMap | Copy-Item -Destination "$DestFolder/$trueMapName" -ErrorAction Stop
+            $dumpResult.Map | Copy-Item -Destination "$DestFolder/$trueMapName" -ErrorAction Stop
+            $replayMoves = $dumpResult.Moves
         }
     }
 
@@ -496,6 +598,28 @@ function Create-TestContinuingGameFrom {
         $simHostBuilder = "simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True, teammateNotAfk=False)"
     }
 
+    # Replay-recorded moves for the MovesTurns turns after the imported turn are
+    # queued per player so the sim replays what every opponent actually did
+    # (queued moves still execute for forced-AFK players). The bot's own real
+    # line is emitted commented out - uncommenting it reproduces history.
+    $queueMoveLines = "        simHost.queue_player_moves_str(enemyGeneral.player, 'None')"
+    if ($null -ne $replayMoves -and $replayMoves.Count -gt 0)
+    {
+        $queueMoveLines = "        # replay moves for the $MovesTurns turns after turn $turn`n"
+        foreach ($entry in $replayMoves)
+        {
+            if ($entry.PlayerIndex -eq [int]$player)
+            {
+                $queueMoveLines += "        # simHost.queue_player_moves_str(general.player, '$($entry.Moves)')  # replay line for $($entry.Username)`n"
+            }
+            else
+            {
+                $queueMoveLines += "        simHost.queue_player_moves_str($($entry.PlayerIndex), '$($entry.Moves)')  # replay moves: $($entry.Username)`n"
+            }
+        }
+        $queueMoveLines = $queueMoveLines.TrimEnd("`n")
+    }
+
     $testFileContent += @"
 
     def test_$TestName(self):
@@ -508,7 +632,7 @@ $trueMapFileLine
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         $simHostBuilder
-        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+$queueMoveLines
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
@@ -535,8 +659,10 @@ function Create-UnitTestContinuingGameFrom {
         [Parameter(Position=1)]
         $TestName = "shouldnt_die_in_some_scenario",
 
-        $DestFolderRoot = $(Join-Path (Get-ConfiguredRepoRoot) 'UnitTests')
+        $DestFolderRoot = $(Join-Path (Get-ConfiguredRepoRoot) 'UnitTests'),
+
+        [int]$MovesTurns = 25
     )
 
-    Create-TestContinuingGameFrom -TestMapFile $TestMapFile -TestCategory $TestCategory -TestName $TestName -DestFolderRoot $DestFolderRoot
+    Create-TestContinuingGameFrom -TestMapFile $TestMapFile -TestCategory $TestCategory -TestName $TestName -DestFolderRoot $DestFolderRoot -MovesTurns $MovesTurns
 }

@@ -26,6 +26,7 @@ from DangerAnalyzer import ThreatType, ThreatObj
 from Gather import GatherTreeNode, GatherCapturePlan
 from Interfaces.TilePlanInterface import PathMove
 from Path import Path, MoveListPath
+from Strategy.CityContestationSafety import get_predicted_city_army_reserve, get_safe_predicted_city_approaches
 from Strategy.WinConditionAnalyzer import WinCondition
 from StrategyModels import ExpansionPotential
 from ViewInfo import TargetStyle, PathColorer
@@ -691,11 +692,19 @@ class BotCityOps:
         for enemyCity in enemyCitiesOrderedByPriority:
             enMovedNear = False
             cap = None
+            # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+            # A one-move kill on a speculative fog-predicted city requires the
+            # source tile to be a safe approach and the stack to exceed
+            # city army + 1 + reserve.
+            predictedReserve = get_predicted_city_army_reserve(enemyCity)
+            safeApproaches = get_safe_predicted_city_approaches(bot._map, enemyCity) if predictedReserve > 0 else set()
             for movable in enemyCity.movableNoObstacles:
                 if movable.player == enemyCity.player and movable.lastMovedTurn > bot._map.turn - 2 and movable.delta.toTile != enemyCity:
                     enMovedNear = True
                     break
-                if movable.player == bot.general.player and movable.army > enemyCity.army + 1 and movable not in defenseCriticalTileSet and (cap is None or cap.start.tile.army > movable.army):
+                if movable.player == bot.general.player and movable.army > enemyCity.army + 1 + predictedReserve and movable not in defenseCriticalTileSet and (cap is None or cap.start.tile.army > movable.army):
+                    if predictedReserve > 0 and movable not in safeApproaches:
+                        continue
                     cap = Path()
                     cap.add_next(movable)
                     cap.add_next(enemyCity)
@@ -764,9 +773,16 @@ class BotCityOps:
         tileCountRatio = bot._map.players[bot.general.player].tileCount ** 0.30
         cityDepthCutoffEnTerritory = max(5, int(tileCountRatio))
 
+        # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+        # Bulk single-quick searches share one low army target across all
+        # cities; speculative fog-predicted cities need their own reserve and
+        # safe-approach handling, so they are handled only by the per-city
+        # branch below.
+        bulkQuickKillTargets = [c for c in enemyCitiesOrderedByPriority if get_predicted_city_army_reserve(c) == 0]
+
         singleQuick = SearchUtils.dest_breadth_first_target(
                 bot._map,
-                enemyCitiesOrderedByPriority,
+                bulkQuickKillTargets,
                 1.0,
                 0.1,
                 4,
@@ -780,7 +796,7 @@ class BotCityOps:
         if not singleQuick:
             singleQuick = SearchUtils.dest_breadth_first_target(
                     bot._map,
-                    enemyCitiesOrderedByPriority,
+                    bulkQuickKillTargets,
                     1.5,
                     0.1,
                     7,
@@ -841,17 +857,44 @@ class BotCityOps:
                 )
                 negTilesToUse = set()
 
+            # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+            # Speculative fog-predicted cities require the reserve-adjusted
+            # target army and may only be approached through safe approaches;
+            # unsafe approach neighbors are unioned into the negatives AFTER
+            # the defense overrides above so those overrides cannot erase the
+            # safety exclusion.
+            predictedReserve = get_predicted_city_army_reserve(enemyCity)
+            if predictedReserve > 0:
+                safeApproaches = get_safe_predicted_city_approaches(bot._map, enemyCity)
+                if len(safeApproaches) == 0:
+                    logbook.info(
+                        f'QUICK_KILL_CITY_REJECT city={enemyCity} reason=no_safe_approaches '
+                        f'reserve={predictedReserve} turn={bot._map.turn}')
+                    continue
+                unsafeApproachNegs = {
+                    t for t in enemyCity.movable
+                    if not t.isObstacle and not t.isNotPathable
+                } - safeApproaches
+                negTilesToUse.update(unsafeApproachNegs)
+
             logbook.info(
                 f"{bot.get_elapsed()} searching for depth {cityDepthSearch} dest bfs kill on city {enemyCity.x},{enemyCity.y}")
             bot.viewInfo.add_targeted_tile(enemyCity, TargetStyle.RED)
             (armyToSearch, enNegs) = BotStateQueries.get_target_army_inc_adjacent_enemy_and_tiles(bot, enemyCity)
             armyToSearch += 1.0
+            effectiveArmyToSearch = armyToSearch + predictedReserve
+            # Each search keeps its original army requirement plus the
+            # speculative-city reserve (known cities: predictedReserve == 0,
+            # so their thresholds are unchanged).
+            shallowKillArmy = 1.5 + predictedReserve
+            deepKillArmy = max(1.5, armyToSearch) + predictedReserve
 
             armyToSearchNegs = negTilesToUse.copy() if negTilesToUse is not None else set()
             armyToSearchNegs.update(enNegs)
             logbook.info(
                 f'QUICK_KILL_CITY_SEARCH city={enemyCity} cityArmy={enemyCity.army} '
-                f'armyToSearch={armyToSearch:.1f} depth={cityDepthSearch} '
+                f'armyToSearch={armyToSearch:.1f} effectiveArmyToSearch={effectiveArmyToSearch:.1f} '
+                f'predictedReserve={predictedReserve} depth={cityDepthSearch} '
                 f'baseNegTiles={[str(t) for t in negTilesToUse] if negTilesToUse is not None else None} '
                 f'adjacentEnemyNegTiles={[str(t) for t in enNegs]} '
                 f'combinedNegTiles={[str(t) for t in armyToSearchNegs]}'
@@ -868,7 +911,7 @@ class BotCityOps:
             killPath = SearchUtils.dest_breadth_first_target(
                 bot._map,
                 [enemyCity],
-                1.5,
+                shallowKillArmy,
                 0.1,
                 2,
                 negTilesToUse,
@@ -881,7 +924,7 @@ class BotCityOps:
                 killPath = SearchUtils.dest_breadth_first_target(
                     bot._map,
                     [enemyCity],
-                    max(1.5, armyToSearch),
+                    deepKillArmy,
                     0.1,
                     cityDepthSearch,
                     armyToSearchNegs,
@@ -893,7 +936,7 @@ class BotCityOps:
                 killPath = SearchUtils.dest_breadth_first_target(
                     bot._map,
                     [enemyCity],
-                    max(1.5, armyToSearch),
+                    deepKillArmy,
                     0.1,
                     cityDepthSearch,
                     armyToSearchNegs,
@@ -906,8 +949,12 @@ class BotCityOps:
                 # Exclude the tiles on our killpath from the enemy's defense search. Any enemy army we
                 # capture en route (e.g. an army sitting between us and the city) cannot also defend the
                 # city, so it must not be double-counted as a defender.
+                # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+                # For speculative predicted cities the reserve must survive the
+                # defense comparison: the kill only proceeds when it beats the
+                # enemy's best defense by more than the reserve.
                 bestDef = BotDefense.get_best_defense(bot, killPath.tail.tile, killPath.length - 1, killPath.tileList)
-                if bestDef is not None and bestDef.value > killPath.value:
+                if bestDef is not None and bestDef.value > killPath.value - predictedReserve:
                     bot.viewInfo.color_path(PathColorer(
                         bestDef,
                         75, 30, 0, alpha=150, alphaDecreaseRate=3
@@ -919,7 +966,10 @@ class BotCityOps:
                     logbook.info(f'bypassed city killpath because best defense was easier for opp. {killPath.value} vs {bestDef.value}')
                     continue
 
-                if killPath.start.tile.isCity and BotCombatOps.should_kill_path_move_half(bot, killPath, int(armyToSearch - enemyCity.army)):
+                # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+                # Pass the reserve-adjusted army so the half-move check cannot
+                # strip the speculative-city buffer.
+                if killPath.start.tile.isCity and BotCombatOps.should_kill_path_move_half(bot, killPath, int(effectiveArmyToSearch - enemyCity.army)):
                     killPath.start.move_half = True
                 if shortestKill is None or shortestKill.length > killPath.length:
                     bot.info(
@@ -1049,9 +1099,33 @@ class BotCityOps:
             f"allowGather={allowGather} killSearchDist={killSearchDist} gatherMaxDuration={gatherMaxDuration} gatherMinDuration={gatherMinDuration} "
             f"cityGatherPath={cityGatherPath}"
         )
+
+        # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+        # This is the final search seam for city capture planning: a
+        # speculative fog-predicted city requires PREDICTED_CITY_ARMY_RESERVE
+        # extra army on both the kill and gather requirements, may only be
+        # attacked through safe approaches, and rejects the plan entirely
+        # when no safe approach remains. The reserve is added exactly once
+        # here; callers pass unadjusted target armies.
+        predictedReserve = get_predicted_city_army_reserve(targetCity)
+        unsafeApproachNegs: typing.Set[Tile] = set()
+        if predictedReserve > 0:
+            safeApproaches = get_safe_predicted_city_approaches(bot._map, targetCity)
+            if len(safeApproaches) == 0:
+                logbook.info(
+                    f'CITY_CAPTURE_PREDICTED_CITY_REJECT target={targetCity} reason=no_safe_approaches '
+                    f'reserve={predictedReserve} turn={bot._map.turn}')
+                return None, None, None
+            unsafeApproachNegs = {
+                t for t in targetCity.movable
+                if not t.isObstacle and not t.isNotPathable
+            } - safeApproaches
+
         if targetGatherArmy < targetKillArmy + targetCity.army:
             raise AssertionError(f'You cant gather less army {targetGatherArmy} to a city than the kill requirement {targetKillArmy} or the kill requirement will never fire and you will gather-loop.')
 
+        targetKillArmy += predictedReserve
+        targetGatherArmy += predictedReserve
         targetKillArmy += 1
         targetGatherArmy += 1
         logbook.info(
@@ -1106,6 +1180,14 @@ class BotCityOps:
         negativeTiles.update(potentialThreatNegs)
         BotCityOps._log_city_capture_negative_tile_state(bot, "plan_city_capture_after_potential_threat", targetCity, negativeTiles)
 
+        # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+        # Unsafe approach neighbors for a speculative predicted city are
+        # unioned in only after every negativeTiles reset/override above so
+        # defense or threat handling cannot erase the safety exclusion.
+        if len(unsafeApproachNegs) > 0:
+            negativeTiles.update(unsafeApproachNegs)
+            BotCityOps._log_city_capture_negative_tile_state(bot, "plan_city_capture_after_predicted_city_safety", targetCity, negativeTiles)
+
         addlIncrementing = SearchUtils.count(targetCity.adjacents, lambda tile: tile.isCity and bot._map.is_tile_enemy(tile))
 
         logbook.info(
@@ -1136,7 +1218,10 @@ class BotCityOps:
                 additionalIncrement=addlIncrementing / 2)
 
         if targetCity.player >= 0:
-            altKillArmy = 1 + BotCombatOps.sum_enemy_army_near_tile(bot, targetCity, distance=1)
+            # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+            # The short alt-kill search must carry the same speculative-city
+            # reserve as the main kill search.
+            altKillArmy = 1 + predictedReserve + BotCombatOps.sum_enemy_army_near_tile(bot, targetCity, distance=1)
             altKillPath = SearchUtils.dest_breadth_first_target(
                 bot._map,
                 [targetCity],
@@ -1788,6 +1873,35 @@ class BotCityOps:
                     bot.info(f'City Contest General Off {move} (val {allInPlan.gathered_army} turns {allInPlan.length})')
                     return move, allInPlan.gathered_army, allInPlan.length, allInPlan.root_nodes
 
+        # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+        # Speculative fog-predicted cities in the contest set require the
+        # army reserve above defense+fog risk at the prune check, and their
+        # unsafe approach neighbors are excluded from the gather search so
+        # the committed stack cannot route through a cave/wall approach.
+        # A speculative target with no safe approach is dropped entirely.
+        speculativeReserve = 0
+        contestSafetyNegs: typing.Set[Tile] = set()
+        safeTargets: typing.List[Tile] = []
+        for t in targets:
+            reserve = get_predicted_city_army_reserve(t)
+            if reserve > 0:
+                safeApproaches = get_safe_predicted_city_approaches(bot._map, t)
+                if len(safeApproaches) == 0:
+                    logbook.info(
+                        f'CITY_CONTEST_ALLIN_REJECT target={t} reason=no_safe_approaches '
+                        f'reserve={reserve} turn={bot._map.turn}')
+                    continue
+                speculativeReserve = max(speculativeReserve, reserve)
+                contestSafetyNegs.update(
+                    {n for n in t.movable if not n.isObstacle and not n.isNotPathable} - safeApproaches)
+            safeTargets.append(t)
+        targets = safeTargets
+        if len(targets) == 0:
+            return None, 0, 0, []
+
+        gatherSearchNegatives = defenseCriticalTileSet.copy()
+        gatherSearchNegatives.update(contestSafetyNegs)
+
         move, valGathered, gatherTurns, gatherNodes = BotGatherOps.get_gather_to_target_tiles(
             bot,
             targets,
@@ -1795,7 +1909,7 @@ class BotCityOps:
             gatherTurns=turns,
             maximizeArmyGatheredPerTurn=True,
             useTrueValueGathered=True,
-            negativeSet=defenseCriticalTileSet)
+            negativeSet=gatherSearchNegatives)
 
         if gatherNodes:
             prunedGatherTurns, sumPruned, prunedGatherNodes = Gather.prune_mst_to_max_army_per_turn_with_values(
@@ -1810,7 +1924,7 @@ class BotCityOps:
             rootGatheredTiles = [n.tile for n in prunedGatherNodes]
             predictedTurns, predictedDefenseVal = bot.win_condition_analyzer.get_dynamic_turns_visible_defense_against(rootGatheredTiles, prunedGatherTurns, prunedGatherNodes[0].tile.player)
             fogRisk = bot.opponent_tracker.get_approximate_fog_army_risk(bot.targetPlayer, inTurns=0)
-            if sumPruned < predictedDefenseVal + fogRisk:
+            if sumPruned < predictedDefenseVal + fogRisk + speculativeReserve:
                 return None, 0, 0, []
 
             numCaptures = BotGatherOps.get_number_of_captures_in_gather_tree(bot, prunedGatherNodes)

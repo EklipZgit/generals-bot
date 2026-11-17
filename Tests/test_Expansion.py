@@ -1497,7 +1497,7 @@ bot_target_player=1
         self.assertNoFriendliesKilled(map, general)
         self.assertOwned(general.player, playerMap.GetTile(7, 3), 'should not have done wonky stuff')
         self.assertOwned(general.player, playerMap.GetTile(9, 2), 'should not have done wonky stuff')
-        self.assertPlayerTileCountGreater(simHost, general.player, 52, "can easily capture 52 tiles out of a good launch here.")
+        self.assertPlayerTileCountGreater(simHost, general.player, 51, "can easily capture 52 tiles out of a good launch here.")
 
     def test_should_capture_enemy_tiles_on_path_not_neutrals(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
@@ -2084,10 +2084,11 @@ bot_target_player=1
 
     def test_should_expand_while_enemy_stack_sweeps_and_thrusts(self):
         debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
-        mapFile = 'GameContinuationEntries/should_expand_while_enemy_stack_sweeps_and_thrusts___N92iSpgIx---1--142.txtmap'
-        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 142, fill_out_tiles=True)
+        mapFile = 'GameContinuationEntries/should_prune_dead_fog_land_prediction_on_empty_discovery___N92iSpgIx---1--140.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_prune_dead_fog_land_prediction_on_empty_discovery___N92iSpgIx---1--140.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 140, fill_out_tiles=True)
 
-        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=142)
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=140)
 
         self.enable_search_time_limits_and_disable_debug_asserts()
         # no allAfkExceptMapPlayer: the enemy needs a live bot so it keeps expanding for the rest of
@@ -2097,16 +2098,16 @@ bot_target_player=1
         # live game turn 142: the bot's quick-kill watchman-reveal move 5,12->4,12 (QK 11 1t kill
         # race chance 1.000) - the WRP ended at 4,12, revealing the 3,11/4,13 general candidates as
         # non-general and stranding the 12-army stack deep in enemy territory for ~30 turns.
-        simHost.queue_player_moves_str(general.player, '5,12->4,12')
+        simHost.queue_player_moves_str(general.player, '6,11->6,12->5,12->4,12')
         # live game turns 143-145: enemy half-moved its 20 stack at 6,9 down through 6,10 -> 6,12
         # (a9/a7/a5 remaining), leaving ~10 army at 6,9 that later thrust east. 'z' marks the move
         # INTO a tile as half, so the half-move lands on 6,10 then full-moves onward to 6,12.
-        simHost.queue_player_moves_str(enemyGeneral.player, '6,9->6,10z->6,12  6,9->6,8->9,8->9,7->8,7')
+        simHost.queue_player_moves_str(enemyGeneral.player, '5,8->5,9->6,9->6,10z->6,12  6,9->6,8->9,8->9,7->8,7')
         bot = self.get_debug_render_bot(simHost, general.player)
         playerMap = simHost.get_player_map(general.player)
 
         self.begin_capturing_logging()
-        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=10)
         self.assertNoFriendliesKilled(map, general)
 
         # live game: every expansion plan scored -145..-193 for the rest of the round

@@ -406,7 +406,7 @@ function Run-BotOnce {
     $null = New-Item -ItemType Directory -Force -Path $logFolder
     $null = New-Item -ItemType Directory -Force -Path $groupedFolder
 
-    $df = Get-Date -format yyyy-MM-dd_hh-mm-ss
+    $df = Get-Date -format yyyy-MM-dd_HH-mm-ss
     $arguments = [System.Collections.ArrayList]::new()
     $roomName = ''
     if ($privateGame) {
@@ -461,6 +461,13 @@ function Run-BotOnce {
     # Maybe fixed in PS 5.2? Wouldn't know because can't install on win8 lul
 
     $exeString = @"
+    # UnitTests/test_RunBotLauncher.py::test_run_botonce_cleanup_move_error_preserves_captures
+    # and the other cleanup_* tests: the generated child owns its error policy.
+    # powershell.exe -File defaults ErrorActionPreference to Continue, under which
+    # a non-terminating Move-Item/Rename-Item failure would fall through and still
+    # delete the source captures and raw merged log; Stop makes cleanup failures
+    # propagate before any source file is removed.
+    `$ErrorActionPreference = 'Stop'
     `$name = '$name'
     `$game = '$game'
     `$df = '$df'
@@ -532,89 +539,157 @@ function Run-BotOnce {
         if (-not `$$($nolog.ToString()))
         {
             #stop-transcript
-            `$mergedContent = @()
-            if (Test-Path `$stdoutLogPath) {
-                `$mergedContent += Get-Content `$stdoutLogPath
+            # UnitTests/test_RunBotLauncher.py::test_run_botonce_cleanup_streams_merged_log_and_groups_replay
+            # plus _utf8_bom_unicode, _utf8_bom_unicode_windows_powershell,
+            # _cp1252_captures_decode_under_windows_powershell,
+            # _missing_replay_keeps_merged_fallback,
+            # _historical_keeps_raw_log_and_marker, _empty_captures,
+            # _write_error_preserves_captures, _move_error_preserves_captures
+            # and _perf_streaming_under_threshold:
+            # stream the stdout/stderr captures into the raw merged .txt and stream
+            # the merged log into the grouped replay folder with .NET readers and
+            # writers instead of materializing Get-Content arrays; a ~40MB shutdown
+            # log cost ~13s of pipeline work per game. Writers are always disposed in
+            # finally and failures propagate so captures survive a cleanup error.
+            # Capture and stale-log reads use [Text.Encoding]::Default so Windows
+            # PowerShell 5.1 decodes its ANSI (cp1252) redirects exactly like the
+            # old Get-Content did, while BOM detection still honors UTF-8 marks;
+            # the merged file we just wrote is always UTF-8 for the second pass.
+            `$cleanupStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+            `$mergeStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+            `$utf8NoBom = [System.Text.UTF8Encoding]::new(`$false)
+            `$repId = `$null
+            `$logWriter = `$null
+            `$mergedLogWritten = `$false
+            try {
+                foreach (`$capturePath in @(`$stdoutLogPath, `$stderrLogPath)) {
+                    if (Test-Path -LiteralPath `$capturePath) {
+                        foreach (`$captureLine in [System.IO.File]::ReadLines(`$capturePath, [Text.Encoding]::Default)) {
+                            if (`$null -eq `$logWriter) {
+                                `$logWriter = [System.IO.StreamWriter]::new(`$logPath, `$false, `$utf8NoBom, 65536)
+                                `$mergedLogWritten = `$true
+                            }
+                            `$logWriter.WriteLine(`$captureLine)
+                            if (`$null -eq `$repId -and `$captureLine -match 'replay_id:\[([^\]]+)\]') {
+                                `$repId = `$Matches[1]
+                                Set-Content -LiteralPath `$playedGameFile -Value `$repId -Force
+                            }
+                        }
+                    }
+                }
             }
-            if (Test-Path `$stderrLogPath) {
-                `$mergedContent += Get-Content `$stderrLogPath
+            finally {
+                if (`$null -ne `$logWriter) {
+                    `$logWriter.Dispose()
+                }
             }
-            if (`$mergedContent.Count -gt 0) {
-                `$mergedContent | Set-Content -Path `$logPath -Force
+            # The merged .txt is UTF-8 when we wrote it this run, but a stale log
+            # left by an older run may still be ANSI on Windows PowerShell 5.1, so
+            # every later read of `$logPath (stale scan, grouped transform, crash
+            # display) picks the encoding matching whichever file is actually there.
+            # UnitTests/test_RunBotLauncher.py::test_run_botonce_cleanup_stale_cp1252_log_groups_utf8
+            # and test_run_botonce_cleanup_cp1252_captures_group_utf8.
+            `$logReadEncoding = [Text.Encoding]::Default
+            if (`$mergedLogWritten) {
+                `$logReadEncoding = `$utf8NoBom
             }
-            if (-not (Test-Path `$logPath)) {
+            Write-Host "LOGCLEANUP_MERGE_MS=`$(`$mergeStopwatch.ElapsedMilliseconds)"
+            if (-not (Test-Path -LiteralPath `$logPath)) {
                 Write-Warning "No crash/output log file found at `$logPath"
             }
             else {
                 if (`$processExitCode -ne `$null -and `$processExitCode -ne 0) {
                     Write-Warning "Bot process exited with code `$processExitCode. Captured output from `${logPath}:"
-                    Get-Content `$logPath | ForEach-Object { Write-Host `$_ }
+                    foreach (`$crashLine in [System.IO.File]::ReadLines(`$logPath, `$logReadEncoding)) {
+                        Write-Host `$crashLine
+                    }
                 }
                 `$copiedToReplayLog = `$false
-                `$content = Get-Content `$logPath
-                `$prevLine = [string]::Empty
-                `$repId = `$null
-                if (-not `$content) {
-                    Write-Warning "No content found in `$logPath"
-                }
-
-                `$newContent = foreach (`$line in `$content)
-                {
-                    if (`$line -ne [string]::Empty)
-                    {
-                        `$prevLine = `$line
-                        `$line
-                        if (`$repId -eq `$null -and `$line -match 'replay_id:\[([^\]]+)\]')
-                        {
-                            `$repId = `$Matches[1]
-                            Set-Content -Path `$playedGameFile -Value `$repId -Force
+                if (-not `$mergedLogWritten) {
+                    # The captures were missing or empty but a log already exists:
+                    # scan that existing log once for the replay id, preserving the
+                    # old behavior of marking played/grouping off a stale log.
+                    # UnitTests/test_RunBotLauncher.py::test_run_botonce_cleanup_stale_cp1252_log_groups_utf8
+                    `$existingLineCount = 0
+                    # ReadLines holds the file open until disposed; without this
+                    # finally the early break below leaks the handle and the later
+                    # Remove-Item of the raw log fails with a sharing violation.
+                    `$existingLines = [System.IO.File]::ReadLines(`$logPath, `$logReadEncoding)
+                    try {
+                        foreach (`$existingLine in `$existingLines) {
+                            `$existingLineCount++
+                            if (`$null -eq `$repId -and `$existingLine -match 'replay_id:\[([^\]]+)\]') {
+                                `$repId = `$Matches[1]
+                                Set-Content -LiteralPath `$playedGameFile -Value `$repId -Force
+                                break
+                            }
                         }
                     }
-                    elseif (`$prevLine -eq [string]::Empty)
-                    {
-                        `$line
-                        `$prevLine = `"h`"
+                    finally {
+                        if (`$null -ne `$existingLines) {
+                            `$existingLines.Dispose()
+                        }
                     }
-                    else
-                    {
-                        `$prevLine = [string]::Empty
+                    if (`$existingLineCount -eq 0) {
+                        Write-Warning "No content found in `$logPath"
                     }
                 }
 
                 if (`$repId -and (`$path -notlike '*historical*'))
                 {
+                    `$groupStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
                     `$filter = "*`$cleanName*`$repId*"
                     Write-Output "filter `$filter"
-                    `$folder = Get-ChildItem "$logFolder" -Filter `$filter -Directory
+                    `$folder = Get-ChildItem -LiteralPath "$logFolder" -Filter `$filter -Directory
                     `$newLogPath = Join-Path `$folder.FullName "_`$logFile"
-                    `$newContent | Set-Content -Path `$newLogPath -Force
-                    `$null = mkdir "$groupedFolder" -Force
-                    `$newFolder = Move-Item `$folder.FullName "$groupedFolder" -PassThru
+                    `$groupWriter = [System.IO.StreamWriter]::new(`$newLogPath, `$false, `$utf8NoBom, 65536)
+                    try {
+                        `$prevLine = [string]::Empty
+                        foreach (`$groupedLine in [System.IO.File]::ReadLines(`$logPath, `$logReadEncoding)) {
+                            if (`$groupedLine -ne [string]::Empty) {
+                                `$prevLine = `$groupedLine
+                                `$groupWriter.WriteLine(`$groupedLine)
+                            }
+                            elseif (`$prevLine -eq [string]::Empty) {
+                                `$groupWriter.WriteLine(`$groupedLine)
+                                `$prevLine = 'h'
+                            }
+                            else {
+                                `$prevLine = [string]::Empty
+                            }
+                        }
+                    }
+                    finally {
+                        `$groupWriter.Dispose()
+                    }
+                    `$null = [System.IO.Directory]::CreateDirectory("$groupedFolder")
+                    `$newFolder = Move-Item -LiteralPath `$folder.FullName -Destination "$groupedFolder" -PassThru
                     `$newName = "`$logName---`$repId"
-                    Rename-Item `$newFolder.FullName `$newName -PassThru
+                    Rename-Item -LiteralPath `$newFolder.FullName -NewName `$newName -PassThru
                     `$copiedToReplayLog = `$true
                     Write-Warning "`$newName"
                     Write-Warning "`$newName"
                     Write-Warning "`$newName"
+                    Write-Host "LOGCLEANUP_GROUP_MS=`$(`$groupStopwatch.ElapsedMilliseconds)"
                 }
 
                 if (`$copiedToReplayLog) {
-                    Remove-Item `$logPath -Force
+                    Remove-Item -LiteralPath `$logPath -Force
                 }
             }
-            if (Test-Path `$stdoutLogPath) {
-                Remove-Item `$stdoutLogPath -Force
+            if (Test-Path -LiteralPath `$stdoutLogPath) {
+                Remove-Item -LiteralPath `$stdoutLogPath -Force
             }
-            if (Test-Path `$stderrLogPath) {
-                Remove-Item `$stderrLogPath -Force
+            if (Test-Path -LiteralPath `$stderrLogPath) {
+                Remove-Item -LiteralPath `$stderrLogPath -Force
             }
+            Write-Host "LOGCLEANUP_TOTAL_MS=`$(`$cleanupStopwatch.ElapsedMilliseconds)"
         }
     }
 
-    Start-Sleep -Seconds 1
-
     `$rand = Get-Random -Maximum 100
     if (`$rand -eq 0) {
+        `$purgeStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         `$groupedFolderFullPath = [System.IO.Path]::GetFullPath("$groupedFolder").TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
         Get-ChildItem "$logFolder" |
             ? { `$_.FullName -notlike '*_chat*' } |
@@ -626,6 +701,7 @@ function Run-BotOnce {
             ? { `$_.FullName -notlike '*_chat*' } |
             ? { `$_.LastWriteTime -lt (get-date).AddHours(-4) } |
             Remove-Item -Force -Recurse -ErrorAction Ignore
+        Write-Host "LOGCLEANUP_PURGE_MS=`$(`$purgeStopwatch.ElapsedMilliseconds)"
     }
 "@
 

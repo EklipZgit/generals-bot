@@ -1,4 +1,4 @@
-import logbook
+﻿import logbook
 import time
 import typing
 
@@ -2138,8 +2138,115 @@ class CityGatherTests(TestBase):
         # t216 (and then diverted by a threat-defense bug). The city needs 43 army;
         # ~8 moves is the theoretical floor here (a7@7,10 is 7 moves away, general
         # merges cap ~41 assembled by t174), the gather achieves t179. Bound at 12
-        # for search-timing margin — the buggy behavior never captures within it.
+        # for search-timing margin â€” the buggy behavior never captures within it.
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=12)
         self.assertNoFriendliesKilled(map, general)
 
         self.assertOwnedXY(8, 6)
+
+    def test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave(self):
+        """Regression: at t168 the unfixed bot abandoned nearby neutral city
+        (13,5) for a FlowExpansion gather through the cave toward the
+        undiscovered fog-predicted city (5,6). The bot must keep taking (13,5)
+        and must never park a stack larger than a 2-army scout on cave tiles
+        (6,6)/(7,6).
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_take_nearby_city_instead_of_attacking_predicted_city_through_cave___3VENGPUNO---0--163.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_take_nearby_city_instead_of_attacking_predicted_city_through_cave___3VENGPUNO---0--163.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 163, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=163)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 25 turns after turn 163
+        # simHost.queue_player_moves_str(general.player, '14,0->14,1  12,4->13,4  14,1->14,2  13,2->14,2->14,3  14,6->13,6  12,1->12,0  14,3->14,4->13,4->12,4  12,3->12,4  12,5->12,4  14,3->14,4->13,4->12,4->11,4  11,3->11,4->10,4  10,3->10,4->9,4->8,4  8,3->8,4  7,4->8,4->8,5->8,6')  # replay line for Human.exe
+        simHost.queue_player_moves_str(enemyGeneral.player, '3,6->3,7  8,9->8,8  9,9->10,9->10,8->10,7  11,9->11,8  7,12->7,13  7,11->7,10  8,10->7,10->6,10->6,9->5,9  3,11->2,11  4,11->5,11->5,10  none  2,10->1,10->1,11->1,12  3,10->4,10->5,10->5,9->5,8->4,8->4,7')  # replay moves: imp25
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # proof: scripted correct play captures neutral city (13,5) on game
+        # turn 171 (8th scripted turn): the (12,3)/(12,4)/(13,4) gather builds
+        # 8 at (13,4), the 14,0 stack feeds column 14 and merges to 46 at
+        # (13,4), then 13,4->13,5 takes the 44-city (proof_163_caveguard.py).
+        # simHost.queue_player_moves_str(general.player, '12,3->12,4->13,4  14,0->14,1->14,2->14,3->14,4->13,4->13,5')
+
+        cave_violations: list[str] = []
+
+        def assert_no_friendly_cave_stack() -> None:
+            """Between-turns guard: no friendly stack >2 (scout size) on cave
+            tiles (6,6)/(7,6); violations recorded for the post-run assert."""
+            sim = simHost.sim
+            for x, y in ((6, 6), (7, 6)):
+                tile = sim.sim_map.At(x, y)
+                if tile.player == general.player and tile.army > 2:
+                    violation = f't{sim.turn + 1} friendly stack a{tile.army} on cave tile {x},{y}'
+                    cave_violations.append(violation)
+                    logbook.error(f'CITY_GATHER_CAVE_GUARD {violation}')
+
+        simHost.run_between_turns(assert_no_friendly_cave_stack)
+
+        self.begin_capturing_logging()
+        # The fixed bot re-targets (13,5) the turn after the predicted-city
+        # plan is rejected (t169) and its 3-step attack path
+        # 14,3->14,4->13,4->13,5 (merging the 45-stack at 13,4) captures on
+        # game turn 176/177, so the budget is 14 turns; the scripted proof
+        # line above remains the tighter lower bound.
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=14)
+        self.assertNoFriendliesKilled(map, general)
+
+        self.assertOwnedXY(13, 5)
+        self.assertEqual(0, len(cave_violations), f'friendly stack >2 entered cave tiles (6,6)/(7,6): {cave_violations}')
+
+    def test_should_not_split_city_gather_army_to_block_nonlethal_threat(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_split_city_gather_army_to_block_nonlethal_threat___9MQtR9bI----0--177.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_not_split_city_gather_army_to_block_nonlethal_threat___9MQtR9bI----0--177.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 177, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=177)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 25 turns after turn 177
+        # simHost.queue_player_moves_str(general.player, '10,1->11,1z->12,1  17,5->17,6  10,1->11,1z  11,2->11,1->12,1->12,0  9,6->9,7  16,1->16,0  6,6->5,6  9,1->10,1->9,1->9,2->9,3  8,4->9,4  9,3->10,3->11,3->12,3->12,2->13,2  14,2->14,1  17,1->16,1  13,2->12,2->13,2  8,1->9,1')  # replay line for Human.exe
+        simHost.queue_player_moves_str(1, '16,14->15,14->15,13->16,13->16,12  15,12->16,12->16,11->16,10->15,10->15,9->15,8->14,8->14,7->14,6->14,5->15,5->16,5->16,4->16,3->17,3->17,2->16,2->16,1->17,1z  16,1->16,0z')  # replay moves: EklipZ
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # Tests/test_CityGather.py::CityGatherTests.test_should_not_split_city_gather_army_to_block_nonlethal_threat:
+        # the stealth all-in subsystem races a WRP worker process and can nondeterministically
+        # commit the 53-stack to a general-hunt route instead of finishing the neutral city
+        # capture (observed STEALTH_ALLIN_ROUTE_MOVE 11,1 -> 11,2 in some runs, 12,1 -> 12,2
+        # in others). This test exists to verify the BLOCK-SPLIT decision on 10,1, not the
+        # all-in hunt policy, so disable it for determinism.
+        bot.enable_stealth_all_in = False
+
+        # proof
+        # simHost.queue_player_moves_str(general.player, '10,1->11,1->12,1->12,0')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertNoFriendliesKilled(map, general)
+
+        # Repro from Human.exe-1v1-2026-11-16_09-03-11---9MQtR9bI- turn 177: a fog-
+        # estimated ~3-army threat ~13 turns out at 10,10 made the defense gather mark
+        # our 53 stack on 10,1 as needing a 3-army block, so the city capture move
+        # 10,1 -> 11,1 got halved (BLOCK-SPLIT). The 26 sent forward could not take the
+        # 42 neutral city at 12,0 and the move was split AGAIN at t180; the city only
+        # fell at t184 with 2 army left instead of ~t180 with ~12. The whole stack
+        # moving was safe: the 'threat' tile is empty in the true map and the general
+        # alone grows past the estimated threat value before it could ever arrive.
+        splitMoves = [
+            m for m in simHost.sim.players[general.player].move_history
+            if m is not None and m.move_half and m.source == playerMap.GetTile(10, 1)]
+        self.assertEqual(
+            0, len(splitMoves),
+            f'expected NO move_half split out of 10,1 - holding a 3-army block against a '
+            f'non-lethal fog threat should not halve the 53-army city gather: {splitMoves}')
+
+        self.assertOwnedXY(12, 0, 'bot should have captured neutral city 12,0 within 5 turns by marching the full 53 stack straight in (3 moves)')
+        self.assertGreater(
+            map.GetTile(12, 0).army, 5,
+            'the city capture should arrive heavy (full stack leaves ~12), not dribble in halves and land with 2')

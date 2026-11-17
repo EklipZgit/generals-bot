@@ -262,6 +262,25 @@ class BotDefense:
 
                             if sumPrunedTurns >= threat.turns or anyLeafIsSameDistAsThreat:
                                 if interceptMove is not None:
+                                    # Tests/test_Defense.py::DefenseTests.test_should_reinforce_city_instead_of_intercepting_when_threat_lands_now:
+                                    # an intercept whose worst-case engagement is later than the threat's
+                                    # arrival on the tail concedes the threatened tile by definition - it
+                                    # is a plan to fight the remnant, not a defense. When the gather move
+                                    # itself lands on the threatened tile it resolves the hit this turn
+                                    # (reinforces so the attack fails, or immediately recaptures the
+                                    # remnant), which is strictly better than letting the tile fall. Only
+                                    # keep the intercept preference when it can engage before/at the hit
+                                    # (same worst_case<=threat.turns certificate as the MISS OVERRIDE gate)
+                                    # or when the gather move does not hold the tail.
+                                    gatherMoveHoldsTail = move.dest == threat.path.tail.tile
+                                    interceptEngagesBeforeHit = (
+                                        intOption is not None
+                                        and intOption.worst_case_intercept_moves <= threat.turns)
+                                    if gatherMoveHoldsTail and not interceptEngagesBeforeHit:
+                                        bot.info(
+                                            f'Must def, gather move {move} holds {str(threat.path.tail.tile)} - int {interceptMove} cannot engage before hit '
+                                            f'(wct {intOption.worst_case_intercept_moves if intOption is not None else "n/a"} > threat {threat.turns}, anyLeafIsSameDistAsThreat {anyLeafIsSameDistAsThreat})')
+                                        return move, savePath
                                     bot.info(f'Must def, int move {interceptMove} (prunedT {sumPrunedTurns}, threat {threat.turns}, anyLeafIsSameDistAsThreat {anyLeafIsSameDistAsThreat})')
                                     return interceptMove, interceptPath
 
@@ -492,6 +511,459 @@ class BotDefense:
         return None, None
 
     @staticmethod
+    def apply_threat_blocking_split_hint_to_move(bot: EklipZBot, move: Move | None) -> Move | None:
+        """
+        Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        Applies the ArmyInterceptor split-interception rule (see
+        get_intercept_blocking_tiles_for_split_hinting / _get_intercept_plan_options) to any
+        chosen move: when the move would drag a threat-blocking tile through one of its
+        blocked_destinations, it abandons the garrison required against an inbound threat
+        and the defense gather has to pull the whole stack back next turn - the oscillation
+        that prevented recapturing the city. If the tile can keep >= amount_needed_to_block
+        behind by sending only half (the same 'army // 2' test the interceptor uses), halve
+        the move instead. If not, the move is suppressed when the source is the committed
+        garrison of a previous split (draining it would repeat the oscillation) and left
+        alone otherwise so the defense gather can pull it back as before.
+
+        @param bot:
+        @param move:
+        @return:
+        """
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # a committed WRP/stealth route step must move its head whole - halving it strands
+        # half the stack on the old tile while the route marches on with a halved head, and
+        # suppressing/redirecting it breaks the committed path outright.
+        if (move is not None
+                and bot.stealth_all_in is not None
+                and bot.stealth_all_in.last_route_move is move):
+            return move
+        # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        # beeline: the army that split off a garrison has a job (the recapture/intercept
+        # it was donated for) - if a pending city/contest option wants to continue it but
+        # the decided move ignores it, the option's continuation takes priority over the
+        # unrelated pick. When no option continues it (e.g. the city is still ours so no
+        # recapture plan exists), the beeline computes the next hop straight toward the
+        # recorded mission target. Otherwise the march stalls whenever expansion
+        # economics pick something else (the live-game failure mode). It never overrides
+        # committed-garrison moves though - repositioning a garrison along its block
+        # corridor is defense business, not an unrelated pick.
+        # prune committed-outbound tiles the army no longer holds (a hop onto an
+        # enemy tile that lost the fight)
+        for trackedTile in list(bot.block_split_outbound_tiles):
+            if trackedTile.player != bot.general.player:
+                bot.block_split_outbound_tiles.discard(trackedTile)
+        if bot.block_split_outbound_target is not None and (
+                bot.block_split_outbound_target in bot.block_split_outbound_tiles
+                or len(bot.block_split_outbound_tiles) == 0):
+            # mission over - the committed army is either standing on the target or
+            # gone entirely; it is back in normal play
+            bot.block_split_outbound_target = None
+
+        # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        # a committed garrison marching into the split-off army's trail abandons the
+        # block no matter what the checker says THIS turn - the trail is the direction
+        # the block was split against. The checker flickers (it dropped every key for a
+        # turn mid-defense), so the trail check stays live a couple turns past the
+        # garrison's last blocking sighting rather than relying on blockInfo alone.
+        # Rather than burning the turn outright the suppressed move is redirected to
+        # the outbound's next hop when it has one.
+        if (move is not None and not move.move_half
+                and move.source in bot.block_split_garrison_sources
+                and bot._map.turn - bot.block_split_garrison_last_turn.get(move.source, -99) <= 2
+                and move.dest in bot.block_split_outbound_trail):
+            blockInfo = bot.blocking_tile_info.get(move.source, None)
+            if blockInfo is None or blockInfo.amount_needed_to_block > move.source.army // 2:
+                redirectMove = BotDefense._get_block_split_beeline_or_option_move(bot)
+                if redirectMove is not None:
+                    logbook.info(
+                        f'BLOCK-SPLIT holding committed garrison {str(move.source)}, redirecting suppressed '
+                        f'trail move {str(move)} to {str(redirectMove)}')
+                    move = redirectMove
+                else:
+                    logbook.info(
+                        f'BLOCK-SPLIT holding committed garrison {str(move.source)}, suppressing trail move {str(move)} '
+                        f'(blockInfo={blockInfo})')
+                    return None
+
+        if bot.block_split_outbound_tiles:
+            if move is None or (move.source not in bot.block_split_outbound_tiles
+                    and move.source not in bot.block_split_garrison_sources):
+                beelineMove = BotDefense._get_block_split_beeline_or_option_move(bot)
+                if beelineMove is not None:
+                    logbook.info(
+                        f'BLOCK-SPLIT beeline {str(beelineMove)} continuing committed outbound '
+                        f'army, overriding unrelated pick {str(move)}')
+                    move = beelineMove
+            # advance committed-outbound tracking for whatever move is finally sent -
+            # track the destination optimistically (a committed stack usually wins its
+            # hop); if the enemy holds it next turn the prune above drops it
+            if move is not None and move.source in bot.block_split_outbound_tiles:
+                bot.block_split_outbound_tiles.discard(move.source)
+                bot.block_split_outbound_tiles.add(move.dest)
+                bot.block_split_outbound_trail.add(move.dest)
+
+        if move is None or move.move_half or not bot.blocking_tile_info:
+            return move
+        blockInfo = bot.blocking_tile_info.get(move.source, None)
+
+        # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        # commit the split early: when the decided move just shuffles/repositions a
+        # threat-blocking tile without ever crossing a blocked destination (the
+        # 7,4 <-> 7,5 tug-of-war between the forward plan and the defense gather),
+        # the army that can spare a split should send it NOW toward the pending city
+        # mission instead of wasting more turns oscillating. Only fires when a
+        # DEFENSIVE mission target exists (an inbound threat to one of our cities -
+        # never an offensive capture option; test_shouldnt_try_to_defend_city_and_
+        # then_die_lmao had the synth halve an offensive intercept stack), the tile
+        # can keep >= amount_needed_to_block, and the decided move is NOT strictly
+        # closer to the mission than the split would be - if it is
+        # (test_should_intercept_51_plus_42_at_the_target_city_not_defend_2_11:
+        # 3,9 -> 3,8 already beelines the intercept at 3,5), the whole-stack
+        # commitment is already the mission's best play and halving it plus sending
+        # the outbound the wrong way would just weaken the intercept.
+        if (bot.block_split_outbound_target is None
+                and not move.move_half
+                and blockInfo is not None
+                and blockInfo.amount_needed_to_block > 0
+                and blockInfo.amount_needed_to_block <= move.source.army // 2
+                and move.dest not in blockInfo.blocked_destinations):
+            synthTarget = BotDefense._detect_block_split_mission_target(bot, move, defensiveOnly=True)
+            if (synthTarget is not None
+                    and bot.dangerAnalyzer.fastestCityThreat is not None
+                    and any(dest in bot.dangerAnalyzer.fastestCityThreat.path.tileSet for dest in blockInfo.blocked_destinations)):
+                # the block exists against the very threat heading to this city -
+                # splitting its surplus toward the threatened city is redundant
+                # (the feint at 2,11 pulling half the 3,5-intercept stack in
+                # test_should_intercept_51_plus_42_at_the_target_city_not_defend_2_11)
+                synthTarget = None
+            if synthTarget is not None:
+                distMatrix = bot._map.distance_mapper.get_tile_dist_matrix(synthTarget)
+                bestDest: Tile | None = None
+                for dest in blockInfo.blocked_destinations:
+                    if not dest.isObstacle and (bestDest is None or distMatrix.raw[dest.tile_index] < distMatrix.raw[bestDest.tile_index]):
+                        bestDest = dest
+                if bestDest is not None and distMatrix.raw[bestDest.tile_index] <= distMatrix.raw[move.dest.tile_index]:
+                    synthMove = Move(move.source, bestDest, move_half=True)
+                    synthMove.army_moved = (move.source.army - 1) // 2
+                    bot.block_split_garrison_sources.add(move.source)
+                    bot.block_split_garrison_last_turn[move.source] = bot._map.turn
+                    bot.block_split_outbound_tiles.add(bestDest)
+                    bot.block_split_outbound_trail.add(bestDest)
+                    bot.block_split_outbound_target = synthTarget
+                    logbook.info(
+                        f'BLOCK-SPLIT synth {str(synthMove)}: committing split toward {str(synthTarget)} instead of '
+                        f'shuffling block tile with {str(move)} (leaves >= {blockInfo.amount_needed_to_block}, {blockInfo})')
+                    return synthMove
+
+        if blockInfo is None or move.dest not in blockInfo.blocked_destinations:
+            return move
+        # Tests/test_CityContestation.py::test_should_be_able_to_recapture_painfully_fine_city:
+        # a zero/negative requirement (realThreatVal + tile.army <= 0) means the threat is
+        # not lethal through this tile even with nothing held back - nothing needs to
+        # remain, so halving the move would only stall the recapture army for no reason.
+        if blockInfo.amount_needed_to_block <= 0:
+            return move
+        if blockInfo.amount_needed_to_block > move.source.army // 2:
+            # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+            # if this tile already donated a split, its remainder is the committed garrison -
+            # letting it leave whole drains the block and forces the defense gather to yank the
+            # outbound half back (the 7,5 <-> 8,5 oscillation). Suppress the move so it holds.
+            if move.source in bot.block_split_garrison_sources:
+                logbook.info(
+                    f'BLOCK-SPLIT holding committed garrison {str(move.source)}, suppressing {str(move)} '
+                    f'(needs {blockInfo.amount_needed_to_block}, {blockInfo})')
+                return None
+            logbook.info(
+                f'BLOCK-SPLIT denied, cannot hold {blockInfo.amount_needed_to_block} by halving '
+                f'{move.source.army} on {str(move.source)} for {str(move)} ({blockInfo})')
+            return move
+        # Tests/test_CityGather.py::test_should_not_split_city_gather_army_to_block_nonlethal_threat:
+        # the reserve should only constrain the decided move when there is no other save
+        # path if the threat turns out real - when the threatened tile(s) still survive
+        # without this stack the reserve is advisory, so send the move whole instead of
+        # stranding an over-strength garrison while the outbound half fails its mission.
+        otherSavePath = BotDefense._block_split_has_other_save_path(bot, move, blockInfo)
+        if otherSavePath is not None:
+            logbook.info(
+                f'BLOCK-SPLIT skipped, other save path exists ({otherSavePath}): {str(move)} whole instead of halving for {blockInfo}')
+            return move
+        # ...and when the reserve IS load-bearing, don't split into a capture the
+        # outbound half can't finish - the city simply cannot be taken this turn and
+        # the stack has to hold instead of sending a doomed under-strength attack.
+        if BotDefense._block_split_dooms_city_capture(bot, move):
+            logbook.info(
+                f'BLOCK-SPLIT suppressed, split of {move.source.army} cannot complete the pending '
+                f'city capture and no other save path exists: {str(move)} ({blockInfo})')
+            return None
+        move.move_half = True
+        move.army_moved = (move.source.army - 1) // 2
+        # record the committed garrison so future planning cannot source it again and future
+        # denied moves from it are suppressed rather than allowed to drain the block; and
+        # record where the split-off army landed so its continuation gets beeline priority.
+        bot.block_split_garrison_sources.add(move.source)
+        bot.block_split_garrison_last_turn[move.source] = bot._map.turn
+        bot.block_split_outbound_tiles.add(move.dest)
+        bot.block_split_outbound_trail.add(move.dest)
+        if bot.block_split_outbound_target is None:
+            bot.block_split_outbound_target = BotDefense._detect_block_split_mission_target(bot, move)
+        logbook.info(
+            f'BLOCK-SPLIT {str(move)}: leaving >= {blockInfo.amount_needed_to_block} '
+            f'behind on {str(move.source)} to hold block ({blockInfo}), outbound target {str(bot.block_split_outbound_target)}')
+        return move
+
+    @staticmethod
+    def _block_split_has_other_save_path(bot: EklipZBot, move: Move, blockInfo: ThreatBlockInfo) -> str | None:
+        """
+        Tests/test_CityGather.py::test_should_not_split_city_gather_army_to_block_nonlethal_threat:
+        Whether every live threat's target can still survive the threat WITHOUT
+        move.source's stack - i.e. another save path exists if the threat turned out
+        real. Counts the target's own army plus its production growth by the threat's
+        arrival turn and every other friendly tile's movable army that can reach the
+        target through friendly territory in time; the moving stack itself is excluded
+        (pretend it is gone - conservative).
+
+        @param bot: The bot
+        @param move: The decided move that wants to leave a threat-blocked tile
+        @param blockInfo: The block the move's source is under; its recorded `threats`
+            are evaluated in addition to the live threat sets, because a reserve is only
+            load-bearing w.r.t. the threats that created it (the filtered 'we care
+            about' set can miss the exact threat this block answers).
+        @return: A short reason string when no live threat needs this tile's reserve to
+            survive it (release the block, send the move whole); None when the reserve
+            is load-bearing for at least one threat (apply the split rules).
+        """
+        threats: typing.Set[ThreatObj] = set()
+        if bot.threats_we_care_about_by_tile is not None:
+            for threatList in bot.threats_we_care_about_by_tile.values():
+                threats.update(threatList)
+        if bot.dangerAnalyzer.fastestThreat is not None:
+            threats.add(bot.dangerAnalyzer.fastestThreat)
+        if bot.dangerAnalyzer.fastestCityThreat is not None:
+            threats.add(bot.dangerAnalyzer.fastestCityThreat)
+        threats.update(blockInfo.threats)
+        if not threats:
+            return None
+        # Tests/test_CityContestation.py::test_should_be_able_to_recapture_painfully_fine_city:
+        # an interception option's first move IS the defense - the stack is marching to
+        # fight the threat, so halving it just sends an under-strength interception while
+        # the 'reserve' sits a tile behind contributing nothing (8,12 -> 9,12 toward the
+        # 9,9 fight got halved, dooming the intercept). The intercept only counts as a
+        # save path for threats whose SOURCE it attacks though - matching an option's
+        # first move against a DIFFERENT threat's block still needs the reserve
+        # (7,4 -> 8,4 intercepted 8,8 while its own block served the threat through 7,4).
+        interceptTarget: Tile | None = None
+        interceptedThreats: typing.Set[ThreatObj] = set()
+        selectedOption = bot.expansion_plan.selected_option
+        if isinstance(selectedOption, InterceptionOptionInfo):
+            optionMove = selectedOption.get_first_move()
+            if (optionMove is not None and optionMove.source == move.source and optionMove.dest == move.dest
+                    and selectedOption.intercept is not None):
+                interceptTarget = selectedOption.intercept.target_tile
+                # the interception was modeled as the answer to exactly these threats
+                # (ArmyInterception.threats) - for them the move IS the defense, so
+                # halving it just weakens the intercept (8,12 -> 9,12 into the 9,9/8,10
+                # fight). A threat NOT in this set (the on-path 7,4 block's threat)
+                # still needs its reserve evaluated below.
+                interceptedThreats.update(selectedOption.intercept.threats)
+        missionTarget = BotDefense._detect_block_split_mission_target(bot, move)
+        if missionTarget is None:
+            # a committed interception is itself a mission - the intercepted enemy army
+            # tile is what the stack is marching on.
+            missionTarget = interceptTarget
+        if missionTarget is None or (not missionTarget.isCity and missionTarget.army <= 1):
+            # Tests/test_Defense.py::test_should_not_loop_defense_gather_just_capture_city:
+            # only release the block for moves with a committed capture/fight mission.
+            # Releasing a directionless positioning move (e.g. a proactive flank-vision
+            # shuffle) re-opens the forward-plan <-> defense-gather ping-pong the block
+            # exists to stop - the garrison/split machinery is exactly what prevents it.
+            return None
+        survivableTails: list[str] = []
+        for threat in threats:
+            if threat.path is None or threat.path.tail is None:
+                continue
+            tailTile = threat.path.tail.tile
+            if not bot._map.is_tile_on_team_with(tailTile, bot.general.player):
+                continue
+            # Tests/test_CityContestation.py::test_should_be_able_to_recapture_painfully_fine_city:
+            # the move's mission is to capture the threat's own SOURCE tile (e.g.
+            # recapturing enemy-held city 9,9 which IS where this threat's army sits) -
+            # taking it kills the attacker outright, so the whole stack going there IS
+            # the save path. Tail/mid-path targets do NOT count: standing on the
+            # threatened tile is exactly what the reserve is for, and surplus-only splits
+            # still accomplish tail defense plus the mission (7,4 -z> 8,4 toward 12,10 in
+            # test_should_split_army_to_recapture_city_and_still_block_threat).
+            if threat in interceptedThreats:
+                survivableTails.append(f'{str(tailTile)} via interception {str(interceptTarget)}')
+                continue
+            if (missionTarget is not None and missionTarget == threat.path.start.tile) \
+                    or (interceptTarget is not None and interceptTarget == threat.path.start.tile):
+                survivableTails.append(f'{str(tailTile)} via source-kill {str(missionTarget)}')
+                continue
+            turns = max(0, threat.turns)
+            if tailTile.isGeneral or tailTile.isCity:
+                growth = turns // 2
+            else:
+                growth = turns // 50
+            defensePool = SearchUtils.Counter(0)
+            defensePool.add(tailTile.army + growth)
+
+            def countDefender(tile: Tile) -> bool:
+                if tile.player != tailTile.player:
+                    return True  # defenders must reach through friendly territory
+                if tile != move.source and tile != tailTile and tile not in threat.path.tileSet:
+                    defensePool.add(tile.army - 1)
+                return False
+
+            SearchUtils.breadth_first_foreach(bot._map, [tailTile], turns, countDefender, noLog=True)
+            if defensePool.value < threat.threatValue:
+                logbook.info(
+                    f'BLOCK-SPLIT no other save path: {str(tailTile)} cannot survive {threat} '
+                    f'without {str(move.source)} (pool {defensePool.value} < needed {threat.threatValue}), '
+                    f'threatSrc {str(threat.path.start.tile)}, mission {str(missionTarget)}, intercept {str(interceptTarget)}')
+                return None
+            survivableTails.append(str(tailTile))
+        if not survivableTails:
+            return None
+        return f'tails survivable without stack: {"|".join(survivableTails)}'
+
+    @staticmethod
+    def _block_split_dooms_city_capture(bot: EklipZBot, move: Move) -> bool:
+        """
+        Tests/test_CityGather.py::test_should_not_split_city_gather_army_to_block_nonlethal_threat:
+        Whether halving move.source's stack leaves the pending plan that produced this
+        move unable to complete - e.g. a city capture gather whose delivered army drops
+        at/below the target's army. Only fires for moves that ARE a pending city
+        option's first move; other moves are assumed still viable at half strength.
+
+        @param bot: The bot
+        @param move: The decided move about to be halved
+        @return: True when the halved force can no longer take the pending city target
+        """
+        for option in (bot.contest_city_plan_option, bot.city_capture_plan_option, bot.quick_kill_city_plan_option):
+            if option is None:
+                continue
+            optionMove = option.get_first_move()
+            if optionMove is None or optionMove.source != move.source or optionMove.dest != move.dest:
+                continue
+            if isinstance(option, Gather.GatherCapturePlan):
+                target = option.gather_target
+                if target is None or not target.isCity:
+                    return False
+                # halving retains (army-1) - (army-1)//2 of this source's delivery
+                retained = (move.source.army - 1) - (move.source.army - 1) // 2
+                deliveredAfterSplit = option.gathered_army - retained
+                return deliveredAfterSplit <= target.army
+            if option.tail is not None and option.tail.tile is not None and option.tail.tile.isCity:
+                # non-gather path options deliver only this move's halved stack at the target
+                return (move.source.army - 1) // 2 <= option.tail.tile.army
+            return False
+        return False
+
+    @staticmethod
+    def _detect_block_split_mission_target(bot: EklipZBot, splitMove: Move, defensiveOnly: bool = False) -> Tile | None:
+        """
+        Which target the committed outbound army is marching on: whichever pending
+        city/contest/quick-kill option produced the just-split move supplies it;
+        otherwise fall back to the fastest incoming city threat's target (the city the
+        inbound column is taking) - that is the city the split exists to save.
+        defensiveOnly restricts the result to inbound threats against our own cities -
+        used by the synth path, which must never manufacture an offensive mission out
+        of a defensive block (a capture option on an enemy city is not a reason to
+        split a garrison that a threat pins).
+        """
+        if not defensiveOnly:
+            for option in (bot.contest_city_plan_option, bot.city_capture_plan_option, bot.quick_kill_city_plan_option):
+                if option is None:
+                    continue
+                optionMove = option.get_first_move()
+                if optionMove is not None and optionMove.source == splitMove.source and optionMove.dest == splitMove.dest:
+                    if isinstance(option, Gather.GatherCapturePlan):
+                        return option.gather_target
+                    if option.tail is not None:
+                        return option.tail.tile
+        if bot.dangerAnalyzer.fastestCityThreat is not None and bot.dangerAnalyzer.fastestCityThreat.path.tail is not None:
+            threatTarget = bot.dangerAnalyzer.fastestCityThreat.path.tail.tile
+            if threatTarget.isCity and threatTarget.player == bot.general.player:
+                # Tests/test_Defense.py::test_should_intercept_51_plus_42_at_the_target_city_not_defend_2_11:
+                # when the blocking tile sits on this threat's own path, the block IS
+                # the defense for that mission - splitting surplus toward the
+                # threatened city is redundant (the feint at 2,11 pulling half the
+                # 3,5-intercept stack away) - there is no separate mission to march on.
+                if not defensiveOnly or splitMove.source not in bot.dangerAnalyzer.fastestCityThreat.path.tileSet:
+                    return threatTarget
+        return None
+
+    @staticmethod
+    def _get_block_split_beeline_or_option_move(bot: EklipZBot) -> Move | None:
+        """
+        The committed split-off army's next move: prefer a pending city/contest/quick-kill
+        option whose first move already sources the outbound army; otherwise compute the
+        next distance-field hop straight at the recorded mission target.
+        """
+        for beelineOption in (bot.contest_city_plan_option, bot.city_capture_plan_option, bot.quick_kill_city_plan_option):
+            if beelineOption is None:
+                continue
+            optionMove = beelineOption.get_first_move()
+            if optionMove is not None and optionMove.source in bot.block_split_outbound_tiles and not BotRepetition.detect_repetition(bot, optionMove):
+                return optionMove
+        return BotDefense._get_block_split_beeline_move(bot)
+
+    @staticmethod
+    def _get_block_split_beeline_move(bot: EklipZBot) -> Move | None:
+        """
+        Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        Next hop for the committed split-off army when no pending plan option wants to
+        continue it: distance-mapper field walk toward the recorded mission target from
+        the strongest committed outbound tile - one step strictly decreasing distance.
+        Keeps the recapture march moving every turn instead of stalling whenever
+        expansion economics pick an unrelated move.
+        """
+        target = bot.block_split_outbound_target
+        if target is None:
+            return None
+        distMatrix = bot._map.distance_mapper.get_tile_dist_matrix(target)
+        bestOutbound: Tile | None = None
+        for outboundTile in bot.block_split_outbound_tiles:
+            if (outboundTile.player == bot.general.player
+                    and outboundTile.army > 1
+                    and (bestOutbound is None or outboundTile.army > bestOutbound.army)):
+                bestOutbound = outboundTile
+        if bestOutbound is None:
+            return None
+        outboundDist = distMatrix.raw[bestOutbound.tile_index]
+        bestDest: Tile | None = None
+        bestDestScore = 0
+        for dest in bestOutbound.movable:
+            if dest.isObstacle:
+                continue
+            destDist = distMatrix.raw[dest.tile_index]
+            if destDist >= outboundDist:
+                continue
+            # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+            # the committed stack must arrive HEAVY enough to win - marching the
+            # geometrically-shortest line through enemy tiles bleeds ~2 army per hop
+            # (one left behind + the capture cost) and the recapture arrives a couple
+            # army short. Prefer our own tiles (the move merges their army in) and
+            # cheap neutrals over enemy captures, accepting up to about one extra hop
+            # of detour; dist-0 is always taken so the final attack is never delayed.
+            # Tiles already in the march's trail or holding a committed garrison are
+            # effectively off-limits: stepping back into them un-does the split and
+            # recreates the oscillation (test_shouldnt_try_to_defend_city_and_then_
+            # die_lmao beelined the outbound straight back onto its garrison).
+            if destDist == 0:
+                score = -1
+            else:
+                score = destDist * 3 + (0 if dest.player == bot.general.player else 2 + min(dest.army, 4))
+                if dest in bot.block_split_outbound_trail or dest in bot.block_split_garrison_sources:
+                    score += 1000
+            if bestDest is None or score < bestDestScore:
+                bestDest = dest
+                bestDestScore = score
+        if bestDest is None:
+            return None
+        return Move(bestOutbound, bestDest)
+
+    @staticmethod
     def _get_conflicting_plan_option_value_per_turn(bot: EklipZBot, interceptPathTiles: typing.Set[Tile]) -> float:
         """
         Best econValue/length among pending city plan options that share tiles with the given
@@ -560,13 +1032,19 @@ class BotDefense:
                         skippedIntercepts.append(tile)
                         continue
 
-                    isCloseThreat = threats[0].turns <= bot.target_player_gather_path.length / 4 and bot.board_analysis.intergeneral_analysis.aMap.raw[tile.tile_index] < bot.target_player_gather_path.length / 2
+                    # UnitTests/test_ArmyInterceptionUnit.py::test_should_not_take_literal_lifetimes_to_load_intercepts
+                    # (and _do_infinite_intercepts_costing_tons_of_time): target_player_gather_path is
+                    # None when the target player is unreachable this turn; treat every threat as
+                    # relatively close (infinite target distance) so the staleness prunes below just
+                    # don't apply - inclusion stays bounded by limit/timeCut instead of crashing.
+                    targetPathLen = bot.target_player_gather_path.length if bot.target_player_gather_path is not None else 1000000
+                    isCloseThreat = threats[0].turns <= targetPathLen / 4 and bot.board_analysis.intergeneral_analysis.aMap.raw[tile.tile_index] < targetPathLen / 2
 
                     if isFfa and threatArmy.last_seen_turn < bot._map.turn - 4 and not isCloseThreat:
                         skippedIntercepts.append(tile)
                         continue
 
-                    if bot._map.turn - threatArmy.last_seen_turn > max(1.0, bot.target_player_gather_path.length / 5) and not isCloseThreat:
+                    if bot._map.turn - threatArmy.last_seen_turn > max(1.0, targetPathLen / 5) and not isCloseThreat:
                         skippedIntercepts.append(tile)
                         continue
 
@@ -595,8 +1073,15 @@ class BotDefense:
                                 continue
 
                             threatsIncluded.append(threat)
-                            if bot.army_interceptor.ensure_threat_army_analysis(threat):
-                                num += 1
+                            # Tests/test_Defense.py::DefenseTests.test_should_immediately_set_up_interception_instead_of_gathering_backwards
+                            # (turn 421) and Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_predict_fog_army_before_visible_path_endpoint
+                            # (turn 424 collapse): ensure_threat_army_analysis returns True only when it BUILT a new
+                            # analysis; threats that already carry armyAnalysis (e.g. DangerAnalyzer's preset Kill
+                            # threats) return False, so counting only new builds logged "Analysis (0 threats)" and
+                            # dropped tiles whose threats were all cached-but-valid. The call is still required for
+                            # its side effect (building missing analyses); num now counts included threats.
+                            bot.army_interceptor.ensure_threat_army_analysis(threat)
+                            num += 1
                         moveEvent.event_name = f'INT @{str(tile)} Analysis ({num} threats)'
                     if num > 0:
                         threatsWeCareAbout.append((tile, threatsIncluded))
@@ -808,6 +1293,60 @@ class BotDefense:
             elif threat.path.tail.tile != bot.general:
                 if len(BotDefense.get_danger_tiles(bot)) > 0:
                     negatives.add(bot.general)
+
+        # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        # when a threat-blocking tile on this threat's path already holds its
+        # amount_needed_to_block, the army sitting on its blocked_destinations is the
+        # committed outbound half of a block-split (see
+        # apply_threat_blocking_split_hint_to_move). Gathering it straight back onto the
+        # path is the pull-back half of the split-then-retreat oscillation, so withhold
+        # those tiles from this gather. When the block is NOT satisfied they stay
+        # gatherable so the stack can still be pulled back to restore the garrison.
+        for threat in threats:
+            for threatPathTile in threat.path.tileList:
+                blockInfo = bot.blocking_tile_info.get(threatPathTile, None)
+                if (blockInfo is not None
+                        and blockInfo.amount_needed_to_block > 0
+                        and threatPathTile.army >= blockInfo.amount_needed_to_block):
+                    for blockedDest in blockInfo.blocked_destinations:
+                        if blockedDest not in negatives:
+                            negatives.add(blockedDest)
+                            logbook.info(
+                                f'DEFENSE_NEG_ADD context=satisfied-block-outbound threat={str(threat.path.start.tile)}@{str(threat.path.tail.tile)} '
+                                f'blockingTile={str(threatPathTile)} dest={str(blockedDest)} ({blockInfo})')
+
+        # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        # committed split garrisons must keep their army against the threats that pin
+        # them - pulling them into THIS gather is the drain that starts the oscillation
+        # (the gather then wants e.g. 7,4 -> 8,4 which abandons the 6,6 block). With
+        # them withheld the gather picks the committed outbound's continuation instead,
+        # which is the same intercept the gather wanted anyway. The pin survives a
+        # couple turns past the tile's last blocking sighting - the checker flickers.
+        for garrisonTile in bot.block_split_garrison_sources:
+            if bot._map.turn - bot.block_split_garrison_last_turn.get(garrisonTile, -99) <= 2 and garrisonTile not in negatives:
+                negatives.add(garrisonTile)
+                logbook.info(f'DEFENSE_NEG_ADD context=block-split-garrison tile={str(garrisonTile)}')
+
+        # Tests/test_CityContestation.py::test_should_split_army_to_recapture_city_and_still_block_threat:
+        # the committed outbound half has a job (the recapture/intercept it split off
+        # for) - once it marches past the garrison's adjacent blocked_destinations this
+        # gather can drag it all the way back, recreating the cycle. While every live
+        # committed garrison still holds its block the outbound is untouchable; if a
+        # block degrades everything becomes pullable again so the stack can be rebuilt.
+        anyLiveCommittedBlock = False
+        allCommittedBlocksHolding = True
+        for garrisonTile in bot.block_split_garrison_sources:
+            garrisonInfo = bot.blocking_tile_info.get(garrisonTile, None)
+            if garrisonInfo is None:
+                continue
+            anyLiveCommittedBlock = True
+            if garrisonTile.army < garrisonInfo.amount_needed_to_block:
+                allCommittedBlocksHolding = False
+        if anyLiveCommittedBlock and allCommittedBlocksHolding:
+            for outboundTile in bot.block_split_outbound_tiles:
+                if outboundTile not in negatives:
+                    negatives.add(outboundTile)
+                    logbook.info(f'DEFENSE_NEG_ADD context=committed-outbound tile={str(outboundTile)}')
 
         if not threat.path.tail.tile.isGeneral:
             # test_Defense: test_should_not_abandon_late_city_defense_when_gather_exceeds_threat
@@ -1651,9 +2190,41 @@ class BotDefense:
         if isMissing:
             isMissing = mvNext not in threatNext.movable
         if threat.threatType == ThreatType.Kill and isMissing:
-            bot.viewInfo.add_info_line(
-                f'DEF int BYP: {mv} would miss threatNext {threatNext}')
-            return None, None, None, False
+            # Tests/test_Defense.py::DefenseTests.test_should_take_certified_intercept_despite_missing_threat_next:
+            # a certified interception option already proves the threat can be caught within its
+            # deadline with enough friendly army arriving, even when this turn's move does not step
+            # onto the threat's immediate next square (a multi-turn catch-up). Do not reject it
+            # merely for the geometric miss; uncertified, delayed, or late options still bypass.
+            #
+            # InterceptionOptionInfo.worst_case_intercept_moves / friendly_army_reaching_intercept are
+            # computed against the plan's best_enemy_threat, which in a mixed-threat plan can be a
+            # higher-value CITY threat rather than this general-kill threat - a city catch does NOT
+            # certify a general catch. Recompute the collision against THIS actual threat at this rare
+            # gate so only a real catch of this threat certifies the move.
+            hasCatchCertificate = False
+            actualWorstCaseInterceptTurn = -1
+            actualFriendlyArmyAtIntercept = -1
+            if interceptingOption is not None and interceptingOption.requiredDelay == 0 and isinstance(interceptPath, Path):
+                collisionResult = bot.army_interceptor._get_result_of_executing_paths_to_intercept_point(
+                    threatInterceptionPlan,
+                    threat,
+                    interceptPath,
+                    bot.timings.get_turns_left_in_cycle(bot._map.turn))
+                actualWorstCaseInterceptTurn = collisionResult.worst_case_intercept_turn
+                actualFriendlyArmyAtIntercept = collisionResult.friendly_army_at_intercept
+                hasCatchCertificate = (
+                    actualWorstCaseInterceptTurn <= threat.turns
+                    and actualFriendlyArmyAtIntercept >= threat.threatValue)
+            if hasCatchCertificate:
+                bot.info(
+                    f'DEF int MISS OVERRIDE: {mv} misses threatNext {threatNext} but intercept is certified vs ACTUAL threat: '
+                    f'wct={actualWorstCaseInterceptTurn} <= threat.turns={threat.turns} deadline, '
+                    f'army={actualFriendlyArmyAtIntercept} >= threatValue={threat.threatValue}, '
+                    f'requiredDelay={interceptingOption.requiredDelay}')
+            else:
+                bot.viewInfo.add_info_line(
+                    f'DEF int BYP: {mv} would miss threatNext {threatNext}')
+                return None, None, None, False
 
         return mv, interceptPath, interceptingOption, isDelayed
 
@@ -2700,6 +3271,7 @@ class BotDefense:
                 )
                 bot.blocking_tile_info[threatPathTile] = block
 
+            block.add_threat(threat)
             block.amount_needed_to_block = min(threatPathTile.army, max(block.amount_needed_to_block, amountNecessary))
             defDist = threat.armyAnalysis.interceptDistances.raw[threatPathTile.tile_index]
             if defDist is None:
@@ -2725,7 +3297,19 @@ class BotDefense:
             if defensiveTile.army <= 2 and gatherTreeNode.toTile.army > defensiveTile.army:
                 defensiveTile = gatherTreeNode.toTile
             block = bot.blocking_tile_info.get(defensiveTile, None)
-            amountNecessary = max(0, threat.threatValue - defensiveTile.army)
+            if defensiveTile in threat.path.tileSet:
+                amountNecessary = max(0, threat.threatValue - defensiveTile.army)
+            else:
+                # Tests/test_Defense.py::DefenseTests.test_should_not_split_intercept_army_and_should_retake_cities
+                # (turn 423, replay 8lCA7C85i): a best_defense_leaf OFF the threat path is an independent
+                # defender contributing toward the threat, not a tile the threat walks through, so its
+                # needed contribution is the threat's full positive value (still capped by its own army via
+                # the min() below), not the residual deficit after subtracting its army. The old
+                # max(0, threatValue - army) produced 104-93=11 for the 3,4 interception stack, which let the
+                # post-selection funnel split off most of that army; reserving the full 104 -> min(93,104)=93
+                # keeps the interception army whole. On-path leaves keep the deficit formula because
+                # threatValue has different provenance there; the threatPathTile loop above is unchanged.
+                amountNecessary = max(0, threat.threatValue)
             if not block:
                 block = ThreatBlockInfo(
                     defensiveTile,
@@ -2733,6 +3317,7 @@ class BotDefense:
                 )
                 bot.blocking_tile_info[defensiveTile] = block
 
+            block.add_threat(threat)
             block.amount_needed_to_block = min(defensiveTile.army, max(block.amount_needed_to_block, amountNecessary))
             defDist = threat.armyAnalysis.interceptDistances.raw[defensiveTile.tile_index]
             if defDist is None:

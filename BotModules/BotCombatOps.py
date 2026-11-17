@@ -28,13 +28,14 @@ from Army import Army
 # from ArmyEngine import ArmySimResult
 from ArmyAnalyzer import ArmyAnalyzer
 from ArmyTracker import ArmyTracker
-from Gather import Gather
+from Gather import Gather, GatherCapturePlan
 from Path import Path
 from Interfaces.TilePlanInterface import PathMove
 from Strategy.GeneralTradeEvaluator import GeneralTradeSide, GeneralTradeEvaluation, evaluate_general_trade as _eval_general_trade_pure
 from StrategyModels import ExpansionPotential
 from ViewInfo import PathColorer, TargetStyle
 from Models.Move import Move
+from base import Colors
 from base.client.map import Tile, Player
 from DangerAnalyzer import ThreatType, ThreatObj
 import typing
@@ -301,6 +302,10 @@ class BotCombatOps:
                         logbook.info(f"    quick-kill path val {quickKill.value} > ({cutoffKillArmy} in {maxEnDefTurns}t) found to kill enemy king w/ additionalKillDist {additionalKillDist}? {str(quickKill)}")
                         ogQuickKill = quickKill
                         ogAdditionalKillDist = additionalKillDist
+                        # Reset per enemyGeneral iteration - wrpPath only gets assigned when the
+                        # isGeneral guard below runs the QK WRP eval, and without a reset a previous
+                        # enemy's route would leak into this enemy's render decision.
+                        wrpPath: Path | None = None
                         if not quickKill.tileList[-1].isGeneral:
                             turns = 30
                             if threat is not None:
@@ -311,7 +316,10 @@ class BotCombatOps:
                             with bot.perf_timer.begin_move_event(f'QK WRP {startTile} tgA {cutoffKillArmy}'):
                                 maxTime = 0.020
 
-                                toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=bot.targetPlayer, cutoffEmergenceRatio=cutoffEmergence, includeCities=False, requirePredictedFogTeamTile=True)
+                                # Tests/test_FFA.py::test_should_snap_kill_nearby_ffa_general_after_enemy_army_loss:
+                                # reveal candidates for the enemy actually being evaluated (enPlayer),
+                                # not bot.targetPlayer which can be -1 or a different FFA enemy.
+                                toReveal = BotTargeting.get_target_player_possible_general_location_tiles_sorted(bot, elimNearbyRange=0, player=enPlayer, cutoffEmergenceRatio=cutoffEmergence, includeCities=False, requirePredictedFogTeamTile=True)
 
                                 wrpPath = WatchmanRouteUtils.get_watchman_path(
                                     bot._map,
@@ -342,7 +350,13 @@ class BotCombatOps:
                                     bot.viewInfo.add_info_line(f'skipped QK wrpPath (addl {additionalKillDist}) was {wrpPath}')
 
                         killRaceChance = BotCombatOps.get_kill_race_chance(bot, quickKill, enGenProbabilityCutoff=cutoffEmergence + 0.1, turnsToDeath=turnsToDeath, cutoffKillArmy=cutoffKillArmy, againstPlayer=enPlayer, threat=threat)
-                        if threat is None or not threatIsGeneralKill or killRaceChance >= killRaceCutoff:
+                        qkRacing = threat is None or not threatIsGeneralKill or killRaceChance >= killRaceCutoff
+                        # Draw the evaluated WRP route in light gray underneath the other paths when
+                        # we decide not to use it (skipped, or kill race chance too low). When we do
+                        # race it, quickKill IS wrpPath and it gets the yellow QK coloring below.
+                        if wrpPath is not None and (quickKill is not wrpPath or not qkRacing):
+                            bot.viewInfo.color_path(PathColorer(wrpPath, *Colors.LIGHT_GRAY, 215, 8, 140), renderOnBottom=True)
+                        if qkRacing:
                             bot.info(f"QK {quickKill.value} {quickKill.length}t kill race chance {killRaceChance:.3f} > {killRaceCutoff:.2f} with cutoffKillArmy {cutoffKillArmy} in {maxEnDefTurns}t +{additionalKillDist} (turns to death {turnsToDeath}) :^)")
                             bot.viewInfo.color_path(PathColorer(quickKill, 255, 240, 79, 244, 5, 200))
                             move = Move(quickKill.start.tile, quickKill.start.next.tile)
@@ -1083,6 +1097,45 @@ class BotCombatOps:
             bot.curPath = None
             bot.curPathPrio = -1
 
+    # Tests/test_AllIn.py::test_should_keep_timed_all_in_over_far_gathers
+    @staticmethod
+    def _get_all_in_attack_route_skips(bot: EklipZBot, targetTiles: typing.Iterable[Tile]) -> typing.Set[Tile]:
+        """
+        Skip set for all-in / cyclic attack gathers that keeps the committed attack on the
+        safe avenue into enemy land and off suicidal shortcuts:
+
+        - Undiscovered predicted cities are probably mountains, and are never worth
+          blindly transiting unless the game mode is a known wallbreak variant
+          (walled / low-cost cities). Same rule BotStealthAllIn uses for WRP routes.
+        - Non-friendly tiles adjacent to our land that are NOT on enemy_attack_path are
+          impassable: the attack may only enter enemy land along the avenue the enemy
+          themselves threaten through, keeping the attack stack between our general and
+          the flank route the whole way up. Without this, the PCST solve happily walks
+          the mass up the visible strip, abandoning the fog-flank guard and letting any
+          counter-army out of the pocket hit our exposed general.
+
+        Targets are never skipped — a gather may still root on an undiscovered-city or
+        border tile (revealing it by adjacency), it just cannot transit through one.
+        """
+        targetIdx = {t.tile_index for t in targetTiles}
+        skips: typing.Set[Tile] = set()
+        if not bot._map.is_walled_city_game and not bot._map.is_low_cost_city_game:
+            for tile in bot._map.get_all_tiles():
+                if tile.isCity and not tile.discovered and tile.tile_index not in targetIdx:
+                    skips.add(tile)
+        if bot.enemy_attack_path is not None:
+            pathSet = bot.enemy_attack_path.tileSet
+            for tile in bot._map.get_all_tiles():
+                if tile.tile_index in targetIdx or tile in pathSet or tile.isMountain:
+                    continue
+                if bot._map.is_tile_friendly(tile) or not (bot._map.is_tile_enemy(tile) or not tile.discovered):
+                    continue
+                for adj in tile.adjacents:
+                    if bot._map.is_tile_friendly(adj):
+                        skips.add(tile)
+                        break
+        return skips
+
     @staticmethod
     def get_all_in_move(bot: EklipZBot, defenseCriticalTileSet: typing.Set[Tile]) -> Move | None:
         if not BotStateQueries.is_all_in(bot):
@@ -1121,7 +1174,42 @@ class BotCombatOps:
             if bot.all_in_city_behind or bot._map.remainingPlayers == 2:
                 targets.extend(bot.targetPlayerObj.cities)
 
-        msg = f'allin g AT tg gen{andTargs}, in {hitGeneralInTurns}t, {str([str(t) for t in targets])}'
+        # Tests/test_AllIn.py::test_should_keep_timed_all_in_over_far_gathers
+        # While the cyclic winning gather is viable, this solve is a launch
+        # DECISION, not an econ gather. Given the full cycle-deadline budget
+        # (~26-31t), the PCST solver happily routes the committed trunk ~25 turns
+        # through friendly land (retracing the approach corridor and down a far
+        # strip) collecting ~40 of crumbs, instead of diving the ~12-turn
+        # enemy-land route to the general: every friendly hop adds prize while
+        # enemy hops cost only 0.1x army, so a bloodless detour always beats a
+        # direct attack. That is exactly how the repro mass retreated home off
+        # 22,11 instead of pushing 22,10 -> 23,10 -> ... -> 20,2. Cap the launch
+        # budget near the trunk's real dive distance so a committed plan takes
+        # the direct route; the cyclic gather keeps its full window for the
+        # actual massing work.
+        # Tests/test_AllIn.py::test_should_not_pull_forward_army_back_for_all_in_gather
+        # Same failure in a winning army-advantage all-in that was NOT cyclic
+        # viable (econ-behind): live Y9S75moK8 t432 asked ~17t and committed a
+        # 66t gather that pulled the 81-stack at 23,9 twenty turns back out of
+        # enemy land while it sat 3-4 moves from the predicted-general cluster.
+        # The same dive-distance cap applies to any non-losing all-in launch:
+        # a losing all-in still needs maximum gathered mass, but a winning one
+        # only needs the shortest direct route.
+        effectiveGatherTurns = hitGeneralInTurns
+        if (BotStateQueries.is_cyclic_winning_gather_viable(bot)
+                or bot.is_all_in_army_advantage
+                or bot.all_in_city_behind) and len(targets) > 0:
+            launchStackTile = max(bot.player.tiles, key=lambda t: t.army, default=None)
+            if launchStackTile is not None:
+                diveDists = [
+                    dist for dist in (
+                        bot._map.get_distance_between_or_none(launchStackTile, t)
+                        for t in targets)
+                    if dist is not None]
+                if len(diveDists) > 0:
+                    effectiveGatherTurns = min(hitGeneralInTurns, min(diveDists) + 5)
+
+        msg = f'allin g AT tg gen{andTargs}, in {hitGeneralInTurns}t (gath {effectiveGatherTurns}t), {str([str(t) for t in targets])}'
 
         with bot.perf_timer.begin_move_event(f'{mode} {msg}. self.all_in_army_advantage_cycle {bot.all_in_army_advantage_cycle}, self.all_in_army_advantage_counter {bot.all_in_army_advantage_counter}'):
             gathNeg = defenseCriticalTileSet.copy()
@@ -1139,52 +1227,166 @@ class BotCombatOps:
 
             bot.viewInfo.add_targeted_tiles_with_legend(targets, 'ALLIN TARGS', TargetStyle.GRAY)
 
-            # if mode == 'PCST':
-            gathCapPlan = Gather.gather_approximate_turns_to_tiles(
-                bot._map,
-                rootTiles=targets,
-                approximateTargetTurns=hitGeneralInTurns,
-                asPlayer=bot.general.player,
-                gatherMatrix=None,
-                captureMatrix=None,
-                negativeTiles=gathNeg,
-                skipTiles=None,
-                prioritizeCaptureHighArmyTiles=bot.is_all_in_army_advantage,
-                useTrueValueGathered=not bot.is_all_in_army_advantage,
-                includeGatherPriorityAsEconValues=True,
-                includeCapturePriorityAsEconValues=True,
-                tilesToHalf=citiesToHalf,
-                timeLimit=min(0.05, BotTimings.get_remaining_move_time(bot, )),
-                logDebug=False,
-                viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
-            # else:
-            #     gathCapPlan = Gather.
-            if gathCapPlan is None:
-                if bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind:
-                    # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack:
-                    # If the known-general army-advantage all-in cannot produce a gather plan anymore, stop treating
-                    # the attack as viable so normal defensive/expansion fallback logic can run instead of looping no-plan gathers.
-                    bot.info(
-                        f'Ceasing army-advantage all-in after failed PCST gather. '
-                        f'is_all_in_losing {bot.is_all_in_losing}, '
-                        f'is_all_in_army_advantage {bot.is_all_in_army_advantage}, '
-                        f'all_in_city_behind {bot.all_in_city_behind}, targets {str([str(t) for t in targets])}'
-                    )
-                    bot.is_all_in_losing = False
-                    bot.all_in_losing_counter = 0
-                    bot.is_all_in_army_advantage = False
-                    bot.all_in_army_advantage_counter = 0
-                    bot.all_in_city_behind = False
-                    # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack__long:
-                    # prevent the projected-loss latch from re-enabling a ceased PCST all-in.
-                    bot.win_condition_analyzer.projected_loss_all_in_active = False
-                    bot.win_condition_analyzer.projected_loss_all_in_target = None
-                    BotCombatOps._clear_uncommitted_stealth_all_in_state(bot)
-                return None
+            # Tests/test_AllIn.py::test_should_not_pull_forward_army_back_for_all_in_gather
+            # In a winning army-advantage all-in the PCST solve may return plans
+            # far longer than the attack window (live Y9S75moK8 t432 asked ~17t
+            # and committed a 66t tree), and its max-value trunk happily walks
+            # the deepest forward stack BACKWARD through friendly land to absorb
+            # crumbs — pulling the 81 at 23,9 twenty turns out of enemy land
+            # while it sat 3 moves from the target cluster. When a stack can
+            # already reach a target inside the attack deadline with enough army
+            # to beat the estimated defense, that is a real attack NOW — commit
+            # it as curPath and skip the gather. Cyclic-viable games keep their
+            # own timed launch mechanism, losing all-ins still need maximum
+            # gathered mass, and FFA-nondom keeps its more careful targeting.
+            divePath: Path | None = None
+            if (bot.is_all_in_army_advantage or bot.all_in_city_behind) \
+                    and not bot.is_all_in_losing \
+                    and not BotStateQueries.is_cyclic_winning_gather_viable(bot) \
+                    and not BotStateQueries.is_still_ffa_and_non_dominant(bot) \
+                    and len(targets) > 0:
+                # The bar is each goal's own garrison, not the enemy's whole fog
+                # army: a short dive arrives before the enemy can move distant
+                # army to the target, so beating the army AT the goal is what
+                # decides the fight. Including global fogDefense (~137 in
+                # Y9S75moK8) blocks every direct attack forever and leaves the
+                # 60t+ retreat gather as the only option. Per-goal requirements
+                # also keep follow-up dives firing: after the predicted-general
+                # tile falls, a shrunken stack can still dive a nearby enemy
+                # city instead of stalling deep in enemy land (t431 variant).
+                genArmy = bot.targetPlayerExpectedGeneralLocation.army \
+                    if bot.targetPlayerExpectedGeneralLocation is not None \
+                    and bot.targetPlayerExpectedGeneralLocation.isGeneral \
+                    else 70
+                # Only real value targets qualify as dive goals: enemy cities
+                # need their garrison beaten, predicted/emergent general tiles
+                # need the estimated gen army. Plain fog tiles would let any
+                # big stack satisfy genArmy on an adjacent tile and thrash
+                # between meaningless goals instead of taking the city cluster.
+                diveGoals: dict[Tile, tuple[int, int, float]] = {
+                    t: (0, t.army + 1, 0.0)
+                    for t in targets
+                    if t.isCity}
+                genDiveTargets = {t for t in targets if t.isGeneral}
+                if bot.targetPlayerExpectedGeneralLocation is not None:
+                    genDiveTargets.add(bot.targetPlayerExpectedGeneralLocation)
+                for t in genDiveTargets:
+                    diveGoals[t] = (0, genArmy, 0.0)
+                diveRequiredArmy = genArmy
+                divePath = SearchUtils.dest_breadth_first_target(
+                    bot._map,
+                    diveGoals,
+                    diveRequiredArmy,
+                    0.1,
+                    hitGeneralInTurns,
+                    negativeTiles=gathNeg,
+                    searchingPlayer=bot.general.player,
+                    dontEvacCities=False,
+                    additionalIncrement=0,
+                    preferCapture=True,
+                    noLog=True)
+                if divePath is not None and (
+                        divePath.get_first_move() is None
+                        or divePath.start.tile.isGeneral):
+                    # never evac our own general to launch a winning-all-in dive
+                    # (and guard degenerate single-tile results)
+                    bot.info(f'ALLIN DIVE rejected: {divePath}')
+                    divePath = None
+                else:
+                    bot.info(f'ALLIN DIVE eval req {diveRequiredArmy} (gen {genArmy}) in {hitGeneralInTurns}t: {divePath}')
 
-            move = gathCapPlan.get_first_move()
-            bot.curPath = gathCapPlan
-            bot.info(f'{mode} ALL IN appx {hitGeneralInTurns}t: {gathCapPlan}')
+            gathCapPlan: GatherCapturePlan | None = None
+            move: Move | None = None
+            if divePath is not None:
+                bot.curPath = divePath
+                move = Move(divePath.start.tile, divePath.start.next.tile)
+                bot.info(f'{mode} ALLIN DIVE {divePath} reqArmy {diveRequiredArmy}')
+            else:
+                # if mode == 'PCST':
+                gathCapPlan = Gather.gather_approximate_turns_to_tiles(
+                    bot._map,
+                    rootTiles=targets,
+                    approximateTargetTurns=effectiveGatherTurns,
+                    asPlayer=bot.general.player,
+                    gatherMatrix=None,
+                    captureMatrix=None,
+                    negativeTiles=gathNeg,
+                    skipTiles=BotCombatOps._get_all_in_attack_route_skips(bot, targets),
+                    prioritizeCaptureHighArmyTiles=bot.is_all_in_army_advantage,
+                    useTrueValueGathered=not bot.is_all_in_army_advantage,
+                    includeGatherPriorityAsEconValues=True,
+                    includeCapturePriorityAsEconValues=True,
+                    tilesToHalf=citiesToHalf,
+                    timeLimit=min(0.05, BotTimings.get_remaining_move_time(bot, )),
+                    logDebug=False,
+                    viewInfo=bot.viewInfo if bot.info_render_gather_values else None)
+                # else:
+                #     gathCapPlan = Gather.
+                if gathCapPlan is None:
+                    # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+                    # a forced FFA endgame all-in must not run the cessation block at all: a failed
+                    # gather returns None so the caller falls through to the forward fallback while
+                    # every forced policy flag stays latched.
+                    if BM.BotFfaEndgame.is_forced_all_in(bot):
+                        return None
+                    # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack:
+                    if (bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind):
+                        # If the known-general army-advantage all-in cannot produce a gather plan anymore, stop treating
+                        # the attack as viable so normal defensive/expansion fallback logic can run instead of looping no-plan gathers.
+                        bot.info(
+                            f'Ceasing army-advantage all-in after failed PCST gather. '
+                            f'is_all_in_losing {bot.is_all_in_losing}, '
+                            f'is_all_in_army_advantage {bot.is_all_in_army_advantage}, '
+                            f'all_in_city_behind {bot.all_in_city_behind}, targets {str([str(t) for t in targets])}'
+                        )
+                        bot.is_all_in_losing = False
+                        bot.all_in_losing_counter = 0
+                        bot.is_all_in_army_advantage = False
+                        bot.all_in_army_advantage_counter = 0
+                        bot.all_in_city_behind = False
+                        # Tests/test_AllIn.py::AllInTests.test_should_stop_allinning_and_city_after_failed_attack__long:
+                        # prevent the projected-loss latch from re-enabling a ceased PCST all-in.
+                        bot.win_condition_analyzer.projected_loss_all_in_active = False
+                        bot.win_condition_analyzer.projected_loss_all_in_target = None
+                        BotCombatOps._clear_uncommitted_stealth_all_in_state(bot)
+                    return None
+
+                # Tests/test_AllIn.py::test_should_keep_timed_all_in_over_far_gathers
+                # This gather doubles as a shortcut attack launch: it fires as soon
+                # as ANY solve succeeds, which is how the live FFA repro committed a
+                # ~80-army attack over the cyclic winning gather's ~150-200-army
+                # timed plan — a plan that ALSO gathered the far friendly stacks the
+                # shortcut's short-ETA window could not reach. While that cyclic
+                # plan is viable, defer until the launched plan is kill-sufficient
+                # AND the mass is actually consolidated: gathered_army measures only
+                # what THIS plan delivers inside its ETA window, and it stalls low
+                # (~75-80) once the cyclic gather consolidates the stack far from
+                # these pocket targets — so a pure-plan bar both fires too early
+                # (~100 > genArmy+60) and can deadlock later. The largest friendly
+                # stack tracks real massed army: when the timed gather finishes
+                # absorbing the far stacks, the trunk clears the same defense bar
+                # and the launch fires with ~140+ instead of ~100.
+                genArmy = bot.targetPlayerExpectedGeneralLocation.army \
+                    if bot.targetPlayerExpectedGeneralLocation is not None \
+                    and bot.targetPlayerExpectedGeneralLocation.isGeneral \
+                    else 70
+                fogDefense = bot.opponent_tracker.get_approximate_fog_army_risk(
+                    bot.targetPlayer, cityLimit=None, inTurns=0)
+                predictedDefense = fogDefense + genArmy
+                deferBelow = min(140, int(predictedDefense * 1.5))
+                largestStack = max((t.army for t in bot.player.tiles), default=0)
+                if BotStateQueries.is_cyclic_winning_gather_viable(bot) \
+                        and (gathCapPlan.gathered_army <= deferBelow
+                             or largestStack <= deferBelow):
+                    bot.info(
+                        f'DEFER all-in attack: cyclic winning gather viable '
+                        f'(gath {gathCapPlan.gathered_army}, stack {largestStack} '
+                        f'<= {deferBelow} = min(140, (fog {fogDefense} + gen {genArmy}) * 1.5)), keep timed gather')
+                    return None
+
+                move = gathCapPlan.get_first_move()
+                bot.curPath = gathCapPlan
+                bot.info(f'{mode} ALL IN appx {hitGeneralInTurns}t: {gathCapPlan}')
 
         if move is not None:
             bot.info(msg)
@@ -1195,7 +1397,7 @@ class BotCombatOps:
                 BotComms.send_teammate_tile_ping(bot, target, cooldown=25, cooldownKey=f'allIn{str(target)}')
 
             bot.all_in_army_advantage_counter += 1
-            bot.gatherNodes = gathCapPlan.root_nodes
+            bot.gatherNodes = gathCapPlan.root_nodes if gathCapPlan is not None else None
             return move
 
         return None
@@ -2204,6 +2406,18 @@ class BotCombatOps:
     @staticmethod
     def check_should_be_all_in_losing(bot: EklipZBot) -> bool:
         """Check endgame surrender thresholds before preserving or updating losing all-in state."""
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # the 3-player FFA endgame policy overrides the target-only/force-far-gathers/counter
+        # gates: forced all-in re-asserts the flag (the weaker target can never clear it),
+        # TURTLE and neutral-city ECONOMY suppress it.
+        ffaEndgameMode = BM.BotFfaEndgame.get_mode(bot)
+        if ffaEndgameMode in (BM.BotFfaEndgame.FfaEndgameMode.ALL_IN, BM.BotFfaEndgame.FfaEndgameMode.RETALIATE):
+            bot.is_all_in_losing = True
+            return True
+        if ffaEndgameMode == BM.BotFfaEndgame.FfaEndgameMode.TURTLE or BM.BotFfaEndgame.is_prioritizing_neutral_city(bot):
+            bot.is_all_in_losing = False
+            return False
+
         general = bot.general
         if general is None:
             bot.is_all_in_losing = False
@@ -2433,6 +2647,19 @@ class BotCombatOps:
 
     @staticmethod
     def determine_should_winning_all_in(bot: EklipZBot):
+        # Tests/test_FFA.py::FFATests.test_should_attack_aggressor_without_overgathering_or_abandoning_general
+        # and ::test_should_nonstop_all_in_weaker_player_when_three_left: while the FFA endgame
+        # policy owns ANY forced mode (ALL_IN/RETALIATE/TURTLE/ECONOMY), the generic winning all-in
+        # must not re-assert itself every turn and toggle/reset the forced attack state.
+        if BM.BotFfaEndgame.get_mode(bot) != BM.BotFfaEndgame.FfaEndgameMode.INACTIVE:
+            return False
+
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # while the FFA endgame policy prioritizes a reachable neutral city, target-relative
+        # all-in flags stay disabled so city capture is not leapfrogged by opportunistic attacks.
+        if BM.BotFfaEndgame.is_prioritizing_neutral_city(bot):
+            return False
+
         if bot.targetPlayer < 0:
             return False
 
@@ -2756,6 +2983,10 @@ class BotCombatOps:
                         fakeThreat = ThreatObj(enAttackPath.length, 1, enAttackPath, ThreatType.Vision, armyAnalysis=analysis)
                         move_closest_value_func = BotDefense.get_defense_tree_move_prio_func(bot, fakeThreat)
 
+                    # Tests/test_AllIn.py::test_should_keep_timed_all_in_over_far_gathers
+                    # Route the timed attack mass through the safe avenue (enemy
+                    # attack path) into enemy land and never through undiscovered
+                    # predicted cities — same constraint as the all-in launch gather.
                     gcp = Gather.gather_approximate_turns_to_tiles(
                         bot._map,
                         targets,
@@ -2763,6 +2994,7 @@ class BotCombatOps:
                         bot.player.index,
                         gatherMatrix=BotGatherOps.get_gather_tiebreak_matrix(bot, ),
                         negativeTiles=negatives,
+                        skipTiles=BotCombatOps._get_all_in_attack_route_skips(bot, targets),
                         prioritizeCaptureHighArmyTiles=not bot.is_all_in_losing,
                         useTrueValueGathered=True,
                         includeGatherPriorityAsEconValues=False,

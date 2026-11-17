@@ -632,12 +632,18 @@ class Tile(object):
                     self.delta.friendlyCaptured = True
                     logbook.info(f'tile captured, losing vision, army moved here true for {str(self)}')
                     armyMovedHere = True
+                    # TEMPORARY DIAGNOSTIC (general-coloring investigation): direct _player writes bypass the isGeneral guard
+                    if self.isGeneral:
+                        logbook.error(f'GENDIAG VIOLATION isGeneral tile {str(self)} lost-vision _player {self._player} -> -1')
                     self._player = -1
                 elif self._player >= 0 and self.army > 1:
                     # we lost SIGHT of enemy tile, IF this tile has positive army, then army could have come from here TO another tile.
                     logbook.info(f'enemy tile adjacent to vision lost was lost, army moved here true for {str(self)}')  # TODO
                     # armyMovedHere = True
             elif tile >= TILE_EMPTY:
+                # TEMPORARY DIAGNOSTIC (general-coloring investigation): direct _player writes bypass the isGeneral guard
+                if self.isGeneral and self._player != tile:
+                    logbook.error(f'GENDIAG VIOLATION isGeneral tile {str(self)} raw-update _player {self._player} -> {tile}')
                 self._player = tile
 
             self.tile = tile
@@ -676,6 +682,9 @@ class Tile(object):
         self.delta.newOwner = self._player
         if overridePlayer is not None:
             self.delta.newOwner = overridePlayer
+            # TEMPORARY DIAGNOSTIC (general-coloring investigation): direct _player writes bypass the isGeneral guard
+            if self.isGeneral and self._player != overridePlayer:
+                logbook.error(f'GENDIAG VIOLATION isGeneral tile {str(self)} override _player {self._player} -> {overridePlayer}')
             self._player = overridePlayer
 
         if self.visible:  # Remember Discovered Armies

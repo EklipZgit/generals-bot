@@ -1,0 +1,59 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+                                   M              M                                            M
+          M                   M    M         M                   M         M    M         M
+                                                       M    M    M         M              M
+                         M                        M              a4   M         M              M
+     M    M                                                      a1        M              M
+                              a1   a1   a1   a5   a5        M    a3   aC27 a4   M    M    M
+     M         a6             a12  C50  a5   a6   M    a6   a3   aC25 a2   a2   a4   M         M
+          C50  a2   a2   a2   a6   a6   a2   a3   a3   a3   a1   a4   a2   M    a1   aG4  M    a5
+     M    M    a2   a2   a2   a2   M    a2   M    a2   a4   a2   a2   aC1  a1   a1   a3   a3   a5
+          a2   a1   M    a2   a1   a2   a2   a2   a2   a2   a2   a3   a84  a4   a5   a5   a3   a7
+M    M    b3   b2   b2   C41  a1   b2   M    a2   a2   a2   a3   M    M    M    a7   a3   a3   a5
+M    b3   b3   b2   b2   b2   M    b2   b2   a2   M    a3   a3   M    M         M    a3   a3   a7
+     b3   b2   b2   b2   M         M    b2   C42  a1   a3   a3   a3   a3   M         M    a3   a4
+bC30 bC30 b2   b2   b2   b2   b2   b2   b2   a1   a1   b3   b3   M    a3   M              a8   a1
+b4   b3   b2   b2   b2   M    b4   b4   b4   M    b3   b3   b3   M    a2   M              a1   a1
+b4   b4   M    bC10 b1   b1   b1   b1   b1   b1   b1   b1   M    b1   b1   M         M    a1   a1
+b4   b4   b4   b1   b4   b4   b5   b3   b3   b3   b3   b1   b1   b1   b1   b1   C41  a3   a1   a1
+b3   bG13 b1   b1   b5   b5   b5   b4   b4   b4   b4   b4   M    M    b1   b1   b106 b5
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=371
+player_index=0
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=1v1
+aUsername=Human.exe
+aStars=77
+aScore=426
+aTiles=102
+aStandingArmy=324
+aCityCount=4
+aGeneral=17,7
+aDead=False
+aLeftGame=True
+aLeftGameTurn=747
+aAggressionFactor=0
+aDelta25Tiles=2
+aDelta25Score=72
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=371
+aKnowsKingLocation=False
+bUsername=imp25
+bStars=81
+bScore=387
+bTiles=83
+bStandingArmy=304
+bCityCount=4
+bGeneral=1,17
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=438
+bDelta25Tiles=1
+bDelta25Score=64
+bCityGainedTurn=258
+bCityLostTurn=148
+bLastSeenMoveTurn=371
+bKnowsKingLocation=False

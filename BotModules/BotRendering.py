@@ -6,16 +6,21 @@ import logbook
 
 import DebugHelper
 import Utils
+from ArmyTracker import EMERGENCE_PATH_CONSISTENCY_FLOOR
 from MapMatrix import MapMatrixSet
 from Path import Path
 from Sim.TextMapLoader import TextMapLoader
-from ViewInfo import TargetStyle, PathColorer, ViewInfo
+from FfaGeneralPlacement import FfaGeneralPlacement
+from ViewInfo import TargetStyle, PathColorer, ViewInfo, PlayerGeneralPredictionTarget
 from base import Colors
 from base.client.map import MapBase, PLAYER_CHAR_BY_INDEX
 from ViewInfo import ViewInfo
 
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander
 from BotModules.BotSerialization import BotSerialization
+from BotModules import BotFfaKillGather
+from BotModules import BotFfaEndgame
+from BotModules import BotGeneralSafety
 from base.client.tile import Tile
 
 if typing.TYPE_CHECKING:
@@ -92,15 +97,61 @@ class BotRendering:
                 and bot.targetPlayer != -1
                 and bot.shortest_path_to_target_player is not None
         ):
+            expectedGeneralDistance = bot.shortest_path_to_target_player.length
             bonusMatrix = bot.armyTracker.build_emergence_distance_bonus_matrix(
                 bot.targetPlayer,
-                bot.shortest_path_to_target_player.length)
+                expectedGeneralDistance)
+            # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - render the gated net emergence-locality contribution (locality x path-consistency gate), matching get_predicted_target_player_general_location.
+            sourceWeights = bot.armyTracker.build_emergence_path_source_weights(
+                bot.targetPlayer,
+                bot.win_condition_analyzer.city_contestation_history)
+            penaltyMatrix = None
+            if len(sourceWeights) > 0:
+                distanceToOurGeneral = bot._map.get_distance_matrix_including_obstacles(bot.general)
+                penaltyMatrix = bot.armyTracker.build_emergence_path_consistency_penalty_matrix(
+                    bot.targetPlayer,
+                    sourceWeights,
+                    distanceToOurGeneral,
+                    expectedGeneralDistance)
             for tile in bot._map.pathable_tiles:
                 if tile.discovered or tile.isCity:
                     continue
-                bonus = bonusMatrix.raw[tile.tile_index]
-                if bonus > 0:
-                    bot.viewInfo.topRightGridText.raw[tile.tile_index] = f'ed{bonus:.1f}'
+                tileIndex = tile.tile_index
+                netValue = (
+                    bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile] * 10
+                    + bonusMatrix.raw[tileIndex])
+                if penaltyMatrix is not None:
+                    netValue *= max(
+                        EMERGENCE_PATH_CONSISTENCY_FLOOR,
+                        1.0 - penaltyMatrix.raw[tileIndex])
+                if netValue > 0.5:
+                    bot.viewInfo.topRightGridText.raw[tileIndex] = f'ed{netValue:.0f}'
+
+    @staticmethod
+    def populate_predicted_general_targets(viewInfo: ViewInfo, map: MapBase, placement: FfaGeneralPlacement) -> None:
+        """
+        Emit one large prediction ring per living player whose general is still
+        unknown, seeded from the joint FFA placement. Known generals
+        (map.generals[player] set), dead players, and our own general get no
+        marker - only genuinely predicted locations are drawn.
+
+        Tests: UnitTests/test_FfaGeneralPlacement.py
+        """
+        # Rebuild rather than append so repeated populate calls within one frame
+        # cannot duplicate markers.
+        viewInfo.predicted_general_targets = []
+        for player in map.players:
+            if player.dead or player.capturedBy is not None or player.index == map.player_index:
+                continue
+            if map.generals[player.index] is not None:
+                continue
+            if player.index >= len(placement.positions):
+                continue
+            seed = placement.positions[player.index]
+            if seed is None:
+                continue
+            viewInfo.predicted_general_targets.append(
+                PlayerGeneralPredictionTarget(tile=seed, player=player.index))
 
     @staticmethod
     def prep_view_info_for_render(bot: EklipZBot, move=None):
@@ -156,6 +207,10 @@ class BotRendering:
             # General prediction only re-runs on turns where the prediction is missing or invalidated, and viewInfo
             # is cleared every turn, so render these stored per-tile contributions here every turn instead.
             BotRendering.render_general_prediction_weights_in_view_info(bot)
+
+            # Per-player FFA predicted-general rings (known generals are skipped inside).
+            BotRendering.populate_predicted_general_targets(
+                viewInfo, map, bot.armyTracker.ffa_general_placement)
 
             for tile in bot.armyTracker.dropped_fog_tiles_this_turn:
                 viewInfo.add_targeted_tile(tile, TargetStyle.RED)
@@ -549,8 +604,32 @@ class BotRendering:
             data.append(f'bot_stealth_is_truncated_front={stealthState.is_truncated_front}')
             data.append(f'bot_stealth_is_desperation_dive={stealthState.is_desperation_dive}')
             data.append(f'bot_stealth_gather_fallback_turns={stealthState.used_normal_gather_fallback_turns}')
+            # Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+            # mid-route resumes need the commit-time army baseline so a wall revealed between
+            # commit and dump is not re-flagged as new.
+            data.append(
+                'bot_stealth_route_army_snapshot='
+                + ','.join(
+                    f'{idx}:{army}'
+                    for idx, army in stealthState.committed_route_army_snapshot.items()))
             data.append(f'bot_stealth_all_in_generation={bot.stealth_all_in_generation}')
         data.append(f'bot_stealth_cannot_kill_counter={bot.stealth_all_in_cannot_kill_counter}')
+
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # persist the latched FFA endgame retaliation target and direct-kill history across
+        # mid-fight txtmap resumes (capturedBy is runtime state not preserved on import).
+        for key, value in BotFfaEndgame.save_state(bot).items():
+            data.append(f'{key}={value}')
+
+        # FFA (>2 living teams) kill-gather committed state, restored by
+        # BotFfaKillGather.load_state from load_resume_data. Values never contain '='.
+        for key, value in BotFfaKillGather.save_state(bot).items():
+            data.append(f'{key}={value}')
+
+        # General-safety reservation episodes/anchor/literal gather, restored by
+        # BotGeneralSafety.load_state from load_resume_data. Values never contain '='.
+        for key, value in BotGeneralSafety.save_state(bot).items():
+            data.append(f'{key}={value}')
 
         for player in bot._map.players:
             char = charMap[player.index]
@@ -566,9 +645,14 @@ class BotRendering:
             if player.general is not None:
                 data.append(f'{char}General={player.general.x},{player.general.y}')
             data.append(f'{char}KnowsKingLocation={player.knowsKingLocation}')
+            data.append(f'{char}KnowsKingSinceTurn={player.king_location_revealed_turn}')
             if bot._map.is_2v2:
                 data.append(f'{char}KnowsAllyKingLocation={player.knowsAllyKingLocation}')
             data.append(f'{char}Dead={player.dead}')
+            # Tests/test_FFA.py credited-kill persistence: write the authoritative has_kill flag
+            # only when known so a SilentWar/unknown state round-trips as absent (None), never False.
+            if player.has_kill is not None:
+                data.append(f'{char}HasKill={player.has_kill}')
             data.append(f'{char}LeftGame={player.leftGame}')
             data.append(f'{char}LeftGameTurn={player.leftGameTurn}')
             data.append(f'{char}AggressionFactor={player.aggression_factor}')
@@ -585,6 +669,11 @@ class BotRendering:
             data.append(f'{char}UneliminatedEmergences={BotSerialization.convert_tile_int_dict_to_string(bot, bot.armyTracker.uneliminated_emergence_events[player.index])}')
             data.append(f'{char}UneliminatedEmergenceCityPerfectInfo={BotSerialization.convert_tile_set_to_string(bot, bot.armyTracker.uneliminated_emergence_event_city_perfect_info[player.index])}')
             data.append(f'{char}UnrecapturedEmergences={BotSerialization.convert_tile_set_to_string(bot, bot.armyTracker.unrecaptured_emergence_events[player.index])}')
+            # Joint FFA general-placement land evidence (frozen inverse-tileCount
+            # weights + witnessed-transfer flags) so resumed games keep identical
+            # centroids; missing key on legacy fixtures bootstraps from discovered
+            # tiles only. Tests: UnitTests/test_FfaGeneralPlacement.py
+            data.append(f'{char}GeneralLandEvidence={BotSerialization.convert_general_land_evidence_to_string(bot, bot.armyTracker.ffa_general_land_evidence[player.index])}')
             if len(bot.generalApproximations) > player.index:
                 if bot.generalApproximations[player.index][3] is not None:
                     data.append(f'{char}_bot_general_approx={str(bot.generalApproximations[player.index][3])}')
@@ -600,6 +689,14 @@ class BotRendering:
             # Serialize lastMovedTurn for tiles that moved recently (within last 5 turns)
             if tile.lastMovedTurn >= bot._map.turn - 5 and tile.lastMovedTurn >= 0:
                 lastMovedTiles[tile] = tile.lastMovedTurn
+        # Retained ex-general exclusion anchors for joint FFA placement (dead
+        # players' former generals + discoveredExGeneralCity discoveries).
+        data.append(f'FFAExGeneralBlockers={BotSerialization.convert_tile_set_to_string(bot, bot.armyTracker.ffa_general_placement.ex_general_blockers)}')
+        # Joint FFA predicted-general positions so a resumed game restores the
+        # same seeds as sticky no-info priors; '-1' slots for unplaced players.
+        # Tests: UnitTests/test_FfaGeneralPlacement.py,
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_roundtrip_ffa_predicted_general_positions
+        data.append(f'FFAPredictedGeneralPositions={BotSerialization.convert_general_positions_to_string(bot)}')
         data.append(f'TempFogTiles={BotSerialization.convert_tile_set_to_string(bot, tempSet)}')
         data.append(f'DiscoveredNeutral={BotSerialization.convert_tile_set_to_string(bot, neutDiscSet)}')
         data.append(f'DefensiveSpanningTree={BotSerialization.convert_tile_set_to_string(bot, bot.defensive_spanning_tree)}')

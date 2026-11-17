@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import logbook
 import typing
@@ -9,6 +10,14 @@ import SearchUtils
 from ArmyTracker import Army
 from MapMatrix import MapMatrix
 from StrategyModels import CycleStatsData, PlayerMoveCategory, UnresolvedEmergenceData
+from StrategyModels.CaptureArmyAccounting import (
+    CaptureArmyLossEstimate,
+    CaptureFogPoolTransfer,
+    CaptureFogSnapshot,
+    CapturePlayerScoreSnapshot,
+    estimate_capture_army_loss,
+    get_capture_fog_pool_transfer,
+    get_capture_score_uncertainty)
 from ViewInfo import ViewInfo, TargetStyle
 from base.client.map import MapBase, TeamStats, Tile, Player, PLAYER_CHAR_BY_INDEX, GeneralTrade
 
@@ -324,6 +333,17 @@ class OpponentTracker(object):
 
         self._gather_queues_new_by_player: typing.List[FogGatherQueue] = [FogGatherQueue(p.index) for p in self.map.players]
 
+        self._pending_player_captures: typing.List[typing.Tuple[int, int]] = []
+        """(capturee, capturer) pairs queued by notify_player_capture when a player_capture event
+        fires between map updates; processed at the start of the next analyze_turn so the
+        halved gather-queue / fog-pool transfer lands alongside the scoreboard changes."""
+
+        self._players_killed_before_dead_flag: typing.Set[int] = set()
+        """Players killed by a player_capture event whose Player.dead flag has not caught up yet on
+        our map (the map only flips dead on the following score update). Treated as dead by
+        calculate_team_fog_tile_data so their stale city/tile counts do not leak into team fog
+        data during the analyze pass that processes the kill. Cleared at the end of analyze_turn."""
+
         self._emergences: typing.List[typing.Tuple[Tile, int, int]] = []
         self.current_largest_unresolved_emergence_by_player: typing.List[UnresolvedEmergenceData | None] = [None for p in self.map.players]
         self.largest_unresolved_emergence_history_by_player: typing.List[typing.Dict[int, UnresolvedEmergenceData]] = [{} for p in self.map.players]
@@ -354,6 +374,127 @@ class OpponentTracker(object):
             self._team_indexes.append(team)
             self.current_team_scores[team] = None
             self.last_team_scores[team] = None
+
+        # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+        # and ::test_should_account_for_annihilated_army_before_ffa_capture_transfer - capture accounting
+        # needs the pre-capture scoreboard frozen BEFORE the zeroed map update can be
+        # analyzed, plus per-victim fog banks for capture text that arrives a turn late.
+        self._capture_previous_scores: tuple[CapturePlayerScoreSnapshot, ...] = self._snapshot_capture_player_scores()
+        self._capture_latest_scores: tuple[CapturePlayerScoreSnapshot, ...] | None = None
+        self._capture_previous_turn: int = self.map.turn
+        self._unresolved_player_captures: dict[int, CaptureFogSnapshot] = {}
+        """Victim index -> frozen pre-zero fog snapshot, awaiting the capture text that identifies the killer."""
+        self._completed_player_captures: set[tuple[int, int]] = set()
+        """(capturee, capturer) pairs already transferred; repeated notifications are no-ops."""
+        self._capture_placeholder_counts: list[int] = [0 for _ in self.map.players]
+        """Per-player count of placeholder gather-queue 1s appended while a capture awaited its text."""
+        self.last_capture_army_losses: dict[int, CaptureArmyLossEstimate] = {}
+        """Victim index -> last conservative combat-loss interval computed at transfer time."""
+
+    def _snapshot_capture_player_scores(self) -> tuple[CapturePlayerScoreSnapshot, ...]:
+        """
+        Reads primitive scoreboard/visibility fields for every player on the map in
+        a single tile pass per player. visibleGeneralArmy is only populated when the
+        player's general tile is known AND currently visible (a visible owned tile by
+        definition); fogged or unknown generals contribute 0 so visible defense is
+        never guessed.
+        """
+        snapshots: list[CapturePlayerScoreSnapshot] = []
+        for player in self.map.players:
+            visibleOwnedTiles = 0
+            visibleCityOrGeneralTiles = 0
+            for tile in player.tiles:
+                if not tile.visible:
+                    continue
+                visibleOwnedTiles += 1
+                if tile.isCity or tile.isGeneral:
+                    visibleCityOrGeneralTiles += 1
+
+            visibleGeneralArmy = 0
+            # player.general can be a stale reference to a tile now owned by a
+            # different player; only count it when the tile itself still belongs
+            # to this player AND is visible.
+            if (player.general is not None and player.general.player == player.index
+                    and player.general.visible and visibleOwnedTiles > 0):
+                visibleGeneralArmy = player.general.army
+
+            snapshots.append(CapturePlayerScoreSnapshot(
+                score=player.score,
+                tiles=player.tileCount,
+                cities=player.cityCount,
+                visibleGeneralArmy=visibleGeneralArmy,
+                visibleOwnedTiles=visibleOwnedTiles,
+                fogCityCount=player.cityCount - visibleCityOrGeneralTiles))
+
+        return tuple(snapshots)
+
+    def _update_capture_previous_scores(self) -> None:
+        """Advances the capture-accounting scoreboard baseline to the end of the current analyze pass."""
+        if self._capture_latest_scores is not None:
+            # map player fields cannot change during analyze_turn, so the scores
+            # snapshot taken at the top of this pass are the end-of-pass baseline.
+            self._capture_previous_scores = self._capture_latest_scores
+            self._capture_latest_scores = None
+        else:
+            self._capture_previous_scores = self._snapshot_capture_player_scores()
+        self._capture_previous_turn = self.map.turn
+
+    def _snapshot_zero_score_transitions(self) -> None:
+        """
+        Freezes fog accounting for every player whose scoreboard just transitioned
+        positive->0/0 tiles. Runs at the top of analyze_turn BEFORE pending captures
+        process and BEFORE this turn's cycle stats can validate the zeroed pools into
+        negatives, so a capture text arriving turns later still transfers the true
+        pre-zero state. No capture identity is inferred; the first zero transition
+        wins and repeats are ignored.
+        """
+        currentScores = self._snapshot_capture_player_scores()
+        # player fields are static for the rest of this analyze pass, so these
+        # scores double as the end-of-pass previous-scoreboard baseline.
+        self._capture_latest_scores = currentScores
+        completedCapturees = {capturee for capturee, _ in self._completed_player_captures}
+        unresolvedWasEmpty = len(self._unresolved_player_captures) == 0
+        placeholderCountsReset = False
+        for player in self.map.players:
+            previous = self._capture_previous_scores[player.index]
+            if previous.score <= 0 or previous.tiles <= 0:
+                continue
+            if player.score != 0 or player.tileCount != 0:
+                continue
+            if player.index in completedCapturees or player.index in self._unresolved_player_captures:
+                continue
+
+            # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+            # placeholder-1 credits only live while a capture bank is unresolved;
+            # a fresh batch after every bank was consumed must not inherit stale
+            # counts that a later capture's removal pass could spend on real ones.
+            if unresolvedWasEmpty and not placeholderCountsReset:
+                self._capture_placeholder_counts = [0 for _ in self.map.players]
+                placeholderCountsReset = True
+
+            captureeTeam = self._team_lookup_by_player[player.index]
+            captureeStats = self.current_team_cycle_stats[captureeTeam]
+            if captureeStats is None:
+                captureeStats = self.initialize_cycle_stats(captureeTeam)
+                self.current_team_cycle_stats[captureeTeam] = captureeStats
+
+            victimQueue = self.get_player_gather_queue(player.index)
+            self._unresolved_player_captures[player.index] = CaptureFogSnapshot(
+                captureTurn=self.map.turn,
+                team=captureeTeam,
+                queueAmounts={size: count for size, count in victimQueue.get_amount_dict().items()},
+                fogArmy=captureeStats.approximate_fog_army_available_total,
+                fogArmyTrue=captureeStats.approximate_fog_army_available_total_true,
+                fogCityArmy=captureeStats.approximate_fog_city_army,
+                fogCityCount=captureeStats.fog_city_count,
+                previousScores=self._capture_previous_scores,
+                finalScores=currentScores)
+            logbook.info(
+                f'OT_CAPTURE_SNAPSHOT turn={self.map.turn} victim=p{player.index} team={captureeTeam} '
+                f'fogArmy={captureeStats.approximate_fog_army_available_total} '
+                f'fogArmyTrue={captureeStats.approximate_fog_army_available_total_true} '
+                f'fogCityArmy={captureeStats.approximate_fog_city_army} fogCityCount={captureeStats.fog_city_count} '
+                f'queue={victimQueue.get_amount_dict()} prevScore={previous.score} prevTiles={previous.tiles}')
 
     def analyze_turn(self, targetPlayer: int):
         self.current_differential_vs_us_by_team: typing.Dict[int, CycleStatsData]
@@ -402,7 +543,25 @@ class OpponentTracker(object):
                             stats = self.initialize_cycle_stats(team)
                             self.current_team_cycle_stats[team] = stats
                         self._reseed_general_trade_fog_state(stats)
+            # Tests/test_FFA.py::FFATests.test_should_account_for_annihilated_army_before_ffa_capture_transfer
+            # a resumed capture's text can arrive on the first post-load turn; the skip
+            # pass must still advance the scoreboard baseline so the zero transition
+            # and missed-bonus windows measure from real analyzed turns.
+            self._update_capture_previous_scores()
             return
+
+        # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+        # freeze each player's fog accounting at their first positive->0/0 scoreboard
+        # transition BEFORE pending captures run and BEFORE this turn's cycle stats can
+        # validate the zeroed pools negative; late capture text then transfers this bank.
+        self._snapshot_zero_score_transitions()
+
+        # Tests/test_OpponentTracker.py::OpponentTrackerTests.test_should_transfer_gather_queue_and_fog_pools_on_enemy_capture
+        # enemy-vs-enemy captures transfer the victim's gather queue + fog pools
+        # to the killer halved (the map halves every transferred tile's army),
+        # and pre-marks the killer's move so the missing-move heuristic does not
+        # misread the bulk land gain as one giant annihilating fog capture.
+        self._process_pending_player_captures()
 
         # Tests: Tests/test_GeneralTrade.py - teams whose calculate_cycle_stats
         # early-returns (no cycle history yet) never reach the in-calculate
@@ -457,6 +616,8 @@ class OpponentTracker(object):
         self._moves_into_fog = []
         self._revealed = set()
         self._vision_losses = set()
+        # map.player.dead is expected to have caught up by the next analyze pass.
+        self._players_killed_before_dead_flag.clear()
 
         self.recalculate_average_tile_values()
         teamStatsNoneByTeam = {team: self.current_team_cycle_stats[team] is None for team in self._team_indexes}
@@ -464,6 +625,11 @@ class OpponentTracker(object):
             f'OT_ANALYZE_END turn={self.map.turn} targetPlayer={targetPlayer} '
             f'teamStatsNoneByTeam={teamStatsNoneByTeam}'
         )
+
+        # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+        # the completed analyze pass becomes the previous-scoreboard baseline for the
+        # next turn's zero-transition detection and missed-bonus window math.
+        self._update_capture_previous_scores()
 
     def _start_team_score_next_cycle_and_record_efficiencies(self, curTurnTeamScore: TeamStats, team: int, teamStats: CycleStatsData | None):
         # do the final pass on the current cycle data and then start a new cycle.
@@ -658,6 +824,293 @@ class OpponentTracker(object):
         # self._tile_flips.add(tile)
         pass # for now
 
+    def notify_player_capture(self, capturee: int, capturer: int) -> None:
+        """
+        Queues an enemy-vs-enemy player capture for the next analyze_turn. The
+        victim's land (and all army on it) transfers to the killer halved, so
+        their gather-queue entries and shared fog pools must move at half value
+        instead of being silently absorbed by army-total validation.
+
+        @param capturee: index of the player whose general was captured.
+        @param capturer: index of the player who captured them.
+        """
+        # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+        # duplicate capture notifications (re-sent text, resumed pending state) must not
+        # re-queue the pair or re-mark the kill; transfer idempotence is enforced by
+        # _completed_player_captures in _process_pending_player_captures.
+        pair = (capturee, capturer)
+        if pair in self._pending_player_captures or pair in self._completed_player_captures:
+            return
+        self._players_killed_before_dead_flag.add(capturee)
+        self._pending_player_captures.append(pair)
+
+    def _process_pending_player_captures(self) -> None:
+        """
+        Applies queued enemy-vs-enemy player captures before the per-team
+        heuristics run. Captures involving our team are skipped: us capturing
+        needs no transfer (our own map is exact) and the killer's move is
+        marked FogCapture so _check_missing_move does not misclassify the
+        bulk land gain as a single annihilating fog capture of their own.
+
+        Pairs whose victim scoreboard has not zeroed yet stay queued for a later
+        analyze pass, already-completed pairs are ignored entirely, and each
+        surviving pair transfers exactly once from the frozen pre-zero snapshot.
+        """
+        if len(self._pending_player_captures) == 0:
+            return
+
+        stillPending: list[tuple[int, int]] = []
+        for capturee, capturer in self._pending_player_captures:
+            if capturee < 0 or capturer < 0 or capturee == capturer:
+                continue
+            if capturee >= len(self.map.players) or capturer >= len(self.map.players):
+                continue
+
+            pair = (capturee, capturer)
+            if pair in self._completed_player_captures:
+                continue
+
+            # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+            # capture text can arrive before the scoreboard zero update lands; keep the
+            # pair queued until the victim is actually at 0 score / 0 tiles so the
+            # transfer never runs against stale pre-zero scores.
+            captureePlayer = self.map.players[capturee]
+            if captureePlayer.score != 0 or captureePlayer.tileCount != 0:
+                stillPending.append(pair)
+                continue
+
+            # Tests/test_OpponentTracker.py::OpponentTrackerTests.test_should_transfer_gather_queue_and_fog_pools_on_enemy_capture
+            # player.dead lags a turn behind the capture event on our map, so
+            # without removing the dead capturee from their team stats players
+            # the per-player handlers (_check_missing_move under-attack
+            # assumptions, queued _emergences / _moves_into_fog, reveals, vision
+            # losses) still execute for them this turn and corrupt the zeroed
+            # pools / the killer's fresh queue. Reassign rather than mutate:
+            # CycleStatsData shares the list with _players_lookup_by_team.
+            captureeTeam = self._team_lookup_by_player[capturee]
+            captureeStats = self.current_team_cycle_stats[captureeTeam]
+            if captureeStats is not None:
+                captureeStats.players = [pIdx for pIdx in captureeStats.players if pIdx != capturee]
+
+            if self.map.is_player_on_team_with(capturer, self.map.player_index) or self.map.is_player_on_team_with(capturee, capturer):
+                self._completed_player_captures.add(pair)
+                self._unresolved_player_captures.pop(capturee, None)
+                continue
+
+            snapshot = self._unresolved_player_captures.get(capturee)
+            if snapshot is not None:
+                # restore the frozen pre-zero bank immediately before transfer so the
+                # spy boundary and the halving math both read true pre-zero values and
+                # shared team pools of a partially surviving team stay untouched.
+                self._restore_capture_fog_snapshot(capturee, snapshot)
+                self._remove_capture_placeholder_ones(capturee, capturer, snapshot)
+            else:
+                logbook.warn(f'p{capturer} captured p{capturee} with no frozen fog snapshot; transferring live pools')
+
+            self._transfer_captured_player_fog_state(capturee, capturer)
+            self._completed_player_captures.add(pair)
+            self._unresolved_player_captures.pop(capturee, None)
+
+        self._pending_player_captures = stillPending
+
+        # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+        # once every frozen bank is consumed the placeholder credits that funded
+        # them are spent; leaving them set would let a future capture's removal
+        # pass eat legitimate size-1 gather entries for unrelated land.
+        if len(self._unresolved_player_captures) == 0:
+            self._capture_placeholder_counts = [0 for _ in self.map.players]
+
+    def _is_team_scoreboard_dead(self, team: int) -> bool:
+        """Returns true when every player on the team is at 0 score / 0 tiles on the live scoreboard."""
+        teamScores = self.map.get_team_stats_by_team_id(team)
+        return teamScores.score == 0 and teamScores.tileCount == 0
+
+    def _restore_capture_fog_snapshot(self, capturee: int, snapshot: CaptureFogSnapshot) -> None:
+        """
+        Writes the frozen pre-zero gather queue back onto the victim and, only when
+        the victim's whole team is dead on the scoreboard, restores the shared fog
+        pools too (a surviving teammate keeps the live shared pools). Runs right
+        before _transfer_captured_player_fog_state so transfer spies observe the
+        correct pre-zero state.
+        """
+        victimQueue = self.get_player_gather_queue(capturee)
+        for tileSize, _ in victimQueue.get_amount_dict().items():
+            victimQueue.set_amount_for_size(tileSize, 0)
+        for tileSize, count in snapshot.queueAmounts.items():
+            victimQueue.set_amount_for_size(tileSize, count)
+
+        captureeStats = self.current_team_cycle_stats[snapshot.team]
+        if captureeStats is None:
+            captureeStats = self.initialize_cycle_stats(snapshot.team)
+            self.current_team_cycle_stats[snapshot.team] = captureeStats
+
+        if self._is_team_scoreboard_dead(snapshot.team):
+            captureeStats.approximate_fog_army_available_total = snapshot.fogArmy
+            captureeStats.approximate_fog_army_available_total_true = snapshot.fogArmyTrue
+            captureeStats.approximate_fog_city_army = snapshot.fogCityArmy
+            captureeStats.fog_city_count = snapshot.fogCityCount
+
+    def _remove_capture_placeholder_ones(self, capturee: int, capturer: int, snapshot: CaptureFogSnapshot) -> None:
+        """
+        Removes placeholder gather-queue 1s the killer's missing-tile check appended
+        for land that was already inherited by the pending capture. Only runs once
+        the zero update has actually been analyzed (_capture_previous_turn >=
+        captureTurn); normal-order captures skip it entirely. Removal is capped by
+        the victim's inherited fog non-city tile count and the killer's actual
+        count of size-1 entries so legitimate small tiles are never eaten.
+        """
+        if self._capture_previous_turn < snapshot.captureTurn:
+            return
+
+        previousVictim = snapshot.previousScores[capturee]
+        inheritedFogNonCityCount = max(0, previousVictim.tiles - previousVictim.visibleOwnedTiles - snapshot.fogCityCount)
+        killerQueue = self.get_player_gather_queue(capturer)
+        recorded = self._capture_placeholder_counts[capturer]
+        toRemove = min(recorded, inheritedFogNonCityCount, killerQueue.get_count(1))
+        if toRemove <= 0:
+            return
+
+        killerQueue.set_amount_for_size(1, killerQueue.get_count(1) - toRemove)
+        self._capture_placeholder_counts[capturer] = recorded - toRemove
+        logbook.info(
+            f'OT_CAPTURE_PLACEHOLDERS turn={self.map.turn} p{capturer} removed {toRemove} '
+            f'placeholder 1s for p{capturee} capture (recorded {recorded}, inheritedFogNonCity {inheritedFogNonCityCount})')
+
+    def _transfer_captured_player_fog_state(self, capturee: int, capturer: int) -> None:
+        """
+        Moves the victim's gather-queue entries to the killer halved (the map
+        applies `army - army // 2` to every transferred tile) and moves the
+        surviving fog pools to the killer's team stats when the victim's team
+        fully died. Combat annihilated on the capture move is subtracted from the
+        frozen pools BEFORE halving via the conservative loss interval, bonus
+        ticks the dead-window analyzes already passed are added back, and the
+        killer is marked as having made a fog capture move this turn.
+
+        @param capturee: index of the captured (now dead) player.
+        @param capturer: index of the capturing player.
+        """
+        captureeTeam = self._team_lookup_by_player[capturee]
+        capturerTeam = self._team_lookup_by_player[capturer]
+        captureeStats = self.current_team_cycle_stats[captureeTeam]
+        capturerStats = self.current_team_cycle_stats[capturerTeam]
+        if captureeStats is None:
+            captureeStats = self.initialize_cycle_stats(captureeTeam)
+            self.current_team_cycle_stats[captureeTeam] = captureeStats
+        if capturerStats is None:
+            capturerStats = self.initialize_cycle_stats(capturerTeam)
+            self.current_team_cycle_stats[capturerTeam] = capturerStats
+
+        snapshot = self._unresolved_player_captures.get(capturee)
+
+        # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+        # bonus ticks that elapsed between the frozen capture turn and the last
+        # completed analyze were already processed while the victim's land was
+        # still unattributed; each inherited tile missed `missedArmyBonuses`
+        # army-bonus increments and each inherited fog city missed both bonus
+        # kinds, so they are added back exactly once here (zero for normal
+        # before-update ordering where prevTurn < captureTurn).
+        missedCityBonuses = 0
+        missedArmyBonuses = 0
+        if snapshot is not None and self._capture_previous_turn >= snapshot.captureTurn:
+            missedCityBonuses = self._capture_previous_turn // 2 - (snapshot.captureTurn - 1) // 2
+            missedArmyBonuses = self._capture_previous_turn // 50 - (snapshot.captureTurn - 1) // 50
+
+        lossEstimate: CaptureArmyLossEstimate | None = None
+        fogTransfer: CaptureFogPoolTransfer
+        if snapshot is not None:
+            # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+            # and ::test_should_account_for_annihilated_army_before_ffa_capture_transfer -
+            # other players may also have fought this update, so the closed
+            # victim<->killer pair bound is not conservative: widen it by every
+            # third-party score deficit and by the killer's unobservable income
+            # range from the frozen scoreboard tuples only (never the true map).
+            uncertainty = get_capture_score_uncertainty(
+                previousScores=snapshot.previousScores,
+                finalScores=snapshot.finalScores,
+                captureTurn=snapshot.captureTurn,
+                victim=capturee,
+                killer=capturer)
+            previousVictim = snapshot.previousScores[capturee]
+            # the estimator's visibleDefense is a PROVEN physical floor only; the
+            # victim's general stack could have vacated before the kill, so 0 is
+            # passed here. The same stack still credits the pool helper below:
+            # assuming it was all annihilated can only shrink the fog deduction.
+            visibleDefense = previousVictim.visibleGeneralArmy
+            lossEstimate = estimate_capture_army_loss(
+                victimScore=previousVictim.score,
+                victimTiles=previousVictim.tiles,
+                killerScoreBefore=snapshot.previousScores[capturer].score,
+                killerScoreAfter=snapshot.finalScores[capturer].score,
+                killerIncome=uncertainty.killerIncomeMinimum,
+                visibleDefense=0,
+                otherPlayerArmyLossBudget=uncertainty.otherPlayerArmyLossBudget,
+                killerIncomeUpper=uncertainty.killerIncomeMaximum)
+            self.last_capture_army_losses[capturee] = lossEstimate
+            fogTransfer = get_capture_fog_pool_transfer(
+                fogArmy=captureeStats.approximate_fog_army_available_total,
+                fogArmyTrue=captureeStats.approximate_fog_army_available_total_true,
+                fogCityArmy=captureeStats.approximate_fog_city_army,
+                annihilatedArmy=lossEstimate.assumed,
+                visibleDefense=visibleDefense)
+            if not lossEstimate.consistent:
+                logbook.warn(
+                    f'CAPTURE_ARMY_LOSS_INCONSISTENT turn={self.map.turn} victim=p{capturee} killer=p{capturer} '
+                    f'victimScore={previousVictim.score} victimTiles={previousVictim.tiles} '
+                    f'killerBefore={snapshot.previousScores[capturer].score} '
+                    f'killerAfter={snapshot.finalScores[capturer].score} '
+                    f'income={uncertainty.killerIncomeMinimum}..{uncertainty.killerIncomeMaximum} '
+                    f'otherLossBudget={uncertainty.otherPlayerArmyLossBudget} '
+                    f'loss={lossEstimate.minimum}..{lossEstimate.maximum} assumed={lossEstimate.assumed}')
+            logbook.info(
+                f'CAPTURE_ARMY_LOSS turn={self.map.turn} victim=p{capturee} killer=p{capturer} '
+                f'victimScore={previousVictim.score} victimTiles={previousVictim.tiles} '
+                f'killerBefore={snapshot.previousScores[capturer].score} killerAfter={snapshot.finalScores[capturer].score} '
+                f'income={uncertainty.killerIncomeMinimum}..{uncertainty.killerIncomeMaximum} '
+                f'otherLossBudget={uncertainty.otherPlayerArmyLossBudget} '
+                f'visibleDefense={visibleDefense} loss={lossEstimate.minimum}..{lossEstimate.maximum} '
+                f'assumed={lossEstimate.assumed} consistent={lossEstimate.consistent} '
+                f'transfer city={fogTransfer.cityArmyTransferred} fog={fogTransfer.gatheredArmyTransferred} '
+                f'true={fogTransfer.gatheredArmyTrueTransferred}')
+        else:
+            # no frozen bank (e.g. resume edge): halve live pools with zero assumed combat
+            fogTransfer = get_capture_fog_pool_transfer(
+                fogArmy=captureeStats.approximate_fog_army_available_total,
+                fogArmyTrue=captureeStats.approximate_fog_army_available_total_true,
+                fogCityArmy=captureeStats.approximate_fog_city_army,
+                annihilatedArmy=0,
+                visibleDefense=0)
+
+        victimQueue = self.get_player_gather_queue(capturee)
+        killerQueue = self.get_player_gather_queue(capturer)
+        victimAmounts = victimQueue.get_amount_dict()
+        for tileSize, count in victimAmounts.items():
+            halvedSize = tileSize - tileSize // 2 + missedArmyBonuses
+            if count > 0:
+                killerQueue.set_amount_for_size(halvedSize, killerQueue.get_count(halvedSize) + count)
+            victimQueue.set_amount_for_size(tileSize, 0)
+
+        # the shared team pools describe army sitting on the victim's land; combat
+        # is removed first, survivors halve, and the result follows the tiles - but
+        # only when the victim's whole team died (a surviving teammate keeps the
+        # pooled estimate attributable). All three victim pools are zeroed
+        # unconditionally so stale negative values cannot survive the transfer.
+        if self._is_team_scoreboard_dead(captureeTeam):
+            cityArmyTransferred = fogTransfer.cityArmyTransferred
+            if snapshot is not None and missedCityBonuses + missedArmyBonuses > 0:
+                cityArmyTransferred += snapshot.fogCityCount * (missedCityBonuses + missedArmyBonuses)
+            capturerStats.approximate_fog_army_available_total += fogTransfer.gatheredArmyTransferred
+            capturerStats.approximate_fog_army_available_total_true += fogTransfer.gatheredArmyTrueTransferred
+            capturerStats.approximate_fog_city_army += cityArmyTransferred
+            captureeStats.approximate_fog_army_available_total = 0
+            captureeStats.approximate_fog_army_available_total_true = 0
+            captureeStats.approximate_fog_city_army = 0
+
+        logbook.info(f'p{capturer} captured p{capturee}: transferred halved gather queue {victimAmounts} -> {killerQueue.get_amount_dict()}, fog pools now {capturerStats.approximate_fog_army_available_total}/{capturerStats.approximate_fog_city_army}')
+
+        self.last_player_move_type[capturer] = PlayerMoveCategory.FogCapture
+        if self.map.players[capturer].last_move is None:
+            capturerStats.moves_spent_capturing_fog_tiles += 1
+
     def dump_to_string_data(self) -> str:
         data = []
 
@@ -744,7 +1197,80 @@ class OpponentTracker(object):
                 cycleTurn = self.get_last_cycle_end_turn(cyclesToGoBack=i)
                 data.append(f'ot_{team}_ah_{cycleTurn}={hist[cycle].serialize()}')
 
+        data.append(f'ot_capture_state={self._serialize_capture_state()}')
+
         return '\n'.join(data)
+
+    def _serialize_capture_state(self) -> str:
+        """
+        Packs all capture-accounting resume state into one compact JSON value:
+        the previous-scoreboard baseline, unresolved pre-zero fog banks,
+        completed capture pairs, placeholder-1 counts, last loss estimates and
+        still-pending capture notifications.
+        """
+        state = {
+            'prev_scores': [score.to_dict() for score in self._capture_previous_scores],
+            'prev_turn': self._capture_previous_turn,
+            'unresolved': {str(playerIdx): snapshot.to_dict() for playerIdx, snapshot in self._unresolved_player_captures.items()},
+            'completed': [[capturee, capturer] for capturee, capturer in self._completed_player_captures],
+            'placeholder_counts': list(self._capture_placeholder_counts),
+            'last_losses': {
+                str(playerIdx): {
+                    'minimum': estimate.minimum,
+                    'maximum': estimate.maximum,
+                    'assumed': estimate.assumed,
+                    'consistent': estimate.consistent,
+                }
+                for playerIdx, estimate in self.last_capture_army_losses.items()
+            },
+            'pending': [[capturee, capturer] for capturee, capturer in self._pending_player_captures],
+        }
+        return json.dumps(state, separators=(',', ':'))
+
+    def _deserialize_capture_state(self, state: dict[str, typing.Any]) -> None:
+        """
+        Rebuilds the typed capture-accounting state from the ot_capture_state JSON
+        boundary. A PRESENT state must carry every section at exact shape - a
+        malformed dump raises instead of silently inventing missing banks or
+        scoreboard baselines. Only a wholly absent ot_capture_state key (older
+        fixtures) falls back to constructor/current-map defaults in the caller.
+        """
+        self._capture_previous_scores = tuple(
+            CapturePlayerScoreSnapshot.from_dict(score) for score in state['prev_scores'])
+        if len(self._capture_previous_scores) != len(self.map.players):
+            raise ValueError(
+                f'ot_capture_state prev_scores length {len(self._capture_previous_scores)} '
+                f'!= player count {len(self.map.players)}')
+        self._capture_previous_turn = int(state['prev_turn'])
+
+        self._unresolved_player_captures = {
+            int(playerIdx): CaptureFogSnapshot.from_dict(snapshot)
+            for playerIdx, snapshot in state['unresolved'].items()
+        }
+
+        self._completed_player_captures = {
+            (int(capturee), int(capturer)) for capturee, capturer in state['completed']
+        }
+
+        placeholderRaw = state['placeholder_counts']
+        if len(placeholderRaw) != len(self.map.players):
+            raise ValueError(
+                f'ot_capture_state placeholder_counts length {len(placeholderRaw)} '
+                f'!= player count {len(self.map.players)}')
+        self._capture_placeholder_counts = [int(count) for count in placeholderRaw]
+
+        self.last_capture_army_losses = {
+            int(playerIdx): CaptureArmyLossEstimate(
+                minimum=int(estimate['minimum']),
+                maximum=int(estimate['maximum']),
+                assumed=int(estimate['assumed']),
+                consistent=bool(estimate['consistent']))
+            for playerIdx, estimate in state['last_losses'].items()
+        }
+
+        self._pending_player_captures = [
+            (int(capturee), int(capturer)) for capturee, capturer in state['pending']
+        ]
 
     def load_from_map_data(self, data: typing.Dict[str, str]):
         teamStatsNoneByTeam = {team: self.current_team_cycle_stats[team] is None for team in self._team_indexes}
@@ -894,6 +1420,16 @@ class OpponentTracker(object):
             for team in self._team_indexes:
                 self.team_score_data_history[team][self.map.turn] = self.map.get_team_stats_by_team_id(team)
 
+        # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+        # resume mid-late-text: restore the frozen capture banks when the dump carries
+        # them; older fixtures without the key sync the scoreboard baseline to the
+        # current map so the next zero transition still measures from real state.
+        if 'ot_capture_state' in data:
+            self._deserialize_capture_state(json.loads(data['ot_capture_state']))
+        else:
+            self._capture_previous_scores = self._snapshot_capture_player_scores()
+            self._capture_previous_turn = self.map.turn
+
         self.skip_this_turn = True
         teamStatsNoneByTeam = {team: self.current_team_cycle_stats[team] is None for team in self._team_indexes}
         logbook.info(
@@ -902,6 +1438,19 @@ class OpponentTracker(object):
         )
 
     def calculate_cycle_stats(self, team: int, curTurnScores: TeamStats) -> CycleStatsData | None:
+        # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+        # and ::test_should_account_for_annihilated_army_before_ffa_capture_transfer - while a fully dead
+        # team's capture text is still pending, running the normal heuristics against the
+        # zeroed scoreboard makes _validate_army_totals subtract the frozen fog pools
+        # negative (the live replays drove fog army to -71/-44). Return the untouched
+        # stats so the frozen bank survives until _transfer_captured_player_fog_state
+        # restores and consumes it. Teams with surviving members keep normal shared-pool
+        # attribution, so this only fires when the WHOLE team is at 0 score / 0 tiles.
+        if curTurnScores.score == 0 and curTurnScores.tileCount == 0:
+            teamPlayers = self.get_team_players(team)
+            if any(playerIdx in self._unresolved_player_captures for playerIdx in teamPlayers):
+                return self.current_team_cycle_stats[team]
+
         lastCycleEndTurn = self.get_last_cycle_end_turn()
         if lastCycleEndTurn is None:
             # Tests/test_FfaGeneralTrade.py::test_map__ffa_trade__bonus_turns_parameterized:
@@ -951,6 +1500,13 @@ class OpponentTracker(object):
 
             # reset certain things after recording the final cycle stuff
 
+            # Tests/test_OpponentTracker.py::OpponentTrackerTests.test_should_preserve_fog_army_across_ffa_round_bonus
+            # the old cycle's gather moves already earned this much net fog-city
+            # army; it must survive rollover into the new cycle's pools.
+            gatheredFogCityArmy = 0
+            if len(currentCycleStats.players) > 0:
+                gatheredFogCityArmy = max(0, self.get_fog_city_risk_in_turns_by_cycle_behavior(currentCycleStats.players[0]))
+
             currentCycleStats = self._start_next_cycle_stats_and_gather_queue(currentCycleStats, lastCycleStats=currentCycleStats, currentTeamStats=curTurnScores, lastCycleTeamStats=lastCycleScores)
             self.current_team_cycle_stats[currentCycleStats.team] = currentCycleStats
 
@@ -959,6 +1515,18 @@ class OpponentTracker(object):
                 gatherQueue.increment_army_bonus()
 
             self._start_team_score_next_cycle_and_record_efficiencies(curTurnScores, team, currentCycleStats)
+
+            # Tests/test_OpponentTracker.py::OpponentTrackerTests.test_should_preserve_fog_army_across_ffa_round_bonus
+            # move the already-gatherable fog-city army earned by the old cycle's
+            # gather moves out of the city pool and into both available fog-army
+            # pools, conserving the raw+city total exactly. Runs after efficiency
+            # recording so the carried city army is not subjected to the
+            # raw-land inefficiency heuristic.
+            if gatheredFogCityArmy > 0:
+                currentCycleStats.approximate_fog_city_army -= gatheredFogCityArmy
+                currentCycleStats.approximate_fog_army_available_total += gatheredFogCityArmy
+                currentCycleStats.approximate_fog_army_available_total_true += gatheredFogCityArmy
+                logbook.info(f'OT_FOG_CITY_CARRY turn={self.map.turn} team={team} amount={gatheredFogCityArmy}')
 
         # Tests: Tests/test_GeneralTrade.py - exact trade reseed runs AFTER the
         # bonus/rollover accounting above but BEFORE missing-tile checks and
@@ -1688,7 +2256,10 @@ class OpponentTracker(object):
         playerCountAliveOnTeam = 0
         fogCityCount = 0
         for player in self.map.players:
-            if player.dead:
+            # Tests/test_OpponentTracker.py::OpponentTrackerTests.test_should_transfer_gather_queue_and_fog_pools_on_enemy_capture
+            # _players_killed_before_dead_flag covers the one-turn gap between a
+            # player_capture event and the map's Player.dead flag catching up.
+            if player.dead or player.index in self._players_killed_before_dead_flag:
                 continue
             if not self._team_lookup_by_player[player.index] == team:
                 continue
@@ -1863,6 +2434,13 @@ class OpponentTracker(object):
             while queue.length < playerFogGathTileCount:
                 logbook.error(f'CheckMissingFogGath: p{playerIdx} team[{currentCycleStats.team}] is missing fog tiles (q {queue.length} vs actual {playerFogGathTileCount})...? Adding a 1')
                 queue.append(1)
+                # Tests/test_FFA.py::FFATests.test_should_preserve_captured_fog_army_after_late_capture_message
+                # while a zeroed victim awaits its capture text, the land they just lost
+                # already counts as the killer's fog tiles, so this tops their queue up
+                # with placeholder 1s that the delayed transfer must remove again (the
+                # real halved queue entries arrive with the snapshot instead).
+                if len(self._unresolved_player_captures) > 0:
+                    self._capture_placeholder_counts[playerIdx] += 1
 
     def get_current_cycle_stats_by_player(self, player: int) -> CycleStatsData:
         return self.current_team_cycle_stats[self._team_lookup_by_player[player]]

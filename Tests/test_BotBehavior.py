@@ -3447,3 +3447,93 @@ whoever has less extra troops will always get ahead
         self.assertNoFriendliesKilled(map, general)
 
         simHost.assert_last_move(general.player, '9,6 -> 8,6')
+
+    def test_should_attack_early_without_gather_repetition(self) -> None:
+        """Imported from QaFHRLrxn turn 213: the bot must take enemy land with a real stack
+        (>=10 army on an initially enemy-owned tile) within 12 turns and must not repeat moves."""
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_attack_early_without_gather_repetition___QaFHRLrxn---1--213.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_attack_early_without_gather_repetition___QaFHRLrxn---1--213.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 213, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=213)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # Snapshot the tiles the enemy owns at import time so the early-attack
+        # check below can tell a real attack (capturing enemy land) apart from
+        # neutral expansion or token 1-army grabs.
+        enemyTiles: list[Tile] = list(map.players[enemyGeneral.player].tiles)
+        earlyAttackTurns: list[int] = []
+
+        def record_early_attack() -> None:
+            """Records the first turn we hold an initially enemy-owned tile with at least 10 army."""
+            if not earlyAttackTurns and any(tile.player == general.player and tile.army >= 10 for tile in enemyTiles):
+                earlyAttackTurns.append(map.turn)
+
+        simHost.run_between_turns(record_early_attack)
+
+        # proof
+        # simHost.queue_player_moves_str(general.player, '3,22->3,21->3,20->2,20->2,19->2,18->2,17->2,16->3,16->3,15->3,14  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none')
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=25)
+
+        with self.subTest('no friendlies killed'):
+            self.assertNoFriendliesKilled(map, general)
+        with self.subTest('no move repetition'):
+            self.assertNoRepetition(simHost, repetitionPlayer=general.player)
+        with self.subTest('early attack on enemy land'):
+            self.assertTrue(earlyAttackTurns, 'Should attack enemy land with at least 10 army within 12 turns')
+            if earlyAttackTurns:
+                self.assertLessEqual(earlyAttackTurns[0], 225, 'expected to attack enemy land by turn 225 (12 turns after turn 213 import)')
+
+    def test_should_intercept_large_army_instead_of_abandoning_general(self) -> None:
+        """Bot must not abandon its general to a large incoming army (live game Y9S75moK8, turn 694)."""
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_intercept_large_army_instead_of_abandoning_general___Y9S75moK8---7--694.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_intercept_large_army_instead_of_abandoning_general___Y9S75moK8---7--694.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 694, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=694)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 25 turns after turn 694
+        simHost.queue_player_moves_str(1, '7,4->7,5->6,5->6,6->7,6->7,7->6,7->5,7->4,7->3,7->2,7->2,8->2,9->2,10->2,11->2,12->1,12->0,12->0,13')  # replay moves: gotcha:)
+        # simHost.queue_player_moves_str(general.player, '11,6->11,5->11,4  9,13->10,13->10,12->11,12->11,11->11,10->11,9->11,8->11,7->10,7->9,7->9,6->8,6->8,5->8,6->7,6->6,6')  # replay line for Human.exe
+        # proof: big stack 9,13 -> 0,12 collects city armies, holds vs incoming column
+        # simHost.queue_player_moves_str(general.player, '9,13->8,13->7,13->6,13->6,12->5,12->4,12->3,12->2,12->1,12->0,12  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none')  # proof
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=20)
+        self.assertNoFriendliesKilled(map, general)
+
+    def test_should_keep_defending_general_against_large_army_for_fifty_turns(self) -> None:
+        """Bot must keep defending its general against a large army for 50 turns (live game Y9S75moK8, turn 678)."""
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_keep_defending_general_against_large_army_for_fifty_turns___Y9S75moK8---7--678.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_keep_defending_general_against_large_army_for_fifty_turns___Y9S75moK8---7--678.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 678, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=678)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 50 turns after turn 678
+        simHost.queue_player_moves_str(1, 'none  none  5,3->5,2->4,2  none  none  none  4,2->4,1->3,1->4,1->4,2->5,2->5,3->6,3->7,3->7,4->7,5->6,5->6,6->7,6->7,7->6,7->5,7->4,7->3,7->2,7->2,8->2,9->2,10->2,11->2,12->1,12->0,12->0,13')  # replay moves: gotcha:)
+        # simHost.queue_player_moves_str(general.player, '1,11->2,11->3,11->4,11->4,12->5,12->6,12->6,13->6,14->7,14  7,13->7,14  9,14->9,13  7,14->8,14->8,13->9,13  11,8->11,7->11,6->11,5->11,4  9,13->10,13->10,12->11,12->11,11->11,10->11,9->11,8->11,7->10,7->9,7->9,6->8,6->8,5->8,6->7,6->6,6')  # replay line for Human.exe
+        # proof: merge 5,12 and 1,11 stacks into the 3,12 column, push to 0,12, hold
+        # simHost.queue_player_moves_str(general.player, '5,12->4,12->3,12  1,11->2,11->2,12->3,12  3,12->4,12->5,12->6,12->6,13->7,13->8,13->8,14->9,14->9,13->8,13->7,13->6,13->6,12->5,12->4,12->3,12->2,12->1,12->0,12  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none  none')  # proof
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
+        self.assertNoFriendliesKilled(map, general)

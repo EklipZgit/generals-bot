@@ -1,0 +1,59 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+     a1   a1   a2   a3   a2   a2   M                                  M         M
+     a1   a1   a2   a1   a1   M              M    M         b19       b2   M    C41       M
+          C41  a1   a1   a1   M         M                   b1   M    b2   b1   b1   b9
+a1   a1   M    a1   a1   a1   M                        b3   b1   b3   b3   b1   b1   M
+a1   a1   a1   a1   M    a1   a1   M    b4   M    M    b3   b1   bC5  b3   b2   b6   b4        M
+     M    a27  a3        M    M    b1   b4   b4   b1   b1   b10  b11  b2   b2   b2   b4
+M    a2   a1   M    M    a2   a2   b1   b2   b4   b4   M    M    b6   b2   b2   b2   b4   b5        M
+a1   a1   a3   M    b1   b1   a2   a2   a3   b3   C46  M    M    M    M    b2   b2   M    b1   b4
+a1   a1   a3   a3   b3   b1   b1   a2   b3   b3   M    M         bC7  b2   b2   b2   b4   b4   M    M
+M    a2   a5   M    M    C44  a11  a1   b1   b3   b3   b3   M    b1   b2   b2   b2   b3   M         M
+M    a2   a2   a2   M         b3   a1   a1        C44  b1   b1   b1   bC7  M    b2   b3   b1
+a2   aG42 a2   a2   M    a1        M    b1   b1   b1   b1        M    b1   b2   b2   M    b1
+a2   a2   a2   a2   a1   aC70 M    a2   b92  a1   M         M    b3   b1   b1   bG10 M    b1   M    M
+M    a3   a3   a3   a1   M    a3   a2   b1   M         M         b3   b3   M    b1   b1   b1
+a5   a4   a4   M    aC3  a2   a1   a1   a1   M              M              M    M         b4   M
+a5   M    a4   M    a3   M    a1   M    M                   M                        M    b4   b4
+a4   a4   a4   a4   a3   a3   aC10 a2   a2   M         M         M    M                   M         M
+a4   a4   M    a4   a4   a4   a4        a2   a2        M                                       M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=289
+player_index=1
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=0
+mode=1v1
+aUsername=NewSouth
+aStars=40
+aScore=361
+aTiles=99
+aStandingArmy=262
+aCityCount=4
+aGeneral=1,11
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=497
+aDelta25Tiles=13
+aDelta25Score=156
+aCityGainedTurn=224
+aCityLostTurn=216
+aLastSeenMoveTurn=289
+aKnowsKingLocation=False
+bUsername=Human.exe
+bStars=77
+bScore=374
+bTiles=100
+bStandingArmy=274
+bCityCount=4
+bGeneral=16,12
+bDead=False
+bLeftGame=True
+bLeftGameTurn=801
+bAggressionFactor=25
+bDelta25Tiles=1
+bDelta25Score=110
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=289
+bKnowsKingLocation=False

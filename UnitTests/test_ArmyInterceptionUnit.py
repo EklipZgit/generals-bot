@@ -6,9 +6,10 @@ import logbook
 
 import SearchUtils
 from ArmyAnalyzer import ArmyAnalyzer
+from Behavior.ArmyInterceptionModels import ArmyInterception
 from Behavior.ArmyInterceptor import InterceptionOptionInfo, TARGET_CAP_VALUE
-from BotModules import BotDefense
-from BotModules.imports import BotCombatOps
+from BotModules.BotCombatOps import BotCombatOps
+from BotModules.BotDefense import BotDefense
 from DangerAnalyzer import ThreatObj, ThreatType
 from Models import Move
 from Path import Path
@@ -61,7 +62,7 @@ class InterceptHarnessParams:
 
 
 class ArmyInterceptionUnitTests(TestBase):
-    USE_V2_INTERCEPTION: bool = False
+    USE_V2_INTERCEPTION: bool = True
     INNER_PATH_INTERCEPT_DEBUG_MAP_FILE = 'GameContinuationEntries/should_correctly_value_intercept_from_general___jzXGxMXQl---1--323.txtmap'
     INNER_PATH_INTERCEPT_DEBUG_TURN = 323
 

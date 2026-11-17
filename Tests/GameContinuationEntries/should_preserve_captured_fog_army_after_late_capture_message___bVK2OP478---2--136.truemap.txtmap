@@ -1,0 +1,174 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+                         M    M                   M                             M                   h1   hG18                                                   M
+                                   M    M              M    M                   M    C45                 h1   C46       h1   h1   h1   h1   h1   h1   h1
+                                        M                   M         M                             e5   e1   e1   e1   e1   e1             M    h1        M
+M    M    M              M    M                   M              M              M              M         h1   M    e1   e1   e1   e1             h1
+               M    M                                                                          M         M         e1   e1   e1   e1             h1
+c1   c1   c1   c1   c1   M         M         M                   M    M              M    M                        M    M    e1   e1        M    h1        M
+c1   c1             c1   c1        M                                  g1                                      M              e1   e1   h1   h1   h1
+c8   c1   M         M    M    c1   bG14                               g1                       M                   e1   h1   h1   h1   h1   M    M    M
+C45  c1   c1   M    c1   c1   c1   C46       M                        g1   M         M         M         M    e1   h1   h1   M    M         M
+M    M    c1   c1   c1   M    M    g2   g2   g2             M         g1                                 M    h2   h1   M    C46  M         M    M
+C46  c2   c1   c2   c2   c2   g2   g2   C45  g2   g2             M    g1   g2        M                        e1   e1   eG10           C45  M                   M
+cG2  c1   c11  M    c2   c1   g2   c1   c1   M    g2   g2        g2   g1   M              M    M                                  M
+M    M    c1   c1   c1   c1   g2   c1   c1        M    M         M    g1   g2        M    M                             M    M              M                   M
+c1   c1   c1   M    M    C45  g2   M              M         M         g1   g2             M         M                        M                   M    f2
+c1   c1   M         M    g2   g2   M    M         M    g1   g1   g1   g1   g2   M                   M                        f4        M    M    f2   f2   M    M
+     c2             a1   a1   a44       a1   a1   g1   g1   g1   g1   g1   g1   g1             M    M         M    M         f1   f1   f2   f2   f2   f2   f1   M
+               M    a1   M    gG34 g2   g2   a2   g2   M    M         M         g1   M    C42  M    M                             f1                  C    f1
+     M    M         a1   M    C46  g2   M    a2   a2   a2   a2        M    C42  g1   M         M                   M              f1   M    M    f2   f2   f1   M
+M         a1   C45  a1   M                        M         a2             M    g1                  M         M              M         f2   f2   f2   f2   fG11
+          a1   a1   a1   M    M    M                   M    a2                  g1        M                                                 C45       f3   f3
+M    M    a1   M                        M    M         M    g7   g1   g1   g1   g1   M                                       M         M              M    f2   M
+          a1                                                a2                                      M                                       M         M    f2
+     M    a1                            M                   a2        M    M              M
+a1   a1   a1        C46  M              C43       M    M    a2   a2   a2   a2   a2             M                                  M         C45       M
+a1   M    aG8  a1   M                        M              C50       M    C40  a2                  M              d1   d1   d1   d1   d1   d1   M    d1   d1   d1
+a1        a1   M    M                             M         M         M    M    a2   M    M                   M    d1   d1   d1   M    d1   d1   d1   d1   d1   d1
+          a1   M                        M              M         M              a2   M                   M         M    d1   d11  M    d2   d2   M    d1   d1   M
+M         a1   a1   a1   a1   a1   a1   a1   a1   a1   M         M    M         a2                                 d2   d2   d2   d2   d2   d2   M    d1   M    d1
+               M                   M              a1   a2   a2   a2   a2   a2   a2             M                   M    d2   M    d2   d2   dG45 C46  d1   M    d1
+                         M    M    M                   M                                  M                        M    d2   d2   d2   d2   d2   M    d1   d1   d1
+                                   C44  M                   M                             M    M                   d2   d2   d2   d2   M    M    d1   d1   d1   d1
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=136
+player_index=2
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=ffa
+aUsername=Davidazullo2525
+aStars=42
+aScore=132
+aTiles=58
+aStandingArmy=74
+aCityCount=1
+aGeneral=2,24
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=21
+aDelta25Score=64
+aCityGainedTurn=0
+aCityLostTurn=2
+aLastSeenMoveTurn=0
+aKnowsKingLocation=False
+bUsername=jlhjlkhjlkhjkl777l
+bStars=11
+bScore=14
+bTiles=1
+bStandingArmy=13
+bCityCount=1
+bGeneral=7,7
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=0
+bDelta25Score=-31
+bCityGainedTurn=0
+bCityLostTurn=2
+bLastSeenMoveTurn=126
+bKnowsKingLocation=False
+cUsername=Human.exe
+cStars=56
+cScore=68
+cTiles=44
+cStandingArmy=24
+cCityCount=1
+cGeneral=0,11
+cDead=False
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=10
+cDelta25Score=6
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=136
+cKnowsKingLocation=False
+dUsername=Vedric
+dStars=35
+dScore=128
+dTiles=54
+dStandingArmy=74
+dCityCount=1
+dGeneral=28,28
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=22
+dDelta25Score=63
+dCityGainedTurn=0
+dCityLostTurn=2
+dLastSeenMoveTurn=0
+dKnowsKingLocation=False
+eUsername=date:26.11.6
+eStars=37
+eScore=36
+eTiles=23
+eStandingArmy=13
+eCityCount=1
+eGeneral=24,10
+eDead=False
+eLeftGame=False
+eLeftGameTurn=-1
+eAggressionFactor=0
+eDelta25Tiles=13
+eDelta25Score=-2
+eCityGainedTurn=0
+eCityLostTurn=2
+eLastSeenMoveTurn=0
+eKnowsKingLocation=False
+fUsername=qwerttyuuiipp
+fStars=13
+fScore=58
+fTiles=26
+fStandingArmy=32
+fCityCount=1
+fGeneral=31,18
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+fDelta25Tiles=5
+fDelta25Score=2
+fCityGainedTurn=0
+fCityLostTurn=2
+fLastSeenMoveTurn=0
+fKnowsKingLocation=False
+gUsername=254378324
+gStars=1
+gScore=114
+gTiles=52
+gStandingArmy=62
+gCityCount=1
+gGeneral=6,16
+gDead=False
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=60
+gDelta25Tiles=8
+gDelta25Score=59
+gCityGainedTurn=0
+gCityLostTurn=2
+gLastSeenMoveTurn=85
+gKnowsKingLocation=False
+hUsername=ydnm
+hStars=42
+hScore=44
+hTiles=26
+hStandingArmy=18
+hCityCount=1
+hGeneral=21,0
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=15
+hDelta25Tiles=-2
+hDelta25Score=4
+hCityGainedTurn=0
+hCityLostTurn=2
+hLastSeenMoveTurn=0
+hKnowsKingLocation=False

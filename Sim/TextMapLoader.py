@@ -327,7 +327,8 @@ class TextMapLoader(object):
             pathsStr = "|".join([str(p) for p in army.expectedPaths])
             revertsStr = ";".join(
                 [
-                    f'{revert.tile.x},{revert.tile.y},{revert.army},{revert.player},{1 if revert.isTempFogPrediction else 0}'
+                    f'{revert.tile.x},{revert.tile.y},{revert.army},{revert.player},{1 if revert.isTempFogPrediction else 0},'
+                    f'{revert.postArmy if revert.postArmy is not None else "None"}'
                     for revert in army.fogTileReverts.values()
                 ]
             )
@@ -392,7 +393,15 @@ class TextMapLoader(object):
             lastSeenTurn, everythingElse = everythingElse.split('*')
             lastMovedTurn, everythingElse = everythingElse.split('&')
             expectedPathsCombined, everythingElse = everythingElse.split('%')
-            expectedPaths = [TextMapLoader.parse_path(map, pStr) for pStr in expectedPathsCombined.split('|')]
+            # Tests/test_FFA.py::FFATests.test_should_attack_aggressor_without_overgathering_or_abandoning_general:
+            # dump_armies serializes an empty expectedPaths list as the empty string; splitting
+            # that back produces [''] and parse_path stores None, which crashes Army.clone during
+            # the resumed fog split. Malformed path strings are equally invalid runtime state.
+            expectedPaths = [
+                path for path in (
+                    TextMapLoader.parse_path(map, pStr)
+                    for pStr in expectedPathsCombined.split('|'))
+                if path is not None]
             revertsRaw = ''
             if '@' in everythingElse:
                 everythingElse, revertsRaw = everythingElse.split('@', 1)
@@ -436,13 +445,19 @@ class TextMapLoader(object):
         for revertRaw in revertsRaw.split(';'):
             if revertRaw == '':
                 continue
-            xRaw, yRaw, armyRaw, playerRaw, isTempFogPredictionRaw = revertRaw.split(',')
+            # postArmy is the optional 6th field; txtmaps serialized before
+            # post-claim tracking have only 5 fields and leave it None, so their
+            # unverifiable snapshots skip the army-value restore entirely.
+            fields = revertRaw.split(',')
+            xRaw, yRaw, armyRaw, playerRaw, isTempFogPredictionRaw = fields[:5]
+            postArmyRaw = fields[5] if len(fields) > 5 else 'None'
             tile = map.GetTile(int(xRaw), int(yRaw))
             reverts[tile] = FogTileRevert(
                 tile=tile,
                 army=int(armyRaw),
                 player=int(playerRaw),
                 isTempFogPrediction=isTempFogPredictionRaw == '1',
+                postArmy=None if postArmyRaw == 'None' else int(postArmyRaw),
             )
         return reverts
 
@@ -517,6 +532,10 @@ class TextMapLoader(object):
                 player.knowsAllyKingLocation = data[f'{char}KnowsAllyKingLocation'].lower() == 'true'
             if f'{char}Dead' in data:
                 player.dead = data[f'{char}Dead'].lower() == 'true'
+            # Tests/test_FFA.py credited-kill persistence: absent metadata stays None (unknown);
+            # only an explicit true/false restores the authoritative server flag.
+            if f'{char}HasKill' in data:
+                player.has_kill = data[f'{char}HasKill'].lower() == 'true'
             if f'{char}LeftGame' in data:
                 player.leftGame = data[f'{char}LeftGame'].lower() == 'true'
             if f'{char}LeftGameTurn' in data:
@@ -533,6 +552,11 @@ class TextMapLoader(object):
                 player.cityLostTurn = int(data[f'{char}CityLostTurn'])
             if f'{char}LastSeenMoveTurn' in data:
                 player.last_seen_move_turn = int(data[f'{char}LastSeenMoveTurn'])
+            # BotGeneralSafety: absent on old fixtures -> stays -1, which must
+            # never activate general-safety episodes (knowsKingLocation=True
+            # without a timestamp is baseline behavior, not a fresh reveal).
+            if f'{char}KnowsKingSinceTurn' in data:
+                player.king_location_revealed_turn = int(data[f'{char}KnowsKingSinceTurn'])
             player.team = map.team_ids_by_player_index[player.index]
 
         for tile in map.get_all_tiles():

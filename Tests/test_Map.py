@@ -4,8 +4,8 @@ from Models import Move
 from Sim.GameSimulator import GameSimulatorHost, GameSimulator
 from Sim.TextMapLoader import TextMapLoader
 from TestBase import TestBase
-from base.client.map import Score
-from base.client.tile import TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN
+from base.client.map import MapBase, Score
+from base.client.tile import TILE_FOG, TILE_OBSTACLE, TILE_MOUNTAIN, Tile
 from test_MapBaseClass import MapTestsBase
 
 
@@ -239,6 +239,72 @@ dG1
         self.assertEqual(0-genArmyMoved, targetTile.delta.armyDelta)
         self.assertEqual(targetTile, general.delta.toTile)
         self.assertEqual(general, targetTile.delta.fromTile)
+
+    def _stage_stale_fog_source_capture(self, sourceTextTile: str) -> typing.Tuple[MapBase, Tile, Tile]:
+        """
+        Builds a small 4-player FFA map where player 2 ('c') captures a
+        remembered blue 'b2' tile from a fog source whose remembered owner is
+        stale, stages this turn's deltas through the normal update_visible_tile
+        path, and returns (map, fogSourceTile, captureTargetTile) ready for a
+        direct set_tile_probably_moved call.
+
+        sourceTextTile is the txtmap cell for the fog source: 'b2D' remembers a
+        blue army-2 tile discovered but not visible, 'N2D' remembers a neutral
+        army-2 tile likewise. The capture target is always remembered 'b2' and
+        is updated to player 2 army 85, giving it the observed -87
+        unexplainedDelta of a real capture (85 arrived + 2 defender).
+        """
+        mapRaw = f"""
+|   |   |   |   |   |
+{sourceTextTile} b2  c1  c1  c1
+b1  bG3 c1  c1  cG5
+d1  d1  d1  d1  dG5
+|   |   |   |   |   |
+"""
+        map, general = self.load_map_and_general_from_string(
+            mapRaw, turn=12, player_index=3, respect_undiscovered=True)
+        sourceTile = map.GetTile(0, 0)
+        targetTile = map.GetTile(1, 0)
+
+        map.update_turn(13)
+        # the fog source stays out of vision all turn; a fog report keeps its
+        # remembered owner/army in the delta without marking lostSight
+        map.update_visible_tile(sourceTile.x, sourceTile.y, TILE_FOG, 0)
+        # the bot now sees player 2's army sitting on the formerly-blue target
+        map.update_visible_tile(targetTile.x, targetTile.y, 2, 85, is_city=False, is_general=False)
+        map.update(bypassDeltas=True)
+
+        return map, sourceTile, targetTile
+
+    def test_should_use_capture_delta_for_stale_fog_source_owner(self) -> None:
+        """
+        Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_double_fog_capture_emergence
+        reproduces this at game scale: player 2 moves 87 army out of fog onto a
+        blue tile it captures. The fog source's remembered owner contradicts
+        the resolved mover, so _get_expected_delta_amount_toward's +87 must be
+        normalized to the destination's observed -87: the source is debited,
+        the capture is explained (destination residual 0), and exactly one 87
+        emergence is recorded on the source instead of a doubled -174 on the
+        destination. Covers both a stale remembered player owner and a
+        remembered-neutral source.
+        """
+        for sourceTextTile, rememberedAs in (('b2D', 'blue'), ('N2D', 'neutral')):
+            with self.subTest(f'fog source remembered as {rememberedAs}'):
+                map, sourceTile, targetTile = self._stage_stale_fog_source_capture(sourceTextTile)
+                map.set_tile_probably_moved(
+                    targetTile,
+                    sourceTile,
+                    fullFromDiffCovered=False,
+                    fullToDiffCovered=False,
+                    byPlayer=2)
+
+                self.assertEqual(0, targetTile.delta.unexplainedDelta)
+                self.assertEqual(88, sourceTile.delta.oldArmy)
+                self.assertEqual(1, sourceTile.army)
+                self.assertEqual(-87, sourceTile.delta.armyDelta)
+                self.assertEqual(2, sourceTile.player)
+                self.assertEqual((87, 2), map.army_emergences.get(sourceTile))
+                self.assertFalse(sourceTile.isGeneral)
 
     def test_tile_delta_against_neutral_city_non_bonus_turn(self):
         mapRaw = """

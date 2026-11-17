@@ -5,7 +5,7 @@ from __future__ import annotations
 import multiprocessing
 import pickle
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from multiprocessing.context import BaseContext
 from multiprocessing.process import BaseProcess
 from multiprocessing.queues import Queue as ProcessQueue
@@ -26,6 +26,8 @@ class WrpRequest:
     target_tile_indexes: list[int]
     initial_army: int
     time_limit: float
+    target_weights: list[float] = field(default_factory=list)
+    """Per-target priority weights aligned with target_tile_indexes; empty = unweighted."""
 
 
 @dataclass(slots=True)
@@ -75,7 +77,11 @@ def _wrp_worker_main(
             start_tile,
             target_tiles,
             timeLimit=request.time_limit,
-            initialArmy=request.initial_army)
+            initialArmy=request.initial_army,
+            target_weights=(
+                dict(zip(request.target_tile_indexes, request.target_weights))
+                if request.target_weights
+                else None))
         tile_indexes = (
             [tile.tile_index for tile in path.tileList]
             if path is not None
@@ -96,6 +102,7 @@ class WrpWorkerProcess:
         "process",
         "started",
         "closed",
+        "close_requested",
     )
 
     def __init__(self) -> None:
@@ -116,11 +123,12 @@ class WrpWorkerProcess:
             daemon=True)
         self.started = False
         self.closed = False
+        self.close_requested = False
 
     def submit(self, request: WrpRequest) -> None:
         """Start the worker on first use and submit one WRP request."""
-        if self.closed:
-            raise RuntimeError("Cannot submit WRP work to a closed worker")
+        if self.closed or self.close_requested:
+            raise RuntimeError("Cannot submit WRP work to a closed/closing worker")
         if not self.started:
             self.started = True
             self.process.start()
@@ -145,6 +153,48 @@ class WrpWorkerProcess:
     def is_alive(self) -> bool:
         """Return whether the lazily started worker process is alive."""
         return self.started and self.process.is_alive()
+
+    def request_close(self) -> None:
+        """Non-blocking close request: the worker finishes its current job (each
+        is time-limited ~1s) then reads the None sentinel and exits on its own.
+        Used on the move hot path (FFA-end) where a blocking join is forbidden;
+        poll_close() finalizes once the process has actually exited.
+        """
+        if self.closed or self.close_requested:
+            return
+        if not self.started:
+            # Never started: no worker to wait for - release the process handle
+            # and both queues immediately so nothing is left unclosable.
+            self.process.close()
+            self.request_queue.close()
+            self.result_queue.close()
+            self.closed = True
+            return
+        if self.process.is_alive():
+            self.request_queue.put(None)
+        self.close_requested = True
+
+    def poll_close(self, timeout_sec: float = 0.0) -> bool:
+        """Finalize a request_close once the worker has exited; never blocks the
+        caller beyond timeout_sec. Returns True when fully closed. A still-alive
+        worker simply returns False - the daemon child self-terminates after its
+        current job and game-over shutdown() can still force a blocking close.
+        """
+        if self.closed:
+            return True
+        if not self.close_requested:
+            return False
+        if self.started and self.process.is_alive():
+            self.process.join(timeout_sec)
+            if self.process.is_alive():
+                return False
+        if self.started:
+            self.process.close()
+        self.request_queue.close()
+        self.result_queue.close()
+        self.closed = True
+        self.close_requested = False
+        return True
 
     def close(self, timeout_sec: float = 30.0) -> None:
         """Stop the worker for deterministic process-backed unit-test cleanup."""

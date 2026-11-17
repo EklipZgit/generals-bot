@@ -1,0 +1,168 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+N2   d3   d3   N2   N2        M              M                   M                        a2        C49            M    M
+C48  M    d3   d3   d3             M    d2   d2   d5                                 d2   a2   d2   d2   d2   d1   d1   dC3  d2
+N2   M    d3   d3   d2   d2   d2   d2   d2   d2   d2   d2   d2   d2   d2   d2   d2   a2   a2   d2   dG37 d1   d1   M    M    d2
+C34  N2   d5   C11  e2   e2   e2   e2   M         M    M         M    M    M         a2   M         d3        M         M    M
+N2   d5   d4   d4   N2   e2   e2   e2        M    e4   e4   e4   e4   e4   e4   e4   a2             d2   d2   d3   M
+N2   M    M    M    M    e2   M    e2   e4   e4   e4   e4   e3   e3   e3   M    e4   a2             d2        M    M    M    M
+                    e2   e2        e2   e4   e4   M    M    e3   e3   e3   e3   e4   a2   a2   d3   d2   M
+e3                            M    e2   M    e4   e5   e3   e3   e3   e3   e3   e4        a2   d3   M              M
+e3   e3                  e2   e2   e2   e2   e2   C48  e3   M    e3   e3   e3   e4        a2   d3
+M    e3                  e2   e2        e4   e2   e5   e3   M    eG28 e3   e3   M         a2   d3        M    M         M    M
+e3   e3                  e2   e2        M    e2   M    e3   C49  e2   e3   e3   e4   M    a2   d3   M                   M
+e2        M    M         M    e2        e4   e2   e3   e3   M    e2   e2   e2   e4        a2   a2   M              M         M
+e2   M    e2   e2   C47  e2   e2        e3   e2   M    e3   e3   e2   M    e4   e4        a2   a2   d3   d3   d3             M
+e5   e2   e2   e2   e2   e2        M         e2   e2   e2   e2   e2   e4   e4   M         a2   M    M    M    d3   a2
+     M    e2   e1   e33                           M    e5   e5   M                   M    a2             a3   M    a2   a3
+M    M    e2   e1   e2   M    M         M    a3   a3   a3   a3        M    a3   a3        a2             a3   a4   C48  a3
+e2   e1   e1   e1   e2   e3   e3   a3   a3   a3   a3   a3   a3   M         M    a3   M    a2        M    a4   a4   a4   a3
+eC5  e2   e3   e3   e2   M    e3   a4   a4   a3   a3   a2   a3   M    M    M    a3        a2   a3   a3   M    a3   a3   a3   a3
+eC6  e2   M    M    e2   e3   e3   a3   M    a3   a3   a1   aC1  M    a3   a3   a3   a2   a2   a4   M    a4   a3   a2   a2   a3
+e2   eC7  e3   e3   e3   e3   e3   a3   C48  a3   a4   C49  a65  a4   a4   a4   a4   a2   a4   a4   M    M    aG35 C49  a5   M
+M    M    e3   e3   M    e3   e3        a3   a3   a3   a3   a3   a4   a4   a4   M    a2   M    a4   a3   a3   a3   M
+     f4   f1   e3   e3   M         M    a3   a3   a3   a3   a3   a4   a3   a3   a4   a2   a4   M    a3   M    M              M
+     f4   f1   M    e3   e3   M                   M              a3   a4   M    M    a2   a4   M    a3   M         M
+f4   M    f11  f5   M    M    M    M    f3                  a3   a3   a4   a2   a2   a2   a4   a5   a10  a1   M    a3   M    M
+f4   f2   f2   f2   f5   f2   f5   M    f2   M         f2        M    a5   M    a4   a2   a4   C49  a3   a2   a4   a3   a3   a3
+f5   f5   f2   f28  f3   f1   f9   f7   f2   fC53      f2   M    a4   a3   a4   a4   a2   aC24 a3   a10  C48  a4   a4   a3   M
+               M         C48  f4   f2   f5   f3   M    f2   M    M    a2   a4   a4   a3   a2   a1   a1   a4   M    a3   a3
+     M    M         f3   f3   f3   f3   M    fG53 f3   f2        M    M    a3   M    a3   a2   a2   a2   a2   a3   a3        C45
+M                   M         M         M              M         M                   a3   a3   a2   a2   M    a3   M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=255
+player_index=0
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=3
+mode=ffa
+aUsername=Human.exe
+aStars=56
+aScore=634
+aTiles=173
+aStandingArmy=461
+aCityCount=3
+aGeneral=22,19
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=22
+aDelta25Score=191
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=255
+aKnowsKingLocation=False
+bUsername=shoopshoopadoop
+bStars=50
+bScore=0
+bTiles=0
+bStandingArmy=0
+bCityCount=0
+bDead=True
+bLeftGame=True
+bLeftGameTurn=92
+bAggressionFactor=0
+bDelta25Tiles=-15
+bDelta25Score=-22
+bCityGainedTurn=0
+bCityLostTurn=2
+bLastSeenMoveTurn=0
+bKnowsKingLocation=False
+cUsername=Sneakers O'Toole
+cStars=21
+cScore=0
+cTiles=0
+cStandingArmy=0
+cCityCount=0
+cDead=True
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=2
+cDelta25Tiles=-1
+cDelta25Score=-15
+cCityGainedTurn=76
+cCityLostTurn=2
+cLastSeenMoveTurn=75
+cKnowsKingLocation=False
+dUsername=Meemo
+dStars=9
+dScore=173
+dTiles=55
+dStandingArmy=118
+dCityCount=2
+dGeneral=20,2
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=67
+dDelta25Tiles=-2
+dDelta25Score=-7
+dCityGainedTurn=225
+dCityLostTurn=2
+dLastSeenMoveTurn=249
+dKnowsKingLocation=True
+eUsername=al.Ghazali
+eStars=25
+eScore=488
+eTiles=152
+eStandingArmy=336
+eCityCount=4
+eGeneral=13,9
+eDead=False
+eLeftGame=False
+eLeftGameTurn=-1
+eAggressionFactor=0
+eDelta25Tiles=78
+eDelta25Score=185
+eCityGainedTurn=243
+eCityLostTurn=240
+eLastSeenMoveTurn=0
+eKnowsKingLocation=False
+fUsername=qwerttyuuiipp
+fStars=10
+fScore=262
+fTiles=40
+fStandingArmy=222
+fCityCount=2
+fGeneral=9,27
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+fDelta25Tiles=3
+fDelta25Score=88
+fCityGainedTurn=163
+fCityLostTurn=2
+fLastSeenMoveTurn=0
+fKnowsKingLocation=False
+gUsername=blacksabbath
+gStars=44
+gScore=0
+gTiles=0
+gStandingArmy=0
+gCityCount=0
+gDead=True
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=0
+gDelta25Tiles=-67
+gDelta25Score=-150
+gCityGainedTurn=209
+gCityLostTurn=2
+gLastSeenMoveTurn=0
+gKnowsKingLocation=False
+hUsername=Bruddah
+hStars=44
+hScore=0
+hTiles=0
+hStandingArmy=0
+hCityCount=0
+hDead=True
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=30
+hDelta25Tiles=-39
+hDelta25Score=-85
+hCityGainedTurn=0
+hCityLostTurn=2
+hLastSeenMoveTurn=150
+hKnowsKingLocation=False

@@ -1,0 +1,63 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+                    M              a1   a1        M         M         M    a4   a4   a5   a5
+                         a1   a1   a1   a1   a1   a1   a1   a2        M    a4   a4   a5   a5
+M                                            aC12 a2   M    M         M    M    a5   a5   a5
+                              a1   a1   M    a1   a2   a2   a3   M    a4   a4   a5   a5   a5
+M         M    M    M         M    a1   a3   a1   M    a2   a3   a3   a4   M    a5   M    a5
+M                        a1   a1   a1   M    aC11 a2   a2   M    aG28 a2   aC31 a22  M    a5
+          M                   M    M    a4   a1   a1   a2   a2   a2   a2   a3   a2   a2   a2
+                         a4   a4   a4   a4   M    aC3  a1   a1   M    M    a3   a2   a2   M
+               M         a4   a4   a4   a4   a4   a4   M    a85  a1   a1   M    a2   M
+M         M         M    a4   b4   C47  M    M    M    a3   a1   b1   a3   b2   M    b1   M
+     M    M              a4   b3   b3   b3   M    M    a3   a1   a1   a3   b2   a2   b1   b2
+                         M    b3   b1   b3   b3   b3   M    M    a1   a3   M    a1   b1   a1
+                    M    b5   b1   b4   b3   b4   b3   M    C47  a1   a1   a1   a1   M    M
+               M         M         b4   b5   M    b3   b3   M    a3   a3   M    b2   M
+M    M         b2   b21  b2   M    b4   b5   b3   b3   M    b3   b2   b2   b2   b2   M
+M    M                   b2   bC8  b1   b1   b1   b1   b1   M    b2   a2   a2   b2   M
+               M    bC9  b36       b2   b2   bC9  b1   b54  M    b2   a2   b1   b2   b2   b2
+               M    M              b4   M    M    bG2  b60  b2   b26  M    b2   M    b2   b2
+          M              M         M    b2   b6   M    b3   b3   b1   b5   b5   b6   b2   b2
+     M         M    M                        b6   b5   b3   b3   b1   b2   M    M    b6   b2
+                    M              M    b6   b5   b5   M    b3   b1   bC17           b6
+M         M         M              M         b6   b5   b5   b3   b2   M    M    M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=433
+player_index=1
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=0
+mode=1v1
+aUsername=imp25
+aStars=81
+aScore=453
+aTiles=108
+aStandingArmy=345
+aCityCount=5
+aGeneral=13,5
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=375
+aDelta25Tiles=7
+aDelta25Score=65
+aCityGainedTurn=391
+aCityLostTurn=0
+aLastSeenMoveTurn=433
+aKnowsKingLocation=False
+bUsername=Human.exe
+bStars=77
+bScore=492
+bTiles=98
+bStandingArmy=394
+bCityCount=5
+bGeneral=10,17
+bDead=False
+bLeftGame=True
+bLeftGameTurn=888
+bAggressionFactor=2
+bDelta25Tiles=11
+bDelta25Score=123
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=433
+bKnowsKingLocation=False

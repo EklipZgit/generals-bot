@@ -18,6 +18,8 @@ from Path import Path
 from PerformanceTimer import PerformanceTimer
 from StrategyModels.ExpansionPotential import ExpansionPotential
 from Territory import TerritoryClassifier
+from .AnticipatedAllIn import EnemyAllInWave
+from .CityContestationSafety import get_predicted_city_army_reserve, get_safe_predicted_city_approaches
 from .OpponentTracker import OpponentTracker
 from .RoundProjection import project_round_outcome
 from base.client.map import MapBase, Tile
@@ -72,6 +74,10 @@ class WinConditionAnalyzer(object):
         self.all_in_plan: Path | None = None
         self.projected_loss_all_in_active: bool = False
         self.projected_loss_all_in_target: Tile | None = None
+        # BotGeneralSafety publishes the current anticipated enemy all-in wave
+        # forecasts here for viewer/analysis; () while the feature is off or no
+        # episode is live. Never repurposed into win-condition decisions.
+        self.anticipated_all_in_waves: tuple[EnemyAllInWave, ...] = ()
         self._verbose_logging_enabled: bool = DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE
 
         self.contestable_city_offense_plans: typing.Dict[Tile, GatherCapturePlan | None] = {}
@@ -342,7 +348,27 @@ class WinConditionAnalyzer(object):
                     ourDistanceToCity = self.board_analysis.intergeneral_analysis.aMap.raw[city.tile_index]
                     attackTime = max(8, min(baseAttackTime, ourDistanceToCity + 8))
                     enemyDistanceToCity = self.board_analysis.intergeneral_analysis.bMap.raw[city.tile_index]
-                    ourOffensePlan = self.get_approximate_attack_plan_against([city], inTurns=attackTime, asPlayer=self.map.player_index, preferValuePerTurn=True)
+                    # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+                    # Speculative fog-predicted cities may only be contested
+                    # through a safe approach; unsafe approach neighbors are
+                    # excluded from the approximate attack plan, and a
+                    # predicted city with no safe approach at all is rejected.
+                    predictedReserve = get_predicted_city_army_reserve(city)
+                    unsafeApproachNegs: typing.Set[Tile] = set()
+                    if predictedReserve > 0:
+                        safeApproaches = get_safe_predicted_city_approaches(self.map, city)
+                        if len(safeApproaches) == 0:
+                            logbook.info(
+                                f'WCA_PREDICTED_CITY_REJECT city={city} reason=no_safe_approaches '
+                                f'reserve={predictedReserve} turn={self.map.turn}')
+                            continue
+                        unsafeApproachNegs = {
+                            t for t in city.movable
+                            if not t.isObstacle and not t.isNotPathable
+                        } - safeApproaches
+                    ourOffensePlan = self.get_approximate_attack_plan_against(
+                        [city], inTurns=attackTime, asPlayer=self.map.player_index,
+                        preferValuePerTurn=True, negativeTiles=unsafeApproachNegs)
                     ogAttackTime = attackTime
                     attackTime = ourOffensePlan.length
                     ourOffensePlan.econValue = 0.0
@@ -353,9 +379,13 @@ class WinConditionAnalyzer(object):
                             ourOffensePlan.econValue += 1.0
                     ourOffense = ourOffensePlan.gathered_army
                     isFogPrediction = False
+                    # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+                    # Keep the old *0.9 fog penalty for ANY undiscovered isTempFogPrediction
+                    # tile (predicted generals included); speculative cities additionally
+                    # subtract the full 15-army reserve where the old code only took 6.
                     if not city.discovered and city.isTempFogPrediction:
                         ourOffense = int(ourOffense * 0.9)
-                        ourOffense -= 6
+                        ourOffense -= max(6, predictedReserve)
                         isFogPrediction = True
                     ourOffensePlan.econValue += self.opponent_tracker.estimate_city_contest_econ_value(self.map.player_index, self.target_player, ourOffense)
                     self.contestable_city_offense_plans[city] = ourOffensePlan

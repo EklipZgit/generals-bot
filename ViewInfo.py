@@ -57,6 +57,20 @@ class BorderGradient:
     colorB: typing.Tuple[int, int, int] | None
 
 
+@dataclass(slots=True)
+class PlayerGeneralPredictionTarget:
+    """
+    Render data for one living player's predicted (still-undiscovered) general
+    location from the joint FFA placement. GeneralsViewer.draw_targets draws it as
+    a large ring in that player's own color; known generals, dead players, and our
+    own general never get an entry. Kept separate from TargetStyle because the ring
+    color is per-player rather than one of the fixed target styles.
+    """
+    tile: Tile
+    player: int
+    radius_reduction: int = -12
+
+
 class PathColorer(object):
     def __init__(self, path, r, g, b, alpha=255, alphaDecreaseRate=10, alphaMinimum=100):
         self.path = path
@@ -103,6 +117,9 @@ class ViewInfo(object):
         self.playerTargetScores: typing.List[int] = []
 
         self.targetedTiles: typing.List[typing.Tuple[Tile, TargetStyle, int]] = []
+        # Per-player predicted-general rings drawn by GeneralsViewer.draw_targets
+        # from the joint FFA placement (BotRendering.populate_predicted_general_targets).
+        self.predicted_general_targets: typing.List[PlayerGeneralPredictionTarget] = []
         # self.redTargetedTileHistory: typing.List[typing.List[typing.Tuple[Tile, TargetStyle]]] = []
         # for i in range(countHist):
         #     self.redTargetedTileHistory.append([])
@@ -189,6 +206,7 @@ class ViewInfo(object):
         #     self.redTargetedTileHistory[countHist - i - 1] = self.redTargetedTileHistory[countHist - i - 2]
         # self.redTargetedTileHistory[0] = self.targetedTiles
         self.targetedTiles = []
+        self.predicted_general_targets = []
 
         self.evaluatedGrid = [[0 for y in range(self.rows)] for x in range(self.cols)]
 

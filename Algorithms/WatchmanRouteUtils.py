@@ -35,7 +35,7 @@ def _is_uncertain_city_wall(map: MapBase, tile: Tile) -> bool:
             and not map.is_low_cost_city_game)
 
 
-def get_watchman_path(map: MapBase, startTile: Tile, toDiscover: typing.Iterable[Tile], timeLimit: float = 1000.0, initialArmy: int = -1) -> Path | None:
+def get_watchman_path(map: MapBase, startTile: Tile, toDiscover: typing.Iterable[Tile], timeLimit: float = 1000.0, initialArmy: int = -1, target_weights: dict[int, float] | None = None) -> Path | None:
     """
     Will be updated with more efficient algorithms in future. Currently an optimized A* approach that searches
      tile by tile but compares against the frontier watchers of the disjoint pivot nodes that are at the extremes of the hunted territory.
@@ -44,12 +44,15 @@ def get_watchman_path(map: MapBase, startTile: Tile, toDiscover: typing.Iterable
     @param toDiscover:
     @param timeLimit:
     @param initialArmy: the amount of army used for the watchman path routing (will deprioritize paths that end up with sub-zero army).
+    @param target_weights: optional tile_index -> priority weight (e.g. general-emergence value) that
+    makes the solver prefer routes revealing high-weight targets early rather than purely minimizing
+    turns+combat coverage order.
     @return:
     """
     if initialArmy == -1:
         initialArmy = startTile.army
     startTime = time.perf_counter()
-    pivot_wrp = PivotIterativeWRP(startTile, map, set(toDiscover), initialArmy=initialArmy)
+    pivot_wrp = PivotIterativeWRP(startTile, map, set(toDiscover), initialArmy=initialArmy, target_weights=target_weights)
     path = pivot_wrp.solve(cutoffTime=startTime + timeLimit)
 
     if path is None or path.length == 0:
@@ -214,6 +217,9 @@ class FrontierAStarNode:
             path: typing.List[Tile] | None = None,
             cost_so_far=0,
             army: int = 0,
+            combat_cost: int = 0,
+            lateness_cost: float = 0.0,
+            remaining_weight: float = 0.0,
     ):
         self.tile: Tile = tile
         # self.seen: typing.Set[Tile] = seen
@@ -224,6 +230,15 @@ class FrontierAStarNode:
         self.heuristic_cost_remaining: float = 0
         self.total_estimated_cost: float = 0  # = self.cost_so_far + self.heuristic_cost_remaining
         self.army = army
+        self.combat_cost = combat_cost
+        """Army spent capturing enemy/neutral tiles walked so far. Folded into
+        total_estimated_cost so WRP dodges army when a cheaper detour exists."""
+        self.lateness_cost = lateness_cost
+        """Accumulated target-priority lateness: each step adds the priority weight of all
+        still-unseen targets, so the total equals sum(weight * revealTurn) over targets -
+        the weighted-completion-time objective that pulls high-value reveals early."""
+        self.remaining_weight = remaining_weight
+        """Priority weight of the node's still-unseen targets; bookkeeping for lateness_cost."""
         self._hash: int | None = None
 
     def __eq__(self, other: FrontierAStarNode) -> bool:
@@ -255,7 +270,13 @@ class PivotWRP:
     https://ojs.aaai.org/index.php/ICAPS/article/view/6668/6522
     """
 
-    def __init__(self, start: Tile, map: MapBase, toDiscover: typing.Set[Tile], noLog: bool = True, initialArmy: int = 100000):
+    # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+    # exponent applied to normalized target weights; >1 concentrates route priority on the
+    # top-emergence candidates (0.93 -> 0.86 while 0.6 -> 0.36) so a route dives the
+    # likely-general cluster before cleaning up the long tail of low-value tiles.
+    TARGET_WEIGHT_SHARPENING = 2.0
+
+    def __init__(self, start: Tile, map: MapBase, toDiscover: typing.Set[Tile], noLog: bool = True, initialArmy: int = 100000, target_weights: dict[int, float] | None = None):
         self.noLog: bool = noLog
         self.start: Tile = start
         self.to_discover: typing.Set[Tile] = toDiscover
@@ -263,6 +284,23 @@ class PivotWRP:
         self.open_list: typing.List[typing.Tuple[float, FrontierAStarNode]] = []
         self.closed_set = set()
         self.initial_army: int = initialArmy
+        # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+        # candidate tiles carry a priority weight (the armyTracker emergence value of the tile as a
+        # general-location candidate). Normalizing to the largest weight keeps the lateness
+        # coefficient meaningful across games/trackers whose raw emergence scale differs, and the
+        # sharpening exponent concentrates priority on the few most-likely tiles - the route is a
+        # dying sweep that usually never reaches the back half, so hitting the top cluster early
+        # matters far more than covering a larger mass of mid-probability tiles slightly sooner.
+        self.target_weights: dict[int, float] | None = None
+        self.total_target_weight: float = 0.0
+        if target_weights:
+            max_weight = max(target_weights.values())
+            if max_weight > 0:
+                self.target_weights = {
+                    tile_index: (weight / max_weight) ** PivotWRP.TARGET_WEIGHT_SHARPENING
+                    for tile_index, weight in target_weights.items()
+                    if weight > 0}
+                self.total_target_weight = sum(self.target_weights.values())
 
         self.pivot_set: typing.Set[Tile] = self.build_pivots(toDiscover)
 
@@ -660,8 +698,15 @@ class PivotWRP:
 
 
 class PivotIterativeWRP(PivotWRP):
-    def __init__(self, start: Tile, map: MapBase, toDiscover: typing.Set[Tile], initialArmy: int = 100000, noLog: bool = True):
-        super().__init__(start, map, toDiscover, noLog, initialArmy)
+    # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+    # scales the accumulated target lateness (normalized weights in [0,1] summed over unseen
+    # targets per step) against turns+combat. At 1.0 a detour is worth taking when it reveals
+    # ~1.0 total normalized weight one turn sooner - strong enough to dive through the
+    # high-emergence cluster first instead of sweeping cheap low-value tiles along the way.
+    TARGET_LATENESS_WEIGHT = 1.0
+
+    def __init__(self, start: Tile, map: MapBase, toDiscover: typing.Set[Tile], initialArmy: int = 100000, noLog: bool = True, target_weights: dict[int, float] | None = None):
+        super().__init__(start, map, toDiscover, noLog, initialArmy, target_weights=target_weights)
 
     def solve(self, cutoffTime: float | None = None) -> Path | None:
         current_f: float
@@ -672,6 +717,7 @@ class PivotIterativeWRP(PivotWRP):
         bestTurns = 0
         bestUnseenPerTurn = 0
         bestSeenToLengthRatio = 0
+        best_unseen_score = (float('inf'), float('inf'))
         # bestUnseenReductionPerTurn = 0
 
         logbook.info(f'longest crossing {self.longest_crossing}')
@@ -687,9 +733,11 @@ class PivotIterativeWRP(PivotWRP):
 
         quickIterCutoff = max(0.003, (cutoffTime - start) * 0.1)
         nextIterCutoffTime = min(cutoffTime, start + min(start + 1.0, quickIterCutoff))
+        frPlayers = self.map.get_teammates(self.start.player)
+        bestCost = 1000.0 * 1000
 
         while w >= 1.0 and cutoffTime >= time.perf_counter():
-            start_node = FrontierAStarNode(tile=self.start, unseen=self.to_discover, unseenComponents=self.components.copy())
+            start_node = FrontierAStarNode(tile=self.start, unseen=self.to_discover, unseenComponents=self.components.copy(), remaining_weight=self.total_target_weight)
             openList = []
             heapq.heappush(openList, (start_node.total_estimated_cost, start_node))
             closedSet = set()
@@ -716,24 +764,40 @@ class PivotIterativeWRP(PivotWRP):
                 #     bestUnseen = unseenCount
                 #     bestSeenToLengthRatio = costRat
 
-                if unseenCount < bestUnseen:
+                # when targets carry priority weights, the best partial path is the one that
+                # has the least priority weight left unseen (the high-emergence cluster must be
+                # reached even when the route cannot cover everything), not just the fewest tiles.
+                unseen_score = (
+                    (current_node.remaining_weight, unseenCount)
+                    if self.target_weights is not None
+                    else (float(unseenCount), 0.0))
+                if unseen_score < best_unseen_score:
                     bestTurns = len(current_node.path) - 1
                     bestPath = current_node.path
                     bestUnseen = unseenCount
+                    best_unseen_score = unseen_score
 
                 if unseenCount == 0:
                     curTurns = len(current_node.path) - 1
+                    curCost = (
+                        current_node.cost_so_far
+                        + current_node.combat_cost
+                        + current_node.lateness_cost * PivotIterativeWRP.TARGET_LATENESS_WEIGHT)
                     nextStart = time.perf_counter()
                     logbook.info(f'--W {w:.1f} iter {iteration} BEST unseen {bestUnseen} len {bestTurns} (vs {cutoffThresh})')
-                    logbook.info(f'                  CUR unseen {unseenCount} len {curTurns} (vs {cutoffThresh}) after {nextStart - start:.5f}s ({nextStart - lastStart:.5f}s)')
+                    logbook.info(f'                  CUR unseen {unseenCount} len {curTurns} cost {curCost} (vs {cutoffThresh}) after {nextStart - start:.5f}s ({nextStart - lastStart:.5f}s)')
                     lastStart = nextStart
-                    if bestPath is None or curTurns < cutoffThresh:
+                    if bestPath is None or curCost < bestCost:
                         bestPath = current_node.path
-                        cutoffThresh = curTurns
+                        bestCost = curCost
                         bestTurns = curTurns
                         bestUnseen = unseenCount
-                        # bestSeenToLengthRatio = costRat
-                    # return current_node.path
+                    # Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+                    # cutoffThresh stays a pure turn bound for the lenThreshs prune schedule;
+                    # the accepted path is picked by turns + combat, which can legitimately
+                    # exceed the turn bound when it buys a huge army dodge.
+                    if curTurns < cutoffThresh:
+                        cutoffThresh = curTurns
                     break
 
                 if iteration & 63 == 0:
@@ -767,6 +831,28 @@ class PivotIterativeWRP(PivotWRP):
 
                     # diff = t for t in neighbor.adjacents if
 
+                    # Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+                    # charging through enemy armies costs the stack that has to execute the
+                    # route; every non-team tile costs its army on entry, so fold that spend
+                    # into f (not cost_so_far, which stays a pure turn count for lenThreshs).
+                    # A 57-army wall then gets dodged by any detour under ~57 turns, while
+                    # 1-2 army tiles are still taken when the detour costs more turns.
+                    new_combat = current_node.combat_cost
+                    if neighbor.player not in frPlayers:
+                        new_combat += neighbor.army
+
+                    # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+                    # each step additionally charges the priority weight of everything still
+                    # unseen after the move; summing that over the route equals
+                    # sum(weight * revealTurn), so a route that reaches the likely-general
+                    # cluster early beats a marginally cheaper route through dead tiles.
+                    new_remaining_weight = current_node.remaining_weight
+                    if self.target_weights is not None:
+                        for adjacent in neighbor.adjacents:
+                            if adjacent in current_node.unseen:
+                                new_remaining_weight -= self.target_weights.get(
+                                    adjacent.tile_index, 0.0)
+
                     neighbor_node = FrontierAStarNode(
                         neighbor,
                         # current_node.seen.union(neighbor.adjacents),
@@ -774,15 +860,24 @@ class PivotIterativeWRP(PivotWRP):
                         unseenComp,
                         # current_node.unseen_components,
                         newPath,
-                        current_node.cost_so_far + 1)  # actual cost is always 1.
+                        current_node.cost_so_far + 1,  # actual turn cost is always 1.
+                        combat_cost=new_combat,
+                        lateness_cost=current_node.lateness_cost + new_remaining_weight,
+                        remaining_weight=new_remaining_weight)
 
                     if neighbor_node in closedSet:
                         continue
 
                     neighbor_node.heuristic_cost_remaining = self.heuristic(neighbor_node) * w
 
-                    neighbor_node.total_estimated_cost = neighbor_node.cost_so_far + neighbor_node.heuristic_cost_remaining
-                    if neighbor_node.total_estimated_cost >= lenThreshs[neighbor_node.cost_so_far]:
+                    neighbor_node.total_estimated_cost = (
+                        neighbor_node.cost_so_far
+                        + neighbor_node.combat_cost
+                        + neighbor_node.lateness_cost * PivotIterativeWRP.TARGET_LATENESS_WEIGHT
+                        + neighbor_node.heuristic_cost_remaining)
+                    if (neighbor_node.cost_so_far
+                            + neighbor_node.heuristic_cost_remaining
+                            >= lenThreshs[neighbor_node.cost_so_far]):
                         continue
 
                     # if neighbor_node not in openList:  # The fuck, chatgpt? There is NO WAY we are supposed to do this. MAYBE we make a set of open entries to prevent adding duplicates, though.

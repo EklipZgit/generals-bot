@@ -54,6 +54,7 @@ class ThreatBlockInfo(object):
         'tile',
         'amount_needed_to_block',
         'blocked_destinations',
+        'threats',
     )
 
     def __init__(self, tile: Tile, amount_needed_to_block: int):
@@ -61,10 +62,18 @@ class ThreatBlockInfo(object):
         self.amount_needed_to_block: int = amount_needed_to_block
         # list, not set, because set is slower to check than list for small numbers of entries, and we can never have more than 4
         self.blocked_destinations: typing.List[Tile] = []
+        # list, not set, same reason - the threats this reserve was created against,
+        # for BotDefense._block_split_has_other_save_path (a block can only be
+        # released when every threat it serves has another save path).
+        self.threats: typing.List[ThreatObj] = []
 
     def add_blocked_destination(self, tile: Tile):
         if tile not in self.blocked_destinations:
             self.blocked_destinations.append(tile)
+
+    def add_threat(self, threat: ThreatObj):
+        if threat not in self.threats:
+            self.threats.append(threat)
 
     def __str__(self) -> str:
         return f'{str(self.tile)}:{str(self.amount_needed_to_block)}@{"|".join([str(t) for t in self.blocked_destinations])}'

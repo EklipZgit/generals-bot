@@ -5,7 +5,7 @@ from __future__ import annotations
 import pickle
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -53,6 +53,9 @@ class StealthWrpJob:
     background_process: bool = False
     pickle_duration_sec: float = 0.0
     payload_bytes: int = 0
+    target_weights: list[float] = field(default_factory=list)
+    """Per-target priority weights aligned with target_tile_indexes (emergence value of the
+    candidate); empty means unweighted coverage-order routing."""
 
 
 @dataclass(slots=True)
@@ -74,6 +77,13 @@ class StealthAllInState:
     """True while committed_route is a truncated safe-front segment that must re-check on completion."""
     is_desperation_dive: bool = False
     """True when this plan gave up verifying the kill and committed the route anyway (losing all-in)."""
+    is_relaxed_dive: bool = False
+    """True while the plan is rebased onto a forward stack that already passes the relaxed
+    losing-all-in kill check (predicted general stack, not full projected fog defense)."""
+    committed_route_army_snapshot: dict[int, int] = field(default_factory=dict)
+    """tile_index -> non-team army on committed_route tiles as of commit time. Execution
+    aborts on a big discovered wall only when it grew past this baseline, so a replanned
+    route that still prices through the same wall cannot re-abort forever."""
 
 
 # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend
@@ -121,6 +131,12 @@ class BotStealthAllIn:
     # consecutive turns a single uncommitted plan may fail the launch kill-check before the
     # losing all-in stops demanding safety and dives the assembled stack at the candidates.
     CANNOT_KILL_GATHER_TURNS_BEFORE_DIVE = 6
+    # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+    # once the desperation dive is armed it may still wait for the gather to physically realize
+    # most of its projected stack before launching - a dive fired at a fixed turn count from a
+    # stack that only exists on paper dies broken_head before revealing anything. Bounded so a
+    # gather that stalls outright still gambles rather than stalling forever.
+    CANNOT_KILL_DIVE_EXTRA_GATHER_TURNS = 15
 
     # Tests/test_AllIn.py::AllInTests.test_should_all_in_along_short_top_path_instead_of_long_bottom_flank:
     # a hidden flank only earns its delay when it denies the enemy warning turns before we reach
@@ -183,12 +199,22 @@ class BotStealthAllIn:
                 and bot.stealth_all_in.committed_route is not None):
             return None
         # Tests/test_GeneralHunting.py::GeneralPredictionTests.test_should_keep_diving_when_all_in_and_not_much_left_to_search_regardless_of_opp_army
-        # and test_should_not_dive_few_fog_tiles_when_cannot_kill: under a live general-kill threat,
-        # a fresh hunt commits only to be defense-interrupted every turn (commit/abort loop that
-        # displaces the dive); the same condition that interrupts a committed route gates starting one.
+        # and test_should_not_dive_few_fog_tiles_when_cannot_kill: under an imminent general-kill
+        # threat, a fresh hunt commits only to be defense-interrupted every turn (commit/abort loop
+        # that displaces the dive); the same condition that interrupts a committed route gates
+        # starting one.
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # a kill path still many turns out is a different situation - defense does not have to
+        # answer this turn, so the hunt eval still runs; if it commits, the committed-route
+        # defense interrupt already handles the threat turning actionable mid-route.
         if (threat is not None
                 and threat.threatType == ThreatType.Kill
-                and threat.path.tail.tile.isGeneral):
+                and threat.path.tail.tile.isGeneral
+                and threat.turns <= 8):
+            bot.viewInfo.add_info_line(
+                f'STEALTH_ALLIN_HUNT_EVAL turn={bot._map.turn} commit=False '
+                f'reason=imminent_kill_threat threatTurns={threat.turns} '
+                f'threatStart={threat.path.start.tile} threatTail={threat.path.tail.tile}')
             return None
 
         turn = bot._map.turn
@@ -314,6 +340,67 @@ class BotStealthAllIn:
                 False,
                 []))
         bot.stealth_hunt_render_path = wrp_path
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # the hunt gets the same safe-front semantics the losing all-in already uses - a
+        # route whose only unsafe reveal sits at the tail still commits its safe prefix,
+        # because revealing candidates en route can trigger the general-known handoff long
+        # before the unsafe tail ever executes. A front too short to even leave the launch
+        # tile is still a reject.
+        first_unsafe_reveal = min(
+            (result.reveal_turns
+             for result in route_safety.candidate_results
+             if result.remaining_army < result.required_army),
+            default=0)
+        is_truncated_front = False
+        if wrp_path is not None and not route_safety.safe_at_every_reveal:
+            # Tests/test_AllIn.py::AllInTests.test_should_not_switch_to_all_in_and_time_with_cycle_appropriately:
+            # a front that can only safely probe a minority of the candidates, or one that
+            # ends with the stack spent (less army left than it burned on the prefix, or
+            # too weak to cover the reveal defense plus the predicted general garrison on
+            # top), is a mostly-failed search rather than a hunt - there it was a 23-army
+            # stack decaying to ~4 army by its deepest safe reveal, so even finding the
+            # general wins nothing. Committing it displaces the correct non-all-in plan
+            # for a search that can't answer the question anyway.
+            unsafe_reveal_count = sum(
+                1
+                for result in route_safety.candidate_results
+                if result.remaining_army < result.required_army)
+            front_covers_majority = (
+                len(route_safety.candidate_results) > 0
+                and unsafe_reveal_count * 2
+                <= len(route_safety.candidate_results))
+            predicted_general_army = max(
+                1,
+                bot.opponent_tracker.get_current_cycle_stats_by_player(
+                    enemy_player).approximate_fog_army_available_total)
+            safe_results = [
+                result
+                for result in route_safety.candidate_results
+                if result.remaining_army >= result.required_army]
+            deepest_safe_result = max(
+                safe_results,
+                key=lambda result: result.reveal_turns,
+                default=None)
+            # the front must end holding a strike force, not a spent stack: more
+            # army than it burned walking the prefix AND enough to cover the local
+            # reveal defense plus the predicted general garrison.
+            front_can_still_kill = (
+                deepest_safe_result is not None
+                and deepest_safe_result.remaining_army * 2 > army_tile.army
+                and deepest_safe_result.remaining_army
+                > deepest_safe_result.required_army + predicted_general_army)
+            if (first_unsafe_reveal > 1
+                    and front_covers_majority
+                    and front_can_still_kill):
+                full_route_length = route_length
+                wrp_path = wrp_path.get_subsegment(first_unsafe_reveal - 1)
+                route_length = wrp_path.length
+                is_truncated_front = True
+                bot.viewInfo.add_info_line(
+                    f"STEALTH_ALLIN_SAFE_FRONT turn={turn} frontLen={route_length} "
+                    f"fullLen={full_route_length} "
+                    f"firstUnsafeReveal={first_unsafe_reveal} "
+                    f"candidateResults={BotStealthAllIn._format_candidate_safety_results(route_safety)}")
         commit = (
             wrp_path is not None
             and wrp_path.length > 0
@@ -321,7 +408,8 @@ class BotStealthAllIn:
             and wrp_path.start.tile.tile_index == army_tile.tile_index
             and army_tile.player == bot.general.player
             and army_tile.army > 1
-            and route_safety.safe_at_every_reveal)
+            and (route_safety.safe_at_every_reveal
+                 or is_truncated_front))
         logbook.info(
             f"STEALTH_ALLIN_HUNT_EVAL turn={turn} "
             f"armyTile={army_tile.x},{army_tile.y} army={army_tile.army} "
@@ -349,7 +437,10 @@ class BotStealthAllIn:
             last_route_move=None,
             used_normal_gather_fallback_turns=0,
             generation=job.generation,
-            is_undefendable_hunt=True)
+            is_undefendable_hunt=True,
+            is_truncated_front=is_truncated_front)
+        bot.stealth_all_in.committed_route_army_snapshot = (
+            BotStealthAllIn._snapshot_route_enemy_army(bot, wrp_path))
         bot.stealth_hunt_render_path = None
         bot.curPath = None
         bot.curPathPrio = -1
@@ -585,6 +676,16 @@ class BotStealthAllIn:
     ) -> StealthWrpJob:
         """Run simulator WRP inline or submit a pickled live-map snapshot to a process."""
         target_tile_indexes = [tile.tile_index for tile in to_discover]
+        # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+        # carry each candidate's emergence weight into the WRP so the route reveals likely-general
+        # tiles early instead of sweeping the nearest cheap dead tiles first (the flank test's
+        # route marched 16 turns up the top edge and reached the 25-ED cluster only at step 44).
+        target_weights = (
+            [
+                bot.armyTracker.get_tile_emergence_for_player(tile, bot.targetPlayer)
+                for tile in to_discover]
+            if bot.armyTracker is not None
+            else [])
         if bot.run_background_work_synchronously:
             cloned_map = BotStealthAllIn._clone_map_for_wrp(bot)
             return BotStealthAllIn._start_wrp_job_on_clone(
@@ -594,7 +695,8 @@ class BotStealthAllIn:
                 target_tile_indexes,
                 initial_army,
                 generation,
-                1.0)
+                1.0,
+                target_weights)
 
         pickle_start = time.perf_counter()
         map_payload = pickle.dumps(bot._map, protocol=pickle.HIGHEST_PROTOCOL)
@@ -611,14 +713,16 @@ class BotStealthAllIn:
             time_limit=3.0,
             background_process=True,
             pickle_duration_sec=pickle_duration,
-            payload_bytes=len(map_payload))
+            payload_bytes=len(map_payload),
+            target_weights=target_weights)
         request = WrpRequest(
             generation=generation,
             map_payload=map_payload,
             start_tile_index=start_tile.tile_index,
             target_tile_indexes=target_tile_indexes,
             initial_army=initial_army,
-            time_limit=3.0)
+            time_limit=3.0,
+            target_weights=target_weights)
         bot.wrp_worker_process.submit(request)
         logbook.info(
             f"STEALTH_ALLIN_WRP_START turn={bot._map.turn} "
@@ -682,6 +786,7 @@ class BotStealthAllIn:
         initial_army: int,
         generation: int,
         time_limit: float,
+        target_weights: list[float],
     ) -> StealthWrpJob:
         """Run a WRP job synchronously on a caller-created private map clone."""
         job = StealthWrpJob(
@@ -692,7 +797,8 @@ class BotStealthAllIn:
             target_tile_indexes=target_tile_indexes,
             initial_army=initial_army,
             time_limit=time_limit,
-            background_process=False)
+            background_process=False,
+            target_weights=target_weights)
         logbook.info(
             f"STEALTH_ALLIN_WRP_START turn={bot._map.turn} "
             f"generation={generation} start={start_tile_index} "
@@ -743,12 +849,63 @@ class BotStealthAllIn:
             if state is not None:
                 bot.stealth_all_in = None
             return None
+        # Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+        # when a forward stack can already plausibly kill under the relaxed losing-all-in
+        # criterion (its sweep army beats the predicted general stack, not the entire projected
+        # fog defense a good player could mount), dive it from where it stands. Re-rooting the
+        # plan onto the stack keeps the gather pulling reserves TO the stack instead of dragging
+        # the one army that can actually kill back to a stale launch tile - the live game lost
+        # ~10 turns doing exactly that, which a losing all-in cannot afford.
+        predicted_general_army = max(
+            1,
+            bot.opponent_tracker.get_current_cycle_stats_by_player(
+                bot.targetPlayer).approximate_fog_army_available_total)
+        dive_tile = BotStealthAllIn._get_forward_dive_stack(
+            bot,
+            candidates,
+            bot.targetPlayer,
+            predicted_general_army)
+        if dive_tile is not None:
+            if state is None:
+                bot.stealth_all_in_generation += 1
+                state = StealthAllInState(
+                    launch_tile=dive_tile,
+                    entry_tile=dive_tile,
+                    flank_path=Path(),
+                    launch_turn=bot._map.turn,
+                    wrp_job=None,
+                    committed_route=None,
+                    committed_turn=-1,
+                    last_route_move=None,
+                    used_normal_gather_fallback_turns=0,
+                    generation=bot.stealth_all_in_generation)
+                state.flank_path.add_next(dive_tile)
+                bot.stealth_all_in = state
+                bot.stealth_all_in_cannot_kill_counter = 0
+            elif dive_tile is not state.launch_tile:
+                state.launch_tile = dive_tile
+                state.entry_tile = dive_tile
+                state.flank_path = Path()
+                state.flank_path.add_next(dive_tile)
+                state.wrp_job = None
+                state.launch_turn = bot._map.turn
+                bot.stealth_all_in_cannot_kill_counter = 0
+            state.is_relaxed_dive = True
+            logbook.info(
+                f"STEALTH_ALLIN_DIVE_REBASE turn={bot._map.turn} "
+                f"diveStart={dive_tile.x},{dive_tile.y} "
+                f"diveArmy={dive_tile.army} "
+                f"predictedGenArmy={predicted_general_army}")
+        elif state is not None:
+            state.is_relaxed_dive = False
+
         # frontier-rebased states use a degenerate single-tile flank path whose head is already
         # inside enemy vision on purpose; only replan real flank paths that became visible.
         needs_replan = (
             state is None
             or state.launch_tile.player != bot.general.player
-            or (state.flank_path.length > 0
+            or (not state.is_relaxed_dive
+                and state.flank_path.length > 0
                 and any(
                     enemy_vision.raw[tile.tile_index]
                     for tile in state.flank_path.tileList)))
@@ -879,6 +1036,8 @@ class BotStealthAllIn:
             (gather_plan.gathered_army if gather_plan is not None else 0)
             + state.launch_tile.army
             - state.flank_path.length)
+        relaxed_army = (
+            predicted_general_army if state.is_relaxed_dive else None)
         route_safety = (
             BotStealthAllIn._evaluate_route_safety(
                 bot,
@@ -886,10 +1045,13 @@ class BotStealthAllIn:
                 [pre_gate_path.tail.tile],
                 projected_launch_army,
                 bot.targetPlayer,
-                distance_offset=state.flank_path.length)
+                distance_offset=state.flank_path.length,
+                relaxed_general_army=relaxed_army)
             if pre_gate_path is not None and pre_gate_path.tail is not None
             else StealthRouteSafetyEstimate(None, 1, False, []))
-        required_launch_army = route_safety.max_enemy_defense * 1.2 + 2
+        required_launch_army = max(
+            (result.required_army for result in route_safety.candidate_results),
+            default=route_safety.max_enemy_defense * 1.2 + 2)
         # Tests/test_AllIn.py::AllInTests.test_should_all_in_along_short_top_path_instead_of_long_bottom_flank:
         # the gather projection only says the stack WILL be at the launch tile; the real head army
         # decides whether we can launch right now. When it already can, skip the rest of the gather
@@ -904,13 +1066,21 @@ class BotStealthAllIn:
                 [pre_gate_path.tail.tile],
                 state.launch_tile.army - state.flank_path.length,
                 bot.targetPlayer,
-                distance_offset=state.flank_path.length)
+                distance_offset=state.flank_path.length,
+                relaxed_general_army=relaxed_army)
             if pre_gate_path is not None and pre_gate_path.tail is not None
             else StealthRouteSafetyEstimate(None, 1, False, []))
         head_ready_now = head_route_safety.safe_at_every_reveal
         if not head_ready_now and (
                 projected_launch_army < required_launch_army
                 or not route_safety.safe_at_every_reveal):
+            if state.is_relaxed_dive:
+                # Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+                # the dive stack was chosen because it is already the best-positioned killer;
+                # when even the predicted-general-stack check fails there is nothing left to
+                # gather toward, so force the gamble immediately rather than stalling turns.
+                bot.stealth_all_in_cannot_kill_counter = (
+                    BotStealthAllIn.CANNOT_KILL_GATHER_TURNS_BEFORE_DIVE - 1)
             bot.stealth_all_in_cannot_kill_counter += 1
             if (bot.stealth_all_in_cannot_kill_counter
                     < BotStealthAllIn.CANNOT_KILL_GATHER_TURNS_BEFORE_DIVE):
@@ -931,6 +1101,33 @@ class BotStealthAllIn:
                 if gather_move is not None:
                     return gather_move
                 return None
+            # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+            # the dive must launch a stack that can actually survive the route, not whatever
+            # fragment happens to be largest at a fixed turn count - in that test a 6-turn dive
+            # sent a 69-army head down a 42-tile route while the gather's projected ~180 was
+            # still two dozen turns from assembling; it died broken_head on the enemy border.
+            # While the gather still out-promises the largest real stack, keep gathering so the
+            # dive commits real army; only gamble early when the stack is already viable, when
+            # the extra window has elapsed (a stalled gather must still gamble rather than
+            # stall forever), or when a relaxed forward dive was picked to gamble immediately.
+            dive_start_tile = BotStealthAllIn._get_desperation_dive_start_tile(bot)
+            dive_army = dive_start_tile.army if dive_start_tile is not None else 0
+            dive_wait_turns = (
+                bot.stealth_all_in_cannot_kill_counter
+                - BotStealthAllIn.CANNOT_KILL_GATHER_TURNS_BEFORE_DIVE)
+            viable_floor = max(25, int(projected_launch_army * 0.6))
+            if (not state.is_relaxed_dive
+                    and dive_army < viable_floor
+                    and dive_wait_turns < BotStealthAllIn.CANNOT_KILL_DIVE_EXTRA_GATHER_TURNS):
+                logbook.info(
+                    f"STEALTH_ALLIN_WAIT turn={bot._map.turn} reason=dive_stack_too_weak "
+                    f"diveArmy={dive_army} floor={viable_floor} "
+                    f"projectedArmy={projected_launch_army} "
+                    f"diveWaitTurns={dive_wait_turns} "
+                    f"counter={bot.stealth_all_in_cannot_kill_counter}")
+                if gather_move is not None:
+                    return gather_move
+                return None
             # Tests/test_AllIn.py::AllInTests.test_should_finish_losing_all_in_attack_instead_of_replanning_forever:
             # when the enemy fog-defense estimate grows faster than the stack can ever gather,
             # the kill-check can never pass and the losing all-in stalls forever while the
@@ -941,7 +1138,6 @@ class BotStealthAllIn:
             # of its planned turns, so the launch tile still holds ~1-2 army while the real
             # stack sits elsewhere (a desperate route committed from an empty launch tile just
             # dies broken_head next turn). Relaunch the dive from the largest friendly stack.
-            dive_start_tile = BotStealthAllIn._get_desperation_dive_start_tile(bot)
             if dive_start_tile is not None and dive_start_tile is not state.launch_tile:
                 state.launch_tile = dive_start_tile
                 state.entry_tile = dive_start_tile
@@ -965,7 +1161,7 @@ class BotStealthAllIn:
             # projection that the launch tile will never see.
             initial_army = (
                 state.launch_tile.army
-                if state.is_desperation_dive
+                if state.is_desperation_dive or state.is_relaxed_dive
                 else (stealth_plan.gathered_army - state.flank_path.length
                       if stealth_plan is not None
                       else state.launch_tile.army))
@@ -1026,7 +1222,8 @@ class BotStealthAllIn:
                     bot._map.tiles_by_index[tile_index]
                     for tile_index in state.wrp_job.target_tile_indexes],
                 route.start.tile.army,
-                bot.targetPlayer))
+                bot.targetPlayer,
+                relaxed_general_army=relaxed_army))
         if not route_safety.safe_at_every_reveal:
             first_unsafe_reveal = min(
                 (result.reveal_turns
@@ -1084,6 +1281,8 @@ class BotStealthAllIn:
 
         state.committed_route = route
         state.committed_turn = bot._map.turn
+        state.committed_route_army_snapshot = (
+            BotStealthAllIn._snapshot_route_enemy_army(bot, route))
         bot.curPath = None
         bot.curPathPrio = -1
         logbook.info(
@@ -1186,10 +1385,26 @@ class BotStealthAllIn:
             return None
 
         # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
-        # preserve lethal general-defense interruptions while executing the committed route.
-        if (threat is not None
-                and threat.threatType == ThreatType.Kill
-                and threat.path.tail.tile.isGeneral):
+        # preserve lethal general-defense interruptions while executing the committed route -
+        # but only once the kill is close enough to need answering this turn. A projected
+        # threat still many turns out would otherwise interrupt the route on a speculative
+        # early intercept, which is the same over-reaction the hunt start-gate scopes out.
+        kill_threat_imminent = (
+            threat is not None
+            and threat.threatType == ThreatType.Kill
+            and threat.path.tail.tile.isGeneral
+            and threat.turns <= 8)
+        # Tests/test_Defense.py::DefenseTests.test_should_reinforce_city_instead_of_intercepting_when_threat_lands_now:
+        # when a general kill threat exists, self.threat holds it (fastestThreat wins the
+        # pipeline's threat selection), so a city being captured THIS turn never reaches the
+        # Kill+general+<=8 check above and the committed route executes while the city falls
+        # uncontested (live aDGJc7F9T t331: the 58 stack at 13,6 took 13,5 while a 15-turn
+        # threat at 7,3 held self.threat). An immediate city threat is answer-now, not
+        # speculative - consult defense the same way so the gather can hold the tail.
+        city_threat = bot.dangerAnalyzer.fastestCityThreat
+        city_threat_imminent = city_threat is not None and city_threat.turns <= 1
+        interrupt_threat = threat if kill_threat_imminent else (city_threat if city_threat_imminent else None)
+        if interrupt_threat is not None:
             defense_move, _ = BotDefense.get_defense_moves(
                 bot,
                 defense_critical_tiles,
@@ -1204,11 +1419,14 @@ class BotStealthAllIn:
                         generation=state.generation,
                         launch_tile_index=state.launch_tile.tile_index,
                         aborted_route=aborted_route))
-                logbook.info(
+                # route-interrupt is a fundamental decision (it re-seats or aborts a
+                # committed route), so the verdict goes through viewInfo which already
+                # forwards to logbook.
+                bot.viewInfo.add_info_line(
                     f"STEALTH_ALLIN_DEFENSE_INTERRUPT turn={bot._map.turn} "
                     f"move={defense_move} routeHead={head_tile} "
-                    f"threatPlayer={threat.threatPlayer} threatTurns={threat.turns} "
-                    f"threatStart={threat.path.start.tile} threatTail={threat.path.tail.tile}")
+                    f"threatPlayer={interrupt_threat.threatPlayer} threatTurns={interrupt_threat.turns} "
+                    f"threatStart={interrupt_threat.path.start.tile} threatTail={interrupt_threat.path.tail.tile}")
                 if aborted_route:
                     if state.is_undefendable_hunt:
                         bot.stealth_hunt_excluded_start_tile_indexes.update({
@@ -1219,6 +1437,88 @@ class BotStealthAllIn:
                     bot.curPath = None
                     bot.curPathPrio = -1
                 return defense_move
+
+        # Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+        # the route was priced off what we knew at commit time; committed replay is blind,
+        # so when vision reveals a large enemy stack sitting ON the remaining route that
+        # was not in the plan (t300: 20,12 showed b57 one step ahead and the route walked
+        # straight into it, leaving 34 to face a 46-army general), sidestep it instead of
+        # paying the stack.
+        # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction:
+        # this used to abort the whole route; the released stack then took whatever direction
+        # the next pipeline stage picked (a fresh WRP tour ordering is solver-timing
+        # dependent), so the army could dive down, reverse back up, then dive again. Instead
+        # splice a local detour around the wall into the committed route so the committed
+        # direction keeps executing. The detour must flank to a tile ORTHOGONALLY adjacent
+        # to the wall when the wall still has unseen visibles: route steps onto a tile for
+        # what it reveals (the 20,12 peek was the only vantage on the 21,13 general), and
+        # simply dropping the excursion skips that reveal. Only when no local detour exists
+        # do we abort and let the planner re-solve - the next commit re-snapshots the wall
+        # at its new baseline, so this cannot oscillate: a wall can only force ONE replan each.
+        wall_min = max(12, head_tile.army // 4)
+        route_tiles = list(route.tiles)
+        wall_indexes: list[int] = []
+        wall_index_set: set[int] = set()
+        wall_tiles: set[Tile] = set()
+        for route_index, route_tile in enumerate(route_tiles):
+            if (route_index > 0
+                    and not bot._map.is_tile_on_team_with(route_tile, bot.general.player)
+                    and route_tile.discovered
+                    and route_tile.army >= wall_min
+                    and route_tile.army
+                    - state.committed_route_army_snapshot.get(route_tile.tile_index, 0)
+                    >= 8):
+                wall_indexes.append(route_index)
+                wall_index_set.add(route_index)
+                wall_tiles.add(route_tile)
+        if wall_indexes:
+            first_wall = wall_indexes[0]
+            detour_start = route_tiles[first_wall - 1]
+            wall_tile = route_tiles[first_wall]
+            rejoin_index = first_wall + 1
+            # watchman tours revisit tiles (20,11->20,12->20,11 peeks then steps back), so a
+            # rejoin target equal to the detour's own start is just the tail of a peek
+            # excursion and may be skipped; the vantage detour preserves the reveal itself.
+            while (rejoin_index < len(route_tiles)
+                    and (rejoin_index in wall_index_set
+                         or route_tiles[rejoin_index] == detour_start)):
+                rejoin_index += 1
+            detour = BotStealthAllIn._find_wall_detour(
+                bot,
+                detour_start,
+                wall_tile,
+                route_tiles[rejoin_index] if rejoin_index < len(route_tiles) else None,
+                wall_tiles,
+                wall_min)
+            if detour is not None:
+                new_route = Path()
+                new_route.add_next(head_tile)
+                for route_tile in route_tiles[1:first_wall]:
+                    new_route.add_next(route_tile)
+                for detour_tile in detour[1:]:
+                    new_route.add_next(detour_tile)
+                if rejoin_index < len(route_tiles):
+                    for route_tile in route_tiles[rejoin_index + 1:]:
+                        new_route.add_next(route_tile)
+                state.committed_route = new_route
+                state.committed_route_army_snapshot = (
+                    BotStealthAllIn._snapshot_route_enemy_army(bot, new_route))
+                route = new_route
+                next_move = route.get_first_move()
+                logbook.info(
+                    f"STEALTH_ALLIN_WALL_DETOUR turn={bot._map.turn} "
+                    f"wall={wall_tile.x},{wall_tile.y} "
+                    f"detour={'->'.join(f'{t.x},{t.y}' for t in detour)} "
+                    f"headArmy={head_tile.army} routeLen={route.length}")
+            else:
+                logbook.info(
+                    f"STEALTH_ALLIN_ARMY_WALL turn={bot._map.turn} "
+                    f"tile={wall_tile.x},{wall_tile.y} army={wall_tile.army} "
+                    f"baseline={state.committed_route_army_snapshot.get(wall_tile.tile_index, 0)} "
+                    f"headArmy={head_tile.army} wallMin={wall_min} "
+                    f"routeLen={route.length}")
+                BotStealthAllIn._abort_committed_route(bot, "army_wall")
+                return None
 
         state.last_route_move = next_move
         route.remove_start()
@@ -1285,11 +1585,38 @@ class BotStealthAllIn:
             is_truncated_front=BotStateQueries.parse_bool(
                 bot, resume_data.get('bot_stealth_is_truncated_front', 'False')),
             is_desperation_dive=BotStateQueries.parse_bool(
-                bot, resume_data.get('bot_stealth_is_desperation_dive', 'False')))
+                bot, resume_data.get('bot_stealth_is_desperation_dive', 'False')),
+            committed_route_army_snapshot=(
+                BotStealthAllIn._parse_route_army_snapshot(
+                    bot,
+                    committed_route,
+                    resume_data.get('bot_stealth_route_army_snapshot', ''))))
         logbook.info(
             f'STEALTH_ALLIN_RESUME turn={bot._map.turn} restored committed route '
             f'remaining={committed_route.length} launch={launch_tile.x},{launch_tile.y} '
             f'generation={generation} isHunt={bot.stealth_all_in.is_undefendable_hunt}')
+
+    @staticmethod
+    def _parse_route_army_snapshot(
+        bot: EklipZBot,
+        committed_route: Path,
+        raw_snapshot: str,
+    ) -> dict[int, int]:
+        """Parse `idx:army,idx:army` resume data; fall back to re-snapshotting live armies.
+
+        Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+        a mid-route txtmap resume must not treat walls revealed between commit and dump as
+        new (they were already priced or already paid), so the baseline persists; stale
+        txtmaps without the key degrade to current armies, which is the same thing the
+        baseline would show anyway.
+        """
+        snapshot: dict[int, int] = {}
+        if raw_snapshot:
+            for entry in raw_snapshot.split(','):
+                idx_str, army_str = entry.split(':', 1)
+                snapshot[int(idx_str)] = int(army_str)
+            return snapshot
+        return BotStealthAllIn._snapshot_route_enemy_army(bot, committed_route)
 
     # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend
     # and Tests/test_GeneralHunting.py::GeneralPredictionTests.test_should_not_dive_few_fog_tiles_when_cannot_kill:
@@ -1436,6 +1763,56 @@ class BotStealthAllIn:
                 best_tile = tile
         return best_tile
 
+    # Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+    # when a losing all-in already owns a stack that can plausibly kill (its sweep army beats
+    # the predicted general stack, not the entire projected fog defense), that stack must dive
+    # the remaining candidates from where it stands; the whole point of the gather is only to
+    # assemble a killer that does not exist yet, so dragging an existing killer back to the
+    # launch tile just donates turns to the defender. The relaxed single-candidate eval already
+    # filters out rear stacks: they bleed too much army walking to the candidate region.
+    MAX_FORWARD_DIVE_EVALUATIONS = 4
+
+    @staticmethod
+    def _get_forward_dive_stack(
+        bot: EklipZBot,
+        candidates: list[Tile],
+        enemy_player: int,
+        predicted_general_army: int,
+    ) -> Tile | None:
+        """Return the best-positioned stack that can already dive under the relaxed check."""
+        army_tiles = sorted(
+            (
+                tile for tile in bot._map.get_all_tiles()
+                if tile.player == bot.general.player
+                and not tile.isGeneral
+                and tile.army > predicted_general_army),
+            key=lambda tile: (-tile.army, tile.tile_index))
+        best_tile: Tile | None = None
+        best_path_length = 0
+        for army_tile in army_tiles[:BotStealthAllIn.MAX_FORWARD_DIVE_EVALUATIONS]:
+            dive_path = BotStealthAllIn._get_shortest_path_to_candidate(
+                bot,
+                army_tile,
+                candidates)
+            if dive_path is None or dive_path.tail is None:
+                continue
+            dive_safety = BotStealthAllIn._evaluate_route_safety(
+                bot,
+                dive_path,
+                [dive_path.tail.tile],
+                army_tile.army,
+                enemy_player,
+                relaxed_general_army=predicted_general_army)
+            if not dive_safety.safe_at_every_reveal:
+                continue
+            if (best_tile is None
+                    or dive_path.length < best_path_length
+                    or (dive_path.length == best_path_length
+                        and army_tile.army > best_tile.army)):
+                best_tile = army_tile
+                best_path_length = dive_path.length
+        return best_tile
+
     # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
     # subtract predicted capture costs before checking every newly revealed candidate.
     @staticmethod
@@ -1478,8 +1855,15 @@ class BotStealthAllIn:
         initial_army: int,
         enemy_player: int,
         distance_offset: int = 0,
+        relaxed_general_army: int | None = None,
     ) -> StealthRouteSafetyEstimate:
-        """Check capture costs and reachable visible defense at candidate reveals."""
+        """Check capture costs and reachable visible defense at candidate reveals.
+
+        When relaxed_general_army is provided (losing all-in forward dives), the required
+        army at each reveal is just the predicted enemy general stack grown ~1/turn plus a
+        small buffer - we are betting on the opponent misplaying an unexpected all-in, not
+        that they defend perfectly with their entire fog army.
+        """
         fog_defense = max(
             1,
             BotCombatOps.get_fog_defense_amount_available_for_tiles(
@@ -1488,9 +1872,22 @@ class BotStealthAllIn:
                 enemy_player,
                 fog_defense_turns=0,
                 fog_reach_turns=5))
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # enemy stacks already committed to a kill path on our general cannot also be
+        # defending the candidates - counting them prices the same army on both sides of
+        # the board and rejects hunts that are the definition of "enemy cannot defend".
+        # They stay excluded from visible defense; everything else keeps the strict margin.
+        threat = bot.threat
+        committed_to_attack_indexes: set[int] = set()
+        if (threat is not None
+                and threat.threatType == ThreatType.Kill
+                and threat.path.tail.tile.isGeneral):
+            committed_to_attack_indexes = {
+                tile.tile_index for tile in threat.path.tileSet}
         visible_enemy_tiles = [
             tile for tile in bot._map.get_all_tiles()
-            if tile.visible and tile.player == enemy_player and tile.army >= 3]
+            if tile.visible and tile.player == enemy_player and tile.army >= 3
+            and tile.tile_index not in committed_to_attack_indexes]
         candidate_indexes = {tile.tile_index for tile in candidates}
         if route.start is None or not candidate_indexes:
             return StealthRouteSafetyEstimate(None, fog_defense, False, [])
@@ -1520,7 +1917,10 @@ class BotStealthAllIn:
                     if bot._map.get_distance_between(
                         enemy_tile,
                         candidate) <= reveal_turns)
-                required_army = enemy_defense * 1.2 + 2
+                required_army = (
+                    relaxed_general_army + reveal_turns + 2
+                    if relaxed_general_army is not None
+                    else enemy_defense * 1.2 + 2)
                 candidate_results.append(StealthCandidateSafety(
                     tile_index=candidate.tile_index,
                     reveal_turns=reveal_turns,
@@ -1610,7 +2010,11 @@ class BotStealthAllIn:
             start_tile,
             to_discover,
             timeLimit=job.time_limit,
-            initialArmy=job.initial_army)
+            initialArmy=job.initial_army,
+            target_weights=(
+                dict(zip(job.target_tile_indexes, job.target_weights))
+                if job.target_weights
+                else None))
         job.result_tile_indexes = (
             [tile.tile_index for tile in wrp_path.tileList]
             if wrp_path is not None
@@ -1655,9 +2059,108 @@ class BotStealthAllIn:
                 job.target_tile_indexes,
                 job.initial_army,
                 state.generation,
-                fallback_time_limit)
+                fallback_time_limit,
+                job.target_weights)
             state.wrp_job = job
         return BotStealthAllIn.convert_wrp_job_result(bot._map, job)
+
+    @staticmethod
+    def _snapshot_route_enemy_army(bot: EklipZBot, route: Path) -> dict[int, int]:
+        """Record every non-team army along a committed route at commit time.
+
+        Tests/test_AllIn.py::AllInTests.test_should_keep_diving_general_candidates_after_revealing_empty_tile:
+        route execution compares live armies against this baseline, so it can tell a wall
+        the plan already priced (e.g. a predicted b2 that stayed b2) from a wall that was
+        invisible or grew after commit (e.g. the fog tile that revealed b57 mid-route) and
+        only aborts on the latter.
+        """
+        snapshot: dict[int, int] = {}
+        for tile in route.tiles:
+            if (not bot._map.is_tile_on_team_with(tile, bot.general.player)
+                    and tile.army > 0):
+                snapshot[tile.tile_index] = tile.army
+        return snapshot
+
+    @staticmethod
+    def _find_wall_detour(
+            bot: EklipZBot,
+            from_tile: Tile,
+            wall_tile: Tile,
+            to_tile: Tile | None,
+            wall_tiles: set[Tile],
+            wall_min: int) -> list[Tile] | None:
+        """Detour around a newly revealed wall stack, preserving its vantage when possible.
+
+        Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction:
+        execution-time wall sidestep - returns the tile list including both endpoints, or
+        None when no short detour exists (the caller then aborts for a full replan). The
+        route stepped onto the wall tile for what it would reveal, so the detour first
+        flanks to a tile orthogonally adjacent to the wall (preferring the one that can
+        still see the most of the wall's unseen tiles), then rejoins the route.
+        """
+        wall_unseen = {t for t in wall_tile.adjacents if not t.discovered}
+        vantage_goals = [
+            t for t in wall_tile.movable
+            if (t != from_tile
+                and t not in wall_tiles
+                and not t.isObstacle
+                and (not wall_unseen
+                     or any(v in wall_unseen for v in t.adjacents)))]
+        vantage_goals.sort(
+            key=lambda t: -sum(1 for v in t.adjacents if v in wall_unseen))
+        for vantage in vantage_goals:
+            leg1 = BotStealthAllIn._bfs_detour(
+                bot, from_tile, {vantage}, wall_tiles, wall_min)
+            if leg1 is None:
+                continue
+            if to_tile is None:
+                return leg1
+            leg2 = BotStealthAllIn._bfs_detour(
+                bot, vantage, {to_tile}, wall_tiles, wall_min)
+            if leg2 is not None:
+                return leg1 + leg2[1:]
+        if to_tile is None:
+            return None
+        return BotStealthAllIn._bfs_detour(
+            bot, from_tile, {to_tile}, wall_tiles, wall_min)
+
+    @staticmethod
+    def _bfs_detour(
+            bot: EklipZBot,
+            from_tile: Tile,
+            goal_tiles: set[Tile],
+            wall_tiles: set[Tile],
+            wall_min: int) -> list[Tile] | None:
+        """Shortest movable path from from_tile to any goal tile avoiding walls."""
+        parents: dict[int, Tile | None] = {from_tile.tile_index: None}
+        frontier = [from_tile]
+        depth = 0
+        while frontier and depth < 8:
+            depth += 1
+            next_frontier: list[Tile] = []
+            for tile in frontier:
+                for adjacent in tile.movable:
+                    if adjacent.tile_index in parents:
+                        continue
+                    if adjacent in goal_tiles:
+                        detour = [adjacent]
+                        current: Tile | None = tile
+                        while current is not None:
+                            detour.append(current)
+                            current = parents[current.tile_index]
+                        detour.reverse()
+                        return detour
+                    if (adjacent.isObstacle
+                            or adjacent in wall_tiles
+                            or (adjacent.discovered
+                                and adjacent.army >= wall_min
+                                and not bot._map.is_tile_on_team_with(
+                                    adjacent, bot.general.player))):
+                        continue
+                    parents[adjacent.tile_index] = tile
+                    next_frontier.append(adjacent)
+            frontier = next_frontier
+        return None
 
     @staticmethod
     def _abort_committed_route(bot: EklipZBot, reason: str) -> None:

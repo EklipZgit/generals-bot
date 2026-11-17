@@ -32,6 +32,12 @@ from Interfaces import MapMatrixInterface, TilePlanInterface
 from MapMatrix import MapMatrix
 from Path import Path
 from PerformanceTimer import PerformanceTimer
+from Strategy.CityContestationSafety import (
+    PREDICTED_CITY_ARMY_RESERVE,
+    get_predicted_city_army_reserve,
+    get_safe_predicted_city_approaches,
+    is_speculative_predicted_city,
+)
 
 OUTPUT_KNAPSACK_TEST_REPRO_LOGS = False
 """Set to true if you are debugging a problem where the correct options with the correct values are input into MKCP iterator, but the wrong results come out. Enable this and then add tests to UnitTests\\FlowExpansionSubtests\\test_FlowExpansion_GroupedKnapsack.py"""
@@ -2068,6 +2074,17 @@ class ArmyFlowExpanderV2:
             incomplete_target_tile_count=0
         )
 
+        # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+        # Track the concrete prefix of tiles this capture commits to (the
+        # frontier island plus every processed target tile) so that
+        # speculative fog-predicted cities can be gated on being reached
+        # through an already-captured, safe approach.
+        prefix_tiles: typing.Set[Tile] = set()
+        friendly_node = stream_data.friendly_node
+        if friendly_node is not None:
+            prefix_tiles.update(friendly_node.island.tile_set)
+        predicted_city_reserve = 0
+
         # Process target contributions in order
         for contrib in target_contributions:
             node = contrib.flow_node
@@ -2082,6 +2099,26 @@ class ArmyFlowExpanderV2:
                 if current_turn > max_turns:
                     break
                 i += 1
+
+                speculative_city = is_speculative_predicted_city(tile)
+                if speculative_city:
+                    # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+                    # A contest against an undiscovered isTempFogPrediction city
+                    # is only allowed through an approach that is already inside
+                    # this capture's concrete prefix AND still has alternate
+                    # same-team targets nearby; otherwise the whole lookup is
+                    # rejected back to the last safe entry (earlier scouting /
+                    # prefix captures are preserved).
+                    safe_approaches = get_safe_predicted_city_approaches(self.map, tile)
+                    viable_approaches = set(tile.movable) & safe_approaches & prefix_tiles
+                    if len(viable_approaches) == 0:
+                        logbook.info(
+                            f"FE_PREDICTED_CITY_REJECT turn={self.map.turn} city={tile.x},{tile.y} "
+                            f"reason=no_alternative_targets reserve={PREDICTED_CITY_ARMY_RESERVE} "
+                            f"safeApproaches={sorted((t.x, t.y) for t in safe_approaches)} "
+                            f"prefixApproaches={sorted((t.x, t.y) for t in set(tile.movable) & prefix_tiles)}")
+                        return lookup
+                    predicted_city_reserve = max(predicted_city_reserve, get_predicted_city_army_reserve(tile))
 
                 if contrib.is_crossing:
                     # Target-crossable friendly island: only turn cost, no econ value
@@ -2115,7 +2152,17 @@ class ArmyFlowExpanderV2:
                 # Each tile traversed costs 1 army (left behind on source/intermediate tile),
                 # and the final capture requires arriving with strictly more than the defender
                 # (generals.io rule: attacker wins only if attacker > defender, so need +1).
-                required_army_for_entry = current_army_cost + current_turn
+                # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+                # predicted_city_reserve is a feasibility cushion added once a
+                # speculative fog-predicted city entered the prefix; it is not
+                # destroyed army and does not accumulate per city.
+                base_required_army = current_army_cost + current_turn
+                required_army_for_entry = base_required_army + predicted_city_reserve
+                if speculative_city:
+                    logbook.info(
+                        f"FE_PREDICTED_CITY_RESERVE turn={self.map.turn} city={tile.x},{tile.y} "
+                        f"reserve={predicted_city_reserve} base={base_required_army} "
+                        f"final={required_army_for_entry}")
                 lookup[current_turn] = FlowTurnsEntry(
                     turns=current_turn,
                     required_army=required_army_for_entry,
@@ -2132,6 +2179,7 @@ class ArmyFlowExpanderV2:
                 if OUTPUT_KNAPSACK_TEST_REPRO_LOGS or self._is_diag_border_pair(border_pair):
                     logbook.info(f"CAPTURES: {self._diag_border_pair_anchor(border_pair)}  (cur {self._diag_island_anchor(island)}) - Adding capture entry @{tile} for turn {current_turn} with econ value {current_econ_value:.2f}, army cost {current_army_cost}, "
                                  f"army remaining {current_army_remaining}, gathered army {current_gathered_army}, required army {required_army_for_entry}, incomplete {lookup[current_turn].incomplete_target_tile_count}")
+                prefix_tiles.add(tile)
 
             if current_turn > max_turns:
                 break
@@ -3422,6 +3470,31 @@ class ArmyFlowExpanderV2:
                     capping.update(partial_capture_tiles)
                 else:
                     capping.update(island.tile_set)
+
+            # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+            # The capture lookup table gates speculative fog-predicted cities
+            # against an army-ordered prefix, but partial-capture materialization
+            # re-selects tiles by connectivity (_select_partial_capture_tiles),
+            # which can include a predicted city the ordered prefix never
+            # reached. Re-validate every speculative city in the concrete
+            # capping set against the actual gathered/captured prefix here so
+            # the buffer cannot be bypassed by tile reordering.
+            unsafe_predicted_city: Tile | None = None
+            for cap_tile in capping:
+                if not is_speculative_predicted_city(cap_tile):
+                    continue
+                safe_approaches = get_safe_predicted_city_approaches(self.map, cap_tile)
+                viable_approaches = set(cap_tile.movable) & safe_approaches & (gathing | capping)
+                if len(viable_approaches) == 0:
+                    unsafe_predicted_city = cap_tile
+                    break
+            if unsafe_predicted_city is not None:
+                logbook.info(
+                    f"FE_PREDICTED_CITY_REJECT turn={self.map.turn} city={unsafe_predicted_city.x},{unsafe_predicted_city.y} "
+                    f"reason=no_safe_materialized_approach reserve={PREDICTED_CITY_ARMY_RESERVE} "
+                    f"borderPair={border_pair.friendly_island_id}->{border_pair.target_island_id}")
+                continue
+
             if gathing:
                 connected_gathing = self._connect_allied_gather_components_to_owned_tiles(gathing, asPlayer)
                 if not connected_gathing:

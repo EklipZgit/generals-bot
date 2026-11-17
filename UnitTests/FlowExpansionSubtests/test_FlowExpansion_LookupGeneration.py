@@ -9,7 +9,7 @@ import SearchUtils
 from Algorithms import TileIslandBuilder
 from Algorithms.TileIslandBuilder import IslandBuildMode
 from BehaviorAlgorithms import IterativeExpansion
-from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, EnrichedFlowTurnsEntry
+from BehaviorAlgorithms.FlowExpansion import ArmyFlowExpanderV2, EnrichedFlowTurnsEntry, FlowTurnsEntry
 from BehaviorAlgorithms.IterativeExpansion import ArmyFlowExpander, IslandFlowNode, FlowGraphMethod
 from BoardAnalyzer import BoardAnalyzer
 from Gather import GatherDebug
@@ -2758,3 +2758,201 @@ a2   a3   a2   a2   a2   a2   M    M    M    b2   b2   b2   b2   b2   b2   b1   
             len(enemy_capture_entries), 0,
             'Expected a capture entry down the x=2 corridor reaching the enemy with econ > 0.8.',
         )
+
+    # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+    # Speculative fog-predicted cities must add PREDICTED_CITY_ARMY_RESERVE to
+    # required_army once they enter the capture prefix, and must be rejected
+    # entirely when no safe already-captured approach exists.
+    def _build_capture_lookup_for_first_border_pair(
+        self,
+        mapData: str,
+        speculative_city_coords: typing.List[typing.Tuple[int, int]] | None = None,
+        discovered: bool = False,
+    ) -> typing.Tuple[MapBase, ArmyFlowExpanderV2, list, object, object, list]:
+        """Build the real flow graph for mapData and generate the first border pair's capture lookup.
+
+        @param mapData: txtmap string.
+        @param speculative_city_coords: optional (x, y) tiles to mark as fog-prediction cities.
+        @param discovered: when True the marked cities stay discovered (known fog memory); when False they are speculative.
+        @return: (map, flowExpanderV2, target_contribs, stream_data, border_pair, capture_lookup)
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        self.begin_capturing_logging()
+        analysis = BoardAnalyzer(map, general)
+        analysis.rebuild_intergeneral_analysis(enemyGeneral, possibleSpawns=None)
+        builder = TileIslandBuilder(map, analysis.intergeneral_analysis)
+        builder.recalculate_tile_islands(enemyGeneral)
+
+        flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.log_debug = False
+        flowExpanderV2.target_team = enemyGeneral.player
+        flowExpanderV2._ensure_flow_graph_exists(builder, turns=50)
+        target_crossable = flowExpanderV2._detect_target_crossable_friendly_islands(
+            builder, flowExpanderV2.flow_graph, flowExpanderV2.team, flowExpanderV2.target_team
+        )
+        border_pairs = flowExpanderV2._enumerate_border_pairs(
+            flowExpanderV2.flow_graph, builder, flowExpanderV2.team, flowExpanderV2.target_team, target_crossable
+        )
+        self.assertGreater(len(border_pairs), 0, 'Expected at least one border pair')
+        border_pair = border_pairs[0]
+        stream_data = flowExpanderV2._build_border_pair_stream_data(border_pair, flowExpanderV2.flow_graph, target_crossable, 50)
+        friendly_contribs, target_contribs = flowExpanderV2._preprocess_flow_stream_tilecounts(stream_data, border_pair)
+        if speculative_city_coords is not None:
+            for x, y in speculative_city_coords:
+                city = map.At(x, y)
+                city.isTempFogPrediction = True
+                city.discovered = discovered
+                city.visible = False
+        capture_lookup = flowExpanderV2._generate_capture_lookup_table(border_pair, target_contribs, stream_data, 50)
+        return map, flowExpanderV2, target_contribs, stream_data, border_pair, capture_lookup
+
+    @staticmethod
+    def _city_stream_position(target_contribs, city: Tile) -> int:
+        """Return the 1-based processing position of city within the target contribution stream."""
+        position = 0
+        for contrib in target_contribs:
+            for tile in contrib.flow_node.island.tiles_by_army:
+                position += 1
+                if tile is city:
+                    return position
+        raise AssertionError(f'city {city} not found in target contribution stream')
+
+    def test_lookup_generation__speculative_city_adds_exactly_reserve_to_required_army(self):
+        # Same concrete map evaluated twice: once with the enemy city known,
+        # once marked as an undiscovered isTempFogPrediction city. The
+        # speculative run must require exactly +15 army at the city turn and
+        # every later turn, must not change tile.army, and must leave earlier
+        # entries untouched.
+        mapData = """
+|    |    |    |    |    |    |    |    |
+aG2  a8   b1   b1   b1   b3   bC1  b1   bG2
+|    |    |    |    |    |    |    |    |
+        """
+        cityXY = (6, 0)
+
+        mapKnown, flowExpander, contribs, streamData, borderPair, lookupKnown = self._build_capture_lookup_for_first_border_pair(mapData)
+        knownCity = mapKnown.At(*cityXY)
+        cityPosition = self._city_stream_position(contribs, knownCity)
+
+        mapSpec, flowExpanderSpec, contribsSpec, streamDataSpec, borderPairSpec, lookupSpec = self._build_capture_lookup_for_first_border_pair(
+            mapData, speculative_city_coords=[cityXY], discovered=False
+        )
+        specCity = mapSpec.At(*cityXY)
+        self.assertTrue(specCity.isTempFogPrediction)
+        self.assertFalse(specCity.discovered)
+        self.assertEqual(knownCity.army, specCity.army, 'reserve must not mutate tile.army')
+
+        firstDivergentTurn = None
+        for turn in range(len(lookupKnown)):
+            knownEntry = lookupKnown[turn]
+            specEntry = lookupSpec[turn]
+            if knownEntry is None and specEntry is None:
+                continue
+            self.assertIsNotNone(knownEntry, f'known lookup missing turn {turn}')
+            self.assertIsNotNone(specEntry, f'speculative lookup missing turn {turn}')
+            if turn < cityPosition:
+                self.assertEqual(knownEntry.required_army, specEntry.required_army,
+                                 f'reserve must not apply before the predicted city (turn {turn})')
+            else:
+                if firstDivergentTurn is None:
+                    firstDivergentTurn = turn
+                self.assertEqual(knownEntry.required_army + 15, specEntry.required_army,
+                                 f'speculative entry at turn {turn} must require exactly +15 army')
+
+        self.assertEqual(cityPosition, firstDivergentTurn,
+                         'reserve must first apply exactly at the predicted city turn')
+        self.assertIsNotNone(lookupSpec[cityPosition])
+        self.assertGreater(len([e for e in lookupSpec if e is not None]), cityPosition)
+
+    def test_lookup_generation__speculative_city_rejected_without_safe_prefix_approach(self):
+        # The only enemy-side approach already inside the capture prefix is a
+        # dead-end pocket with no alternate targets; the speculative city must
+        # be rejected so no lookup entry reaches it, while earlier scouting /
+        # prefix captures remain.
+        mapData = """
+|    |    |    |    |    |    |    |    |
+aG2  a8   b3   bC1  b1   b1   b1   bG2
+|    |    |    |    |    |    |    |    |
+        """
+        cityXY = (3, 0)
+        mapKnown, flowExpander, contribs, streamData, borderPair, lookupKnown = self._build_capture_lookup_for_first_border_pair(mapData)
+        knownCity = mapKnown.At(*cityXY)
+        cityPosition = self._city_stream_position(contribs, knownCity)
+
+        mapSpec, flowExpanderSpec, contribsSpec, streamDataSpec, borderPairSpec, lookupSpec = self._build_capture_lookup_for_first_border_pair(
+            mapData, speculative_city_coords=[cityXY], discovered=False
+        )
+        lastSpecTurn = max(entry.turns for entry in lookupSpec if entry is not None)
+        self.assertLess(lastSpecTurn, cityPosition,
+                        f'speculative lookup must stop before the unsafe predicted city at stream position {cityPosition}, got last turn {lastSpecTurn}')
+        self.assertGreater(lastSpecTurn, 0, 'earlier scouting/prefix captures must be preserved')
+
+    def test_lookup_generation__discovered_fog_city_capture_unchanged(self):
+        # A city marked isTempFogPrediction but discovered (known fog memory)
+        # is not speculative: no reserve, no rejection, identical lookup.
+        mapData = """
+|    |    |    |    |    |    |    |    |
+aG2  a8   b1   b1   b1   b3   bC1  b1   bG2
+|    |    |    |    |    |    |    |    |
+        """
+        mapKnown, flowExpander, contribs, streamData, borderPair, lookupKnown = self._build_capture_lookup_for_first_border_pair(mapData)
+        mapDisc, flowExpanderDisc, contribsDisc, streamDataDisc, borderPairDisc, lookupDisc = self._build_capture_lookup_for_first_border_pair(
+            mapData, speculative_city_coords=[(6, 0)], discovered=True
+        )
+        for turn in range(len(lookupKnown)):
+            knownEntry = lookupKnown[turn]
+            discEntry = lookupDisc[turn]
+            if knownEntry is None or discEntry is None:
+                self.assertEqual(knownEntry is None, discEntry is None, f'lookup presence diverged at turn {turn}')
+                continue
+            self.assertEqual(knownEntry.required_army, discEntry.required_army,
+                             f'discovered fog city must not add reserve at turn {turn}')
+            self.assertEqual(knownEntry.econ_value, discEntry.econ_value)
+
+    def test_gather_support__speculative_reserve_shifts_cutoff_by_fifteen(self):
+        # The gather-support enrichment compares effective gathered army
+        # against capture_entry.required_army; a speculative city's +15
+        # reserve must move the support cutoff by exactly 15.
+        mapData = """
+|    |    |    |    |
+aG2  a4   a4   bG2
+|    |    |    |
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(mapData, 250, fill_out_tiles=False)
+        flowExpanderV2 = ArmyFlowExpanderV2(map)
+        flowExpanderV2.target_team = enemyGeneral.player
+
+        def make_entry(turns: int, required_army: int, gathered_army: int) -> FlowTurnsEntry:
+            return FlowTurnsEntry(
+                turns=turns,
+                required_army=required_army,
+                econ_value=0.0,
+                army_remaining=0,
+                gathered_army=gathered_army,
+                included_friendly_flow_nodes=tuple(),
+                included_target_flow_nodes=tuple(),
+                incomplete_friendly_island_id=None,
+                incomplete_friendly_tile_count=0,
+                incomplete_target_island_id=None,
+                incomplete_target_tile_count=0,
+            )
+
+        baselineRequired = 20
+        speculativeRequired = baselineRequired + 15
+        captureKnown = make_entry(5, baselineRequired, 0)
+        captureSpec = make_entry(5, speculativeRequired, 0)
+        gatherEntries = [make_entry(t, 0, g) for t, g in ((1, 33), (2, 34), (3, 35), (4, 40))]
+
+        supportedKnown = flowExpanderV2._find_all_gather_support_entries(captureKnown, gatherEntries)
+        supportedSpec = flowExpanderV2._find_all_gather_support_entries(captureSpec, gatherEntries)
+        self.assertEqual(4, len(supportedKnown))
+        self.assertEqual(2, len(supportedSpec))
+        self.assertEqual(35, supportedSpec[0].gathered_army)
+        self.assertEqual(40, supportedSpec[1].gathered_army)
+
+        minKnown = flowExpanderV2._find_minimum_gather_support(captureKnown, gatherEntries)
+        minSpec = flowExpanderV2._find_minimum_gather_support(captureSpec, gatherEntries)
+        self.assertIsNotNone(minKnown)
+        self.assertIsNotNone(minSpec)
+        self.assertEqual(1, minKnown.turns)
+        self.assertEqual(3, minSpec.turns)

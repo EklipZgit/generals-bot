@@ -6,14 +6,14 @@
     Tests that import [TestBase](cci:2://file:///c:/src/generals-bot/Tests/TestBase.py:55:0-2748:73) directly require `PYTHONPATH` to include both the repo root and `Tests`.
 
     Single test target:
-    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
+    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2026.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
 
     Single test file/module target examples:
-    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target Tests.test_Expansion.ExpansionTests.test_shouldnt_create_broken_islands_after_captures
-    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --path C:\src\generals-bot\UnitTests\FlowExpansionSubtests
+    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2026.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target Tests.test_Expansion.ExpansionTests.test_shouldnt_create_broken_islands_after_captures
+    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2026.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --path C:\src\generals-bot\UnitTests\FlowExpansionSubtests
 
     If a test has `debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True`, run it with `bypass_ui=True` instead of editing the test file:
-    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2025.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
+    $env:bypass_ui='True';$env:PYTHONPATH='C:\src\generals-bot\Tests;C:\src\generals-bot'; .\.venv\Scripts\python.exe "C:/Program Files/JetBrains/PyCharm 2026.1.2/plugins/python-ce/helpers/pycharm/_jb_unittest_runner.py" --target UnitTests.test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general
 
     Write temporary test/debug output outside the repo at:
 C:\cascade-debug-output\generals-bot
@@ -109,3 +109,9 @@ def test_grouped_knapsack__logged_repro(self):
 --- Live code safety ---
 1. The user runs LIVE games directly off this working tree. Once code is saved it is live. Never leave code in a state that can throw in normal games: finish each edit completely before saving (no half-wired helpers, no calls to unimplemented functions, no nonexistent attributes such as map.width/height - MapBase uses cols/rows), py_compile touched files immediately, and smoke-test the changed code path with a relevant test right after each functional change.
 
+
+--- Fundamental decision logging (viewInfo) ---
+1. Any time you add or change code that alters a fundamental decision the bot makes - committing to or aborting an attack/plan, vetoing or overriding a move another system already evaluated, switching modes/phases, or releasing a committed plan - the verdict and its reason MUST be emitted via `bot.viewInfo.add_info_line` (or `bot.info` for banner-level decisions), not only `logbook.info`.
+2. This matters MOST when another system already logged the opposite verdict earlier in the same turn: e.g. a QK "kill race chance 1.000" line followed by silence when a different system vetoes the attack makes the log read as incoherent. The veto/override itself must appear in viewInfo so the log shows WHY the advertised move did not happen.
+3. `viewInfo.add_info_line` already calls `logbook.info`, so the text log loses nothing - prefer it over bare `logbook.info` for any decision line. Keep `logbook.info` only for verbose math/geometry diagnostics, and keep per-candidate spam guards (eligible-only) intact.
+4. When you finish work that added viewInfo decision lines, the final message to the user must call out each new line in bold, in the form **"I added 'sample log line' to view info output to show when X occurs"** (quote the actual emitted string), so the user can decide whether to keep it, tweak the wording, or decide the logging isn't worth having.

@@ -1,0 +1,64 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+                    M                                                 a2   a2   M    M
+M                                  M    M                        M    a2   a2        M         M
+M    M              M              M                   M    M    M         a2   a1   a1        a1
+                    M         M              M              M    a2   a2   a2   a4   M    M    a1
+          M                   C43                           M    M    M    a2        a2   a2   a2
+                                        M         M    M    M              a2   aC23 a2   M    a2
+     M    M                   C40       a3                  a2   a2   a2   a2   a2   M    a2   a2
+                    M              M    a3                  a2   a3        M    aG24 a2   a2
+     M    M                   M         a3             aC16 a2   a3   a3        M    M    a3
+               M                   M    a2   a2   a2   a2   a3   M    a3   a3             a3
+                                   M    a2   M         a3             M    a2             a1
+b1             C43  M              a2   a2   a3   a3             M         a2             a1   a1
+b1   C40  b1   b1   a2   a2   a2   a2        M                        M    a2   a2   M
+b2   b1   b2   a2   a2   M         a3   M         M    M              M    a2   a1   a1   a1
+b3   b5   M    a2   M    M    M    a3                                      a2   a1   M    M
+b3   b1   b1   a1   b3   b2   b2   M    M                   C42  M         a1             M
+b3   b1   b1   b2   b3   b3   b3   b2   b2   M                   M         a1   M
+b3   b2   b1   M    M    b4   M    b1   b1   b3                  M         a1
+M    b2   b3   b3   b3   b4   M    b1   b1   b2        C42            M         M
+b2   b2   b2   b2   b4   b3   b3   b3   b1   b2                  M
+b2   M    b2   bC18 b4   b3   b3   b3   b2   b2   b2   b1   M                             M
+b2   b2   b2   b2   b3   b3   b4   b2   b3   b3   b2   b1   M    M                             M
+b2   b1   b1   bG17 b2   b2   b2   b2   b2   b2   bC9  b2   M                             M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=213
+player_index=1
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=0
+mode=1v1
+aUsername=AzureHell
+aStars=48
+aScore=222
+aTiles=81
+aStandingArmy=141
+aCityCount=3
+aGeneral=16,7
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=200
+aDelta25Tiles=22
+aDelta25Score=77
+aCityGainedTurn=178
+aCityLostTurn=0
+aLastSeenMoveTurn=206
+aKnowsKingLocation=False
+bUsername=Human.exe
+bStars=79
+bScore=222
+bTiles=84
+bStandingArmy=138
+bCityCount=3
+bGeneral=3,22
+bDead=False
+bLeftGame=True
+bLeftGameTurn=437
+bAggressionFactor=0
+bDelta25Tiles=9
+bDelta25Score=21
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=213
+bKnowsKingLocation=False

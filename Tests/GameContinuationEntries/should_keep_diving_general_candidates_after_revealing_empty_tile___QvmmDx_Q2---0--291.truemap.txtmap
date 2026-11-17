@@ -1,0 +1,60 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+                                   M    a2   a2   a2   a2   M
+          M                        a2   a2   a2   a2   M                             M                   M
+M    C45                           a2   a3   a3   M         M                                  M
+               M    a2   M    M    a2   a2   a2
+     M    M    a1   a1   a1   a1   a1   M    a3   M                   M    M    M    M                   M
+M    a1   a1   a1   M    a1   a1   a1   a2   a5   a1   M         M         b2   M                   M
+a1   M    a1   M    b5   a9   a1   a1   a1   a1   a1   M    b1   b1   C48  b2   b2   b2             M    M
+a1   a1   a1   a6   a4   a4   a3   M    M    C42  a1   a1   a1   a1   a1   a115 b1   b2        M         M
+aG12 M    a1   a1   M    M    a2   a2   a2   bC79 b1   b1   M         M         b1   b2   b2   b2   M    b3
+a1   a1   a1   M    a1   a5   a1   b2   b1   b1   a2   M         C42       M    b3   b3   b3   b2        b3
+M    aC13 a2   a2   a2   a2   a6   a2   a2   b2   M    b2   b2   b2                  M         b2   b2   b3
+M    a1   a1   M    a2   a3   b1   b1   a3   b2   b2   b2        b2             M         M    M    b2   b3
+a2   a2   a2   M    a2   M    b1   b1   b1   b1   b1        M    b2             M    M    bC2  b1   b56  b2
+a2   a2   b1   b1   b1   b1   b1   M    a2        b1   b1   b1   bC6  b1   b1   b1   b1   b1   b1   M    bG40
+     a3   M    M    M    a3   M    C48            b1   b2   M    b2   b2        M    M    b2   b1   M    b4
+     M                   M              M         M    b2   b2   b2             M         b2   b1   M
+M                        M                   M                   b3   b3   b3   b3   b3   b3             M
+M    M              M    M              M              M                   b4   M    b3   b4        M
+M                                            M                                       b3                  C45
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=291
+player_index=0
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=1v1
+aUsername=Human.exe
+aStars=78
+aScore=303
+aTiles=86
+aStandingArmy=217
+aCityCount=2
+aGeneral=0,8
+aDead=False
+aLeftGame=True
+aLeftGameTurn=407
+aAggressionFactor=0
+aDelta25Tiles=-9
+aDelta25Score=94
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=291
+aKnowsKingLocation=False
+bUsername=2511425938514_
+bStars=71
+bScore=340
+bTiles=88
+bStandingArmy=252
+bCityCount=4
+bGeneral=21,13
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=679
+bDelta25Tiles=10
+bDelta25Score=130
+bCityGainedTurn=250
+bCityLostTurn=248
+bLastSeenMoveTurn=278
+bKnowsKingLocation=False

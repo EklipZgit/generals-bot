@@ -1291,3 +1291,50 @@ class CityContestationTests(TestBase):
 # 21f 22p
 # 28f 16p (interception breaking things probably)
 # 31f 26p - 26-07-07 after "fixing" our city contest recaptures not going through an army between the recapturing army and the target city (when that army is a threat kinda?)
+    def test_should_split_army_to_recapture_city_and_still_block_threat(self):
+        # Repro from Human.exe-1v1-2026-11-14_05-28-17---0NnTBdYkn turn 688:
+        # enemy walks 7,8->11,8->11,10->12,10 and takes our city while an a77
+        # threat sits inbound at 6,6 threatening the general at 5,4. The bot
+        # oscillated between going for the recapture and pulling the whole 118
+        # stack back for threat defense, so the city was never retaken. Correct
+        # play is to split: enough army recaptures 12,10 while the rest stays
+        # on the threat blocking tiles. Correct play takes 13 turns end to end
+        # (split at ~t690, straight march down the corridor, city retaken at
+        # t700); 14 turns leaves no room for a split-then-cycle detour.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_split_army_to_recapture_city_and_still_block_threat___0NnTBdYkn---1--688.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_split_army_to_recapture_city_and_still_block_threat___0NnTBdYkn---1--688.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 688, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=688)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,8->11,8->11,10->12,10')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=14)
+        self.assertNoFriendliesKilled(map, general)
+
+        #proof: the recapture must come from actually splitting the 118 on a
+        # threat-blocking tile (7,4 or 7,5 hold ~56-59 vs the 6,6 threat) - a
+        # move_half out of that corridor is the mechanical proof, not just
+        # 'city eventually owned'.
+        blockCorridorSources = {playerMap.GetTile(7, 4), playerMap.GetTile(7, 5)}
+        splitMoves = [
+            m for m in simHost.sim.players[general.player].move_history
+            if m is not None and m.move_half and m.source in blockCorridorSources]
+        self.assertGreater(
+            len(splitMoves), 0,
+            'expected a move_half split out of the 7,4/7,5 threat-blocking corridor - '
+            'no split means the bot either cycled the whole stack back for defense or abandoned the block')
+
+        self.assertOwnedXY(12, 10, 'bot should have recaptured city 12,10 within 14 turns by splitting the 118 and marching straight down the corridor - splitting then cycling back and forth is not a pass')
+
+        # the live game oscillated 7,5->8,5 / 8,5->7,5 for 25+ turns; incidental re-gathers can move a tile a few times, but not a sustained shuttle
+        self.assertNoRepetition(simHost, minForRepetition=3)
+
+        defenseArmy = BotCombatOps.sum_player_standing_army_near_or_on_tiles(bot, [playerMap.GetTile(7, 4), playerMap.GetTile(8, 5)], distance=3, player=general.player)
+        self.assertGreater(defenseArmy, 30, 'bot should have left enough army on the blocking tiles to defend against the inbound 6,6 threat')

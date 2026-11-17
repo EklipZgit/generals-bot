@@ -121,10 +121,12 @@ class Player(object):
         'leftGame',
         'leftGameTurn',
         'capturedBy',
+        'has_kill',
         'knowsKingLocation',
         'knowsAllyKingLocation',
         'aggression_factor',
         'last_seen_move_turn',
+        'king_location_revealed_turn',
     )
 
     def __init__(self, player_index: int):
@@ -189,12 +191,20 @@ class Player(object):
         """The turn the player left the game. Useful to know how many turns to attempt a capture are left."""
 
         self.capturedBy: int | None = None
+        # Server-credited "has a kill" flag: True/False when the leaderboard payload carries it,
+        # None when unknown (older payloads or SilentWar, which strips the field entirely).
+        self.has_kill: bool | None = None
         self.knowsKingLocation: bool = False
         self.knowsAllyKingLocation: bool = False
         self.aggression_factor: int = 0
         """"""
         self.last_seen_move_turn: int = 0
         """True if this player knows the map.player_index players general location. False otherwise."""
+        self.king_location_revealed_turn: int = -1
+        """The map turn this player's knowsKingLocation first flipped false->true via general
+        adjacency in the bot's own scan (BotGeneralSafety episode trigger). -1 = never
+        timestamped (old fixtures that load knowsKingLocation=True directly stay -1 and must
+        not activate general-safety episodes)."""
 
     def __str__(self):
         return f'p{self.index}{" (dead)" if self.dead else ""}: tiles {self.tileCount}, cities {self.cityCount}, standingArmy {self.standingArmy}, general {str(self.general)}'
@@ -206,18 +216,26 @@ class Score(object):
         'total',
         'tiles',
         'dead',
+        'has_kill',
     )
 
-    def __init__(self, player: int, total: int, tiles: int, dead: bool):
+    def __init__(self, player: int, total: int, tiles: int, dead: bool, has_kill: bool | None = None):
         self.player: int = player
         self.total: int = total
         self.tiles: int = tiles
         self.dead: bool = dead
+        # Authoritative server credited-kill flag; None preserves the unknown (absent) state.
+        self.has_kill: bool | None = has_kill
 
     @staticmethod
     def from_server_scores(scores_from_server: typing.List[dict]):
+        # scores_from_server is already re-ordered to player-index order by
+        # _get_raw_scores_from_data (keyed on the server's 'i' field), so enumerate gives the
+        # correct player identity even though leaderboardScores arrive sorted by standing.
+        # 'has_kill' uses .get so a SilentWar payload that omits it stays None rather than False.
         return [
-            Score(player, scores_entry['total'], scores_entry['tiles'], scores_entry['dead'])
+            Score(player, scores_entry['total'], scores_entry['tiles'], scores_entry['dead'],
+                  scores_entry.get('has_kill'))
             for player, scores_entry
             in enumerate(scores_from_server)
         ]
@@ -389,6 +407,9 @@ class MapBase(object):
         """Server turns of anonymous (SilentWar) trade events, retained for dedup/record."""
         self._self_trade_notification_opponent: int = -1
         """Opponent hint from a server notification when the trade involves the local player."""
+        self._orphanedGeneralCandidates: typing.Set[Tile] = set()
+        """Generals-slot evictees whose isGeneral flags may be stale fog pins; cleared
+        at the end of update() once trade repair has rebound any real swapped gens."""
 
         self.pathable_tiles: typing.Set[Tile] = set()
         """Tiles PATHABLE from the general spawn on the map, including neutral cities but not including mountains/undiscovered obstacles"""
@@ -464,6 +485,17 @@ class MapBase(object):
         self.unexplained_deltas = {}
         self.moved_here_set = set()
 
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+        # tiles bulk-transferred to a capturer by handle_player_capture before this turn's diff is
+        # applied, and the capturers themselves. Consumed (and cleared) by
+        # detect_movement_and_populate_unexplained_diffs, which zeroes their
+        # halving/prediction deltas so they are not reconstructed as fake
+        # moves/emergences, the same way _normalize_general_trade_deltas handles mutual trades.
+        # Fog tiles we mispredicted as neutral/other-owned are never repaired, so the
+        # capturers set catches their gainedSight + owner-flip signature as a fallback.
+        self._capture_transfer_tiles: typing.Set[Tile] = set()
+        self._player_capturers_since_last_update: typing.Set[int] = set()
+
     def __repr__(self):
         return str(self)
 
@@ -517,6 +549,9 @@ class MapBase(object):
         state.pop('unexplained_deltas', None)
         state.pop('moved_here_set', None)
         state.pop('army_moved_grid', None)
+        state.pop('_capture_transfer_tiles', None)
+        state.pop('_player_capturers_since_last_update', None)
+        state.pop('_orphanedGeneralCandidates', None)
 
         return state
 
@@ -531,6 +566,9 @@ class MapBase(object):
         self.__dict__.setdefault('_pre_trade_city_counts', [])
         self.__dict__.setdefault('_anonymous_trade_turns', set())
         self.__dict__.setdefault('_self_trade_notification_opponent', -1)
+        self.__dict__.setdefault('_capture_transfer_tiles', set())
+        self.__dict__.setdefault('_player_capturers_since_last_update', set())
+        self.__dict__.setdefault('_orphanedGeneralCandidates', set())
         # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_legacy_resume_without_island_ids_disables_fairness - old pickled maps need an explicit empty resume-data state.
         self.__dict__.setdefault('resume_data', {})
         self.__dict__.setdefault('resume_data_is_txtmap', False)
@@ -709,6 +747,10 @@ AttributeError: 'Map' object has no attribute 'grid'
             player.unexplainedTileDelta = player.tileDelta
             player.tileCount = self.scores[player.index].tiles
             player.standingArmy = self.scores[player.index].total - self.scores[player.index].tiles
+            # Authoritative credited-kill is three-valued: only a known server value overwrites the
+            # player, so a SilentWar payload that omits has_kill preserves the previously known credit.
+            if self.scores[player.index].has_kill is not None:
+                player.has_kill = self.scores[player.index].has_kill
 
         last = self.scoreHistory[len(self.scoreHistory) - 1]
         earliest = last
@@ -834,10 +876,19 @@ AttributeError: 'Map' object has no attribute 'grid'
             logbook.error(f'YO WTF WHY DO WE HAVE OURSELVES AS CAPTUREE??')
         else:
             self.generals[captureeIdx] = None
+            # TEMPORARY DIAGNOSTIC (general-coloring investigation): generals[capturee] is
+            # cleared but players[capturee].general may still point at the transferred tile
+            stalePGen = self.players[captureeIdx].general
+            if stalePGen is not None:
+                logbook.error(
+                    f'GENDIAG p{captureeIdx} captured by p{capturerIdx}: players[].general left dangling on '
+                    f'{stalePGen} (own={stalePGen.player},G={stalePGen.isGeneral}) while generals[{captureeIdx}]=None')
+            self.players[captureeIdx].general = None
 
         capturingPlayer = self.players[capturerIdx]
         captureePlayer = self.players[captureeIdx]
         captureePlayer.capturedBy = capturerIdx
+        self._player_capturers_since_last_update.add(capturerIdx)
         logbook.info(f'CITY_COUNT increasing capturer p{capturerIdx} cities from {capturingPlayer.cityCount} by captured players {captureePlayer.cityCount} cityCount')
         capturingPlayer.cityCount += captureePlayer.cityCount
         for tile in self.get_all_tiles():
@@ -868,6 +919,12 @@ AttributeError: 'Map' object has no attribute 'grid'
                     eventHandler(tile)
             else:
                 tile.army = tile.army - tile.army // 2
+
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+            # record the tile as part of this capture's bulk transfer so
+            # detect_movement_and_populate_unexplained_diffs zeroes its halving delta
+            # instead of treating it as an emergence/fake move.
+            self._capture_transfer_tiles.add(tile)
 
             for eventHandler in self.notify_tile_deltas:
                 eventHandler(tile)
@@ -1191,6 +1248,27 @@ AttributeError: 'Map' object has no attribute 'grid'
                 eventHandler(curTile)
             if curTile.isGeneral and curTile.visible:
                 logbook.info(f' SET map.generals[{curTile.player}] = {curTile} IN map.py (was {self.generals[curTile.player]})')
+                # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_visible_general_reveal_clears_orphaned_fog_pin_flag -
+                # live ffa pUUy0ztZL t124 (GENDIAG VIOLATION 'map.generals[5] overwrite
+                # 15,8 -> 21,9; prev still isGeneral'): an authoritative server reveal
+                # overwrites generals[p] while a previous fog PIN tile keeps its
+                # isGeneral flag, rendering a phantom '+' marker in the player's
+                # color forever. Invisible prev gens were fog guesses now disproved.
+                prevGen = self.generals[curTile.player]
+                if prevGen is not None and prevGen is not curTile and prevGen.isGeneral:
+                    # Tests/test_GeneralTrade.py (oldGenHidden variants) + live ffa
+                    # pUUy0ztZL t124 (GENDIAG VIOLATION 'map.generals[5] overwrite
+                    # 15,8 -> 21,9; prev still isGeneral'): an authoritative reveal
+                    # can overwrite generals[p] while a previous fog PIN keeps its
+                    # isGeneral flag -> phantom '+' marker in the player's color.
+                    # The flag cannot be cleared here: during a general trade the
+                    # hidden swapped-away general also satisfies this branch and must
+                    # keep its flag for _detect_and_repair_general_trade's rebind.
+                    # Defer to _clear_orphaned_general_markers after trade repair.
+                    self._orphanedGeneralCandidates.add(prevGen)
+                    logbook.error(
+                        f'GENDIAG VIOLATION map.generals[{curTile.player}] overwrite {prevGen} -> {curTile}; '
+                        f'prev still isGeneral own={prevGen.player}')
                 self.generals[curTile.player] = curTile
                 self.players[curTile.player].general = curTile
             elif curTile.visible:
@@ -1342,7 +1420,34 @@ AttributeError: 'Map' object has no attribute 'grid'
                 continue
             self._restore_observer_trade_city_counts(trade.player, trade.opponent)
 
+        self._clear_orphaned_general_markers()
+
         return self
+
+    def _clear_orphaned_general_markers(self) -> None:
+        """Clears isGeneral flags left behind on fog-prediction tiles after the real
+        general slot they were pinned under was overwritten by an authoritative
+        reveal. Runs AFTER trade repair so a hidden traded-away general - which the
+        repair rebinds into its new owner's generals slot - keeps its flag, while a
+        disproved pin that no slot references anymore loses it.
+        Tests/test_ArmyTracker.py::test_visible_general_reveal_clears_orphaned_fog_pin_flag
+        Tests/test_GeneralTrade.py oldGenHidden variants (must not clear traded gens).
+        Live repro: ffa pUUy0ztZL t124 left a phantom fG at 15,8 for 100+ turns."""
+        if not self._orphanedGeneralCandidates:
+            return
+        candidates = self._orphanedGeneralCandidates
+        self._orphanedGeneralCandidates = set()
+        for orphan in candidates:
+            if not orphan.isGeneral:
+                continue
+            if orphan in self.generals:
+                # Trade repair rebound this real general into another player's slot.
+                continue
+            logbook.info(f' clearing orphaned general flag on {orphan} - no generals slot references it after reveal')
+            orphan.isGeneral = False
+            for i in range(len(self.players)):
+                if self.players[i].general is orphan:
+                    self.players[i].general = None
 
     def _restore_observer_trade_city_counts(self, pA: int, pB: int) -> None:
         """Apply the opposite player's prior city estimate, bounded by known cities."""
@@ -1464,6 +1569,16 @@ AttributeError: 'Map' object has no attribute 'grid'
         self.generals[opponent] = oldGen
         self.players[us].general = newGen
         self.players[opponent].general = oldGen
+        # TEMPORARY DIAGNOSTIC (general-coloring investigation): record every
+        # general rebind and flag refs whose tile owner does not match the slot
+        logbook.info(
+            f'GENDIAG SELF-TRADE rebind t{self.turn}: generals[{us}]={newGen}(own={newGen.player},G={newGen.isGeneral}) '
+            f'generals[{opponent}]={oldGen}(own={oldGen.player},G={oldGen.isGeneral},v={oldGen.visible}) '
+            f'newGenOldOwner={newGen.delta.oldOwner} oldGenOldOwner={oldGen.delta.oldOwner}')
+        if oldGen.player == us and oldGen.visible:
+            logbook.error(
+                f'GENDIAG VIOLATION self-trade bound OUR still-visible-owned general {oldGen} to p{opponent} '
+                f'(newGen={newGen} own={newGen.player} oldOwner={newGen.delta.oldOwner})')
 
         # our submitted attack source keeps only ceil(reserve/2) - and only
         # when our submitted move was actually the trade attack onto the new
@@ -1655,6 +1770,17 @@ AttributeError: 'Map' object has no attribute 'grid'
         self.generals[pB] = genA
         self.players[pA].general = genB
         self.players[pB].general = genA
+        # TEMPORARY DIAGNOSTIC (general-coloring investigation): record every
+        # general rebind and flag refs whose tile owner does not match the slot
+        us = self.player_index
+        logbook.info(
+            f'GENDIAG OBSERVER-TRADE rebind t{self.turn}: p{pA}<->p{pB} us={us} '
+            f'generals[{pA}]={genB} generals[{pB}]={genA}')
+        if pA == us or pB == us:
+            logbook.error(f'GENDIAG VIOLATION observer trade rebind included US p{us}: p{pA}<->p{pB}')
+        for slot, tile in ((pA, genB), (pB, genA)):
+            if tile is not None and tile.player == us:
+                logbook.error(f'GENDIAG VIOLATION observer trade bound OUR tile {tile} to p{slot}')
         if genA is not None and not genA.visible:
             # the player setter guards owner-writes on isGeneral tiles; clear
             # the flag, write the new owner, then restore it so the swapped
@@ -1804,6 +1930,13 @@ AttributeError: 'Map' object has no attribute 'grid'
                     if tile.player == -1:
                         raise AssertionError(f'Cant have neutral generals idiot')
 
+                    # TEMPORARY DIAGNOSTIC (general-coloring investigation): flag
+                    # a second isGeneral tile claiming one player's generals slot
+                    prevGen = self.generals[tile.player]
+                    if prevGen is not None and prevGen is not tile:
+                        logbook.error(
+                            f'GENDIAG VIOLATION init_grid_movable: second general {tile} overwrites '
+                            f'generals[{tile.player}]={prevGen}')
                     self.generals[tile.player] = tile
 
                 if not MapBase.DO_NOT_RANDOMIZE:
@@ -1820,10 +1953,18 @@ AttributeError: 'Map' object has no attribute 'grid'
 
         queue = deque()
 
-        for gen in self.generals:
+        for genIdx, gen in enumerate(self.generals):
             if gen is not None:
                 queue.append(gen)
-                self.players[gen.player].general = gen
+                # TEMPORARY DIAGNOSTIC (general-coloring investigation): flag
+                # generals[] slots whose tile owner does not match the index
+                if gen.player != genIdx:
+                    logbook.error(
+                        f'GENDIAG VIOLATION update_reachable: generals[{genIdx}] tile {gen} owned by p{gen.player}')
+                # the generals[] slot index IS the player identity; writing
+                # players[gen.player] with a corrupted/neutral gen.player (-1)
+                # silently rebound players[-1].general to a dead tile
+                self.players[genIdx].general = gen
 
         minCityArmy = 10000
         maxMinCityArmy = self.walled_city_base_value
@@ -2026,6 +2167,30 @@ AttributeError: 'Map' object has no attribute 'grid'
         self._update_moved_here(fromTile, fromTile.delta.armyMovedHere and not fullFromDiffCovered)
 
         expectedDelta = self._get_expected_delta_amount_toward(fromTile, toTile)
+
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_double_fog_capture_emergence
+        # (and Tests/test_Map.py::MapTests.test_should_use_capture_delta_for_stale_fog_source_owner):
+        # a fog source whose remembered owner is contradicted by an observed
+        # capture - destination visible, already owned by the explicitly
+        # resolved mover, carrying a negative unexplained delta - cannot be
+        # explained by the helper's sign-flipped +sent: that debits the fog
+        # source the wrong way and leaves the destination at -2x. The
+        # destination's signed delta is the truth here, so the negative sent
+        # amount debits the fog source and explains the capture instead.
+        if (
+                not fromTile.visible
+                and not fromTile.was_visible_last_turn()
+                and toTile.visible
+                and byPlayer >= 0
+                and fromTile.delta.oldOwner != byPlayer
+                and toTile.delta.oldOwner != byPlayer
+                and toTile.player == byPlayer
+                and toTile.delta.unexplainedDelta < 0
+        ):
+            logbook.info(
+                f'OT_FOG_CAPTURE_DELTA from={fromTile} to={toTile} rememberedOwner={fromTile.delta.oldOwner} '
+                f'mover={byPlayer} oldExpectedDelta={expectedDelta} newExpectedDelta={toTile.delta.unexplainedDelta}')
+            expectedDelta = toTile.delta.unexplainedDelta
 
         # if not fromTile.was_visible_last_turn():  # 8485 failed (with other changes)
         # if not fromTile.visible and not fromTile.was_visible_last_turn(): # 8129 failed
@@ -2645,6 +2810,26 @@ AttributeError: 'Map' object has no attribute 'grid'
         enPlayers = [i for i in range(len(self.players)) if self.players[i].team != self.friendly_team]
 
         for t in self.get_all_tiles():
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+            # tiles bulk-transferred to a capturer carry only the capture's halving/fog-prediction
+            # delta; treating each as an unexplained emergence/move source reconstructs dozens of
+            # fake moves out of the transfer and runs fog-source pathing per tile. Zero their deltas
+            # the same way _normalize_general_trade_deltas does for mutual trades. The
+            # oldOwner == newOwner guard keeps the repaired-tile check inert if a stale entry's tile
+            # flips again to a real third-party owner before the set is consumed; the gainedSight +
+            # owner-flip-to-capturer check catches transferred tiles the fog repair never touched
+            # (our view map mispredicted their pre-capture owner), which is also how transfers to an
+            # ENEMY capturer get caught. A real same-turn fight inside the victim's land looks
+            # identical, but the tile flip itself is still recorded - only the delta story is masked,
+            # the same tradeoff _normalize_general_trade_deltas already accepts.
+            if ((t in self._capture_transfer_tiles
+                    and t.delta.newOwner == t.delta.oldOwner)
+                    or (t.delta.gainedSight
+                        and t.delta.newOwner != t.delta.oldOwner
+                        and t.delta.newOwner in self._player_capturers_since_last_update)):
+                t.delta.unexplainedDelta = 0
+                t.delta.armyMovedHere = False
+                continue
             if t.delta.armyMovedHere:
                 self.moved_here_set.add(t)
             if t.delta.unexplainedDelta == 0:
@@ -2669,6 +2854,10 @@ AttributeError: 'Map' object has no attribute 'grid'
 
                 if t.was_visible_last_turn() and t.delta.oldOwner != -1:
                     candidateMoves.append((t.delta.oldOwner, t, mv))
+
+        # consumed above; capture transfers older than this update are no longer relevant.
+        self._capture_transfer_tiles.clear()
+        self._player_capturers_since_last_update.clear()
 
         # self._brute_force_movement(candidateMoves)
 
@@ -2762,6 +2951,13 @@ AttributeError: 'Map' object has no attribute 'grid'
             if not t.visible:
                 continue
             if t.player == -1:
+                continue
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+            # emergences describe armies appearing out of the fog. A delta on one of OUR OWN
+            # tiles is accounting noise (we see every tile we own; e.g. halving error on land a
+            # capture just transferred to us), never an emergence - and running enemy-style
+            # emergence/gen-position machinery on our own player is meaningless and warned.
+            if t.player == self.player_index:
                 continue
             if t in self.army_emergences:
                 continue
@@ -3260,7 +3456,19 @@ AttributeError: 'Map' object has no attribute 'grid'
                         logbook.info(
                             f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS potentialDest.delta.imperfectArmyDelta and sourceWasAttackedNonLethalOrVacated, INCLUDING IT AS POTENTIAL DEST')
                         potentialDests.append(potentialDest)
-                    elif not sourceOwnerWouldHaveCapturedNeutral and self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest):
+                    # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_shouldnt_track_three_trackers_for_one_stack
+                    # covers a stale predicted fog value matching a real unexplained
+                    # ARRIVAL on an adjacent visible tile via the lenient partial
+                    # match, fabricating a reversed move (8,11->8,12 instead of the
+                    # real 8,12->8,11) that ArmyTracker then honored by dragging a
+                    # tracker onto the vacated tile. A tile whose army only GREW this
+                    # turn cannot be the source of a move OUT, so for sources with a
+                    # reliable (non-imperfect) delta require a real army loss before
+                    # accepting the lenient match. Imperfect-delta (fog) sources keep
+                    # the loose match since their deltas are speculative anyway.
+                    elif (not sourceOwnerWouldHaveCapturedNeutral
+                            and (sourceTile.delta.imperfectArmyDelta or sourceTile.delta.armyDelta < 0)
+                            and self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest)):
                         logbook.info(
                             f'FOG SOURCE SCAN DEST {repr(potentialDest)} SRC {repr(sourceTile)} WAS self._is_partial_army_movement_delta_match(source=sourceTile, dest=potentialDest), INCLUDING IT AS POTENTIAL DEST')
                         potentialDests.append(potentialDest)
@@ -3866,6 +4074,23 @@ AttributeError: 'Map' object has no attribute 'grid'
                 resetAsCity = True
 
         curTile.reset_wrong_undiscovered_fog_guess()
+
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_reset_wrong_undiscovered_fog_guess_clears_general_refs -
+        # live ffa bVK2OP478 t137: when the reset clears a fog-pinned general's
+        # isGeneral flag while the tile is still invisible, generals[] and
+        # players[].general must drop with it - update_visible_tile's ref cleanup
+        # only runs for VISIBLE tiles, so invisible resets left a 100%-confidence
+        # "known general" dangling on a tile that was no longer one for 40+ turns.
+        for i, t in enumerate(self.generals):
+            if i >= len(self.players):
+                break
+            if t == curTile:
+                logbook.info(f' clearing generals[{i}] - reset disproved fog general {curTile}')
+                self.generals[i] = None
+            player = self.players[i]
+            if player.general == curTile:
+                logbook.info(f' clearing players[{i}].general - reset disproved fog general {curTile}')
+                player.general = None
 
         if resetAsCity:
             if self.walled_city_base_value is None:

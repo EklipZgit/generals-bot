@@ -1,0 +1,62 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+     b3   b1   M    b1   b3   b4   b4   M    b2   b3   b3   b3   M         M
+          b1   b6   b1   b1   b2   b2   b2   b2   b2   b3   b3                       M
+     b6   b1   b1   b1   b1   M    b10  bC3  b3   b2   M                        M
+          M    M    b1   b1   b1   b1   M    b3   b2             M    M
+     C44  M    b1   b1   bG4  M    b118 b1   b3   b2   M         M    M    M    M
+M              M    M    M    b1   b1   b1   b3   b4   M         M
+     a4   a3        M    M    a77  M    b1   M    M         M
+     M    a5   M    a5   a4   a1   M    b1   b1   b1   M    b4   b1   M
+          a5   M    a7   a4   a1   a71  a2   a2   b1   a3   b4   b8             M    M
+M    M    a5   C45  b4   a3   a1   a2   M    M    b1   b1   M    a2             M
+b3   b1   a5   a5   M    a1   a1   b3             M    b1   bC17 a1             M
+b5   b1   a1   a1   a1   a1   C45  b3   b3        M    b3   b3   b2        M
+M    a1   M    a2   a2   a3   M    M                   b3   C43  b2   C41
+M    aC8  a2   a2   a3   a3   M    M                   b3        b4   b4   b4   M
+a1   a1   a2   a2   M    a3   b3   b6   b5   b2   C43  b3   b5   M    C41       M
+aC9  M    a5   M         a3   M    b6   M    b1        b3                       M
+a1   a1   a5   M              M    a6   a4   b1   M    b6   b6
+a2   a1   a2   a2   M                   a4   a6   M         b4                  M
+M    a1   a2   a2   a2   M    M    M    a4   M    M    b2   a3   C48
+a2   aG12 a1   a1   a2   a2   M    M    a4   a1   a1   b2   a3
+a2   a2   a2   a1   a1   a1   a1   a1   a1   a1   M    M         M         M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=688
+player_index=1
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=0
+mode=1v1
+aUsername=vitusc
+aStars=70
+aScore=366
+aTiles=83
+aStandingArmy=283
+aCityCount=3
+aGeneral=1,19
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=454
+aDelta25Tiles=1
+aDelta25Score=48
+aCityGainedTurn=228
+aCityLostTurn=0
+aLastSeenMoveTurn=688
+aKnowsKingLocation=True
+bUsername=Human.exe
+bStars=78
+bScore=377
+bTiles=93
+bStandingArmy=284
+bCityCount=3
+bGeneral=5,4
+bDead=False
+bLeftGame=True
+bLeftGameTurn=741
+bAggressionFactor=3
+bDelta25Tiles=0
+bDelta25Score=26
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=688
+bKnowsKingLocation=False

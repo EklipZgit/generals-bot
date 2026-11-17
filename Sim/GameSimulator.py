@@ -27,8 +27,8 @@ def generate_player_map(player_index: int, map_raw: MapBase) -> MapBase:
             for y in range(map_raw.rows)
     ]
 
-    scores = [Score(n, map_raw.players[n].score, map_raw.players[n].tileCount, map_raw.players[n].dead) for n in
-              range(0, len(map_raw.players))]
+    scores = [Score(n, map_raw.players[n].score, map_raw.players[n].tileCount, map_raw.players[n].dead,
+                    map_raw.players[n].has_kill) for n in range(0, len(map_raw.players))]
 
     friendlyPlayers = [player_index]
 
@@ -160,6 +160,11 @@ class GamePlayer(object):
 
             if rawPlayer.last_seen_move_turn > 0:
                 player.last_seen_move_turn = rawPlayer.last_seen_move_turn
+
+            # BotGeneralSafety: propagate the fresh-reveal timestamp alongside
+            # knowsKingLocation so resumed fogged maps keep episode triggers.
+            if rawPlayer.king_location_revealed_turn >= 0:
+                player.king_location_revealed_turn = rawPlayer.king_location_revealed_turn
 
             if rawPlayer.cityGainedTurn > 0:
                 player.cityGainedTurn = rawPlayer.cityGainedTurn
@@ -431,7 +436,10 @@ class GameSimulator(object):
                 self.tiles_updated_this_cycle.add(mapTile)
 
     def _update_scores(self):
-        scores = [Score(player.index, 0, 0, player.dead) for player in self.players]
+        # carry the authoritative credited-kill flag through the simulated scoreboard so a
+        # resumed game does not wipe a known has_kill back to unknown each cycle.
+        scores = [Score(player.index, 0, 0, player.dead, self.sim_map.players[player.index].has_kill)
+                  for player in self.players]
 
         for row in self.sim_map.grid:
             for mapTile in row:
@@ -461,7 +469,8 @@ class GameSimulator(object):
             logbook.info(f'SIM SENDING TURN {self.turn} MAP UPDATES TO PLAYER {player.index}')
             player.map.update_turn(self.turn)
 
-            playerScoreClone = [Score(score.player, score.total, score.tiles, score.dead) for score in self.sim_map.scores]
+            playerScoreClone = [Score(score.player, score.total, score.tiles, score.dead, score.has_kill)
+                                for score in self.sim_map.scores]
             player.map.update_scores(playerScoreClone)
 
             # send updates for tiles they lost vision of
@@ -845,17 +854,8 @@ class GameSimulatorHost(object):
         self.give_players_perfect_initial_city_information()
         self.dropped_move_counts_by_player = [0 for player in self.sim.players]
 
-        botHost: BotHostBase
-        for playerIndex, botHost in enumerate(self.bot_hosts):
-            if botHost is None:
-                continue
-
-            if botHost.has_viewer and run_real_time:
-                botHost.initialize_viewer(botHost.eklipz_bot.no_file_logging, onClick=self.on_click)
-                botHost.run_viewer_loop()
-                BotRendering.prep_view_info_for_render(botHost.eklipz_bot, None)
-                botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
-                # botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
+        if run_real_time:
+            self.start_viewers()
 
         if run_real_time:
             stopSleep = time.perf_counter() + 0.5
@@ -915,6 +915,27 @@ class GameSimulatorHost(object):
         if winner == -1:
             winner = None
         return winner
+
+    def start_viewers(self):
+        """
+        Initialize the viewer process for every bot host that has UI enabled and
+        push the first frame. run_sim calls this automatically, but tests that
+        drive execute_turn manually (e.g.
+        Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend)
+        must call it themselves or botHost._viewer stays None and every
+        send_update_to_viewer site silently no-ops - debugMode then appears to
+        do nothing.
+        """
+        botHost: BotHostBase
+        for botHost in self.bot_hosts:
+            if botHost is None:
+                continue
+
+            if botHost.has_viewer:
+                botHost.initialize_viewer(botHost.eklipz_bot.no_file_logging, onClick=self.on_click)
+                botHost.run_viewer_loop()
+                BotRendering.prep_view_info_for_render(botHost.eklipz_bot, None)
+                botHost._viewer.send_update_to_viewer(botHost.eklipz_bot.viewInfo, botHost.eklipz_bot._map)
 
     def on_click(self, tile: Tile, isRightClick: bool):
         if isRightClick:

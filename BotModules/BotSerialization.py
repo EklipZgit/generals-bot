@@ -6,6 +6,7 @@ import logbook
 from BotModules.BotCentralDefense import BotCentralDefense
 from BotModules.BotStateQueries import BotStateQueries
 from Directives import Timings
+from FfaGeneralPlacement import GeneralLandEvidence
 from History import History
 from Interfaces import MapMatrixInterface
 from MapMatrix import MapMatrix, MapMatrixSet
@@ -21,7 +22,7 @@ if typing.TYPE_CHECKING:
 
 class BotSerialization:
     @staticmethod
-    def load_resume_data(bot: EklipZBot, resume_data: typing.Dict[str, str]):
+    def load_resume_data(bot: EklipZBot, resume_data: typing.Dict[str, str], skip_island_restore: bool = False):
         if f'bot_target_player' in resume_data:  # ={self.player}')
             bot.targetPlayer = int(resume_data[f'bot_target_player'])
             if bot.targetPlayer >= 0:
@@ -138,6 +139,11 @@ class BotSerialization:
                 for t in bot._map.get_all_tiles():
                     if t in pUnelim:
                         pUnrecaptured.add(t)
+            # Joint FFA general-placement land evidence; absent on legacy fixtures
+            # (empty dict -> discovered-tile bootstrap on first refresh).
+            # Tests: UnitTests/test_FfaGeneralPlacement.py
+            if f'{char}GeneralLandEvidence' in resume_data:
+                bot.armyTracker.ffa_general_land_evidence[player.index] = BotSerialization.convert_string_to_general_land_evidence(bot, resume_data[f'{char}GeneralLandEvidence'])
 
             fairnessKey = f'{char}SpawnFairness'
             fairnessWeights: MapMatrixInterface[float] | None = None
@@ -150,6 +156,23 @@ class BotSerialization:
                 player.index,
                 fairnessWeights,
                 resume_data)
+
+        # Retained ex-general exclusion anchors for joint FFA placement; absent on
+        # legacy fixtures (empty set -> rediscovered organically).
+        if 'FFAExGeneralBlockers' in resume_data:
+            bot.armyTracker.ffa_general_placement.ex_general_blockers = BotSerialization.convert_string_to_tile_set(bot, resume_data['FFAExGeneralBlockers'])
+
+        # Persisted joint FFA predicted-general positions; absent on legacy
+        # fixtures (positions stay [] -> first refresh places randomly as
+        # before). Restored slots become sticky no-info priors, but only after
+        # the first refresh revalidates them against current evidence and known
+        # generals, so invalidate() must force that recompute.
+        # Tests: UnitTests/test_FfaGeneralPlacement.py,
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_roundtrip_ffa_predicted_general_positions
+        if 'FFAPredictedGeneralPositions' in resume_data:
+            bot.armyTracker.ffa_general_placement.positions = BotSerialization.convert_string_to_general_positions(
+                bot, resume_data['FFAPredictedGeneralPositions'])
+            bot.armyTracker.ffa_general_placement.invalidate()
 
         if f'TempFogTiles' in resume_data:
             tiles = BotSerialization.convert_string_to_tile_set(bot, resume_data[f'TempFogTiles'])
@@ -210,8 +233,12 @@ class BotSerialization:
         if bot.targetPlayerExpectedGeneralLocation:
             BotCentralDefense.rebuild_intergeneral_analysis_for_central_defense(bot)
 
-        # Rebuild islands from serialized data if available (overrides the recalculate_tile_islands done in init)
-        if 'island_ids' in resume_data:
+        # Rebuild islands from serialized data if available (overrides the recalculate_tile_islands done in init).
+        # LiveGameAnalysis/ScanRecentGamesForGeneralPrediction.py passes skip_island_restore=True: some
+        # live-dump island_ids matrices contain tiles with no leaf-island entry, which crashes
+        # rebuild_islands_from_ids, and the analyzer's general-prediction metrics don't consume
+        # tile islands anyway — the fresh recalculate_tile_islands from init is sufficient.
+        if 'island_ids' in resume_data and not skip_island_restore:
             island_id_matrix = BotSerialization.convert_string_to_island_id_matrix(bot, resume_data['island_ids'])
             Tile.recalc_all_derived(bot._map.tiles_by_index)
             bot.tileIslandBuilder.rebuild_islands_from_ids(island_id_matrix)
@@ -313,7 +340,18 @@ class BotSerialization:
             if eligible:
                 armyTracker.spawn_fairness_active = True
                 if player == enemyPlayer:
-                    armyTracker.initialize_spawn_fairness_weights()
+                    # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend
+                    # - a serialized bValidGeneralPos already encodes every
+                    # elimination live play applied, so the recomputed weights
+                    # must not re-eliminate on top of it: the recompute reads
+                    # the resume-turn map (revealed cities and fog-guessed
+                    # obstacles as walls), which diverges from the spawn-time
+                    # weights live play used and silently strips candidate
+                    # positions the live game still considered valid.
+                    validPositionsKey = f'{PLAYER_CHAR_BY_INDEX[player]}ValidGeneralPos'
+                    armyTracker.initialize_spawn_fairness_weights(
+                        apply_eliminations=not bool(
+                            resume_data.get(validPositionsKey)))
             return
 
         if player != enemyPlayer:
@@ -374,6 +412,89 @@ class BotSerialization:
     @staticmethod
     def convert_tile_int_dict_to_string(bot: EklipZBot, tiles: typing.Dict[Tile, int]) -> str:
         return ','.join([str(tiles.get(tile, '')) for tile in bot._map.get_all_tiles()])
+
+    @staticmethod
+    def convert_general_land_evidence_to_string(bot: EklipZBot, evidence: typing.Dict[Tile, GeneralLandEvidence]) -> str:
+        """
+        Serialize per-player FFA general-placement land evidence as sorted
+        'tileIndex:firstSeenTurn:playerTileCount:transferredFlag' entries joined by
+        ','. The frozen playerTileCount preserves the 1/max(1,tileCount) weight
+        across resume; transferredFlag preserves witnessed-transfer zero weight.
+        Tests: UnitTests/test_FfaGeneralPlacement.py
+        """
+        entries = sorted(
+            (tile.tile_index, ev.first_seen_turn, ev.player_tile_count, 1 if ev.transferred else 0)
+            for tile, ev in evidence.items())
+        return ','.join(f'{tileIndex}:{firstSeen}:{tileCount}:{transferred}' for tileIndex, firstSeen, tileCount, transferred in entries)
+
+    @staticmethod
+    def convert_string_to_general_land_evidence(bot: EklipZBot, data: str) -> typing.Dict[Tile, GeneralLandEvidence]:
+        """
+        Inverse of convert_general_land_evidence_to_string. Missing/empty data
+        (legacy fixtures) yields an empty dict so first refresh bootstraps from
+        actually-discovered enemy tiles only.
+        """
+        evidence: typing.Dict[Tile, GeneralLandEvidence] = {}
+        if data == '':
+            return evidence
+        for entry in data.split(','):
+            tileIndexRaw, firstSeenRaw, tileCountRaw, transferredRaw = entry.split(':')
+            tile = BotSerialization.get_tile_by_tile_index(bot, int(tileIndexRaw))
+            evidence[tile] = GeneralLandEvidence(
+                tile=tile,
+                first_seen_turn=int(firstSeenRaw),
+                player_tile_count=int(tileCountRaw),
+                transferred=transferredRaw == '1')
+        return evidence
+
+    @staticmethod
+    def convert_general_positions_to_string(bot: EklipZBot) -> str:
+        """
+        Serialize joint FFA predicted-general positions as one row-major
+        tile_index per map player (player.index order), '-1' for no position.
+        positions == [] (placement never refreshed) still emits one '-1' slot
+        per player so the vector always has exactly len(players) slots.
+        Tests: UnitTests/test_FfaGeneralPlacement.py
+        """
+        positions = bot.armyTracker.ffa_general_placement.positions
+        playerCount = len(bot._map.players)
+        slots: typing.List[str] = []
+        for playerIndex in range(playerCount):
+            tile = positions[playerIndex] if playerIndex < len(positions) else None
+            slots.append(str(tile.tile_index) if tile is not None else '-1')
+        return ','.join(slots)
+
+    @staticmethod
+    def convert_string_to_general_positions(bot: EklipZBot, data: str) -> typing.List[Tile | None]:
+        """
+        Inverse of convert_general_positions_to_string. Requires exactly
+        len(map.players) comma-separated slots, each '-1' or a valid row-major
+        tile_index; raises ValueError on malformed slot counts, non-integer
+        slots, values below -1, or out-of-range indices. Resolved tiles always
+        come from the resumed bot's own map, never the source bot's objects.
+        Tests: UnitTests/test_FfaGeneralPlacement.py
+        """
+        playerCount = len(bot._map.players)
+        maxTileIndex = bot._map.cols * bot._map.rows - 1
+        slots = data.split(',')
+        if len(slots) != playerCount:
+            raise ValueError(
+                f'FFAPredictedGeneralPositions expects {playerCount} slots, got {len(slots)}')
+        positions: typing.List[Tile | None] = []
+        for slot in slots:
+            if slot == '-1':
+                positions.append(None)
+                continue
+            signless = slot[1:] if slot.startswith('-') else slot
+            if not signless.isdecimal():
+                raise ValueError(
+                    f'FFAPredictedGeneralPositions slot {slot!r} is not an integer')
+            tileIndex = int(slot)
+            if tileIndex < 0 or tileIndex > maxTileIndex:
+                raise ValueError(
+                    f'FFAPredictedGeneralPositions slot {slot!r} outside valid range [0, {maxTileIndex}]')
+            positions.append(BotSerialization.get_tile_by_tile_index(bot, tileIndex))
+        return positions
 
     @staticmethod
     def convert_move_to_string(move: Move) -> str:

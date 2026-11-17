@@ -1,0 +1,63 @@
+|     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     
+      M     M                                                     M     b3    b3    M     M
+                  a4    a4    a4                            M     b4    b3    b3    b4    b3    b3
+      M     a4    a4    C40               M     M     b2    b2    b4    M     b6    b1    b3    b3    M
+a4    a4    a4    a4    a4    a4    a4    a4          b2    b4    b4    b3    b3    b2    b3    M     b3
+a4    a4                a4    a4    a4    b4          b39   b7    b12   b23   b52   b5    bC14  bG47  b3
+a4    a4    M     M                 b1    b255  b7    b7    M     b3    b1    b1    b1    b1    b3    M
+      a4    a4    a4    M     C44   b1    b7                      M     b4    b1    b1    b2    b3    b3
+M     a4    a4    a4    a3    a5    b1                            M     M     M     b1    b4    b4    b6
+      a1    aC1   a4    a3    a3    b1    b1    b1    b1    b1    b1    b1    b1    b1    M     b5    M
+      a1    a22   a2    b1    b1    b1    a2    a2    a2    b2    b2    b2    b2    b2    b2    M     M
+      M     a2    a2    a2    a2    M           M     a3    a3    b4    M     b4    b2    b2    b2    b6
+a6    a6    a2    a4    M     a2    a2    M     M     a3    a3    M     a3    M     M     b2    bC22
+a6    a7    a2    a4    a2    a2    a2    a2    a2    a2    a81   a3    a3    M     M     b3    b3    M
+aC17  a5    a2    a5    a2    a5    a4    a4    a3    a4    a4    M     aC47  a3    a3    a14   b3
+a2    a2    a1    M     a2    a3    b7    b7    a3    b7    b7    M     a3    a3    a3    b6    b5
+M     M     a1    M     a2    a3    M     M     a3    b5    b5    M     a3    b6    a3    M     b5
+a1    a1    a1    a1    a2    a3    a3    a3    a3    b5    a4    b5    a3    a3    a3    a5    M
+a1    a1    a1    a1    a6    a3    a3    a3    a4    b5    a4                C44         a5
+      a1    M     a250  a2    a2    a2    M     b9                      M     a4    a4    a4
+      M     a1    a1    M     a11   a2    a2    M     M     M     a4    a4    a4    a4    a4    a4    a4
+M     a1    a1    a1    a1    a1    M     a2    a2    a2    a2    a2    a2    a2    a2    a2    a4    a4
+      M     a1    aG199 aC4   a1    M     M                       M     M           M     aC40  M
+|     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     
+turn=477
+player_index=1
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=0
+mode=1v1
+aUsername=imp25
+aStars=80
+aScore=1135
+aTiles=163
+aStandingArmy=972
+aCityCount=6
+aGeneral=3,21
+aDead=False
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=276
+aDelta25Tiles=11
+aDelta25Score=289
+aCityGainedTurn=310
+aCityLostTurn=308
+aLastSeenMoveTurn=451
+aKnowsKingLocation=False
+bUsername=Human.exe
+bStars=77
+bScore=761
+bTiles=100
+bStandingArmy=661
+bCityCount=3
+bGeneral=16,4
+bDead=False
+bLeftGame=True
+bLeftGameTurn=521
+bAggressionFactor=20
+bDelta25Tiles=-8
+bDelta25Score=148
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=477
+bKnowsKingLocation=False

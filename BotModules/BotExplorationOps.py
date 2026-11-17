@@ -6,7 +6,9 @@ import ExpandUtils
 import logbook
 from Algorithms import WatchmanRouteUtils
 import SearchUtils
-from ArmyTracker import spawn_fairness_hunting_value
+from ArmyTracker import (
+    EMERGENCE_PATH_CONSISTENCY_FLOOR,
+    spawn_fairness_hunting_value)
 from BotModules.BotCombatQueries import BotCombatQueries
 from BotModules.BotDefenseQueries import BotDefenseQueries
 from BotModules.BotExpansionOps import BotExpansionOps
@@ -396,6 +398,7 @@ class BotExplorationOps:
             tilesRevealed = set()
             score: float = 0.0
             emergenceDistanceBonus: MapMatrixInterface[float] | None = None
+            emergencePathPenalty: MapMatrixInterface[float] | None = None
             if bot.shortest_path_to_target_player is None:
                 logbook.info(
                     'Skipping emergence distance bonus because the shortest path to the target player is unavailable')
@@ -404,13 +407,25 @@ class BotExplorationOps:
                 emergenceDistanceBonus = bot.armyTracker.build_emergence_distance_bonus_matrix(
                     bot.targetPlayer,
                     expectedGeneralDistance)
+                emergencePathPenalty = BotTargeting.build_emergence_path_consistency_penalty(
+                    bot,
+                    expectedGeneralDistance)
             node = path.start
             while node is not None:
                 tileIndex = node.tile.tile_index
                 if not node.tile.discovered and (not onlyHuntGeneral or enGenPositions.raw[tileIndex]):
+                    # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - hunting paths should prefer candidates whose observed emergences lie on their route to us.
+                    emergenceLocality = 0.0
                     emergenceValue = bot.armyTracker.emergenceLocationMap[bot.targetPlayer][node.tile]
                     if emergenceValue > 0:
-                        score += emergenceValue ** 0.5
+                        emergenceLocality += emergenceValue ** 0.5
+                    if emergenceDistanceBonus is not None:
+                        emergenceLocality += emergenceDistanceBonus.raw[tileIndex]
+                    if emergenceLocality != 0 and emergencePathPenalty is not None:
+                        emergenceLocality *= max(
+                            EMERGENCE_PATH_CONSISTENCY_FLOOR,
+                            1.0 - emergencePathPenalty.raw[tileIndex])
+                    score += emergenceLocality
                     # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_hunting_contribution_uses_two_emergence_scale - keep this hunting bonus comparable to emergence's square-root score.
                     if bot.armyTracker.spawn_fairness_active:
                         spawnFairnessWeight = (
@@ -418,8 +433,6 @@ class BotExplorationOps:
                                 bot.targetPlayer].raw[tileIndex])
                         score += spawn_fairness_hunting_value(
                             spawnFairnessWeight)
-                    if emergenceDistanceBonus is not None:
-                        score += emergenceDistanceBonus.raw[tileIndex]
                 for adj in node.tile.adjacents:
                     if not adj.discovered and (not onlyHuntGeneral or enGenPositions[adj]):
                         tilesRevealed.add(adj)

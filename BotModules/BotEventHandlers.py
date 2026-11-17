@@ -200,6 +200,12 @@ class BotEventHandlers:
 
         bot.history.captured_player(bot._map.turn, capturee, capturer)
 
+        # Tests/test_OpponentTracker.py::OpponentTrackerTests.test_should_transfer_gather_queue_and_fog_pools_on_enemy_capture
+        # enemy-vs-enemy kills transfer the victim's OpponentTracker gather
+        # queue + fog pools to the killer halved (skipped internally when the
+        # capturer is us).
+        bot.opponent_tracker.notify_player_capture(capturee, capturer)
+
         if capturer == bot._map.player_index:
             logbook.info(f"setting lastPlayerKilled to {capturee}")
             bot.lastPlayerKilled = capturee
@@ -325,3 +331,117 @@ class BotEventHandlers:
                     bot.armyTracker.scrap_army(army, scrapEntangled=False)
 
         SearchUtils.breadth_first_foreach(bot._map, [enemyGeneral], maxDepth=7, foreachFunc=fog_army_clear_func)
+
+    @staticmethod
+    def _fmt_gen_diag_tile(t: Tile | None) -> str:
+        if t is None:
+            return 'None'
+        return (f'{t.x},{t.y}(own={t.player},G={int(t.isGeneral)},v={int(t.visible)},'
+                f'd={int(t.discovered)},a={t.army},i={t.tile_index})')
+
+    @staticmethod
+    def log_general_state_debug(bot: EklipZBot) -> None:
+        """
+        TEMPORARY DIAGNOSTIC (general-coloring investigation): per-turn dump of
+        every general-reference path that could paint our general as another
+        player's - map.generals[] slot vs tile.player, players[].general refs,
+        dead/capturedBy, trade state, whether our general tile sits in another
+        player's predicted valid_general_positions (the spawn overlay paints
+        those in that player's color), and all live isGeneral tiles with their
+        owner deltas. Remove once the miscoloring source is identified.
+        """
+        mapObj = bot._map
+        us = mapObj.player_index
+        fmt = BotEventHandlers._fmt_gen_diag_tile
+
+        logbook.info(
+            f'GENDIAG t{mapObj.turn} pi={us} botGen={fmt(bot.general)} '
+            f'target={bot.targetPlayer} tPEL={fmt(bot.targetPlayerExpectedGeneralLocation)}')
+
+        genTilesByIndex: typing.Dict[int, typing.Set[int]] = {}
+        ourGen = bot.general if bot.general is not None else mapObj.generals[us]
+        for p in mapObj.players:
+            gen = mapObj.generals[p.index]
+            pgen = p.general
+            if gen is not None:
+                genTilesByIndex.setdefault(gen.tile_index, set()).add(p.index)
+            if pgen is not None:
+                genTilesByIndex.setdefault(pgen.tile_index, set()).add(p.index)
+            seen = bot.armyTracker.seen_player_lookup[p.index] if bot.armyTracker is not None else False
+            if bot.armyTracker is not None:
+                validPos = bot.armyTracker.valid_general_positions_by_player[p.index]
+                validCount = sum(validPos.raw)
+                ourGenInValid = ourGen is not None and validPos[ourGen]
+            else:
+                validCount = -1
+                ourGenInValid = False
+            logbook.info(
+                f'GENDIAG p{p.index}: gen={fmt(gen)} pgen={fmt(pgen)} dead={p.dead} capBy={p.capturedBy} '
+                f'tiles={len(p.tiles)} seen={seen} validGen={validCount} ourGenInValid={ourGenInValid}')
+
+        # TEMPORARY DIAGNOSTIC: if our general tile lands in any per-player set
+        # that drives an overlay tinted in that player's color
+        # (player_connected_tiles zone, unconnectable/alt-gen targeted tiles,
+        # ffa placement seeds, or the evidence sets that unban it from the
+        # connected-tile spanning tree), that is the miscoloring source.
+        if ourGen is not None and bot.armyTracker is not None:
+            for p in mapObj.players:
+                if mapObj.is_player_on_team_with(us, p.index):
+                    continue
+                inEverOwned = ourGen in bot.armyTracker.tiles_ever_owned_by_player[p.index]
+                inUneliminated = ourGen in bot.armyTracker.uneliminated_emergence_events[p.index]
+                inUnrecaptured = ourGen in bot.armyTracker.unrecaptured_emergence_events[p.index]
+                inConnected = ourGen in bot.armyTracker.player_connected_tiles[p.index]
+                inUnconnectable = ourGen in bot.armyTracker.unconnectable_tiles[p.index]
+                inAltGen = ourGen in bot.alt_en_gen_positions[p.index]
+                inFfaSeed = (
+                    p.index < len(bot.armyTracker.ffa_general_placement.positions)
+                    and bot.armyTracker.ffa_general_placement.positions[p.index] is ourGen)
+                emergenceVal = bot.armyTracker.emergenceLocationMap[p.index].raw[ourGen.tile_index]
+                if (inEverOwned or inUneliminated or inUnrecaptured or inConnected
+                        or inUnconnectable or inAltGen or inFfaSeed or emergenceVal > 0):
+                    logbook.warning(
+                        f'GENDIAG OGEN-IN p{p.index}: everOwned={inEverOwned} '
+                        f'unelim={inUneliminated} unrecap={inUnrecaptured} '
+                        f'connected={inConnected} unconnectable={inUnconnectable} '
+                        f'altGen={inAltGen} ffaSeed={inFfaSeed} emergeVal={emergenceVal}')
+
+        for p in mapObj.players:
+            gen = mapObj.generals[p.index]
+            pgen = p.general
+            onTeam = mapObj.is_player_on_team_with(us, p.index)
+            if gen is not None and gen.player != p.index:
+                logbook.error(f'GENDIAG VIOLATION generals[{p.index}] {fmt(gen)} tile owned by p{gen.player}')
+            if pgen is not None and pgen.player != p.index:
+                logbook.error(f'GENDIAG VIOLATION players[{p.index}].general {fmt(pgen)} tile owned by p{pgen.player}')
+            if gen is not None and not gen.isGeneral:
+                logbook.error(f'GENDIAG VIOLATION generals[{p.index}] {fmt(gen)} isGeneral=False')
+            if pgen is not None and not pgen.isGeneral:
+                logbook.error(f'GENDIAG VIOLATION players[{p.index}].general {fmt(pgen)} isGeneral=False')
+            if not onTeam:
+                if gen is not None and gen.player == us:
+                    logbook.error(f'GENDIAG VIOLATION generals[{p.index}] {fmt(gen)} IS OUR TILE')
+                if pgen is not None and pgen.player == us:
+                    logbook.error(f'GENDIAG VIOLATION players[{p.index}].general {fmt(pgen)} IS OUR TILE')
+                if ourGen is not None and bot.armyTracker is not None and \
+                        bot.armyTracker.valid_general_positions_by_player[p.index][ourGen]:
+                    logbook.error(f'GENDIAG VIOLATION our general {fmt(ourGen)} in valid_general_positions p{p.index}')
+
+        for tileIndex, playerSet in genTilesByIndex.items():
+            if len(playerSet) > 1:
+                tile = mapObj.get_tile_by_tile_index(tileIndex)
+                logbook.error(f'GENDIAG VIOLATION same general tile {fmt(tile)} claimed as general by players {sorted(playerSet)}')
+
+        for tile in mapObj.get_all_tiles():
+            if tile.isGeneral:
+                d = tile.delta
+                logbook.info(
+                    f'GENDIAG isGenTile {fmt(tile)} own {d.oldOwner}->{d.newOwner} '
+                    f'gainS={d.gainedSight} lostS={d.lostSight} disc={d.discovered}')
+
+        pendingStr = str([(n.server_turn, n.player_a, n.player_b) for n in mapObj._pending_trade_notifications])
+        appliedStr = str(sorted(mapObj._applied_trade_keys)) if mapObj._applied_trade_keys else '[]'
+        logbook.info(
+            f'GENDIAG trades: general_trade={mapObj.general_trade} trades={mapObj.general_trades} '
+            f'pending={pendingStr} applied={appliedStr} '
+            f'preTrade={[fmt(t) for t in mapObj._pre_trade_generals]}')

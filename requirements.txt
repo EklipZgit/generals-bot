@@ -29,3 +29,4 @@ tqdm
 setuptools # comment out for PyPy
 # PyMaxflow
 # arraydeque
+openpyxl # LiveGameAnalysis/ScanRecentGamesForGeneralPrediction.py xlsx summary output

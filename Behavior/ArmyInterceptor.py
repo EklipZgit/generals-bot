@@ -52,7 +52,7 @@ class ArmyInterceptor(object):
         boardAnalysis: BoardAnalyzer,
         useDebugLogging: bool = False,
         viewInfo: typing.Any | None = None,
-        useV2Interception: bool = False,
+        useV2Interception: bool = True,
     ):
         self.map: MapBase = map
         self.board_analysis: BoardAnalyzer = boardAnalysis
@@ -1735,11 +1735,35 @@ class ArmyInterceptor(object):
         """
         returns turnsLeft, armyAccumulatedByInterceptPath, bestCaseInterceptTurn, worstCaseInterceptTurn, enInterceptPointTile, enPhysicalArmyAtTile
 
+        For a positive friendly general-kill threat the local collision physics
+        horizon extends past turnsLeftInCycle to best_enemy_threat.turns + 1 so
+        en-route city armies are still collected before the real intercept; the
+        caller's economic/recapture budget is unchanged and the returned
+        turns_left stays relative to the original cycle (it may go negative once
+        the sim runs past it). See Tests/test_BotBehavior.py
+        test_should_intercept_large_army_instead_of_abandoning_general and
+        test_should_keep_defending_general_against_large_army_for_fifty_turns,
+        and UnitTests/test_ArmyInterceptionV2Unit.py
+        test_should_collect_city_army_after_round_end_before_general_intercept.
+
         @param best_enemy_threat:
         @param interceptPath:
         @param turnsLeftInCycle:
         @return:
         """
+        # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_intercept_large_army_instead_of_abandoning_general
+        # and ::test_should_keep_defending_general_against_large_army_for_fifty_turns, plus
+        # UnitTests/test_ArmyInterceptionV2Unit.py::ArmyInterceptionV2UnitTests.
+        # test_should_collect_city_army_after_round_end_before_general_intercept: lethal-general collision
+        # physics must keep simulating past the economic cycle end so en-route city armies are collected;
+        # only this local horizon extends -- the caller's econ/recapture budget is unchanged, and the
+        # returned turns_left is shifted back to original-cycle-relative below (may go negative).
+        originalCycleTurns = turnsLeftInCycle
+        if (best_enemy_threat.threatType == ThreatType.Kill
+                and best_enemy_threat.threatValue > 0
+                and best_enemy_threat.path.tail.tile.isGeneral
+                and self.map.is_tile_friendly(best_enemy_threat.path.tail.tile)):
+            turnsLeftInCycle = max(turnsLeftInCycle, best_enemy_threat.turns + 1)
         enPathNode = best_enemy_threat.path.start
         threatPlayers = self.map.get_teammates(best_enemy_threat.threatPlayer)
         enPhysicalArmy = 0
@@ -2117,7 +2141,7 @@ class ArmyInterceptor(object):
 
         bestCaseInterceptTurn = min(bestCaseInterceptTurn, worstCaseInterceptTurn)
         return InterceptCollisionResult(
-            turnsLeft,
+            turnsLeft - (turnsLeftInCycle - originalCycleTurns),
             armyAccumulatedByInterceptPath,
             bestCaseInterceptTurn,
             worstCaseInterceptTurn,
@@ -2202,6 +2226,7 @@ class ArmyInterceptor(object):
                     if blockInfo is None:
                         blockInfo = ThreatBlockInfo(chokeTile, blockAmount)
                         blockingTiles[chokeTile] = blockInfo
+                    blockInfo.add_threat(threat)
 
                     # if the army is going through this tile AND still killing us, we cant waste time moving this tile at all,
                     # we need to defense gather (and this can't be used for defense gather since threat already goes through it and still kills).
@@ -2224,6 +2249,58 @@ class ArmyInterceptor(object):
                     if blockInfo.amount_needed_to_block < blockAmount:
                         blockInfo.amount_needed_to_block = blockAmount
                         # blockingTiles[chokeTile] = blockInfo
+
+                # Tests/test_Defense.py::DefenseTests.test_should_not_split_intercept_army_and_should_retake_cities
+                # (turn 423, enemy splits at 7,8): threat.path.tileList is just ONE
+                # representative shortest route; shortestPathWay.tiles is the union of
+                # every shortest route to the target. A friendly stack sitting on a
+                # different shortest route (5,7 vs the modeled 7,8->4,4 east-corridor
+                # path) covers the branch even though it is not on the modeled path -
+                # but only if it is still a viable intercept position
+                # (interceptDistances <= 3: it can catch the column if it commits;
+                # farther tiles just get left behind). These coverage tiles reserve
+                # the threat's residual kill capacity (realThreatVal) rather than
+                # realThreatVal + tile.army: the enemy's modeled march does not fight
+                # through this tile, so the garrison only needs to match the kill
+                # power it must intercept, not absorb the column standing still.
+                # Kill threats only - an econ poke should not pin a reserve.
+                if threat.threatType == ThreatType.Kill:
+                    for coverTile in threat.armyAnalysis.shortestPathWay.tiles:
+                        if not self.map.is_tile_friendly(coverTile):
+                            continue
+                        if coverTile in threat.path.tileSet:
+                            continue  # on-path tiles already handled with the hold-the-tile amount
+                        if coverTile.army < otherTile.army // 3:
+                            continue
+                        coverIntDist = threat.armyAnalysis.interceptDistances.raw[coverTile.tile_index]
+                        if coverIntDist is None or coverIntDist > 3:
+                            continue
+                        # the branch must actually be able to net-kill through its
+                        # path: realThreatVal <= ~4 is a remnant/weak source whose
+                        # reserve is not worth splitting a real stack over (the old
+                        # funnel produced need-1 blocks that halved stacks for no
+                        # reason). The turn-423 branches carry 27+.
+                        coverAmount = max(0, realThreatVal)
+                        if coverAmount < 8:
+                            continue
+                        coverBlock = blockingTiles.get(coverTile, None)
+                        if coverBlock is None:
+                            coverBlock = ThreatBlockInfo(coverTile, coverAmount)
+                            blockingTiles[coverTile] = coverBlock
+                        coverBlock.add_threat(threat)
+                        if coverBlock.amount_needed_to_block < coverAmount:
+                            coverBlock.amount_needed_to_block = coverAmount
+                        coverCanDie = realThreatVal > threat.turns // 2
+                        for moveable in coverTile.movable:
+                            wouldMoveAwayFromThreat = bMapRaw[moveable.tile_index] > bMapRaw[coverTile.tile_index]
+                            if wouldMoveAwayFromThreat and (
+                                coverCanDie
+                                or (
+                                    moveable not in threat.path.tileSet
+                                    and moveable not in threat.armyAnalysis.shortestPathWay.tiles
+                                )
+                            ):
+                                coverBlock.add_blocked_destination(moveable)
 
         return blockingTiles
 

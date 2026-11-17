@@ -24,6 +24,7 @@ from base.client.map import MapBase, Tile
 from bot_ek0x45 import EklipZBot
 from BotModules.BotComms import BotComms
 from BotModules.BotRendering import BotRendering
+from BotModules import BotFfaKillGather
 
 from Viewer.ViewerProcessHost import ViewerHost
 
@@ -353,6 +354,8 @@ class BotHostBase(object):
 
     def notify_game_over(self):
         self.eklipz_bot._map.complete = True
+        # Close the FFA kill-gather feature's private WRP worker so no process leaks.
+        BotFfaKillGather.shutdown(self.eklipz_bot)
         if self.has_viewer and self._viewer is not None:
             self._viewer.send_update_to_viewer(
                 self.eklipz_bot.viewInfo,

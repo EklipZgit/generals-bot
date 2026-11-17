@@ -281,8 +281,14 @@ function parseTxtmap(filePath) {
     }
     if (!footer) {
       const cells = [];
-      for (let i = 0; i < row.length; i += cellWidth) {
-        cells.push(row.substr(i, cellWidth));
+      // Rows can be RAGGED: the client trims trailing empty cells, so iterate
+      // out to the authoritative header width (width * cellWidth) and padEnd
+      // each missing trailing cell to blank, mirroring Python TextMapLoader.
+      // Oversized rows still iterate their full length and stay oversized so
+      // strict verification keeps rejecting them (never cropped/truncated).
+      // Regression coverage: ReplayTxtmapDump.test.js::parseTxtmap ragged rows.
+      for (let i = 0; i < Math.max(row.length, width * cellWidth); i += cellWidth) {
+        cells.push(row.substr(i, cellWidth).padEnd(cellWidth, ' '));
       }
       grid.push(cells);
     } else {
@@ -308,7 +314,93 @@ function tileOwnerChar(owner) {
 // Tile.get_value_representation: playerChar, C, L|O|S|E|M(elif), G,
 // army ('N' prefix for unowned non-city), and a trailing 'D' for
 // discovered-not-visible tiles (never emitted - the true map is omniscient).
-function cellFor(game, Map, index) {
+// Board orientations the client may have viewed relative to the replay's
+// canonical map: generals.io mirrors (and for some player seats rotates)
+// the per-player view, so a verify that fails on 'none' is retried under
+// each transform before the dump is rejected. mirrorX/rot180 are involutions
+// on the same dims; rot90cw/rot90ccw swap width/height and are NOT
+// involutions, so they need the explicit inverse below.
+const ORIENTATIONS = ['none', 'mirrorX', 'rot180', 'rot90cw', 'rot90ccw', 'antiTranspose'];
+
+// Display dims produced by an orientation: rot90/anti-transpose swap width/height.
+function displayDims(width, height, orientation) {
+  if (orientation === 'rot90cw' || orientation === 'rot90ccw' || orientation === 'antiTranspose') {
+    return [height, width];
+  }
+  return [width, height];
+}
+
+// canonical index -> display index (result uses display-frame stride).
+function canonToDisplayIndex(index, width, height, orientation) {
+  const x = index % width;
+  const y = Math.floor(index / width);
+  if (orientation === 'mirrorX') {
+    return y * width + (width - 1 - x);
+  }
+  if (orientation === 'rot180') {
+    return (height - 1 - y) * width + (width - 1 - x);
+  }
+  if (orientation === 'rot90cw') {
+    // canonical (x,y) -> display (height-1-y, x); display width = height
+    return x * height + (height - 1 - y);
+  }
+  if (orientation === 'rot90ccw') {
+    // canonical (x,y) -> display (y, width-1-x); display width = height
+    return (width - 1 - x) * height + y;
+  }
+  if (orientation === 'antiTranspose') {
+    // canonical (x,y) -> display (height-1-y, width-1-x); display width = height
+    return (width - 1 - x) * height + (height - 1 - y);
+  }
+  return index;
+}
+
+// Rejects unknown orientation names up front: an unrecognized value must not
+// silently fall through the transform helpers as identity.
+function normalizeOrientation(orientation) {
+  const value = orientation || 'none';
+  if (!ORIENTATIONS.includes(value)) {
+    throw new Error(`unknown orientation '${orientation}'; expected one of: ${ORIENTATIONS.join(', ')}`);
+  }
+  return value;
+}
+
+// canonical index -> {x, y} in the orientation's display frame. Shared by the
+// General= footer fields and the --moves-turns recorded endpoints so both
+// always agree with the emitted grid.
+function displayXYFromCanon(index, width, height, orientation) {
+  const [dispWidth] = displayDims(width, height, orientation || 'none');
+  const dispIndex = canonToDisplayIndex(index, width, height, orientation || 'none');
+  return { x: dispIndex % dispWidth, y: Math.floor(dispIndex / dispWidth) };
+}
+
+// display index -> canonical index. displayWidth is the stride of the frame
+// the index lives in; width/height are the canonical dims.
+function displayToCanonIndex(index, displayWidth, width, height, orientation) {
+  const x = index % displayWidth;
+  const y = Math.floor(index / displayWidth);
+  if (orientation === 'mirrorX') {
+    return y * width + (width - 1 - x);
+  }
+  if (orientation === 'rot180') {
+    return (height - 1 - y) * width + (width - 1 - x);
+  }
+  if (orientation === 'rot90cw') {
+    // forward: dx=height-1-cy, dy=cx  =>  cx=dy, cy=height-1-dx
+    return (height - 1 - x) * width + y;
+  }
+  if (orientation === 'rot90ccw') {
+    // forward: dx=cy, dy=width-1-cx  =>  cx=width-1-dy, cy=dx
+    return x * width + (width - 1 - y);
+  }
+  if (orientation === 'antiTranspose') {
+    // forward: dx=height-1-cy, dy=width-1-cx  =>  cx=width-1-dy, cy=height-1-dx
+    return (height - 1 - x) * width + (width - 1 - y);
+  }
+  return index;
+}
+
+function cellForCanon(game, Map, index) {
   const owner = game.map._map[index];
   const army = game.map._armies[index];
   const isCity = game.citySet.has(index);
@@ -366,16 +458,20 @@ function cellFor(game, Map, index) {
   return cell;
 }
 
-function dumpTxtmap(game, Map, replay, turn, playerIndex, inherited) {
+function dumpTxtmap(game, Map, replay, turn, playerIndex, inherited, orientation) {
   const width = game.map.width;
   const height = game.map.height;
+  // The emitted grid is in the player's display frame: rot90 orientations
+  // swap dims, and every display cell maps back to its canonical tile.
+  const [dispWidth, dispHeight] = displayDims(width, height, orientation || 'none');
 
   const cells = [];
   let cellWidth = 3;
-  for (let y = 0; y < height; y++) {
+  for (let y = 0; y < dispHeight; y++) {
     const row = [];
-    for (let x = 0; x < width; x++) {
-      const cell = cellFor(game, Map, y * width + x);
+    for (let x = 0; x < dispWidth; x++) {
+      const canonIndex = displayToCanonIndex(y * dispWidth + x, dispWidth, width, height, orientation || 'none');
+      const cell = cellForCanon(game, Map, canonIndex);
       row.push(cell);
       cellWidth = Math.max(cellWidth, cell.length + 1);
     }
@@ -383,7 +479,7 @@ function dumpTxtmap(game, Map, replay, turn, playerIndex, inherited) {
   }
 
   const lines = [];
-  const bar = Array(width).fill('|' + ' '.repeat(cellWidth - 1)).join('');
+  const bar = Array(dispWidth).fill('|' + ' '.repeat(cellWidth - 1)).join('');
   lines.push(bar);
   for (const row of cells) {
     lines.push(row.map(cell => cell.padEnd(cellWidth)).join('').trimEnd());
@@ -441,9 +537,8 @@ function dumpTxtmap(game, Map, replay, turn, playerIndex, inherited) {
     lines.push(`${c}StandingArmy=${score.total - score.tiles}`);
     lines.push(`${c}CityCount=${cityCount}`);
     if (!dead) {
-      const gx = game.generals[i] % width;
-      const gy = Math.floor(game.generals[i] / width);
-      lines.push(`${c}General=${gx},${gy}`);
+      const gXY = displayXYFromCanon(game.generals[i], width, height, orientation || 'none');
+      lines.push(`${c}General=${gXY.x},${gXY.y}`);
     }
     lines.push(`${c}Dead=${dead ? 'True' : 'False'}`);
     const afkTurn = afkTurnByPlayer[i];
@@ -465,10 +560,22 @@ function dumpTxtmap(game, Map, replay, turn, playerIndex, inherited) {
 // state exactly: own tiles are always visible, and any non-'D' foreign tile
 // next to own land is currently visible too. Fog guesses ('a1' without 'D'
 // outside vision) legitimately differ - they are the point of the dump.
-function verifyAgainstBotMap(game, Map, botTxtmap, playerIndex) {
+function verifyAgainstBotMap(game, Map, botTxtmap, playerIndex, orientation) {
   const errors = [];
   const { grid } = botTxtmap;
   const width = game.map.width;
+  const height = game.map.height;
+  // The bot grid must exactly match the display dims of the orientation being
+  // verified BEFORE any cell is compared: on rectangular boards a wrong
+  // orientation (e.g. 'none' vs 'rot90cw') has different dims, and indexing a
+  // mismatched grid would alias x>=expected-width cells into the next row.
+  const [expWidth, expHeight] = displayDims(width, height, orientation || 'none');
+  if (grid.length !== expHeight || grid.some(row => row.length !== expWidth)) {
+    return [
+      `bot grid is ${grid.length ? grid[0].length : 0}x${grid.length} but `
+      + `${orientation || 'none'} expects ${expWidth}x${expHeight}`];
+  }
+  const dispWidth = expWidth;
 
   // First pass: collect the bot's own tiles; vision = own tile + adjacents.
   const visibleTruth = new Set();
@@ -476,12 +583,12 @@ function verifyAgainstBotMap(game, Map, botTxtmap, playerIndex) {
     for (let x = 0; x < grid[y].length; x++) {
       const cell = grid[y][x];
       if (cell.startsWith(tileOwnerChar(playerIndex)) && !cell.includes('D')) {
-        visibleTruth.add(y * width + x);
+        visibleTruth.add(y * dispWidth + x);
         for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
           const nx = x + dx;
           const ny = y + dy;
           if (ny >= 0 && ny < grid.length && nx >= 0 && nx < grid[ny].length) {
-            visibleTruth.add(ny * width + nx);
+            visibleTruth.add(ny * dispWidth + nx);
           }
         }
       }
@@ -490,12 +597,15 @@ function verifyAgainstBotMap(game, Map, botTxtmap, playerIndex) {
 
   for (let y = 0; y < grid.length; y++) {
     for (let x = 0; x < grid[y].length; x++) {
-      const index = y * width + x;
+      const index = y * dispWidth + x;
       if (!visibleTruth.has(index)) {
         continue;
       }
       const botCell = grid[y][x];
-      const trueCell = cellFor(game, Map, index);
+      const canonIndex = displayToCanonIndex(index, dispWidth, width, height, orientation || 'none');
+      const trueCell = (canonIndex >= 0 && canonIndex < width * height)
+          ? cellForCanon(game, Map, canonIndex)
+          : '';
       if (botCell.trim() === trueCell) {
         continue;
       }
@@ -524,8 +634,8 @@ async function main() {
   const targetTurn = parseInt(args.turn, 10);
 
   const generalsEventsRepo = resolveGeneralsEventsRepo(args);
-  const { axios, ReplayDeserializer, EventReplaySimulation, Map } =
-      loadEventsDeps(generalsEventsRepo);
+  const { axios, ReplayDeserializer, EventReplaySimulation, Map }
+      = loadEventsDeps(generalsEventsRepo);
 
   const { bytes, source } = await acquireReplayBytes(
     args, axios, generalsEventsRepo);
@@ -556,11 +666,37 @@ async function main() {
   }
   game.recalculateScores();
 
+  let orientation = normalizeOrientation(args.orientation);
   if (botTxtmap && args.verify !== false) {
-    const errors = verifyAgainstBotMap(game, Map, botTxtmap, playerIndex);
-    if (errors.length) {
-      throw new Error(
-        `simulated turn ${game.turn} contradicts the bot's visible board:\n  ${errors.slice(0, 20).join('\n  ')}`);
+    // The client view can be mirrored/rotated relative to the replay's
+    // canonical board (FFA seat views, second-player 1v1 rotation). Detect
+    // it by re-verifying under each transform before rejecting the dump.
+    if (!args.orientation) {
+      let best = null;
+      for (const candidate of ORIENTATIONS) {
+        const errors = verifyAgainstBotMap(game, Map, botTxtmap, playerIndex, candidate);
+        if (errors.length === 0) {
+          orientation = candidate;
+          best = null;
+          break;
+        }
+        if (best === null || errors.length < best.length) {
+          best = errors;
+        }
+      }
+      if (best !== null) {
+        throw new Error(
+          `simulated turn ${game.turn} contradicts the bot's visible board under every orientation:\n  ${best.slice(0, 20).join('\n  ')}`);
+      }
+      if (orientation !== 'none') {
+        console.error(`detected ${orientation} view orientation for this replay`);
+      }
+    } else {
+      const errors = verifyAgainstBotMap(game, Map, botTxtmap, playerIndex, orientation);
+      if (errors.length) {
+        throw new Error(
+          `simulated turn ${game.turn} contradicts the bot's visible board:\n  ${errors.slice(0, 20).join('\n  ')}`);
+      }
     }
     const scoreErrors = [];
     for (let i = 0; i < replay.usernames.length; i++) {
@@ -578,21 +714,123 @@ async function main() {
     }
   }
 
-  const output = dumpTxtmap(game, Map, replay, game.turn, playerIndex, inherited);
+  const output = dumpTxtmap(game, Map, replay, game.turn, playerIndex, inherited, orientation);
   fs.mkdirSync(path.dirname(path.resolve(args.out)), { recursive: true });
   fs.writeFileSync(args.out, output);
+
+  // --moves-turns <n>: keep simulating past the dump turn and record every
+  // move that actually applied (handleAttack success or a mutual general
+  // swap), so the test importer can queue each player's real continuation.
+  // Emitted as MOVES|<playerIndex>|<moves_str>|<username> marker lines where
+  // moves_str is already in simHost.queue_player_moves_str format.
+  const movesTurns = parseInt(args.movesTurns || '0', 10);
+  const dumpedTurn = game.turn;
+  const dumpedScoreSummary = game.scores.map(
+    (s, i) => `${tileOwnerChar(i)}=${s.total}/${s.tiles}`).join(' ');
+  if (movesTurns > 0) {
+    const startTurn = game.turn;
+    const width = game.map.width;
+    const height = game.map.height;
+    // playerIndex -> [{slot, sx, sy, ex, ey, is50}]; a plain object because the
+    // generals Map class shadows the builtin Map constructor in this scope.
+    const recorded = {};
+    const record = (turn, movePlayerIndex, start, end, is50) => {
+      // recorded endpoints are canonical sim indices; queued moves must be in
+      // the same display frame as the emitted truemap/bot map.
+      const toXY = index => displayXYFromCanon(index, width, height, orientation || 'none');
+      const s = toXY(start);
+      const e = toXY(end);
+      if (!(movePlayerIndex in recorded)) {
+        recorded[movePlayerIndex] = [];
+      }
+      recorded[movePlayerIndex].push(
+        { slot: turn - startTurn, sx: s.x, sy: s.y, ex: e.x, ey: e.y, is50 });
+    };
+    const origHandleAttack = game.handleAttack.bind(game);
+    const origMutualSwap = game.executeMutualGeneralSwap.bind(game);
+    game.handleAttack = (index, start, end, is50, attackIndex) => {
+      const succeeded = origHandleAttack(index, start, end, is50, attackIndex);
+      if (succeeded) {
+        record(game.turn, index, start, end, is50);
+      }
+      return succeeded;
+    };
+    game.executeMutualGeneralSwap = (playerIndexA, playerIndexB, moveA, moveB) => {
+      origMutualSwap(playerIndexA, playerIndexB, moveA, moveB);
+      for (const swapMove of [moveA, moveB]) {
+        if (swapMove) {
+          record(game.turn, swapMove.playerIndex, swapMove.start, swapMove.end, swapMove.is50);
+        }
+      }
+    };
+
+    let extraTurns = 0;
+    while (!game.isOver() && extraTurns < movesTurns) {
+      game.nextTurn();
+      extraTurns++;
+    }
+
+    for (const movePlayerIndex of Object.keys(recorded)) {
+      const moves = recorded[movePlayerIndex];
+      // At most one executed move per player per turn: chain edges that share
+      // an endpoint into -> paths, pad idle turns with 'none', and drop the
+      // trailing idle tail (an empty queue tail is identical to 'none's).
+      const parts = [];
+      let chain = [];
+      let lastX = null;
+      let lastY = null;
+      const flush = () => {
+        if (chain.length) {
+          parts.push(chain.join('->'));
+          chain = [];
+        }
+      };
+      let slot = 0;
+      for (const move of moves) {
+        while (slot < move.slot) {
+          flush();
+          parts.push('none');
+          slot++;
+        }
+        const destTok = `${move.ex},${move.ey}${move.is50 ? 'z' : ''}`;
+        if (chain.length && lastX === move.sx && lastY === move.sy) {
+          chain.push(destTok);
+        } else {
+          flush();
+          chain = [`${move.sx},${move.sy}`, destTok];
+        }
+        lastX = move.ex;
+        lastY = move.ey;
+        slot++;
+      }
+      flush();
+      console.log(`MOVES|${movePlayerIndex}|${parts.join('  ')}|${replay.usernames[movePlayerIndex]}`);
+    }
+  }
 
   if (args.saveReplay) {
     fs.mkdirSync(path.dirname(path.resolve(args.saveReplay)), { recursive: true });
     fs.writeFileSync(args.saveReplay, bytes);
   }
 
-  const scoreSummary = game.scores.map(
-    (s, i) => `${tileOwnerChar(i)}=${s.total}/${s.tiles}`).join(' ');
-  console.log(`dumped true map for replay ${replay.id} from ${source} at turn ${game.turn}: ${scoreSummary}`);
+  console.log(`dumped true map for replay ${replay.id} from ${source} at turn ${dumpedTurn}: ${dumpedScoreSummary}`);
 }
 
-main().catch(error => {
-  console.error(error.stack || String(error));
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error(error.stack || String(error));
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  ORIENTATIONS,
+  displayDims,
+  canonToDisplayIndex,
+  displayToCanonIndex,
+  normalizeOrientation,
+  displayXYFromCanon,
+  verifyAgainstBotMap,
+  dumpTxtmap,
+  parseTxtmap,
+};

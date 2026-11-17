@@ -13,6 +13,7 @@ import Gather
 import SearchUtils
 import logbook
 from BoardAnalyzer import BoardAnalyzer
+from Gather.GatherCapturePlan import GatherCapturePlan
 from BotModules.BotCombatOps import BotCombatOps
 from BotModules.BotStealthAllIn import BotStealthAllIn, StealthAllInState
 from BotModules.BotStateQueries import BotStateQueries
@@ -224,7 +225,16 @@ class AllInTests(TestBase):
         logHandler.push_application()
         stealthLogPath = OutputPath(
             r"C:\cascade-debug-output\generals-bot\stealth_allin_test_logs.txt")
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # this test drives simHost.execute_turn directly, which never passes through
+        # GameSimulatorHost.run_sim - the only place that used to create the viewer.
+        # Without this, debugMode=True still renders nothing because botHost._viewer
+        # stays None and every send_update_to_viewer site silently no-ops.
+        if debugMode and not self.GLOBAL_BYPASS_RENDERING:
+            simHost.start_viewers()
         committedRoute: Path | None = None
+        committedRouteTiles: list[Tile] = []
+        committedRouteTargetIndexes: list[int] = []
         routeWasCommitted = False
         visibleGatherMoves: list[str] = []
         routeMoveKinds: list[str] = []
@@ -241,6 +251,14 @@ class AllInTests(TestBase):
                 if stateBefore is not None and stateBefore.committed_route is not None:
                     if committedRoute is None:
                         committedRoute = stateBefore.committed_route
+                        # the committed Path consumes itself via remove_start() during
+                        # execution, so snapshot its tiles + WRP targets at commit for the
+                        # post-loop reveal-order assertions.
+                        committedRouteTiles = list(committedRoute.tileList)
+                        committedRouteTargetIndexes = (
+                            list(stateBefore.wrp_job.target_tile_indexes)
+                            if stateBefore.wrp_job is not None
+                            else [])
                         routeWasCommitted = True
                     else:
                         self.assertIs(committedRoute, stateBefore.committed_route)
@@ -314,6 +332,11 @@ class AllInTests(TestBase):
                         and stateAfter.committed_route is not None):
                     routeWasCommitted = True
                     committedRoute = stateAfter.committed_route
+                    committedRouteTiles = list(committedRoute.tileList)
+                    committedRouteTargetIndexes = (
+                        list(stateAfter.wrp_job.target_tile_indexes)
+                        if stateAfter.wrp_job is not None
+                        else [])
                     interruptThisTurn = (
                         interrupt is not None
                         and interrupt.turn == decisionTurn)
@@ -378,6 +401,52 @@ class AllInTests(TestBase):
                 f"unexpected stealth route abort reason: {reason}")
         self.assertTrue(routeWasCommitted, "the stealth WRP route was never committed")
         self.assertIn("route", routeMoveKinds)
+        # Tests/test_AllIn.py::AllInTests.test_should_stealth_flank_all_in_when_enemy_general_unknown:
+        # the committed route must dive the likely-general candidates before sweeping cheap
+        # dead-ED tiles. Split the WRP targets into emergence tiers and require the first
+        # top-tier reveal to precede the first low-tier reveal - under the old unweighted WRP
+        # ordering the route marched the top edge and only reached the 25-ED cluster at step 44.
+        if committedRouteTargetIndexes and committedRouteTiles:
+            target_indexes = set(committedRouteTargetIndexes)
+            reveal_steps: dict[int, int] = {}
+            for step_index, route_tile in enumerate(committedRouteTiles):
+                for adjacent in route_tile.adjacents:
+                    if (adjacent.tile_index in target_indexes
+                            and adjacent.tile_index not in reveal_steps):
+                        reveal_steps[adjacent.tile_index] = step_index
+                if (route_tile.tile_index in target_indexes
+                        and route_tile.tile_index not in reveal_steps):
+                    reveal_steps[route_tile.tile_index] = step_index
+            emergence = {
+                tile_index: bot.armyTracker.get_tile_emergence_for_player(
+                    bot._map.tiles_by_index[tile_index],
+                    enemyGeneral.player)
+                for tile_index in committedRouteTargetIndexes}
+            max_emergence = max(emergence.values())
+            top_tier_steps = [
+                reveal_steps[tile_index]
+                for tile_index in committedRouteTargetIndexes
+                if tile_index in reveal_steps
+                and emergence[tile_index] >= max_emergence * 0.75]
+            self.assertGreaterEqual(
+                len(top_tier_steps),
+                3,
+                f"committed route only reached {len(top_tier_steps)} "
+                f"high-ED general candidates")
+            # the first high-ED tile must be revealed before the route has revealed half of
+            # everything it will reveal; brushing a low-ED tile en route to the cluster is
+            # fine, but sweeping most of the dead-ED board first (the old bug: first top-tier
+            # reveal at step 44 of 48, ~94% of reveals in) is not.
+            first_top_tier_step = min(top_tier_steps)
+            revealed_before_first_top = sum(
+                1 for step in reveal_steps.values()
+                if step < first_top_tier_step)
+            self.assertLessEqual(
+                revealed_before_first_top,
+                len(reveal_steps) // 2,
+                f"route revealed {revealed_before_first_top} of {len(reveal_steps)} "
+                f"candidates before touching the high-ED cluster "
+                f"(first top-tier reveal at step {first_top_tier_step})")
         self.assertLessEqual(
             len(visibleGatherMoves),
             2,
@@ -583,6 +652,13 @@ class AllInTests(TestBase):
         logOutput = io.StringIO()
         logHandler = logbook.StreamHandler(logOutput, level=logbook.INFO)
         logHandler.push_application()
+        # Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend:
+        # this test drives simHost.execute_turn directly, which never passes through
+        # GameSimulatorHost.run_sim - the only place that used to create the viewer.
+        # Without this, debugMode=True still renders nothing because botHost._viewer
+        # stays None and every send_update_to_viewer site silently no-ops.
+        if debugMode and not self.GLOBAL_BYPASS_RENDERING:
+            simHost.start_viewers()
         committedRoute: Path | None = None
         routeWasCommitted = False
         routeMoveKinds: list[str] = []
@@ -1714,3 +1790,268 @@ class AllInTests(TestBase):
         winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=32)
         self.assertNoFriendliesKilled(map, general)
         self.assertOwned(general.player, enemyGeneral)
+
+    def test_should_keep_diving_general_candidates_after_revealing_empty_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_keep_diving_general_candidates_after_revealing_empty_tile___QvmmDx_Q2---0--291.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_keep_diving_general_candidates_after_revealing_empty_tile___QvmmDx_Q2---0--291.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 291, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=291)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        # The 115-army stack already sits at ~15,6 next to the candidate region; sweeping the
+        # remaining high-probability general positions (top line or bottom-right) is the only
+        # reasonable play. The live game instead dragged it 5+ tiles back to the stealth launch
+        # tile and recommitted a 43-tile route, wasting ~10 turns while down on econ. A 57-army
+        # stack guards the real general at 21,13 behind fog: the committed route reveals it one
+        # step out, must abort rather than pay it, and the replanned route dodges through
+        # 21,11->21,12 to reach the general with enough army to kill (~85 vs ~47).
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=16)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertOwned(general.player, enemyGeneral)
+
+    def test_should_keep_timed_all_in_over_far_gathers(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_keep_timed_all_in_over_far_gathers___50ZwYtndy---0--255.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_keep_timed_all_in_over_far_gathers___50ZwYtndy---0--255.truemap.txtmap'
+
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 255, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=255)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # proof: the VERIFIED winning route (executed by the gather+dive plans) —
+        # the hook walks row 25 absorbing 18,25's 54a / 20,25 / 20,23, marches
+        # onto our general 22,19 collecting the garrison, rides the east avenue
+        # 24,16 -> 23,13 -> 22,12 into the fog pocket, then dives straight west
+        # 22,10 -> 23,8 -> col 19 -> 19,3 -> 20,2 to kill dG37 at ~t304 (49t).
+        # 22,5 is a real mountain — the route never tries to transit it.
+        # simHost.queue_player_moves_str(general.player, '12,19->13,19->14,19->14,20->14,21->14,22->14,23->14,24->14,25->15,25->16,25->17,25->18,25->19,25->20,25->20,24->20,23->20,22->20,21->20,20->21,20->22,20->22,19->22,18->22,17->22,16->23,16->24,16->24,15->24,14->23,14->23,13->23,12->22,12->22,11->22,10->23,10->23,9->23,8->22,8->21,8->20,8->19,8->19,7->19,6->19,5->19,4->19,3->20,3->20,2')
+
+        self.begin_capturing_logging()
+
+        # After ~30 turns the timed all-in must have massed real army into the
+        # right-flank approach (the 22,13->22,10 fog corridor, the pocket, and
+        # Meemo's near flank). In the live game the FORCE_FAR_GATHERS hijack at
+        # t258 left only ~15-30 army there while small stacks wandered home.
+        # (Captured via run_between_turns: a second run_sim call would crash on
+        # the stale queued move left by the first call's final make_move.)
+        flankArmyAt285: list[int] = []
+        usedCorridorMouth = [False]
+        usedGeneral = [False]
+        stripEntries: list[str] = []
+        initialFriendly: set[int] = {
+            t.tile_index for t in playerMap.tiles_by_index if t.player == general.player}
+        # curPath tripwire: the live-game plan gathered these friendly stacks
+        # (the 54a spearhead at 18,25, the row-25 tiles, and the general's own
+        # ~35a) before committing the attack. If a committed plan's tileSet does
+        # not cover a tile that is still pending, the launch cut the gather
+        # short — fail immediately so the log ends at the offending commit
+        # instead of 40 turns later. A tile leaves 'pending' once its army has
+        # been absorbed (moving stacks leave ~1 behind); once all four are in,
+        # curPath may be anything.
+        pendingGatherTiles: set[Tile] = {
+            playerMap.GetTile(18, 25), playerMap.GetTile(20, 25),
+            playerMap.GetTile(20, 23), playerMap.GetTile(22, 19)}
+        seenCurPathPlans: list[typing.Any] = []
+        def record_flank_at_285():
+            if simHost.sim.turn == 285:
+                pm = simHost.get_player_map(general.player)
+                flankArmyAt285.append(sum(
+                    t.army - 1 for t in pm.tiles_by_index
+                    if t.player == general.player and 17 <= t.x <= 25 and t.y <= 15))
+            # gather stacks leave ~1 army behind once absorbed; also drop tiles
+            # we no longer own (assertNoFriendliesKilled covers that disaster).
+            for pending in list(pendingGatherTiles):
+                if pending.player != general.player or pending.army <= 4:
+                    pendingGatherTiles.discard(pending)
+            cur = bot.curPath
+            if (cur is not None and pendingGatherTiles
+                    and map.generals[enemyGeneral.player].player != general.player
+                    and isinstance(cur, (GatherCapturePlan, Path))
+                    and not any(cur is seen for seen in seenCurPathPlans)):
+                seenCurPathPlans.append(cur)
+                missing = [str(t) for t in pendingGatherTiles if t not in cur.tileSet]
+                self.assertEqual(
+                    [], missing,
+                    f't{simHost.sim.turn}: committed plan cut the gather short, '
+                    f'missing pending gather tiles in its tileSet: {cur}')
+            if len(simHost.sim.moves_history) == 0:
+                return
+            mv = simHost.sim.moves_history[-1][general.player]
+            if mv is None:
+                return
+            # The attack must mass at/through our general (22,19) then push the
+            # east avenue: 24,14 -> 22,12 area into the fog pocket. Going up the
+            # left strip (cols <=20 border crossings) abandons the flank guard
+            # and exposes us to a counter-all-in out of the pocket.
+            # mass consolidates at/around our general (22,19) before riding the
+            # avenue — the general tile itself keeps its garrison, so check the
+            # stack passed through the general's immediate neighborhood.
+            if abs(mv.source.x - 22) <= 3 and abs(mv.source.y - 19) <= 3:
+                usedGeneral[0] = True
+            if (mv.source.x, mv.source.y) in {(24, 14), (23, 14), (24, 13), (23, 13), (22, 13)}:
+                usedCorridorMouth[0] = True
+            # strip entry = a move carrying real mass from a tile we owned at
+            # import time onto an enemy tile on the west border — driving west
+            # through just-captured fog does not count (that IS the safe dive
+            # route), and neither do small frontier scout pokes.
+            destWasEnemy = mv.dest.delta.oldOwner >= 0 and mv.dest.delta.oldOwner != general.player
+            if mv.army_moved >= 15 and mv.source.tile_index in initialFriendly and destWasEnemy and mv.dest.x <= 20:
+                stripEntries.append(f'{mv.source} -> {mv.dest} ({mv.army_moved}a)')
+            # 22,5 is an undiscovered predicted enemy city (a mountain in truth):
+            # attack paths must treat it as impassable, never route through it.
+            if (mv.dest.x, mv.dest.y) == (22, 5):
+                stripEntries.append(f'{mv.source} -> {mv.dest} (routed THROUGH undiscovered city)')
+        simHost.run_between_turns(record_flank_at_285)
+
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=50)
+        self.assertNoFriendliesKilled(map, general)
+        self.assertTrue(len(flankArmyAt285) > 0, 'sim ended before t285, cannot measure flank mass')
+        self.assertGreater(flankArmyAt285[0], 100)
+
+        # The attack must ride the safe avenue: mass through our general, up via
+        # 24,14 -> 23,13 into enemy land at 22,12/22,13 — never entering enemy
+        # land off the left strip where a fog counter-army could hit our general.
+        self.assertTrue(usedGeneral[0], 'attack mass should gather through our general area (22,19)')
+        self.assertTrue(usedCorridorMouth[0], 'attack should transit the east avenue (24,14/23,13/22,13)')
+        self.assertEqual([], stripEntries, 'no entries into enemy land off the left strip')
+
+        # Meemo (target player 3, general at 20,2) dies at ~t304 — the kill move
+        # 20,3 -> 20,2 is sent at t303, just inside the 50-turn window: mass
+        # through our general area, up 24,14 -> 22,13 into enemy land, corridor
+        # 22,12 -> 22,10 -> 23,8, then the straight dive 22,8 -> 19,8 -> down
+        # col 19 -> 20,3 -> 20,2 — NOT the long 18,8 detour.
+        self.assertOwned(general.player, enemyGeneral)
+
+    def test_should_keep_attacking_with_forward_stacks_when_winning_all_in(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_keep_attacking_with_forward_stacks_when_winning_all_in___Y9S75moK8---7--431.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_keep_attacking_with_forward_stacks_when_winning_all_in___Y9S75moK8---7--431.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 431, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=431)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 30 turns after turn 431
+        simHost.queue_player_moves_str(1, '21,14->20,14->19,14->18,14->17,14->16,14->15,14->15,13->15,12->15,11->15,10->15,9->15,8->15,7->15,6->16,6->17,6->17,5->18,5->19,5->19,4  24,0->25,0->25,1->24,1->24,2->24,3->24,4->24,5->23,5->22,5  22,3->22,4')  # replay moves: gotcha:)
+        # simHost.queue_player_moves_str(general.player, '16,3->17,3  23,9->23,8->22,8->21,8->20,8->20,9->19,9->18,9->17,9->17,10->17,11->16,11->15,11->14,11->14,12->14,13->13,13->12,13->11,13->10,13->9,13->8,13->8,14  7,17->8,17->8,16->8,15->8,14->7,14->6,14->6,13')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # Same live Y9S75moK8 state as the t432 test, one turn earlier: the
+        # forward stacks (81 at 23,9, 50 at 16,3) must keep attacking into the
+        # enemy land they already occupy — the live game's all-in gather pulled
+        # them back starting at t432. Track the 81-stack's own move chain off
+        # 23,9: the live retreat walked it to 8,13, so any step that lands the
+        # stack inside x <= 15 (our home side of the corridor) is the blunder.
+        deepRetreats: list[str] = []
+        frontStack: list = [rawMap.GetTile(23, 9)]
+        enemyTilesAtStart = {t for t in map.tiles_by_index if t.player == 1}
+
+        def record_moves():
+            if len(simHost.sim.moves_history) == 0:
+                return
+            mv = simHost.sim.moves_history[-1][general.player]
+            if mv is None or frontStack[0] is None:
+                return
+            if mv.source.x == frontStack[0].x and mv.source.y == frontStack[0].y and mv.army_moved >= 30:
+                frontStack[0] = rawMap.GetTile(mv.dest.x, mv.dest.y)
+                if mv.dest.x <= 15:
+                    deepRetreats.append(f't{simHost.sim.turn} {mv.source} -> {mv.dest} ({mv.army_moved}a)')
+
+        simHost.run_between_turns(record_moves)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=18)
+        self.assertNoFriendliesKilled(map, general)
+
+        # The forward stack must never drag real mass back into our own land:
+        # that is the exact live blunder this test exists to prevent.
+        self.assertEqual([], deepRetreats)
+
+        # And the all-in must convert the attack into real enemy land: a kill,
+        # an enemy city, or a meaningful sweep of enemy tiles (the replayed
+        # enemy counter-push makes a full kill racy in this window — the live
+        # retreat captured zero enemy tiles while marching home).
+        capturedEnemyTiles = [t for t in enemyTilesAtStart if map.GetTile(t.x, t.y).player == general.player]
+        capturedEnemyCities = [t for t in capturedEnemyTiles if t.isCity]
+        self.assertTrue(
+            map.generals[1].player == general.player
+            or len(capturedEnemyCities) > 0
+            or len(capturedEnemyTiles) >= 8,
+            f'all-in should convert the forward attack into a kill/city/enemy land, '
+            f'captured {len(capturedEnemyTiles)} tiles, {len(capturedEnemyCities)} cities')
+
+    def test_should_not_pull_forward_army_back_for_all_in_gather(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_pull_forward_army_back_for_all_in_gather___Y9S75moK8---7--432.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_not_pull_forward_army_back_for_all_in_gather___Y9S75moK8---7--432.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 432, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=432)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 30 turns after turn 432
+        simHost.queue_player_moves_str(1, '20,14->19,14->18,14->17,14->16,14->15,14->15,13->15,12->15,11->15,10->15,9->15,8->15,7->15,6->16,6->17,6->17,5->18,5->19,5->19,4  24,0->25,0->25,1->24,1->24,2->24,3->24,4->24,5->23,5->22,5  22,3->22,4->22,5')  # replay moves: gotcha:)
+        # simHost.queue_player_moves_str(general.player, '23,9->23,8->22,8->21,8->20,8->20,9->19,9->18,9->17,9->17,10->17,11->16,11->15,11->14,11->14,12->14,13->13,13->12,13->11,13->10,13->9,13->8,13->8,14  7,17->8,17->8,16->8,15->8,14->7,14->6,14->6,13->6,12')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # Track the 81-stack's own move chain off 23,9. The live Y9S75moK8
+        # failure pulled it back through 22,8 -> 21,8 -> ... -> 8,13 over 21
+        # turns for a 66t PCST gather while it sat ~3 moves from the predicted
+        # general cluster. Any step landing the stack inside x <= 15 (our home
+        # side of the corridor) is that same blunder; the correct path itself
+        # starts 23,9 -> 23,8 -> 24,8 -> 25,8, still in enemy land.
+        deepRetreats: list[str] = []
+        frontStack: list = [rawMap.GetTile(23, 9)]
+        enemyTilesAtStart = {t for t in map.tiles_by_index if t.player == 1}
+
+        def record_moves():
+            if len(simHost.sim.moves_history) == 0:
+                return
+            mv = simHost.sim.moves_history[-1][general.player]
+            if mv is None or frontStack[0] is None:
+                return
+            if mv.source.x == frontStack[0].x and mv.source.y == frontStack[0].y and mv.army_moved >= 30:
+                frontStack[0] = rawMap.GetTile(mv.dest.x, mv.dest.y)
+                if mv.dest.x <= 15:
+                    deepRetreats.append(f't{simHost.sim.turn} {mv.source} -> {mv.dest} ({mv.army_moved}a)')
+
+        simHost.run_between_turns(record_moves)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=18)
+        self.assertNoFriendliesKilled(map, general)
+
+        # The forward stack must never drag real mass back into our own land:
+        # that is the exact live blunder this test exists to prevent.
+        self.assertEqual([], deepRetreats)
+
+        # And the all-in must convert the attack into real enemy land: a kill,
+        # an enemy city, or a meaningful sweep of enemy tiles (the replayed
+        # enemy counter-push makes a full kill racy in this window — the live
+        # retreat captured zero enemy tiles while marching home).
+        capturedEnemyTiles = [t for t in enemyTilesAtStart if map.GetTile(t.x, t.y).player == general.player]
+        capturedEnemyCities = [t for t in capturedEnemyTiles if t.isCity]
+        self.assertTrue(
+            map.generals[1].player == general.player
+            or len(capturedEnemyCities) > 0
+            or len(capturedEnemyTiles) >= 8,
+            f'all-in should convert the forward attack into a kill/city/enemy land, '
+            f'captured {len(capturedEnemyTiles)} tiles, {len(capturedEnemyCities)} cities')

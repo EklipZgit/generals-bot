@@ -10,8 +10,11 @@ import ExpandUtils
 import logbook
 
 import SearchUtils
+from FfaGeneralPlacement import FfaGeneralPlacement
 from ArmyTracker import (
     ArmyTracker,
+    EMERGENCE_PATH_CONSISTENCY_FLOOR,
+    EMERGENCE_PATH_CONSISTENCY_PRECONTACT_SCALE,
     spawn_fairness_prediction_value)
 from BotModules.BotStateQueries import BotStateQueries
 from BotModules.BotPathingUtils import BotPathingUtils
@@ -24,6 +27,7 @@ from Path import Path
 from ViewInfo import PathColorer, TargetStyle
 from base.client.map import Tile, MapBase
 from Models.Move import Move
+from Strategy.CityContestationSafety import get_predicted_city_army_reserve, get_safe_predicted_city_approaches
 import typing
 
 
@@ -429,7 +433,11 @@ class BotTargeting:
                 diff = ourAttack - theirDef
                 bot.viewInfo.add_stats_line(f'en city @{tile} in {curLeft} diff {diff} (us={ourAttack} vs them={theirDef})')
 
-                if ourAttack > theirDef and maxDiff < diff:
+                # Tests/test_CityGather.py::CityGatherTests.test_should_take_nearby_city_instead_of_attacking_predicted_city_through_cave
+                # A contest against an undiscovered isTempFogPrediction city
+                # must beat the defense by more than the speculative reserve.
+                predictedReserve = get_predicted_city_army_reserve(tile)
+                if ourAttack > theirDef + predictedReserve and maxDiff < diff:
                     logbook.info(f'Approx attack/def shows our attack {ourAttack}, their def {theirDef}')
                     tgTile = tile
                     maxDiff = diff
@@ -439,6 +447,19 @@ class BotTargeting:
             return bestTurns, None
 
         bestTurns = -1
+        predictedReserve = get_predicted_city_army_reserve(tgTile)
+        if predictedReserve > 0:
+            # The path to a speculative predicted city must not route through
+            # an approach that lacks alternate targets.
+            safeApproaches = get_safe_predicted_city_approaches(bot._map, tgTile)
+            if len(safeApproaches) == 0:
+                return bestTurns, None
+            unsafeApproachNegs = {
+                t for t in tgTile.movable
+                if not t.isObstacle and not t.isNotPathable
+            } - safeApproaches
+            return bestTurns, BotPathingUtils.get_path_to_targets(
+                bot, {tgTile}, preferEnemy=False, negativeTiles=unsafeApproachNegs)
         return bestTurns, BotPathingUtils.get_path_to_target(bot, tgTile)
 
     @staticmethod
@@ -571,6 +592,15 @@ class BotTargeting:
     def calculate_target_player(bot: EklipZBot) -> int:
         targetPlayer = -1
         playerScore = 0
+
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # the 3-player FFA endgame policy owns target selection: forced all-in modes return
+        # their policy target and TURTLE returns no target, overriding pacifism locks.
+        ffaEndgameMode = BM.BotFfaEndgame.get_mode(bot)
+        if ffaEndgameMode in (BM.BotFfaEndgame.FfaEndgameMode.ALL_IN, BM.BotFfaEndgame.FfaEndgameMode.RETALIATE):
+            return BM.BotFfaEndgame.get_state(bot).decision.target_player
+        if ffaEndgameMode == BM.BotFfaEndgame.FfaEndgameMode.TURTLE:
+            return -1
 
         if bot._map.remainingPlayers == 2:
             for player in bot._map.players:
@@ -810,6 +840,9 @@ class BotTargeting:
         grid = MapMatrix(bot._map, 0.0)
 
         genDists = bot._map.get_distance_matrix_including_obstacles(bot.general)
+        emergencePathPenalty = BotTargeting.build_emergence_path_consistency_penalty(
+            bot,
+            minSpawnDistance * 2)
 
         def tile_meets_criteria_for_value_around_general(t: Tile) -> bool:
             return (
@@ -858,6 +891,11 @@ class BotTargeting:
                 if bot.armyTracker.spawn_fairness_active:
                     grid.raw[tile.tile_index] += spawn_fairness_prediction_value(
                         spawnFairnessWeight)
+                # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - soft-penalize candidates that cannot explain the observed emergence directions.
+                if emergencePathPenalty is not None:
+                    grid.raw[tile.tile_index] -= (
+                        emergencePathPenalty.raw[tile.tile_index]
+                        * EMERGENCE_PATH_CONSISTENCY_PRECONTACT_SCALE)
                 if bot.info_render_general_undiscovered_prediction_values:
                     bot.viewInfo.bottomRightGridText.raw[tile.tile_index] = f'c{counter.value}'
 
@@ -876,6 +914,26 @@ class BotTargeting:
 
         return grid
 
+    # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - shared penalty construction for prediction and hunting.
+    @staticmethod
+    def build_emergence_path_consistency_penalty(
+            bot: EklipZBot,
+            expectedGeneralDistance: int) -> MapMatrixInterface[float] | None:
+        """Build the off-route emergence penalty for the target player, or None when unusable."""
+        if bot.targetPlayer == -1:
+            return None
+        sourceWeights = bot.armyTracker.build_emergence_path_source_weights(
+            bot.targetPlayer,
+            bot.win_condition_analyzer.city_contestation_history)
+        if len(sourceWeights) == 0:
+            return None
+        distanceToOurGeneral = bot._map.get_distance_matrix_including_obstacles(bot.general)
+        return bot.armyTracker.build_emergence_path_consistency_penalty_matrix(
+            bot.targetPlayer,
+            sourceWeights,
+            distanceToOurGeneral,
+            expectedGeneralDistance)
+
     @staticmethod
     def get_predicted_target_player_general_location(bot: EklipZBot, skipDiscoveredAsNeutralFilter: bool = False) -> Tile:
         minSpawnDist = bot.armyTracker.min_spawn_distance
@@ -893,9 +951,32 @@ class BotTargeting:
             logbook.info(f'DEBUG enemyGeneral')
             return bot._map.generals[bot.targetPlayer]
 
+        # Original-FFA maps place every living player's predicted general JOINTLY
+        # through ArmyTracker.ffa_general_placement: the target's seed already
+        # respects spawn-distance spacing against every other player's prediction
+        # and is scored only from that player's own evidence, so return it directly
+        # instead of re-scoring candidates independently. When the joint placement
+        # has no seed for the target (incomplete packing / dead target) return the
+        # existing no-prediction sentinel bot.general with a warning - NEVER fall
+        # through to the independent scorer, which would publish an FFA seed that
+        # violates the joint spacing constraints. Regression:
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals
+        if FfaGeneralPlacement.is_original_ffa(bot._map):
+            placement = bot.armyTracker.ffa_general_placement
+            placement.refresh(bot.armyTracker, bot.targetPlayer)
+            if bot.targetPlayer < len(placement.positions):
+                ffaSeed = placement.positions[bot.targetPlayer]
+                if ffaSeed is not None:
+                    return ffaSeed
+            logbook.warning(
+                f'FFA joint general placement has no seed for target p{bot.targetPlayer}; '
+                f'returning bot.general sentinel instead of an illegal independent guess')
+            return bot.general
+
         maxTile = bot.general
         values = MapMatrix(bot._map, 0.0)
         emergenceDistanceBonus: MapMatrixInterface[float] | None = None
+        emergencePathPenalty: MapMatrixInterface[float] | None = None
         if bot.shortest_path_to_target_player is None:
             logbook.info(
                 'Skipping emergence distance bonus because the shortest path to the target player is unavailable')
@@ -914,6 +995,9 @@ class BotTargeting:
             logbook.info(
                 f'Emergence distance bonus sources={sourceCount} '
                 f'D={expectedGeneralDistance} max={maxBonusTile} value={maxBonus:.1f}')
+            emergencePathPenalty = BotTargeting.build_emergence_path_consistency_penalty(
+                bot,
+                expectedGeneralDistance)
 
         if bot.armyTracker.connectedByPlayer[bot.targetPlayer] is not None:
             range = bot._map.rows / 3
@@ -944,12 +1028,16 @@ class BotTargeting:
             if bot.armyTracker.spawn_fairness_active:
                 foundValue += spawn_fairness_prediction_value(spawnFairnessWeight)
 
+            # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - emergence locality evidence only counts to the degree the candidate's route to us explains the observed emergences.
+            emergenceLocality = bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile] * 10
             if emergenceDistanceBonus is not None:
-                bonus = emergenceDistanceBonus.raw[tile.tile_index]
-                foundValue += bonus
-
-            if bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile] > 0:
-                foundValue += bot.armyTracker.emergenceLocationMap[bot.targetPlayer][tile] * 10
+                emergenceLocality += emergenceDistanceBonus.raw[tile.tile_index]
+            if emergenceLocality != 0 and emergencePathPenalty is not None:
+                pathPenalty = emergencePathPenalty.raw[tile.tile_index]
+                emergenceLocality *= max(
+                    EMERGENCE_PATH_CONSISTENCY_FLOOR,
+                    1.0 - pathPenalty)
+            foundValue += emergenceLocality
 
             values.raw[tile.tile_index] = foundValue
             if values.raw[tile.tile_index] > maxAmount:

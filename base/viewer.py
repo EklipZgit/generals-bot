@@ -1041,6 +1041,26 @@ class GeneralsViewer(object):
                 radius=self.cellWidth / 2 - radReduction - 1,
                 width=2)
 
+        # Joint FFA predicted-general rings: one large ring per living player whose
+        # general is still unknown, colored by that player's own palette entry
+        # (ViewInfo.predicted_general_targets, populated by
+        # BotRendering.populate_predicted_general_targets).
+        for target in self._viewInfo.predicted_general_targets:
+            tile = target.tile
+            if tile is None:
+                continue
+            pos_left = (CELL_MARGIN + self.cellWidth) * tile.x + CELL_MARGIN
+            pos_top = (CELL_MARGIN + self.cellHeight) * tile.y + CELL_MARGIN
+            pos_left_circle = pos_left + (self.cellWidth / 2)
+            pos_top_circle = pos_top + (self.cellHeight / 2)
+            playerColor = self.player_colors[target.player]
+            pygame.draw.circle(
+                self._screen,
+                playerColor,
+                center=[pos_left_circle, pos_top_circle],
+                radius=self.cellWidth / 2 - target.radius_reduction,
+                width=4)
+
     def tile_text_colorer(self, tile) -> typing.Tuple[int, int, int]:
         if tile.player == -1 and tile.visible:
             return BLACK
@@ -1595,13 +1615,21 @@ class GeneralsViewer(object):
                 stats = self._map.get_team_stats_by_team_id(player.team)
                 statsSorted.append((stats, None))
 
-        statsSorted = list(sorted(statsSorted, key=lambda s: (s[0].score, self._map.players[s[1].players[0]].leftGameTurn if s[1] is not None else False), reverse=True))
+        # Tests/test_Viewer.py::ViewerTests.test_should_render_player_scores_when_a_teams_cycle_stats_players_list_is_empty
+        # OpponentTracker removes captured players from CycleStatsData.players so
+        # its per-player handlers skip dead capturees, which leaves a fully
+        # eliminated FFA team with players == []. Indexing players[0] here used
+        # to throw and kill every subsequent frame render.
+        statsSorted = list(sorted(statsSorted, key=lambda s: (s[0].score, self._map.players[s[1].players[0]].leftGameTurn if s[1] is not None and len(s[1].players) > 0 else False), reverse=True))
 
         pos_left = 0
 
         for teamScore, teamCycleData in statsSorted:
             if teamCycleData is None:
                 logbook.info(f'Team {teamScore.teamId} had None teamCycleData in viewer...')
+            if teamCycleData is None or len(teamCycleData.players) == 0:
+                # map membership still lists eliminated players, so emptied-out
+                # teams keep rendering a grayed score row instead of vanishing
                 teamPlayers = [player for player in self._map.players if player.team == teamScore.teamId]
             else:
                 teamPlayers = []

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import typing
+from dataclasses import dataclass
 
 import BotModules as BM
 import logbook
@@ -12,10 +13,58 @@ import typing
 if typing.TYPE_CHECKING:
     from bot_ek0x45 import EklipZBot
 
+
+@dataclass(slots=True)
+class InferredGeneralClearKillCandidate:
+    """
+    Viable inferred-general clear-kill evaluation for one enemy whose general location is
+    unknown, produced by BotStateQueries._eval_inferred_general_clear_kill. Carries the found
+    attack path stats plus the conservative hunt budget derived from how far the enemy's
+    remaining valid-general region extends past that path, so
+    get_ffa_clear_kill_enemy_player can pick the best opportunity deterministically.
+    """
+    player_index: int
+    path_length: int
+    path_value: float
+    fog_risk: int
+    candidate_count: int
+    hunt_turns: int
+    max_extra_distance: int
+
+
 class BotStateQueries:
     @staticmethod
     def is_all_in(bot: EklipZBot):
         return bot.is_all_in_losing or bot.is_all_in_army_advantage or bot.all_in_city_behind
+
+    @staticmethod
+    def is_cyclic_winning_gather_viable(bot: EklipZBot) -> bool:
+        """True while the cyclic winning gather (BotCombatOps.try_get_cyclic_all_in_move)
+        can produce the timed attack gather: the latched cyclic mode, or currently
+        winning on economy + tiles + army."""
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # a forced FFA endgame all-in must never defer to the target-only cyclic gather.
+        if BM.BotFfaEndgame.is_forced_all_in(bot):
+            return False
+        if bot.is_winning_gather_cyclic:
+            return True
+        if bot.targetPlayer == -1:
+            return False
+        return (bot.opponent_tracker.winning_on_economy(byRatio=1.15)
+                and bot.opponent_tracker.winning_on_tiles(byRatio=1.1)
+                and bot.opponent_tracker.winning_on_army(byRatio=1.45))
+
+    @staticmethod
+    def is_timed_all_in_or_cyclic_active(bot: EklipZBot) -> bool:
+        """Tests/test_AllIn.py::AllInTests.test_should_keep_timed_all_in_over_far_gathers
+        True while a timed attack plan is (or should be) driving move selection, so
+        unrelated gather systems (FORCE_FAR_GATHERS) must not hijack the pipeline:
+        any all-in state, a running army-advantage temp all-in (the counter persists
+        while the per-turn flag flickers off between determine_should_winning_all_in
+        evaluations), or a viable cyclic winning gather."""
+        return (BotStateQueries.is_all_in(bot)
+                or bot.all_in_army_advantage_counter > 0
+                or BotStateQueries.is_cyclic_winning_gather_viable(bot))
 
     @staticmethod
     def is_tile_enemy(bot: EklipZBot, tile: Tile) -> bool:
@@ -54,29 +103,134 @@ class BotStateQueries:
         Returns the one enemy player we can clearly kill right now while exclusive targeting is
         active: their general location is known, we have a decisive standing-army advantage over
         them, and their general is reachable within ~12 turns. -1 if nobody qualifies.
+
+        Tests/test_FFA.py::test_should_snap_kill_nearby_ffa_general_after_enemy_army_loss: enemies
+        whose general location is UNKNOWN but who are still seen and alive also qualify when their
+        remaining valid-general region is small and can be hunted inside a conservative 10-turn
+        army budget - see _eval_inferred_general_clear_kill. A known-general clear kill keeps
+        priority; the inferred branch only fills the gap for enemies the bot cannot yet pinpoint.
         @param bot:
         @return:
         """
         bestPlayer = -1
         bestArmyRatio = 1.3
+        inferredBest: InferredGeneralClearKillCandidate | None = None
         ourStats = bot._map.get_team_stats(bot._map.player_index)
         for player in bot._map.players:
             if player.dead or player.index == bot._map.player_index or player.index in bot._map.teammates or len(player.tiles) == 0:
                 continue
             enGen = bot._map.generals[player.index]
-            if enGen is None or not enGen.isGeneral:
+            if enGen is not None and enGen.isGeneral:
+                enStats = bot._map.get_team_stats(player.index)
+                if enStats.standingArmy <= 0:
+                    continue
+                armyRatio = ourStats.standingArmy / enStats.standingArmy
+                genDist = bot._map.get_distance_between(bot.general, enGen)
+                if genDist > 12:
+                    continue
+                if armyRatio >= bestArmyRatio:
+                    bestArmyRatio = armyRatio
+                    bestPlayer = player.index
                 continue
-            enStats = bot._map.get_team_stats(player.index)
-            if enStats.standingArmy <= 0:
+
+            inferred = BotStateQueries._eval_inferred_general_clear_kill(bot, player.index)
+            if inferred is None:
                 continue
-            armyRatio = ourStats.standingArmy / enStats.standingArmy
-            genDist = bot._map.get_distance_between(bot.general, enGen)
-            if genDist > 12:
+            if inferredBest is None:
+                inferredBest = inferred
                 continue
-            if armyRatio >= bestArmyRatio:
-                bestArmyRatio = armyRatio
-                bestPlayer = player.index
-        return bestPlayer
+            inferredKey = (inferred.hunt_turns, inferred.path_length, -inferred.path_value, inferred.player_index)
+            bestKey = (inferredBest.hunt_turns, inferredBest.path_length, -inferredBest.path_value, inferredBest.player_index)
+            if inferredKey < bestKey:
+                inferredBest = inferred
+
+        if bestPlayer != -1:
+            return bestPlayer
+        if inferredBest is not None:
+            logbook.info(
+                f'FFA_CLEAR_KILL inferred p{inferredBest.player_index} ({bot._map.usernames[inferredBest.player_index]}): '
+                f'pathLen={inferredBest.path_length} pathVal={inferredBest.path_value:.1f} '
+                f'maxExtraDist={inferredBest.max_extra_distance} huntTurns={inferredBest.hunt_turns} '
+                f'fogRisk@{inferredBest.hunt_turns}t={inferredBest.fog_risk} candidates={inferredBest.candidate_count}')
+            return inferredBest.player_index
+        return -1
+
+    @staticmethod
+    def _eval_inferred_general_clear_kill(bot: EklipZBot, playerIndex: int) -> InferredGeneralClearKillCandidate | None:
+        """
+        Tests/test_FFA.py::test_should_snap_kill_nearby_ffa_general_after_enemy_army_loss
+        UnitTests/test_FfaClearKill.py: evaluates an alive, seen enemy whose general location
+        is unknown as an FFA clear-kill candidate. The enemy's remaining valid-general region
+        (ArmyTracker.valid_general_positions_by_player) must be nonempty and at most 12 tiles,
+        a friendly stack >5 must sit within manhattan 10 of some candidate, and a real
+        assembled-force path to the region must exist. The region must also be localized
+        enough to hunt inside a conservative 10-turn budget: huntTurns =
+        path.length + 2*maxExtraDistance, where maxExtraDistance is the farthest any candidate
+        sits from the found path; the projected fog army risk is evaluated at huntTurns and
+        the path's army must still exceed it after paying 2*maxExtraDistance army for the
+        diversion, so broad, scattered, or unreachable regions cannot qualify.
+        @param bot:
+        @param playerIndex: enemy player index with unknown general location.
+        @return: InferredGeneralClearKillCandidate or None if not viable.
+        """
+        candidates = [t for t in bot.armyTracker.valid_general_positions_by_player[playerIndex]]
+        if len(candidates) == 0 or len(candidates) > 12:
+            return None
+
+        hasNearbyStack = False
+        for stack in bot._map.players[bot.general.player].tiles:
+            if stack.army <= 5:
+                continue
+            for candidate in candidates:
+                if abs(stack.x - candidate.x) + abs(stack.y - candidate.y) <= 10:
+                    hasNearbyStack = True
+                    break
+            if hasNearbyStack:
+                break
+        if not hasNearbyStack:
+            return None
+
+        fogRiskNow = bot.opponent_tracker.get_approximate_fog_army_risk(playerIndex, inTurns=0)
+        path = SearchUtils.dest_breadth_first_target(
+            bot._map,
+            candidates,
+            targetArmy=max(1, fogRiskNow),
+            maxTime=0.01,
+            maxDepth=10,
+            searchingPlayer=bot.general.player,
+            additionalIncrement=0.5,
+            noLog=True)
+        if path is None or path.length <= 0 or path.length > 10:
+            return None
+
+        maxExtraDistance = 0
+        for candidate in candidates:
+            closestDist = None
+            for pathTile in path.tileList:
+                dist = bot._map.get_distance_between_or_none(candidate, pathTile)
+                if dist is not None and (closestDist is None or dist < closestDist):
+                    closestDist = dist
+            if closestDist is None:
+                return None
+            if closestDist > maxExtraDistance:
+                maxExtraDistance = closestDist
+
+        huntTurns = path.length + 2 * maxExtraDistance
+        if huntTurns > 10:
+            return None
+
+        fogRiskAtKill = bot.opponent_tracker.get_approximate_fog_army_risk(playerIndex, inTurns=huntTurns)
+        if path.value - 2 * maxExtraDistance <= max(0, fogRiskAtKill):
+            return None
+
+        return InferredGeneralClearKillCandidate(
+            player_index=playerIndex,
+            path_length=path.length,
+            path_value=path.value,
+            fog_risk=fogRiskAtKill,
+            candidate_count=len(candidates),
+            hunt_turns=huntTurns,
+            max_extra_distance=maxExtraDistance)
 
     @staticmethod
     def update_ffa_exclusive_target_lock(bot: EklipZBot) -> None:
@@ -131,6 +285,16 @@ class BotStateQueries:
         @param bot:
         @return:
         """
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # forced endgame modes restrict attacks to the policy target (or nobody while
+        # TURTLE) regardless of the exclusive-targeting pacifism state; unseen enemies count.
+        ffaEndgameMode = BM.BotFfaEndgame.get_mode(bot)
+        if ffaEndgameMode in (BM.BotFfaEndgame.FfaEndgameMode.ALL_IN, BM.BotFfaEndgame.FfaEndgameMode.RETALIATE):
+            return BotStateQueries._ffa_endgame_unattackable_except(
+                bot, BM.BotFfaEndgame.get_state(bot).decision.target_player)
+        if ffaEndgameMode == BM.BotFfaEndgame.FfaEndgameMode.TURTLE:
+            return BotStateQueries._ffa_endgame_unattackable_except(bot, -1)
+
         if not BotStateQueries.is_ffa_exclusive_targeting_active(bot):
             return None
 
@@ -149,6 +313,22 @@ class BotStateQueries:
             if player.dead or player.index == bot._map.player_index or player.index in bot._map.teammates or len(player.tiles) == 0:
                 continue
             if player.index not in attackable:
+                unattackable.add(player.index)
+        return unattackable
+
+    @staticmethod
+    def _ffa_endgame_unattackable_except(bot: EklipZBot, attackableTarget: int) -> typing.Set[int]:
+        """Enemy player indexes that may not be attacked under forced FFA endgame modes."""
+        unattackable: typing.Set[int] = set()
+        selfIndex = bot.general.player
+        teamIds = bot._map.team_ids_by_player_index
+        ourTeam = teamIds[selfIndex] if selfIndex < len(teamIds) else selfIndex
+        for player in bot._map.players:
+            if player.dead or player.index == selfIndex or player.index in bot._map.teammates:
+                continue
+            if player.index < len(teamIds) and teamIds[player.index] == ourTeam:
+                continue
+            if player.index != attackableTarget:
                 unattackable.add(player.index)
         return unattackable
 
@@ -180,6 +360,15 @@ class BotStateQueries:
 
     @staticmethod
     def is_still_ffa_and_non_dominant(bot: EklipZBot) -> bool:
+        # Tests/test_FFA.py::FFATests.test_should_nonstop_all_in_weaker_player_when_three_left
+        # forced endgame modes override the buggy dominance scan: ALL_IN/RETALIATE report
+        # non-FFA-non-dominant so all-in/stealth machinery engages; TURTLE stays pacifist.
+        ffaEndgameMode = BM.BotFfaEndgame.get_mode(bot)
+        if ffaEndgameMode in (BM.BotFfaEndgame.FfaEndgameMode.ALL_IN, BM.BotFfaEndgame.FfaEndgameMode.RETALIATE):
+            return False
+        if ffaEndgameMode == BM.BotFfaEndgame.FfaEndgameMode.TURTLE:
+            return True
+
         isFfa = False
         if bot._map.remainingPlayers > 2 and not bot._map.is_2v2:
             isFfa = True

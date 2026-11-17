@@ -16,7 +16,7 @@ from bot_ek0x45 import EklipZBot
 
 
 class ArmyInterceptionTests(TestBase):
-    USE_V2_INTERCEPTION: bool = False
+    USE_V2_INTERCEPTION: bool = True
 
     def __init__(self, methodName: str = ...):
         super().__init__(methodName)

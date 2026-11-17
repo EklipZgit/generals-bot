@@ -8,6 +8,7 @@ import typing
 import logbook
 
 import SearchUtils
+from BotModules.BotTargeting import BotTargeting
 from Sim.GameSimulator import GameSimulatorHost
 from TestBase import TestBase
 from ViewInfo import TargetStyle
@@ -1587,3 +1588,164 @@ class GeneralPredictionTests(TestBase):
         self.assertNoFriendliesKilled(map, general)
 
         # Runtime would throw if bug weren't fixed
+
+    # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - emergences that lie off a candidate's shortest route to our general should reduce its predicted-general weight.
+    def test_should_infer_bottom_right_spawn_from_emergence_direction(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_infer_bottom_right_spawn_from_emergence_direction___QvmmDx_Q2---a--291.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_infer_bottom_right_spawn_from_emergence_direction___QvmmDx_Q2---a--291.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 291, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=291)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        # The 115-stack sits at 15,7 next to the 15,5 candidate; after 15,5 is sighted empty the
+        # only options are sweeping UP through the 9,3->13,3 hallway to the top row, or sweeping
+        # right/down through the bottom-right candidates. Track the stack's tile each turn so the
+        # sweep order can be asserted (bottom-right must come first).
+        #
+        # Note run_sim must only be called ONCE: after its turn loop it makes a trailing extra
+        # make_move call that leaves a stale move queued in sim.moves, which crashes the next
+        # run_sim's first set_next_move. Everything we assert is therefore captured here in the
+        # between-turns callback (which fires after the bots moves are queued each turn).
+        diveTiles: typing.List[Tile] = []
+        predictedTurn291: typing.List[Tile] = []
+        trueSpawnValidTurn291: typing.List[bool] = []
+        diveWentDown: typing.List[bool] = [False]
+
+        def trackDiveAndCapturePrediction():
+            ourTiles = [t for t in map.get_all_tiles() if t.player == general.player]
+            stack = max(ourTiles, key=lambda t: t.army, default=None)
+            if stack is not None and stack.army > 50:
+                if len(diveTiles) > 0:
+                    prev = diveTiles[-1]
+                    dist = abs(stack.x - prev.x) + abs(stack.y - prev.y)
+                    if dist <= 1:
+                        if stack.y > prev.y:
+                            diveWentDown[0] = True
+                        # after the stack moves DOWN toward 21,13 it may only keep going
+                        # right/down - an upward step means a plan flip-flopped (the QK
+                        # kingKillPath fallback once dragged it 15,7->15,8 down, then the
+                        # committed stealth route walked it back up 15,8->15,7->15,6).
+                        self.assertFalse(
+                            diveWentDown[0] and stack.y < prev.y,
+                            f'the {stack.army}-stack moved UP to {stack} after already diving down '
+                            f'(prev {prev}); path: {[str(t) for t in diveTiles]} -> {stack}')
+                diveTiles.append(stack)
+            if len(predictedTurn291) == 0:
+                # re-evaluate the same prediction the bot just used for this turns move.
+                predictedTurn291.append(BotTargeting.get_predicted_target_player_general_location(bot))
+                trueSpawnValidTurn291.append(
+                    bot.armyTracker.valid_general_positions_by_player[enemyGeneral.player][playerMap.At(21, 13)])
+
+        simHost.run_between_turns(trackDiveAndCapturePrediction)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=15)
+        self.assertEqual(winner, general.player,
+            'the bot must legitimately kill the fabricated general at the end of the sweep')
+
+        # The true enemy spawn was 21,13: every observed emergence lies near the bottom-right
+        # cluster's shortest route to our general, while top-row candidates would have had to
+        # emerge through the 9,3->13,3 hallway (or 12,6) and never did.
+        self.assertTrue(
+            len(trueSpawnValidTurn291) == 1 and trueSpawnValidTurn291[0],
+            'the true spawn 21,13 should still be a valid candidate at turn 291')
+
+        predicted = predictedTurn291[0]
+        bottomRightCluster = {
+            (19, 12),
+            (21, 8), (21, 9), (21, 10), (21, 11), (21, 12), (21, 13),
+        }
+        self.assertIn(
+            (predicted.x, predicted.y),
+            bottomRightCluster,
+            f'predicted {predicted} should be in the bottom-right cluster, not top row or mid-map')
+        self.assertNotEqual((14, 9), (predicted.x, predicted.y))
+        self.assertNotEqual((20, 0), (predicted.x, predicted.y))
+
+        tile155 = playerMap.At(15, 5)
+        self.assertTrue(
+            tile155.discovered and not tile155.isGeneral,
+            'the dive should have sighted 15,5 empty during the sweep')
+        firstBottomRight = next(
+            (i for i, t in enumerate(diveTiles) if t.x >= 19 and t.y >= 8),
+            None)
+        firstTopRow = next(
+            (i for i, t in enumerate(diveTiles) if t.y <= 4),
+            None)
+        self.assertIsNotNone(
+            firstBottomRight,
+            f'the 115-stack never swept the bottom-right candidate region; path: {[str(t) for t in diveTiles]}')
+        self.assertLess(
+            firstBottomRight,
+            firstTopRow if firstTopRow is not None else len(diveTiles) + 1,
+            f'the 115-stack reached the top row before the bottom-right cluster; path: {[str(t) for t in diveTiles]}')
+
+    # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+    # Regression: in ffa replay p9lH7ucI- our t243 capture of green (player 2) revealed a huge swath of
+    # red (player 0) land. The tracker then concluded red's general MUST be 15,3 (the only surviving fog
+    # 'a' guess adjacent to the revealed block) even though the real general was at 15,0.
+    def test_should_not_over_limit_enemy_general_on_capture_reveal(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_over_limit_general_on_capture_reveal___p9lH7ucI----1--243__real.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 243, fill_out_tiles=True)
+
+        rawFile = 'GameContinuationEntries/should_not_over_limit_general_on_capture_reveal___p9lH7ucI----1--243.txtmap'
+        rawMap, _ = self.load_map_and_general(rawFile, respect_undiscovered=True, turn=243)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '10,8->11,8  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+
+        validPositions = bot.armyTracker.valid_general_positions_by_player[0]
+        validTiles = [str(t) for t in map.get_all_tiles() if validPositions[t]]
+        logbook.info(f'valid general positions for p0 after capture: {len(validTiles)} -> {validTiles}')
+
+        # We must not be certain where red's general is: no force-pin of a
+        # 'known' general on our map and more than one surviving candidate.
+        self.assertIsNone(
+            playerMap.generals[0],
+            'red general should not be known/pinned after the capture reveal')
+        self.assertGreater(
+            len(validTiles),
+            1,
+            f'red should have multiple valid general candidates, not a single pinned tile: {validTiles}')
+
+        # 15,3 was the phantom pin (it is also guessed as a mountain, so it
+        # cannot host a general at all in our view).
+        self.assertInvalidGeneralPositionXY(bot, 15, 3, 0)
+
+        # red's real general was at 15,0 - it must remain a candidate, along
+        # with the rest of the fog block connected to its revealed land.
+        self.assertValidGeneralPositionXY(bot, 15, 0, 0)
+        self.assertValidGeneralPositionXY(bot, 15, 1, 0)
+        self.assertValidGeneralPositionXY(bot, 15, 2, 0)
+        self.assertValidGeneralPositionXY(bot, 16, 0, 0)
+        self.assertValidGeneralPositionXY(bot, 16, 2, 0)
+        self.assertValidGeneralPositionXY(bot, 16, 3, 0)
+        self.assertValidGeneralPositionXY(bot, 17, 0, 0)
+
+        # but the candidate set must stay meaningfully bounded: positions deep
+        # in unrelated fog (all of which were valid before the fix) are now
+        # eliminated because the general cannot be farther than red's unseen
+        # tile count from its revealed land.
+        self.assertInvalidGeneralPositionXY(bot, 2, 12, 0)
+        self.assertInvalidGeneralPositionXY(bot, 0, 13, 0)
+        self.assertInvalidGeneralPositionXY(bot, 0, 15, 0)
+        self.assertInvalidGeneralPositionXY(bot, 2, 16, 0)
+        self.assertInvalidGeneralPositionXY(bot, 2, 19, 0)
+        self.assertInvalidGeneralPositionXY(bot, 3, 22, 0)
+        self.assertLess(
+            len(validTiles),
+            60,
+            f'red general candidates should be tightly bounded after the reveal, got {len(validTiles)}: {validTiles}')

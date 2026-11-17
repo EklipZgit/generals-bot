@@ -1,0 +1,61 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+M    M    M    M    a4   a5   a13  a1   a1   a5   a5   a2   a4        M    M    M
+a3   a3   a1   aC5  a3   M    a5   a5   a4   M    M    M                                  M
+M    M    a1   a2   a2   a2   a2   a3   a1   a1   a2   a5   M    M              M
+aC4  a1   a1   a2   a2   M    a2   a3   a1   a3   a2   M    M                             M
+a3   a2   a1   a93  aG1  M    a2   M    a1   a3   a2   aC21 M         M    M
+a2   a2   a3   a5   M    aC14 a2   b6   a1   a3   a3   a3
+a2   a6   a3   M    M    a2   a1   a1   a1   a3   a3   M
+a2   a2   a2   a2   a2   a14  M    a1   aC12 M    a3   M    M
+a2   a2   M    M    a1   a2   a10  a1   M    a3   a3   b6
+M    M    M         b2   a2   b3   b3   b3   a3   M
+                    b2   b3   b3   b3   b3   a2   M              M
+                    b2   M    M    b131 b4   a2   a1   a1                  M              M
+M         M    M    b2   b1   b1   b1   b4   M    a2   a1   a1   M                        M
+b3   M    b2   b2   b2   b1   b4   b4   b4   b6   a2   a1   a1
+b3   b2   b2   M    b4   b1   b2   bC25 b4   b4   b4   b4   M                   M
+bG7  b2   M    b1   b1   bC4  b2   M         M                        M    M
+b1   b1   b1   b1   b2   b2   M    b2   M         M    M    M    M    M         M    M
+b3   b1   b3   M    b2   b2   b2   b2   b2   b2   b2   b2   M    M
+b3   b1   bC9  bC9  b2   M    b2   M    b2   b2        b2        M         M              M
+b3   b3   b3   b1   b1   b1   bC11 M    b3   M                   M         M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=423
+player_index=0
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=1v1
+aUsername=Human.exe
+aStars=78
+aScore=383
+aTiles=95
+aStandingArmy=288
+aCityCount=6
+aGeneral=4,4
+aDead=False
+aLeftGame=True
+aLeftGameTurn=572
+aAggressionFactor=0
+aDelta25Tiles=11
+aDelta25Score=68
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=423
+aKnowsKingLocation=False
+bUsername=EklipZ
+bStars=77
+bScore=374
+bTiles=80
+bStandingArmy=294
+bCityCount=6
+bGeneral=0,15
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=185
+bDelta25Tiles=0
+bDelta25Score=116
+bCityGainedTurn=389
+bCityLostTurn=366
+bLastSeenMoveTurn=423
+bKnowsKingLocation=False

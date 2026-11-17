@@ -21,6 +21,7 @@ from BotModules.BotRendering import BotRendering
 from BotModules.BotDefense import BotDefense
 from BotModules.BotComms import BotComms
 from BotModules.BotCombatOps import BotCombatOps
+from BotModules import BotFfaKillGather
 
 from BotModules.BotGatherOps import BotGatherOps
 from BotModules.BotRepetition import BotRepetition
@@ -565,6 +566,72 @@ class BotExpansionOps:
         return None
 
     @staticmethod
+    def get_defensive_flow_path(bot: EklipZBot) -> Path | None:
+        """
+        Returns a stable forward path along the threatened home corridor for iterative
+        flow expansion, or None when no corridor-compatible state exists.
+
+        Tests/test_BotBehavior.py::BotBehaviorTests.test_should_attack_early_without_gather_repetition
+        (QaFHRLrxn t213 import) plus UnitTests/test_BotExpansionOps.py::
+        BotExpansionOpsDefensiveFlowPathTests: BotDefense.likely_kill_push flickers as our
+        own gathered army grows, which made the main-expansion gate alternate between
+        skipping and entering flow expansion and let gather/flow pull the stack back off
+        the defensive corridor (repeated 5,17 source tile, first qualifying enemy-land
+        attack only at t237 vs the t222 proof line). This corridor is gated on the same
+        enemy path-density evidence that sets likely_kill_push but deliberately does NOT
+        gate on our own army amount, so it stays stable through that flicker. It is only
+        consumed as constrainedFlowPaths, which constrains OUTGOING island arcs from
+        corridor source islands (OrToolsFlowDirectionFinder._build_flow_path_island_constraints)
+        while inbound reinforcements and forward captures remain allowed.
+        """
+        if not bot.expansion_use_iterative_flow:
+            return None
+        enemyAttackPath = bot.enemy_attack_path
+        if enemyAttackPath is None:
+            return None
+        if bot.targetPlayer is None or bot.targetPlayer < 0:
+            return None
+        shortestPath = bot.shortest_path_to_target_player
+        if shortestPath is None:
+            return None
+        if BotStateQueries.is_all_in(bot):
+            return None
+        if BotTargeting.is_ffa_situation(bot):
+            return None
+
+        if not bot.likely_kill_push:
+            if bot.opponent_tracker.did_player_already_attack_this_round(bot.targetPlayer):
+                return None
+            # Mirror the exact path-density evidence used by
+            # BotModules/BotDefense.py::check_should_defend_economy_based_on_cycle_behavior
+            # so the corridor activates on the same threat signal that sets
+            # likely_kill_push, without gating on our own army amount.
+            halfDist = shortestPath.length - shortestPath.length // 2
+            enPath = enemyAttackPath.get_subsegment(halfDist + 2, end=True)
+            enemyAttackPathEnOrFogTiles = sum([1.25 for t in enPath.tileList if (bot._map.is_tile_on_team_with(t, bot.targetPlayer) or not t.visible) and t.army > 2])
+            enemyAttackPathEnOrFogTiles += sum([0.95 for t in enPath.tileList if (bot._map.is_tile_on_team_with(t, bot.targetPlayer) or not t.visible) and t.army == 2])
+            enemyAttackPathEnOrFogTiles += sum([0.55 for t in enPath.tileList if (bot._map.is_tile_on_team_with(t, bot.targetPlayer) or not t.visible) and t.army <= 1])
+            if enemyAttackPathEnOrFogTiles <= halfDist // 2:
+                return None
+
+        # enemy_attack_path runs enemy-general -> our-general, so reversed order is the
+        # forward defensive flow direction (our side -> enemy). Keep the contiguous
+        # friendly-team prefix plus the first nonfriendly endpoint, then stop: this
+        # constrains only friendly outgoing sources, never enemy-owned outgoing arcs.
+        reversedTiles = list(reversed(enemyAttackPath.tileList))
+        if len(reversedTiles) == 0 or not bot._map.is_tile_friendly(reversedTiles[0]):
+            return None
+        defensivePath = Path()
+        defensivePath.add_next(reversedTiles[0])
+        for tile in reversedTiles[1:]:
+            defensivePath.add_next(tile)
+            if not bot._map.is_tile_friendly(tile):
+                break
+        if defensivePath.length < 1:
+            return None
+        return defensivePath
+
+    @staticmethod
     def build_expansion_plan(
             bot: EklipZBot,
             timeLimit: float,
@@ -676,6 +743,14 @@ class BotExpansionOps:
                     addlOptions.append(opt)
                     bot.info(f'opt quickKillCity {bot.quick_kill_city_plan_option.econValue / max(bot.quick_kill_city_plan_option.length, 1):.2f} ({bot.quick_kill_city_plan_option.econValue:.1f}e/{bot.quick_kill_city_plan_option.length}t) {str(bot.quick_kill_city_plan_option)}')
 
+            # FFA (>2 living teams) certified kill-gather option. Offered into the SAME
+            # external-option/knapsack path as city/interception options so normal flow
+            # selection chooses it; process_selected_plan commits it only if selected.
+            # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+            for ffaOption in BotFfaKillGather.prepare_options(bot, expansionNegatives):
+                addlOptions.append(ffaOption)
+                bot.info(f'opt ffaKillGather {ffaOption.econValue / max(ffaOption.length, 1):.2f} ({ffaOption.econValue:.1f}e/{ffaOption.length}t) enemy=p{ffaOption.enemy_index} margin={ffaOption.projection.margin}')
+
             # Clone blocking_tile_info and add general movement blocking
             threatBlockingTiles = dict(bot.blocking_tile_info)
             if bot.general.lastMovedTurn >= bot._map.turn - 3 and bot.general.delta.toTile is not None:
@@ -703,6 +778,7 @@ class BotExpansionOps:
                     bot.info(f'FE GEN_MV_BLK toTile={toTile} lastMovedTurn={bot.general.lastMovedTurn}')
 
 
+            defensiveFlowPath: Path | None = None
             if bot.expansion_use_iterative_flow:
                 with bot.perf_timer.begin_move_event('FLOW EXPAND!'):
                     ogStart = time.perf_counter()
@@ -800,6 +876,18 @@ class BotExpansionOps:
                         if bot.enemy_attack_path is not None:
                             enemyAttackPathTiles = bot.enemy_attack_path.tileSet
 
+                        # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_attack_early_without_gather_repetition
+                        # + UnitTests/test_BotExpansionOps.py::BotExpansionOpsDefensiveFlowPathTests /
+                        # ::test_iterative_flow_passes_defensive_corridor_as_constrained_flow_paths:
+                        # hand iterative flow the stable defensive corridor on every build so
+                        # likely_kill_push flicker (cleared by our own gathered army) cannot make
+                        # the planner alternate and pull expansion back off the threatened home
+                        # corridor. threatBlockingTiles/enemyAttackPathTiles handling is unchanged.
+                        defensiveFlowPath = BotExpansionOps.get_defensive_flow_path(bot)
+                        constrainedFlowPaths = [defensiveFlowPath] if defensiveFlowPath is not None else None
+                        if defensiveFlowPath is not None:
+                            logbook.info(f'FE_DEFENSIVE_CORRIDOR turn={bot._map.turn} path={defensiveFlowPath}')
+
                         optCollection = flowExpander.get_expansion_options(
                             islands=bot.tileIslandBuilder,
                             asPlayer=bot.player.index,
@@ -814,6 +902,7 @@ class BotExpansionOps:
                             army_override_matrix=armyOverrideMatrix,
                             threatBlockingTiles=threatBlockingTiles,
                             enemyAttackPathTiles=enemyAttackPathTiles,
+                            constrainedFlowPaths=constrainedFlowPaths,
                             leafMoves=bot.leafMoves,  # not capture leafmoves, this is for gather plan extension
                         )
                         cumulative = 0.0
@@ -935,7 +1024,11 @@ class BotExpansionOps:
                 additionalOptionValues=addlOptions,
                 includeExtraGenAndCityArmy=includeExtraGenAndCityArmy,
                 perfTimer=bot.perf_timer,
-                skipKnapsacking=flow_expansion_did_knapsacking)
+                skipKnapsacking=flow_expansion_did_knapsacking,
+                # Tests/test_BotBehavior.py::BotBehaviorTests.test_should_attack_early_without_gather_repetition:
+                # execute the compatible frontier attack before unrelated flank expansion,
+                # rather than deferring its city-source army until the attack is too late.
+                preferredCaptureTarget=defensiveFlowPath.tail.tile if defensiveFlowPath is not None else None)
 
             path = expUtilPlan.selected_option
             otherPaths = expUtilPlan.all_paths
@@ -952,6 +1045,13 @@ class BotExpansionOps:
                 )
 
             bot.viewInfo.add_stats_line(f'EXP AVAIL {expUtilPlan.turns_used} {expUtilPlan.cumulative_econ_value:.2f} - (en{expUtilPlan.en_tiles_captured} neut{expUtilPlan.neut_tiles_captured})')
+
+            # Emit the FFA kill-gather diagnostic line right under EXP AVAIL.
+            # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+            # NOTE: process_selected_plan is deliberately NOT called here - it must run on
+            # the FINAL ExpansionPotential after intercept promotion and plan filtering,
+            # just before `return plan` below, so a flow/chosen selection commits correctly.
+            BotFfaKillGather.add_stats(bot)
 
         plan = ExpansionPotential(
             expUtilPlan.turns_used,
@@ -1070,6 +1170,14 @@ class BotExpansionOps:
             plan = BotExpansionOps._reject_unaffordable_neutral_city_capture_plan(
                 bot, plan, expansionNegatives, pathColor,
                 overrideTurns, includeExtraGenAndCityArmy, skip_remaining_time_check)
+
+        # Commit a selected FFA kill-gather option on the FINAL plan, after
+        # intercept promotion (selected_option/all_paths) and every legitimate
+        # filter above has run. A chosen option is promoted to selected_option and
+        # committed THIS turn so same-turn execution follows; an offered-but-
+        # unchosen option never commits.
+        # Tests/test_FFA.py::FFATests.test_should_all_in_nearby_players_as_fast_as_possible
+        BotFfaKillGather.process_selected_plan(bot, plan)
 
         return plan
 
@@ -1902,7 +2010,12 @@ class BotExpansionOps:
 
         tilesMinusDeserts = bot.player.tileCount - len(bot.player.deserts)
         if outOfPlayRat > 1.4 and (tilesMinusDeserts > 150 or bot.player.cityCount > 5 or len(bot.defensive_spanning_tree) > 50):
-            if bot.force_far_gathers_sleep_turns <= 0 and not bot.force_far_gathers:
+            # Tests/test_AllIn.py::test_should_keep_timed_all_in_over_far_gathers
+            # An attacking army positioned far from the shortest inter-general path
+            # reads as "out of play", so a live timed all-in / cyclic winning gather
+            # must not be hijacked by force_far_gathers pulling that army back.
+            if bot.force_far_gathers_sleep_turns <= 0 and not bot.force_far_gathers \
+                    and not BotStateQueries.is_timed_all_in_or_cyclic_active(bot):
                 bot.force_far_gathers = True
                 bot.force_far_gathers_turns = bot._map.remainingCycleTurns
                 minTurns = max(tilesMinusDeserts // 2, len(bot.defensive_spanning_tree) + outOfPlayCount // 2, outOfPlayCount) + bot.board_analysis.inter_general_distance * outOfPlayRat

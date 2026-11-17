@@ -1,0 +1,61 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+b3   b3   bG39 b2   M    M    M                                       M    M         a3   a1
+b3   b3   b3   b2   b3   b3   bC30 b2   b2   b2   b2                            M    M    a4   M    aC7
+b3   b3   b2   b2   M    b5   b3   b2   b2   b4   b4   b5   b5   a1   a1   a62  a1   a1   a1   a1   a1
+     b3   b2   b2   M              bC26 b2   M         M    a2   a1   a2   a2   a2   a3   a3   a3   a3
+     bC8  b2   b2   b2   M         M    b2   b2   b2   b2   a2   a5   a2   M    aC2  a1   a2   a2   a3
+     b1   b2   b2   M    M    M         b4   M    M    b1   b2   aC55 a1   a14  a1   a2   M    aG21 a3
+     b1   b1   b1   b1   b1   b1   b1   b1   b1   b1   b1   b58  b2   a2   M    a2   a2   a3   M    a3
+b1   b1   b1   M    b5   b1   b1   b2   b4   a3   M    b1   b1   b1   b2   a2   a2   M    a2   M    a2
+b1   b1   M              b1   b1   a1   a1   a3   a2   a2   M    M    a2   M    a1   M    a2   a2   a2
+     M              M    b1   b1        a2   a2   a2   a2   a2   a3   b3   a1   a1   a1   b3        a4
+M         M                   M              M    M    a2   a2   M    M    a1   a1   b3             a1
+               M              M                        a2   a2             a1   a1   a4   M    M    a3
+M    M         M                        M         M    M              M         M         M
+M         M    M    M                   M              M                        M
+               M    M         M              M              M    M         M
+M    M                   M                        M    M    M
+                         M                   C45                 M              M    M
+               M                                                                M                   M
+          M                   M                   C45       M    M         M    M                   M
+M                             C42  M    M    C48                      M         M              M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=330
+player_index=0
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=1v1
+aUsername=Human.exe
+aStars=77
+aScore=302
+aTiles=77
+aStandingArmy=225
+aCityCount=4
+aGeneral=19,5
+aDead=False
+aLeftGame=True
+aLeftGameTurn=460
+aAggressionFactor=0
+aDelta25Tiles=-3
+aDelta25Score=66
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=330
+aKnowsKingLocation=False
+bUsername=q4523654
+bStars=47
+bScore=318
+bTiles=80
+bStandingArmy=238
+bCityCount=4
+bGeneral=2,0
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=632
+bDelta25Tiles=6
+bDelta25Score=86
+bCityGainedTurn=294
+bCityLostTurn=292
+bLastSeenMoveTurn=330
+bKnowsKingLocation=True

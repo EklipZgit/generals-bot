@@ -1981,6 +1981,15 @@ class TileIslandBuilder(object):
             if not id:
                 continue
 
+            # Tests/test_AllIn.py::AllInTests.test_should_keep_attacking_with_forward_stacks_when_winning_all_in:
+            # serialized islands can cover tiles that were pathable fog land in
+            # the live game but reload as obstacles (reset_wrong_undiscovered_fog_guess
+            # flips isCity fog tiles to TILE_OBSTACLE on import). Obstacle tiles
+            # cannot carry islands — debug_verify_all_islands skips them in the
+            # lookup scan — so skip them here exactly like mountains.
+            if tile.isObstacle:
+                continue
+
             maxId = max(id, maxId)
 
             tileTeam = self.teams[tile.player]

@@ -1,0 +1,170 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+d3   d3   d3   M    d5   d5   d5   d4   d4   M    C42       M                             M              b1   f2   f2   f2
+d4   d3   d3   d3   d3   d3   d3   d4   d4   M              M         M                        M         b1   M    f2   f2
+d4   d3   d3   d3   d7   d8   dG67 M    M    dC61 d3   d3   d3   d3                                      b1   b1   b1   f2
+          d7   M         M    d3   d3   d3   d3                  d3   d3   M    M         f5        b1   b1   f2   b1   f2
+     M    d7             M    d4   d5   d5   d5             M         d3             b1   b1   b1   b1   f2   f2   b1   f2
+          d7   M    d6   d6   d4             M    M              M    d48            b1   M                   M    b1   f2
+     M    d7        d6        d4   M              M    M    M                        b1   b1             f6   f6   b1   f2
+          d7   M    d4   d4   d4             M    C45                                C42  b2   M         C41  f5   b1   f2
+d7   d7   d7        d4        M         M                   M    M                   M              f6   M    f2   b1   fC35
+     M    M         d4        M         M    M                                  M              M    f6   b1   b1   b1   f3
+     M              d4                  f3   f3   f3   f3   f3   f3   f3             M    f4   f4   f4   b1   f2   f3   M
+          C3   d4   d4   C49  M    M    f3   f3   f3   f3   f3   f3   f3   M    M    M    M         M    b1   b1   f3   M
+M    d4   d4   d4   C42  f4   f4   f4   f4   f3   f3   f3   f3   f3   f3   f14  f3   f1   fC19 M    f5   f2   b1   f3   f4
+d4   d4   d4   M    f4   f4   f4   f4   f4   f3   M    M    f3   M    f3   f2   f3   f1   M         M    f2   b1   f3   f4
+d4   M    d4   d5   d5   d5   d5   d5   d5   f3   fC51 f3   f3        M    f3   f4   f1   f1   f1   f1   f1   f1   f1   f1
+d4        d4        M    f4   f4   f4   f4   f4   f4   f4   C41       M    f3   f3   f1   f3   f3   f3   f2   b1   f3   f1
+d4   M    d4   M         M    f4   M    f4   f4   f4   M         M    f1   f1   f1   f1   f1   M         f2   b1   f3   f1
+d4   d4   d4   d4   M         f4   d4   f4   f4   f4   M         f1   f1   M    f1   C41  f1   f1   f2   b2   b1   f3   f287
+d4   d4   d4   d4   d4   d4   M    d4   f4   d5   M              f1   M    M    f1   f1   M    f1   f2   b2   f6   M    fG61
+d4   d4   d11  dC81 d4   d4   d4   d4   d4   d4   d4             f1   b3   M    M    f1   f1   f1        b2   f3   f3   f3
+d4   d4   d4   M    d6                  M    b3   b3        M    f1   f1   f1   f1   f1   b2   b2   b2   b2        M    f3
+d4   d4   d4   d4   d4   d4        C41       M    b3   b3   b3   b2   b2   f1   f1   M                        C41  f7   f6
+               M                        M         C41  M    b2   b2   bC29 b2   b3   M         M    M         M    f7   f6
+          M                                  b3   b2   b2   b2   M    M    b2   b3   M    M    M    M              f6   M
+                                        b3   C41  M    b2   b2   b2   b2   b2   b3   M                             f6
+M         M                             b3   b2   b2   b2   b2   b2   b2   b2   b3   M         M         C49       f6
+                                   b3   b3   b2   b2   b2   M    b2   b2   b3   b3                            M    f6
+               M    M              M    b2   bG4  b2   M    b3   b3   M    b3   M                        M    M    M
+                                   b3   b2   b1   M    b1   b42            b3   C45       M              M
+                              M    b3   b3   b1   b1   b1   M    M                        C48                      M
+               M                   M    b3        M                   M    C41            M
+               M         M    M                                       M                   M         M    C43       M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=391
+player_index=5
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=ffa
+aUsername=sdjdvdfvdf
+aStars=6
+aScore=0
+aTiles=0
+aStandingArmy=0
+aCityCount=0
+aDead=True
+aLeftGame=False
+aLeftGameTurn=-1
+aAggressionFactor=0
+aDelta25Tiles=-42
+aDelta25Score=-116
+aCityGainedTurn=0
+aCityLostTurn=2
+aLastSeenMoveTurn=0
+aKnowsKingLocation=False
+bUsername=roastedtomatoes
+bStars=36
+bScore=260
+bTiles=101
+bStandingArmy=159
+bCityCount=2
+bGeneral=9,27
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=590
+bDelta25Tiles=31
+bDelta25Score=39
+bCityGainedTurn=275
+bCityLostTurn=273
+bLastSeenMoveTurn=381
+bKnowsKingLocation=False
+cUsername=egykth
+cStars=13
+cScore=0
+cTiles=0
+cStandingArmy=0
+cCityCount=0
+cDead=True
+cLeftGame=False
+cLeftGameTurn=-1
+cAggressionFactor=0
+cDelta25Tiles=-33
+cDelta25Score=-62
+cCityGainedTurn=0
+cCityLostTurn=2
+cLastSeenMoveTurn=210
+cKnowsKingLocation=False
+dUsername=Eason_
+dStars=15
+dScore=733
+dTiles=114
+dStandingArmy=619
+dCityCount=3
+dGeneral=6,2
+dDead=False
+dLeftGame=True
+dLeftGameTurn=843
+dAggressionFactor=0
+dDelta25Tiles=0
+dDelta25Score=186
+dCityGainedTurn=269
+dCityLostTurn=233
+dLastSeenMoveTurn=0
+dKnowsKingLocation=False
+eUsername=Davidazullo2525
+eStars=42
+eScore=0
+eTiles=0
+eStandingArmy=0
+eCityCount=0
+eDead=True
+eLeftGame=False
+eLeftGameTurn=-1
+eAggressionFactor=61
+eDelta25Tiles=-64
+eDelta25Score=-238
+eCityGainedTurn=298
+eCityLostTurn=200
+eLastSeenMoveTurn=297
+eKnowsKingLocation=False
+fUsername=Human.exe
+fStars=56
+fScore=908
+fTiles=160
+fStandingArmy=748
+fCityCount=4
+fGeneral=24,18
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+fDelta25Tiles=-11
+fDelta25Score=184
+fCityGainedTurn=0
+fCityLostTurn=0
+fLastSeenMoveTurn=391
+fKnowsKingLocation=False
+gUsername=F11
+gStars=26
+gScore=0
+gTiles=0
+gStandingArmy=0
+gCityCount=0
+gDead=True
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=0
+gDelta25Tiles=-1
+gDelta25Score=-73
+gCityGainedTurn=0
+gCityLostTurn=2
+gLastSeenMoveTurn=0
+gKnowsKingLocation=False
+hUsername=Harvitabular
+hStars=47
+hScore=0
+hTiles=0
+hStandingArmy=0
+hCityCount=0
+hDead=True
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=4
+hDelta25Tiles=-19
+hDelta25Score=-21
+hCityGainedTurn=0
+hCityLostTurn=2
+hLastSeenMoveTurn=92
+hKnowsKingLocation=False

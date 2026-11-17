@@ -6,7 +6,7 @@ from unittest import mock
 import base.bot_base
 from base.bot_base import GeneralsClientHost
 from base.client.generals import GeneralsClient
-from BotModules.WrpWorkerProcess import WrpWorkerProcess
+from BotModules.WrpWorkerProcess import WrpRequest, WrpWorkerProcess
 
 
 class ProcessSuicideTests(unittest.TestCase):
@@ -60,6 +60,57 @@ class ProcessSuicideTests(unittest.TestCase):
             self.assertTrue(worker.result_queue._joincancelled)
         finally:
             worker.close()
+
+    @staticmethod
+    def _dummy_request() -> WrpRequest:
+        """A structurally valid request; submit() rejects closed/closing workers
+        before the payload is ever unpickled, so contents are never used."""
+        return WrpRequest(
+            generation=1, map_payload=b'', start_tile_index=0,
+            target_tile_indexes=[], initial_army=0, time_limit=0.01)
+
+    def test_wrp_worker_request_close_polls_to_closed(self) -> None:
+        """Async FFA-end close: request_close is non-blocking, poll_close
+        finalizes once the daemon worker self-exits, submit is rejected while
+        closing, and request_close on a never-started worker leaves nothing
+        unclosable. Idempotent with the blocking game-over close()."""
+        # never-started worker: request_close finalizes immediately (no process
+        # to join, no unclosable queues) and submit stays rejected.
+        idle = WrpWorkerProcess()
+        idle.request_close()
+        self.assertTrue(idle.closed)
+        self.assertTrue(idle.poll_close())
+        with self.assertRaises(RuntimeError):
+            idle.submit(self._dummy_request())
+
+        # running worker: launch the real process exactly as submit() does but
+        # without a WRP job - _wrp_worker_main blocks on request_queue.get()
+        # until the None sentinel request_close() enqueues.
+        worker = WrpWorkerProcess()
+        worker.started = True
+        worker.process.start()
+        try:
+            worker.request_close()
+            self.assertFalse(worker.closed)          # non-blocking: still closing
+            self.assertTrue(worker.close_requested)
+            # submit while closing must be rejected - never enqueue behind None
+            with self.assertRaises(RuntimeError):
+                worker.submit(self._dummy_request())
+            # bounded poll until the daemon self-exits on its own
+            deadline = time.time() + 15.0
+            closed = False
+            while time.time() < deadline:
+                if worker.poll_close(timeout_sec=0.05):
+                    closed = True
+                    break
+                time.sleep(0.01)
+            self.assertTrue(closed, "WRP worker did not self-terminate after request_close")
+            # game-over close() after async close is a safe no-op
+            worker.close()
+            self.assertTrue(worker.closed)
+        finally:
+            if not worker.closed:
+                worker.close()
 
 
 if __name__ == "__main__":

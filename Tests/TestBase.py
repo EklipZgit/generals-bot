@@ -68,7 +68,8 @@ class TestBase(unittest.TestCase):
         """Set by get_debug_render_bot"""
 
         self.map: MapBase = None
-        self.use_v2_interception: bool = False
+        self.use_v2_interception: bool = True
+        self.bot: EklipZBot = None
         ArmyInterceptor.DEBUG_BYPASS_BAD_INTERCEPTIONS = False
 
     def get_debug_render_bot(self, simHost: GameSimulatorHost, player: int = -2) -> EklipZBot:
@@ -78,6 +79,7 @@ class TestBase(unittest.TestCase):
         self._sim_host = simHost
 
         bot = simHost.get_bot(player)
+        self.bot = bot
         bot.info_render_gather_values = False
         bot.info_render_centrality_distances = False
         bot.info_render_leaf_move_values = False
@@ -1230,10 +1232,32 @@ class TestBase(unittest.TestCase):
         self.assertEqual(player, tile.player, reason)
 
     def assertOwnedXY(self, x: int, y: int, reason: str | None = None):
-        tile = self.map.At(x, y)
         player = self.map.player_index
+        self.assertOwnedByXY(player, x, y, reason)
+
+    def assertOwnedByXY(self, player: int, x: int, y: int, reason: str | None = None):
+        tile = self.map.At(x, y)
         if not reason:
             reason = f'expected player {player} to own {tile}'
+        self.assertEqual(player, tile.player, reason)
+
+    def assertFogOwned(self, player: int, tile: Tile | int, reason: str | None = None):
+        if isinstance(tile, int):
+            x, y = player, tile
+            player = self.bot._map.player_index
+            tile = self.bot._map.At(x, y)
+        if not reason:
+            reason = f'expected player {player} to own {tile} in the fog'
+        self.assertEqual(player, tile.player, reason)
+
+    def assertFogOwnedXY(self, x: int, y: int, reason: str | None = None):
+        player = self.bot._map.player_index
+        self.assertOwnedByXY(player, x, y, reason)
+
+    def assertFogOwnedByXY(self, player: int, x: int, y: int, reason: str | None = None):
+        tile = self.bot._map.At(x, y)
+        if not reason:
+            reason = f'expected player {player} to own {tile} in the fog'
         self.assertEqual(player, tile.player, reason)
 
     def assertCoordsInPath(self, coords: typing.Tuple[int, int], path: Path, reason: str = ''):

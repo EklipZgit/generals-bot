@@ -1,0 +1,169 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+                    M    M                   M    M         M    M                             C46                 M    M
+          M    C44                                b1                                           M    M    M    M
+                         C42  b1   b1   b1   b1   bG2            M         M    M                                  M    M
+                    M                        C44  b1             M    M         M
+                                   M              b1             M         C44  M         e4   c1   c1   c1   C42  cG4
+     hG3            M                        M    b5   b1                                 e1   c1   M    c1   c1   c1
+C42  h1   h1   h11       M         M         M    M    b1                  M    M    M    e1   M                        C44
+     M    M                                                                     eG3  e1   e1   M         M
+                                             M         M    M    C42       M         M         M         M    M         M
+M                                  M    M         M              M                             M                   M
+M         M         C50  M         M         M         M              M                                       M    M
+     M    M                             C44       M    C49                      M                                       C49
+               M         C48       M                   C42            M    M         M    M         M              M    M
+     M                        M         fG16 M                        M              M    C49            M
+     M    M                   M                        M         M         M                   M
+M                   C42       M    M    M                   M    M              M    M                   C48  M
+M    M                                                                     M                   M                   M
+                    M         M    M                                       C41       C41       M              M    M
+     d1   d1                                           M                   M         C44       C44            M    M
+     dG4  C32       M                                            M                                       M
+C44       M         M    C43                      M                        C44                      M         a12  a1
+                    M                        M         M                   M                                  aG2  a1   M
+               M                             M         M         g1   g1   g1   g2   C42                      C42
+M                                                 M         M    g1   g1   M    g3             M
+          M                                  M                   M    g1   gG2  g1   M              M              M    M
+     M    M         M              M    C42                      M    g1   M    g1                  M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=31
+player_index=2
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=4
+mode=ffa
+aUsername=12314
+aStars=10
+aScore=16
+aTiles=4
+aStandingArmy=12
+aCityCount=1
+aGeneral=22,21
+aDead=False
+aLeftGame=True
+aLeftGameTurn=243
+aAggressionFactor=0
+aDelta25Tiles=3
+aDelta25Score=15
+aCityGainedTurn=0
+aCityLostTurn=2
+aLastSeenMoveTurn=0
+aKnowsKingLocation=False
+bUsername=gababool
+bStars=17
+bScore=16
+bTiles=11
+bStandingArmy=5
+bCityCount=1
+bGeneral=10,2
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=0
+bDelta25Tiles=10
+bDelta25Score=15
+bCityGainedTurn=0
+bCityLostTurn=2
+bLastSeenMoveTurn=0
+bKnowsKingLocation=False
+cUsername=Human.exe
+cStars=56
+cScore=11
+cTiles=8
+cStandingArmy=3
+cCityCount=1
+cGeneral=23,4
+cDead=False
+cLeftGame=True
+cLeftGameTurn=592
+cAggressionFactor=0
+cDelta25Tiles=7
+cDelta25Score=10
+cCityGainedTurn=0
+cCityLostTurn=0
+cLastSeenMoveTurn=30
+cKnowsKingLocation=False
+dUsername=ghjddfghjhgf
+dStars=0
+dScore=6
+dTiles=3
+dStandingArmy=3
+dCityCount=1
+dGeneral=1,19
+dDead=False
+dLeftGame=False
+dLeftGameTurn=-1
+dAggressionFactor=0
+dDelta25Tiles=2
+dDelta25Score=5
+dCityGainedTurn=0
+dCityLostTurn=2
+dLastSeenMoveTurn=0
+dKnowsKingLocation=False
+eUsername=treasurecritter8
+eStars=46
+eScore=11
+eTiles=6
+eStandingArmy=5
+eCityCount=1
+eGeneral=16,7
+eDead=False
+eLeftGame=True
+eLeftGameTurn=193
+eAggressionFactor=30
+eDelta25Tiles=5
+eDelta25Score=10
+eCityGainedTurn=0
+eCityLostTurn=2
+eLastSeenMoveTurn=31
+eKnowsKingLocation=False
+fUsername=just terrible
+fStars=53
+fScore=16
+fTiles=1
+fStandingArmy=15
+fCityCount=1
+fGeneral=8,13
+fDead=False
+fLeftGame=False
+fLeftGameTurn=-1
+fAggressionFactor=0
+fDelta25Tiles=0
+fDelta25Score=15
+fCityGainedTurn=0
+fCityLostTurn=2
+fLastSeenMoveTurn=0
+fKnowsKingLocation=False
+gUsername=shoopshoopadoop
+gStars=47
+gScore=16
+gTiles=12
+gStandingArmy=4
+gCityCount=1
+gGeneral=15,24
+gDead=False
+gLeftGame=False
+gLeftGameTurn=-1
+gAggressionFactor=0
+gDelta25Tiles=11
+gDelta25Score=15
+gCityGainedTurn=0
+gCityLostTurn=2
+gLastSeenMoveTurn=0
+gKnowsKingLocation=False
+hUsername=Hckfjxjdn
+hStars=31
+hScore=16
+hTiles=4
+hStandingArmy=12
+hCityCount=1
+hGeneral=1,5
+hDead=False
+hLeftGame=False
+hLeftGameTurn=-1
+hAggressionFactor=0
+hDelta25Tiles=3
+hDelta25Score=15
+hCityGainedTurn=0
+hCityLostTurn=2
+hLastSeenMoveTurn=0
+hKnowsKingLocation=False

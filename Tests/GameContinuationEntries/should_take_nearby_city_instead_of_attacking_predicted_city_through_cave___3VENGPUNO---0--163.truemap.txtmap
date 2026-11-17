@@ -1,0 +1,63 @@
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+b2   b2   b2   b2   M    a2   a2   b3   b3        M              M    a5   a1   a1   M
+b2   b2   M    b2   a2   a2   a2   a2   a2   a2   a2   a2   a2   a2   a2   M    a1   M
+b2   b1   b1   b2   a2   b3   a3   a3   M    a3   a3   a2   M    a2   a2   M    M
+b1   b1   b1   b2   M    a2   a2   M    a3   a2   a2   a3   a4   M    aG29 a1   a1
+b1   b1   M    b3   b3   M    a3   a3   a2   a2   a3   a3   a3   a3   a2   M    a1
+M    bG2  b1   b2   b2   b2   C46  M    a2   M    M    C46  a3   C44  M    a1   a1   M
+     M    b1   b48  M    C44            a1   a1             C42       a2   a1   M
+b2   b2   b1   C42  b2   M         M    M                        a2   a1   a1   a2
+b2   b2   b1   b1   b2   b3   M    M         M                   a2   M    M
+          M    b2   M    b2   b2   M    b2   b2   b2   b2   a1   a1             M
+     b2   b2   b2   b2   b2   b2   b2   b2   M              M    a1                  M
+               b2   b2   b2   M    b2   M         M                   C43       M
+M              M    M    C43       b2
+     M              M    M    M
+                                                       M
+     M         M                             M                   M
+M              M    M              M                             M
+                         M              M    M
+                    M         M              M                        M         M
+                         M                   M
+     M    M    C44            M    M    M    M    M    M              M    C44
+M    M    M                             M         M                                  M
+|    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    
+turn=163
+player_index=0
+PATHABLE_CITY_THRESHOLD=10
+bot_target_player=1
+mode=1v1
+aUsername=Human.exe
+aStars=79
+aScore=151
+aTiles=61
+aStandingArmy=90
+aCityCount=1
+aGeneral=14,3
+aDead=False
+aLeftGame=True
+aLeftGameTurn=345
+aAggressionFactor=0
+aDelta25Tiles=13
+aDelta25Score=51
+aCityGainedTurn=0
+aCityLostTurn=0
+aLastSeenMoveTurn=163
+aKnowsKingLocation=False
+bUsername=imp25
+bStars=79
+bScore=158
+bTiles=59
+bStandingArmy=99
+bCityCount=1
+bGeneral=1,5
+bDead=False
+bLeftGame=False
+bLeftGameTurn=-1
+bAggressionFactor=103
+bDelta25Tiles=3
+bDelta25Score=51
+bCityGainedTurn=0
+bCityLostTurn=0
+bLastSeenMoveTurn=148
+bKnowsKingLocation=False

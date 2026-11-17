@@ -10,7 +10,7 @@ from __future__ import annotations
 import itertools
 import typing
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -24,6 +24,7 @@ from Models import Move
 from MapMatrix import MapMatrix, MapMatrixSet, TileSet
 from PerformanceTimer import PerformanceTimer
 from SearchUtils import *
+from FfaGeneralPlacement import FfaGeneralPlacement, GeneralLandEvidence
 from Path import Path
 from base.client.map import (
     MAX_ALLY_SPAWN_DISTANCE,
@@ -38,6 +39,7 @@ from base.client.map import (
 
 if typing.TYPE_CHECKING:
     from Strategy.OpponentTracker import OpponentTracker
+    from Strategy.WinConditionAnalyzer import CityOwnershipTransfer
 
 
 EMERGENCE_DISTANCE_BONUS_EXPONENT: float = 0.5
@@ -50,6 +52,13 @@ SPAWN_FAIRNESS_ELIMINATION_MARGIN: float = 0.1
 SPAWN_FAIRNESS_HUNTING_SCALE: float = 2.0
 SPAWN_FAIRNESS_MAX_DEPTH: int = 15
 SPAWN_FAIRNESS_MAX_PAIR_SAMPLES: int = 1_000_000
+# Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - emergences should lie on shortest paths from the enemy general toward us; soft-penalize candidates that cannot explain them.
+EMERGENCE_PATH_CONSISTENCY_ENABLED: bool = True
+EMERGENCE_PATH_CONSISTENCY_FLOOR: float = 0.2
+"""Minimum fraction of emergence-locality credit a candidate keeps regardless of off-route penalty."""
+EMERGENCE_PATH_CONSISTENCY_PRECONTACT_SCALE: float = 20.0
+EMERGENCE_PATH_CONSISTENCY_CITY_DECAY: float = 0.5
+EMERGENCE_PATH_CONSISTENCY_UNRECAPTURED_WEIGHT: float = 0.5
 
 
 @dataclass(slots=True)
@@ -57,6 +66,8 @@ class EmergenceDistanceSums:
     distance_sum: MapMatrixInterface[int]
     reach_count: MapMatrixInterface[int]
     source_tiles: set[Tile]
+    # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - per-source blocked-BFS distance matrices needed by the path-consistency detour calculation.
+    source_distances: typing.Dict[Tile, MapMatrixInterface[int]] = field(default_factory=dict)
 
 
 # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_server_reference_scores_and_acceptance - keep the server score formula independently testable.
@@ -359,7 +370,26 @@ class ArmyTracker(object):
         re-limits all recorded emergence events, which can itself trigger _check_over_elimination;
         this set prevents that mutual recursion from running forever when the reset cannot restore
         a surviving candidate set (live RecursionError, ffa 1rMOTScJ5 t129 / 1v1 icLXQIWYa t290)."""
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+        # while the emergence loop is recording new events, _check_over_elimination calls are
+        # deferred so every emergence is processed into uneliminated_emergence_events BEFORE any
+        # reset+re-limit runs once per player at the end of the scan; otherwise each new event can
+        # trigger a re-limit of every prior event (O(events x map-wide BFS) on mass reveals).
+        self._defer_emergence_over_elim_checks: bool = False
+        self._deferred_over_elim_players: typing.Set[int] = set()
         self._boardAnalysis: BoardAnalyzer | None = None
+
+        # Joint FFA predicted-general placement state. ffa_general_land_evidence holds
+        # per-player observed-land records frozen at first sighting (weights derive from
+        # the frozen player tile count, witnessed transfers weigh zero);
+        # ffa_land_evidence_revision is the cache signature component bumped on every
+        # evidence mutation; ffa_general_placement owns positions/conflicts/score_loss.
+        # Tests: UnitTests/test_FfaGeneralPlacement.py,
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals
+        self.ffa_general_land_evidence: typing.List[typing.Dict[Tile, GeneralLandEvidence]] = [
+            {} for _ in self.map.players]
+        self.ffa_land_evidence_revision: int = 0
+        self.ffa_general_placement: FfaGeneralPlacement = FfaGeneralPlacement()
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -396,6 +426,13 @@ class ArmyTracker(object):
         if '_over_elimination_resets_in_progress' not in self.__dict__:
             self._over_elimination_resets_in_progress = set()
 
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+        # same rehydration need for the deferred over-elimination check fields.
+        if '_defer_emergence_over_elim_checks' not in self.__dict__:
+            self._defer_emergence_over_elim_checks = False
+        if '_deferred_over_elim_players' not in self.__dict__:
+            self._deferred_over_elim_players = set()
+
         if 'emergence_distance_sums_by_player' not in self.__dict__:
             self.emergence_distance_sums_by_player = [
                 EmergenceDistanceSums(
@@ -429,6 +466,16 @@ class ArmyTracker(object):
                 set()
                 for _ in self.map.players
             ]
+
+        # Fixtures serialized before the FFA placement subsystem existed have no
+        # evidence keys; bootstrap then rebuilds them from actually-discovered
+        # enemy-owned tiles only (never fog-inferred ownership).
+        if 'ffa_general_land_evidence' not in self.__dict__:
+            self.ffa_general_land_evidence = [{} for _ in self.map.players]
+        if 'ffa_land_evidence_revision' not in self.__dict__:
+            self.ffa_land_evidence_revision = 0
+        if 'ffa_general_placement' not in self.__dict__:
+            self.ffa_general_placement = FfaGeneralPlacement()
 
     # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_fairness_is_inactive_for_ffa_and_custom_maps - gate the signal to known-general standard 1v1 maps only.
     def _is_spawn_fairness_active(self) -> bool:
@@ -558,8 +605,21 @@ class ArmyTracker(object):
             active=True)
 
     # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_serialization_round_trip_and_missing_matrix_rebuild - compute once at spawn-in and reapply negative eliminations after legacy state loads.
-    def initialize_spawn_fairness_weights(self) -> SpawnFairnessAnalysis:
-        """Compute and store the enemy spawn-fairness matrix for this game."""
+    def initialize_spawn_fairness_weights(self, apply_eliminations: bool = True) -> SpawnFairnessAnalysis:
+        """Compute and store the enemy spawn-fairness matrix for this game.
+
+        Tests/test_AllIn.py::AllInTests.test_should_commit_wrp_hunt_when_enemy_cannot_defend
+        - when a resume already serializes ``bValidGeneralPos``, that matrix is the
+        authoritative record of every elimination live play had applied
+        (spawn-fairness included). Recomputing weights on the resume-turn map
+        state and re-eliminating on top of it is wrong: revealed cities,
+        mountains, and fog-guessed undiscovered obstacles all read as walls in
+        the recompute BFS, so mid-game resumes produce stricter weights than
+        the spawn-time computation live play used, silently dropping candidate
+        positions the live game still considered valid (including the true
+        general tile). ``apply_eliminations=False`` keeps the recomputed
+        weights for scoring/prediction while trusting the serialized set for
+        candidacy."""
         analysis = self.build_spawn_fairness_analysis()
         self.spawn_fairness_active = analysis.active
         if analysis.active:
@@ -573,7 +633,8 @@ class ArmyTracker(object):
                     self.map,
                     0.0)
         self.spawn_fairness_initialized = True
-        self.eliminate_negative_spawn_fairness_positions()
+        if apply_eliminations:
+            self.eliminate_negative_spawn_fairness_positions()
         return analysis
 
     # UnitTests/test_SpawnFairness.py::SpawnFairnessTests.test_weight_band_and_negative_weights_eliminate_candidates - remove rejected candidates after the existing minimum-distance filter.
@@ -872,6 +933,41 @@ class ArmyTracker(object):
                 self.emergenceLocationMap[player.index].raw[tile.tile_index] += 3
 
 
+    def clear_temp_fog_predictions_for_pending_rebuilds(self) -> None:
+        """
+        Drop isTempFogPrediction land for every player whose fog prediction is about
+        to fully rebuild this turn, BEFORE any player's fill runs.
+
+        Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals:
+        with per-player FFA placement seeds, an earlier player's fill must not see a
+        later player's STALE temp blob (anchored to that player's previous seed) as
+        still-owned land; clearing the whole pending-rebuild set up front lets each
+        fill see a clean neutral board and re-derive ownership from the new seeds.
+        Real tracked fog armies, cities, generals, and discovered tiles are kept -
+        the same keep-filter _build_fog_prediction_internal applies.
+        """
+        if self.map.turn < 26:
+            return
+        # Tests/test_FfaGeneralPlacement.py::FfaGeneralPlacementTests.test_clear_temp_fog_gated_to_original_ffa:
+        # this pre-clear exists so per-player FFA placement seeds are not contaminated
+        # by stale temp blobs; on 1v1/2v2 the legacy single-seed flow must keep its
+        # existing temp-guess behavior untouched.
+        if not FfaGeneralPlacement.is_original_ffa(self.map):
+            return
+        for player in self.map.players:
+            if self.map.is_player_on_team_with(self.map.player_index, player.index):
+                continue
+            willRebuild = (
+                self.should_recalc_fog_land_by_player[player.index]
+                or len(player.tiles) == 0)
+            if not willRebuild:
+                continue
+            for tile in list(player.tiles):
+                if (tile.isTempFogPrediction and not tile.discovered
+                        and tile not in self.armies and not tile.isGeneral and not tile.isCity):
+                    self.map.reset_wrong_undiscovered_fog_guess(tile)
+                    player.tiles.remove(tile)
+
     def update_fog_prediction(
             self,
             playerIndex: int,
@@ -1007,16 +1103,41 @@ class ArmyTracker(object):
             if self.log_debug and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                 logbook.info(f'FOG DEBUG: Army {str(army)} fogPathNexts: {[(str(tile), len(paths)) for tile, paths in fogPathNexts.items()]}')
 
-            # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_shuffle__lose__or_duplicate_fog_armies_when_pushing_them_back_into_the_fog covers a split entangled fog army where one expected path is blocked by a visible tile. Moving another split branch in the same pass shuffles the tracked army onto a wrong fog tile, so hold the entangled hypothesis in place.
-            # Fix: Filter out expected paths that touch visible tiles before the split-blocking check.
-            # This removes stale paths like 3,9->4,9 when 4,9 becomes visible, allowing safe paths like 3,9->2,9 to proceed.
-            # UnitTests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_shuffle__lose__or_duplicate_fog_armies_when_pushing_them_back_into_the_fog
-            pathsBeforeFilter = len(army.expectedPaths)
-            army.expectedPaths = [path for path in army.expectedPaths if path is not None and not any(tile.visible and tile != army.tile for tile in path.tileList)]
-            if self.log_debug and pathsBeforeFilter != len(army.expectedPaths):
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_predict_fog_army_before_visible_path_endpoint
+            # covers a fog army whose expected paths include visible tiles later in the path (e.g. paths
+            # ending in our territory): filtering on ANY visible tile deleted every path and froze the
+            # army at 7,11 instead of advancing the safe fog prefix to 7,10. A single tracked army only
+            # rejects a path whose IMMEDIATE next step is visible; it still halts at the visibility
+            # boundary on a later turn via the immediate-next-visible handling below and
+            # _move_fogged_army_along_path. Entangled armies (split hypotheses) keep the old
+            # any-visible-tile filter: Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_shuffle__lose__or_duplicate_fog_armies_when_pushing_them_back_into_the_fog
+            # and test_should_collide_entangled_and_de_entangle_multiple_armies_correctly cover stale
+            # paths on entangled alternatives where a later visible tile invalidates the whole path.
+            pathsBeforeFilter = army.expectedPaths
+            keptPaths: list[Path] = []
+            droppedVisiblePaths: list[Path] = []
+            for path in pathsBeforeFilter:
+                if path is None:
+                    continue
+                if army.entangledValue is not None:
+                    # entangled hypotheses keep the conservative whole-path filter: a path touching
+                    # ANY visible tile is stale for a split alternative and must be dropped.
+                    if any(tile.visible and tile != army.tile for tile in path.tileList):
+                        droppedVisiblePaths.append(path)
+                        continue
+                elif (path.start is not None
+                        and path.start.next is not None
+                        and path.start.next.tile is not None
+                        and path.start.next.tile.visible):
+                    droppedVisiblePaths.append(path)
+                    continue
+                keptPaths.append(path)
+            army.expectedPaths = keptPaths
+            if self.log_debug and len(army.expectedPaths) != len(pathsBeforeFilter):
                 logbook.info(
                     f'FOG_PATH_TRACE_FILTER_VISIBLE turn={self.map.turn} army={army} tile={army.tile} '
-                    f'pathsBefore={pathsBeforeFilter} pathsAfter={len(army.expectedPaths)}')
+                    f'pathsBefore={len(pathsBeforeFilter)} pathsAfter={len(army.expectedPaths)} '
+                    f'droppedVisiblePaths={[str(path) for path in droppedVisiblePaths]}')
             # Rebuild fogPathNexts after filtering
             fogPathNexts = {}
             for path in army.expectedPaths:
@@ -1038,6 +1159,26 @@ class ArmyTracker(object):
                     nextPaths = []
                     fogPathNexts[nextTile] = nextPaths
                 nextPaths.append(path)
+
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_shouldnt_leave_nonentangled_city_army_after_fog_split
+            # covers a fog hypothesis that split onto 5,8 and 5,10 while its visible-next
+            # "stay" paths were dropped by the visible-path filter above. Stepping onto a
+            # visible tile would have been observed, so a dropped immediate-next-visible
+            # path still encodes the "army stayed" hypothesis: re-add those drops as a
+            # stay-branch on origTile so the split keeps an ENTANGLED clone there. Without
+            # the stay-branch the origTile.army restore below resurrected the pre-split 56
+            # on the emptied city at 5,9 as a bare tile value with no tracker, and a later
+            # get_or_create_army_at minted a duplicate NON-entangled army next to the
+            # entangled alternatives, multiplying predicted armies in the fog.
+            for droppedPath in droppedVisiblePaths:
+                if (droppedPath.start is not None
+                        and droppedPath.start.next is not None
+                        and droppedPath.start.next.tile is not None
+                        and droppedPath.start.next.tile.visible
+                        and droppedPath.start.tile == origTile):
+                    nextPaths = fogPathNexts.get(origTile, [])
+                    nextPaths.append(droppedPath)
+                    fogPathNexts[origTile] = nextPaths
 
             anySplitPathTouchesVisibleAfterArmy = False
             for path in army.expectedPaths:
@@ -1142,9 +1283,26 @@ class ArmyTracker(object):
                         logbook.info(f'AFTER: army {str(army)}: {str(army.expectedPaths)}')
 
             if anyNextVisible:
-                # NEVER modify visible tile army values
-                if not origTile.visible:
+                # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_shouldnt_leave_nonentangled_city_army_after_fog_split
+                # covers a fog hypothesis that split onto 5,8 and 5,10 while its visible-next
+                # "stay" paths were dropped by the visible-path filter above. anyNextVisible is
+                # set while grouping the PRE-filter paths, so it stays true even when no
+                # stay-branch survives into fogPathNexts; unconditionally restoring
+                # origTile.army then resurrected the pre-split 56 on the emptied city at 5,9
+                # after the split clones had already cleared it, letting a later
+                # get_or_create_army_at mint a duplicate non-entangled army next to the
+                # entangled alternatives. Only restore the original tile's army when a
+                # stay-branch actually survived filtering (origTile remains a destination).
+                if origTile in fogPathNexts and not origTile.visible:
                     origTile.army = origTileArmy
+
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_shouldnt_leave_nonentangled_city_army_after_fog_split
+            # - the pre-split revert recorded above is inherited by every split clone via
+            # Army.clone(); stamp the post-split tile value so a dying clone's restore
+            # subtracts only its own delta instead of resurrecting the accumulated
+            # predictions of sibling alternatives that have since vacated the tile.
+            if origTile in army.fogTileReverts:
+                army.fogTileReverts[origTile].postArmy = origTile.army
 
     def clean_up_armies(self):
         for army in list(self.armies.values()):
@@ -1189,6 +1347,89 @@ class ArmyTracker(object):
 
                 if army.tile in self.armies and self.armies[army.tile] == army:
                     del self.armies[army.tile]
+
+    # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+    # extracted so the caller can defer _check_over_elimination during the whole loop and run
+    # each affected player's reset+re-limit once after the last event is recorded.
+    def _process_emergences(self, trackingArmies: typing.Dict[Tile, 'Army'], skip: typing.Set[Tile]) -> None:
+        """
+        Runs the per-tile emergence resolution loop over map.army_emergences for this scan:
+        move-into-fog detection, fog-source pathing via handle_unaccounted_delta, and tracking
+        the resolved armies.
+
+        @param trackingArmies: destination map for armies resolved this scan (tile -> Army).
+        @param skip: tiles already handled this scan that later passes must not reprocess.
+        """
+        for tile, diffTuple in self.map.army_emergences.items():
+            emergedAmount, emergingPlayer = diffTuple
+            if emergingPlayer == -1:
+                continue
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+            # deltas on our own tiles are accounting noise (we see everything we own), never a
+            # fog emergence; the enemy-style pipeline below is meaningless for our own player.
+            if emergingPlayer == self.map.player_index:
+                continue
+
+            self.should_recalc_fog_land_by_player[emergingPlayer] = True
+
+            self.unaccounted_tile_diffs[tile] = emergedAmount
+            # self.unaccounted_tile_diffs[tile] = emergedAmount
+            # map has already dealt with ALL possible perfect-information moves.
+
+            isMoveIntoFog = (
+                (
+                    False
+                    # (tile.delta.oldOwner == tile.player and tile.player != self.map.player_index)
+                    or 0 - Tile.get_move_half_amount(tile.delta.oldArmy) == emergedAmount
+                    or 0 - tile.delta.oldArmy + 1 == emergedAmount
+                )
+                and emergedAmount < 0  # must be negative emergence to be a move into fog
+            )
+
+            try:
+                existingArmy = self.armies[tile]
+            except KeyError:
+                existingArmy = None
+
+            if isMoveIntoFog:
+                if tile.delta.gainedSight and existingArmy:
+                    logbook.info(
+                        f'gainedSight splitting existingArmy back into fog 1 - emerged {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it appears to have been a move INTO fog. Will be tracked via emergence.')
+                    self.try_split_fogged_army_back_into_fog(existingArmy, trackingArmies)
+                    skip.add(tile)
+                else:
+                    logbook.info(f'IGNORING maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it appears to have been a move INTO fog. Will be tracked via emergence.')
+                continue
+
+            # Jump straight to fog source detection.
+            if tile.delta.toTile is not None:
+                # the map does its job too well and tells us EXACTLY where the army emerged from, but armytracker wants the armies final destination and will re-do that work itself, so use the toTile.
+                # tile = tile.delta.toTile
+                if tile.delta.toTile in skip:
+                    continue
+
+            if tile.isCity and tile.discovered:
+                logbook.info(f'(TEMP NOT IG???) IGNORING maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it was a discovered city..?')
+                # continue
+
+            if existingArmy and existingArmy.player == tile.player and existingArmy.value + 1 > tile.army:
+                logbook.info(f'TODO CHECK IF EVER CALLED splitting existingArmy back into fog 2 - emerged {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it appears to have been a move INTO fog. Will be tracked via emergence.')
+                self.try_split_fogged_army_back_into_fog(existingArmy, trackingArmies)
+                skip.add(tile)
+                continue
+
+            if emergedAmount < 0:
+                emergedAmount = 0 - emergedAmount
+
+            logbook.info(f'Respecting maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} (from tile if known {repr(tile.delta.fromTile)})')
+            emergedArmy = self.handle_unaccounted_delta(tile, emergingPlayer, emergedAmount)
+            if emergedArmy is not None:
+                if tile.delta.toTile is not None and tile.delta.toTile.player == emergedArmy.player:
+                    self.army_moved(emergedArmy, tile.delta.toTile, trackingArmies)
+                    skip.add(tile.delta.toTile)
+                else:
+                    trackingArmies[tile] = emergedArmy
+            skip.add(tile)
 
     def track_army_movement(self):
         # TODO tile.delta.imperfectArmyDelta
@@ -1238,71 +1479,23 @@ class ArmyTracker(object):
 
         with self.perf_timer.begin_move_event('ArmyTracker emergence pathing'):
             self.unaccounted_tile_diffs: typing.Dict[Tile, int] = {}
-            for tile, diffTuple in self.map.army_emergences.items():
-                emergedAmount, emergingPlayer = diffTuple
-                if emergingPlayer == -1:
-                    continue
-
-                self.should_recalc_fog_land_by_player[emergingPlayer] = True
-
-                self.unaccounted_tile_diffs[tile] = emergedAmount
-                # self.unaccounted_tile_diffs[tile] = emergedAmount
-                # map has already dealt with ALL possible perfect-information moves.
-
-                isMoveIntoFog = (
-                    (
-                        False
-                        # (tile.delta.oldOwner == tile.player and tile.player != self.map.player_index)
-                        or 0 - Tile.get_move_half_amount(tile.delta.oldArmy) == emergedAmount
-                        or 0 - tile.delta.oldArmy + 1 == emergedAmount
-                    )
-                    and emergedAmount < 0  # must be negative emergence to be a move into fog
-                )
-
-                try:
-                    existingArmy = self.armies[tile]
-                except KeyError:
-                    existingArmy = None
-
-                if isMoveIntoFog:
-                    if tile.delta.gainedSight and existingArmy:
-                        logbook.info(
-                            f'gainedSight splitting existingArmy back into fog 1 - emerged {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it appears to have been a move INTO fog. Will be tracked via emergence.')
-                        self.try_split_fogged_army_back_into_fog(existingArmy, trackingArmies)
-                        skip.add(tile)
-                    else:
-                        logbook.info(f'IGNORING maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it appears to have been a move INTO fog. Will be tracked via emergence.')
-                    continue
-
-                # Jump straight to fog source detection.
-                if tile.delta.toTile is not None:
-                    # the map does its job too well and tells us EXACTLY where the army emerged from, but armytracker wants the armies final destination and will re-do that work itself, so use the toTile.
-                    # tile = tile.delta.toTile
-                    if tile.delta.toTile in skip:
-                        continue
-
-                if tile.isCity and tile.discovered:
-                    logbook.info(f'(TEMP NOT IG???) IGNORING maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it was a discovered city..?')
-                    # continue
-
-                if existingArmy and existingArmy.player == tile.player and existingArmy.value + 1 > tile.army:
-                    logbook.info(f'TODO CHECK IF EVER CALLED splitting existingArmy back into fog 2 - emerged {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} because it appears to have been a move INTO fog. Will be tracked via emergence.')
-                    self.try_split_fogged_army_back_into_fog(existingArmy, trackingArmies)
-                    skip.add(tile)
-                    continue
-
-                if emergedAmount < 0:
-                    emergedAmount = 0 - emergedAmount
-
-                logbook.info(f'Respecting maps determined unexplained emergence of {emergedAmount} by player {emergingPlayer} on tile {repr(tile)} (from tile if known {repr(tile.delta.fromTile)})')
-                emergedArmy = self.handle_unaccounted_delta(tile, emergingPlayer, emergedAmount)
-                if emergedArmy is not None:
-                    if tile.delta.toTile is not None and tile.delta.toTile.player == emergedArmy.player:
-                        self.army_moved(emergedArmy, tile.delta.toTile, trackingArmies)
-                        skip.add(tile.delta.toTile)
-                    else:
-                        trackingArmies[tile] = emergedArmy
-                skip.add(tile)
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+            # defer over-elimination checks until every emergence this scan has been processed
+            # into uneliminated_emergence_events; then each affected player re-limits once in
+            # the drain below instead of each new event resetting + replaying all prior events
+            # (O(events x map-wide BFS) on mass reveals like player captures).
+            self._defer_emergence_over_elim_checks = True
+            try:
+                self._process_emergences(trackingArmies, skip)
+            finally:
+                self._defer_emergence_over_elim_checks = False
+            if len(self._deferred_over_elim_players) > 0:
+                logbook.info(
+                    f'running deferred over-elimination checks for players {sorted(self._deferred_over_elim_players)} '
+                    f'after processing {len(self.map.army_emergences)} emergence events this scan')
+            for deferredPlayer in sorted(self._deferred_over_elim_players):
+                self._check_over_elimination(deferredPlayer)
+            self._deferred_over_elim_players.clear()
 
         with self.perf_timer.begin_move_event('ArmyTracker lastmove loop'):
             for tile in self.map.get_all_tiles():
@@ -1602,7 +1795,8 @@ class ArmyTracker(object):
             logbook.info(
                 f'FOG_TILE_REVERT_APPLY turn={self.map.turn} army={army} tile={revert.tile} '
                 f'currentArmy={revert.tile.army} currentPlayer={revert.tile.player} currentTempFog={revert.tile.isTempFogPrediction} '
-                f'revertArmy={revert.army} revertPlayer={revert.player} revertTempFog={revert.isTempFogPrediction}')
+                f'revertArmy={revert.army} revertPlayer={revert.player} revertTempFog={revert.isTempFogPrediction} '
+                f'revertPostArmy={revert.postArmy}')
             # NEVER modify visible tile army values
             if not revert.tile.visible:
                 # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_skip_stale_fog_revert_player_change_after_general_prediction_corrected covers a stale fog prediction revert recorded before a tile was corrected into a general. Once the tile is a confirmed general with an owner, the old fog snapshot must not demote it back to unknown/enemy ownership.
@@ -1610,9 +1804,25 @@ class ArmyTracker(object):
                     logbook.warn(
                         f'FOG_TILE_REVERT_SKIP_GENERAL_OWNER turn={self.map.turn} army={army} tile={revert.tile} '
                         f'currentArmy={revert.tile.army} currentPlayer={revert.tile.player} currentTempFog={revert.tile.isTempFogPrediction} '
-                        f'revertArmy={revert.army} revertPlayer={revert.player} revertTempFog={revert.isTempFogPrediction}')
+                        f'revertArmy={revert.army} revertPlayer={revert.player} revertTempFog={revert.isTempFogPrediction} '
+                        f'revertPostArmy={revert.postArmy}')
                     continue
-                revert.tile.army = revert.army
+                # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_shouldnt_leave_nonentangled_city_army_after_fog_split
+                # covers the multiplication this prevents: a revert snapshot taken
+                # at claim time includes OTHER armies' predictions accumulated on
+                # the tile (same-player adds write tile.army += army.value).
+                # Restoring that snapshot on death resurrected 245 onto 5,7 in
+                # 4gIv_HBLAC t490 - value owned by armies that had already moved
+                # on - minting a duplicate non-entangled tracker via get_or_create.
+                # postArmy makes the restore subtractive: the tile keeps its
+                # pre-claim value PLUS everything written since the claim (later
+                # predictions, increments, later clears), so only the dying
+                # army's own delta is undone. Reverts without postArmy were
+                # recorded before post-claim tracking (serialized state); the
+                # snapshot can't be verified against the world that came after,
+                # so it must never inflate the tile.
+                if revert.postArmy is not None:
+                    revert.tile.army = max(1, revert.army + (revert.tile.army - revert.postArmy))
                 revert.tile.player = revert.player
                 revert.tile.isTempFogPrediction = revert.isTempFogPrediction
         army.fogTileReverts = {}
@@ -1725,6 +1935,7 @@ class ArmyTracker(object):
                         fogTargetTile.player = army.player
                     else:
                         logbook.error(f'move_army_into_fog: refusing to flip ownership of general tile {fogTargetTile.toString()} from p{fogTargetTile.player} to p{army.player}; a real capture would have eliminated the owner, so this army did not actually move here')
+            army.mark_fog_tile_revert_post(fogTargetTile)
         logbook.info(f"      fogTargetTile {fogTargetTile.toString()} updated army to {fogTargetTile.army}")
         # breaks stuff real bad. Don't really want to do this anyway.
         # Rather track the army through fog with no consideration of owning the tiles it crosses
@@ -1802,6 +2013,50 @@ class ArmyTracker(object):
                         else:
                             army.last_seen_turn = self.map.turn
 
+                        # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_shouldnt_add_lone_tracker_next_to_entangled_pair
+                        # covers a stale predicted fog value (residue left by a nearby
+                        # group's movement hypotheses) minting an INDEPENDENT tracker
+                        # between that group's alternatives, so the bot counted one
+                        # enemy stack twice. A static fog belief (no army delta, no
+                        # newly gained sight) sitting next to a same-owner tracked fog
+                        # army that out-values it is much more likely residue that
+                        # belongs to that group than a second stack, so entangle the
+                        # mint as another alternative instead of letting it count
+                        # independently. A real second stack self-corrects on
+                        # re-observation via the entangled-value mismatch path.
+                        if (not tile.visible
+                                and tile.delta.armyDelta == 0
+                                and not tile.delta.gainedSight
+                                and army.player != self.map.player_index
+                                and army.player not in self.map.teammates):
+                            entangleTarget: Army | None = None
+                            for adjacent in tile.movable:
+                                neighborArmy = self.armies.get(adjacent)
+                                if (neighborArmy is None or neighborArmy is army or neighborArmy.scrapped
+                                        or neighborArmy.tile.visible
+                                        or neighborArmy.player != army.player):
+                                    continue
+                                groupValue = neighborArmy.value
+                                for entangledMember in neighborArmy.entangledArmies:
+                                    groupValue = max(groupValue, entangledMember.value)
+                                if army.value < groupValue:
+                                    entangleTarget = neighborArmy
+                                    break
+                            if entangleTarget is not None:
+                                groupMembers = [entangleTarget] + list(entangleTarget.entangledArmies)
+                                if entangleTarget.entangledValue is None:
+                                    entangleTarget.entangledValue = entangleTarget.value
+                                for member in groupMembers:
+                                    if member.entangledValue is None:
+                                        member.entangledValue = member.value
+                                    member.entangledArmies.append(army)
+                                army.entangledArmies.extend(groupMembers)
+                                army.entangledValue = entangleTarget.entangledValue
+                                logbook.info(
+                                    f'minted army {str(army)} on stale-looking fog tile {str(tile)} was adjacent to '
+                                    f'tracked army {str(entangleTarget)} with a larger claim - entangling it as '
+                                    f'another alternative instead of counting it independently')
+
                 # if tile WAS bordered by fog find the closest fog army and remove it (not tile.visible or tile.delta.gainedSight)
 
     def new_army_emerged(self, emergedTile: Tile, armyEmergenceValue: float, emergingPlayer: int = -1, distance: int | None = None):
@@ -1850,20 +2105,19 @@ class ArmyTracker(object):
                 if not tile.discovered:
                     distCapped = max(distancePlateau, dist)
                     emergeValue = distancePlateau * armyEmergenceScaledToTurns // distCapped
-                    # if self.valid_general_positions_by_player[emergingPlayer][tile]:
-                    # TODO this is doing the weird +1 emergence every turn thing
-                    self.emergenceLocationMap[emergedTile.player][tile] += max(1, emergeValue)
-                    # if largest[0] < self.emergenceLocationMap[emergedTile.player][tile]]:
-                    #     largestTile[0] = tile
-                    #     largest[0] = self.emergenceLocationMap[emergedTile.player][tile]]
+                    # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_not_swap_ffa_predictions_to_enemy_land:
+                    # attribute the flood to emergingPlayer (the tracked army owner),
+                    # not emergedTile.player - the tile's current owner can be a
+                    # temp-fog guess, which would pollute another player's matrix.
+                    self.emergenceLocationMap[emergingPlayer][tile] += max(1, emergeValue)
                 visibleOrDiscNeut = (tile.was_visible_last_turn() or (tile.discoveredAsNeutral and self.map.turn <= 100))
                 return (tile.isObstacle or visibleOrDiscNeut) and tile != emergedTile
 
             breadth_first_foreach_dist(self.map, [emergedTile], distance, foreachFunc, bypassDefaultSkip=True)
 
-            if len(self.uneliminated_emergence_events[emergedTile.player]) < 8:
+            if len(self.uneliminated_emergence_events[emergingPlayer]) < 8:
                 logbook.info(f'new_army_emerged calling limit_gen_position_from_emergence because less than 8 so far')
-                self.limit_gen_position_from_emergence(self.map.players[emergedTile.player], emergedTile, emergenceAmount=armyEmergenceValue)
+                self.limit_gen_position_from_emergence(self.map.players[emergingPlayer], emergedTile, emergenceAmount=armyEmergenceValue)
 
         for handler in self.notify_unresolved_army_emerged:
             handler(emergedTile)
@@ -1894,6 +2148,111 @@ class ArmyTracker(object):
 
     def notify_seen_player_tile(self, tile: Tile):
         self._flipped_tiles.add(tile)
+        self._record_general_land_evidence(tile)
+
+    def _record_general_land_evidence(self, tile: Tile) -> None:
+        """
+        Record one actual enemy-land observation for FFA general placement. Only
+        discovered/visible, non-temporary enemy-owned tiles count; the first
+        observation freezes the owner's scoreboard tile count into the evidence
+        weight (1/max(1, tileCount)) and marks witnessed player-to-player transfers
+        (including observed general trades and dead/captured old owners) as
+        transferred so they carry zero positional weight. Regained vision whose
+        remembered old owner changed while unseen is NOT a witnessed transfer: the
+        old owner must have been visible last turn or be dead/captured.
+        Tests: UnitTests/test_FfaGeneralPlacement.py
+        """
+        if not FfaGeneralPlacement.is_original_ffa(self.map):
+            return
+        playerIndex = tile.player
+        if playerIndex < 0 or playerIndex == self.map.player_index:
+            return
+        if self.map.is_player_on_team_with(playerIndex, self.map.player_index):
+            return
+        if tile.isTempFogPrediction:
+            return
+        if not (tile.visible or tile.delta.gainedSight or tile.delta.discovered):
+            return
+
+        if tile.delta.discoveredExGeneralCity:
+            # A city discovered to be an ex-general location is a confirmed
+            # former-general anchor; persist it so resumed games keep the exclusion.
+            self.ffa_general_placement.ex_general_blockers.add(tile)
+
+        evidence = self.ffa_general_land_evidence[playerIndex]
+        existing = evidence.get(tile)
+        if existing is not None:
+            # Tests/test_FfaGeneralPlacement.py::FfaGeneralPlacementTests.test_transfer_marking_busts_evidence_cache:
+            # flipping transferred changes the evidence weight, so the revision
+            # must bump or the placement cache keeps the stale centroid.
+            if not existing.transferred and self._is_witnessed_land_transfer(tile):
+                existing.transferred = True
+                self.ffa_land_evidence_revision += 1
+            return
+        evidence[tile] = GeneralLandEvidence(
+            tile=tile,
+            first_seen_turn=self.map.turn,
+            player_tile_count=self.map.players[playerIndex].tileCount,
+            transferred=self._is_witnessed_land_transfer(tile))
+        self.ffa_land_evidence_revision += 1
+
+    def _is_witnessed_land_transfer(self, tile: Tile) -> bool:
+        """
+        Return True when this enemy-owned tile provably changed hands in an observed
+        player-to-player transfer: the previous owner was a different living-index
+        player AND we either saw the tile last turn, the old owner is dead/captured,
+        or the flip is part of an observed general trade this turn.
+        """
+        oldOwner = tile.delta.oldOwner
+        if oldOwner < 0 or oldOwner == tile.player:
+            return False
+        if oldOwner in self.map.traded_players_this_turn and tile.player in self.map.traded_players_this_turn:
+            return True
+        if tile.was_visible_last_turn():
+            return True
+        if 0 <= oldOwner < len(self.map.players):
+            oldPlayer = self.map.players[oldOwner]
+            if oldPlayer.dead or oldPlayer.capturedBy is not None:
+                return True
+        return False
+
+    def _finalize_general_land_evidence_transfers(self) -> None:
+        """
+        Second-chance transfer marking run inside the flipped-tile scan, after all
+        map-update event handlers (including player captures) have fired, so dead /
+        capturedBy state is authoritative even when notify_seen_player_tile ran
+        before the capture was processed. Also creates records for flipped enemy
+        tiles the per-tile hook skipped.
+        Tests: UnitTests/test_FfaGeneralPlacement.py
+        """
+        if not FfaGeneralPlacement.is_original_ffa(self.map):
+            return
+        for tile in self._flipped_tiles:
+            playerIndex = tile.player
+            if playerIndex < 0 or playerIndex == self.map.player_index:
+                continue
+            if self.map.is_player_on_team_with(playerIndex, self.map.player_index):
+                continue
+            if tile.isTempFogPrediction:
+                continue
+            if tile.delta.oldOwner < 0 or tile.delta.oldOwner == playerIndex:
+                continue
+            if not self._is_witnessed_land_transfer(tile):
+                continue
+            evidence = self.ffa_general_land_evidence[playerIndex]
+            existing = evidence.get(tile)
+            if existing is None:
+                evidence[tile] = GeneralLandEvidence(
+                    tile=tile,
+                    first_seen_turn=self.map.turn,
+                    player_tile_count=self.map.players[playerIndex].tileCount,
+                    transferred=True)
+                self.ffa_land_evidence_revision += 1
+            elif not existing.transferred:
+                # Same cache-bust requirement as _record_general_land_evidence:
+                # a late dead/captured-owner finalize still changes the weight.
+                existing.transferred = True
+                self.ffa_land_evidence_revision += 1
 
     def handle_general_trade(self, trade: GeneralTrade) -> None:
         """
@@ -2003,6 +2362,13 @@ class ArmyTracker(object):
             self.emergenceLocationMap[pB], self.emergenceLocationMap[pA])
         self.initial_expansion_tile_counts[pA], self.initial_expansion_tile_counts[pB] = (
             self.initial_expansion_tile_counts[pB], self.initial_expansion_tile_counts[pA])
+        # FFA placement: observed-land evidence is player-indexed spatial knowledge
+        # and swaps with the rest; the placement cache must recompute against the
+        # swapped candidate matrices. Tests: UnitTests/test_FfaGeneralPlacement.py
+        # test_general_trade_swaps_placement_state.
+        self.ffa_general_land_evidence[pA], self.ffa_general_land_evidence[pB] = (
+            self.ffa_general_land_evidence[pB], self.ffa_general_land_evidence[pA])
+        self.ffa_general_placement.invalidate()
 
     def _transform_observer_traded_armies(self, trade: GeneralTrade) -> None:
         """
@@ -2865,7 +3231,21 @@ class ArmyTracker(object):
             if not foundLocation and len(fogBois) > 0 and army.player != self.map.player_index and (
                     army.tile.was_visible_last_turn()):  # prevent entangling and moving fogged cities and stuff that we stopped incrementing
                 fogArmies = []
-                if len(fogBois) == 1:
+                originTile = army.tile
+                # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_shouldnt_dup_stack_across_adjacent_fog_tiles
+                # covers a just-fogged enemy stack speculatively moved to the only fog
+                # neighbor while its origin tile kept the last-seen army belief;
+                # find_new_armies then minted an INDEPENDENT tracker on the vacated
+                # tile and the bot counted one real stack as two. While the origin
+                # stays under fog, "the army stayed" is unfalsifiable, so it must be
+                # encoded as an entangled alternative ON the origin tile - not left
+                # as a bare tile belief for a duplicate mint.
+                originStayPossible = (
+                    not originTile.visible
+                    and originTile.player == army.player
+                    and originTile.army > 1
+                    and not originTile.isGeneral)
+                if len(fogBois) == 1 and not originStayPossible:
                     fogTarget = fogBois[0]
                     # if fogTarget.visible and not fogTarget.army > 5:
                     #     self.scrap_army(army)
@@ -2889,13 +3269,32 @@ class ArmyTracker(object):
                     #
                     foundLocation = True
                     logbook.info(f"    Army {str(army)} IS BEING ENTANGLED! WHOO! EXCITING!")
-                    entangledArmies = army.get_split_for_fog(fogBois)
-                    for i, fogBoi in enumerate(fogBois):
+                    fogDests = fogBois
+                    if originStayPossible:
+                        fogDests = [originTile] + fogBois
+                    entangledArmies = army.get_split_for_fog(fogDests)
+                    stayClone: Army | None = None
+                    if originStayPossible:
+                        stayClone = entangledArmies[0]
+                    for i, fogBoi in enumerate(fogDests):
                         logbook.info(
                             f"    Army {str(army)} entangled moved to {str(fogBoi)}")
+                        if fogBoi == originTile:
+                            # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_shouldnt_dup_stack_across_adjacent_fog_tiles
+                            # stay hypothesis: keep the entangled clone keyed on the
+                            # origin tile; its existing fog belief already shows the
+                            # army there. The clone is keyed AFTER the move loop
+                            # because move_army_into_fog pops armies[army.tile] and
+                            # every clone still reports the origin tile at that
+                            # point - keying it here would get it popped by the next
+                            # clone's move call.
+                            self.unaccounted_tile_diffs.pop(originTile, None)
+                            continue
                         self.move_army_into_fog(entangledArmies[i], fogBoi)
                         self.unaccounted_tile_diffs.pop(entangledArmies[i].tile, None)
                         self.army_moved(entangledArmies[i], fogBoi, trackingArmies, dontUpdateOldFogArmyTile=True)
+                    if stayClone is not None:
+                        self.armies[originTile] = stayClone
                 return
 
             if army.player != army.tile.player and army.tile.was_visible_last_turn():
@@ -3530,12 +3929,37 @@ class ArmyTracker(object):
 
         return None
 
-    def get_emergence_max_depth_to_general_or_none(self, player: int, tile: Tile, unaccountedForDelta: int = -1, useOpponentKnownFogTileArmy: bool = True):
+    def get_emergence_max_depth_to_general_or_none(self, player: int, tile: Tile, unaccountedForDelta: int = -1, useOpponentKnownFogTileArmy: bool = True) -> int | None:
+        """
+        Returns the maximum general-distance bound implied by a player's fog
+        standing army for an emergence at `tile`, or None when the delta does
+        not imply a bound.
+
+        @param player: the emerging player's index.
+        @param tile: the tile the emergence is measured from.
+        @param unaccountedForDelta: the emergence amount to test against the
+            fog standing-army pool. Pass -1 to resolve it from the tile's
+            residual unexplainedDelta - the army not explained by known
+            movement - rather than the raw armyDelta, so fully explained
+            captures do not count as fresh emergence evidence. Explicit
+            callers pass the real emergence amount directly.
+        @param useOpponentKnownFogTileArmy: whether to first subtract
+            opponent-tracker known non-general fog tile army from the pool.
+        @return: the distance bound, or None.
+        """
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_double_fog_capture_emergence
+        # and UnitTests/test_ArmyTrackerEmergence.py: the default must read the
+        # residual unexplainedDelta, not the raw armyDelta - a fully explained
+        # capture (armyDelta -87, unexplainedDelta 0) is not fresh emergence
+        # evidence and must not bound the general's position. Explicit positive
+        # amounts still run the standing-army heuristics unchanged.
         # TODO if we take into account the worst case amount of army they guaranteed have left on their tiles from OpponentTracker
         #  eg in test test_because_of_opponent_tracker_registering_max_possible_emergence_pulling_ALL_army_off_of_general_should_limit_gen_spawn we limit to dist 10
         #  but really we know they have at minimum 2x 2s left in that test so we could actually limit to 6 since 2 army can't be on the general from that knowledge.
         if unaccountedForDelta == -1:
-            unaccountedForDelta = abs(tile.delta.armyDelta)
+            unaccountedForDelta = abs(tile.delta.unexplainedDelta)
+        if unaccountedForDelta <= 0:
+            return None
         armyPlayerObj = self.map.players[player]
         depthLimit = None
         armyInFog = armyPlayerObj.standingArmy - armyPlayerObj.visibleStandingArmy
@@ -3911,6 +4335,11 @@ class ArmyTracker(object):
     def _pre_army_track_handle_flipped_tiles(self):
         """To be called every time a tile is flipped from one owner to another owner by the map updates themselves."""
 
+        # Runs before the traded-pair flip filter below and after every map-update
+        # event handler, so dead/capturedBy state is final for witnessed-transfer
+        # marking (UnitTests/test_FfaGeneralPlacement.py).
+        self._finalize_general_land_evidence_transfers()
+
         recalcVis = set()
         for tile in self._flipped_tiles:
             recalcVis.add(tile)
@@ -3980,7 +4409,11 @@ class ArmyTracker(object):
                     self.players_with_incorrect_tile_predictions.add(tile.player)
                 if tile.delta.oldOwner != -1:
                     self.players_with_incorrect_tile_predictions.add(tile.delta.oldOwner)
-            if tile.delta.discovered and tile.player != -1:
+            # Tests/test_OpponentTracker.py::OpponentTrackerTests.test_should_not_transfer_gather_queue_when_we_capture_enemy
+            # our own mass capture flips dozens of our tiles at once; general-
+            # candidate rechecks only make sense for enemy players, and
+            # _check_over_elimination asserts on self/team by design.
+            if tile.delta.discovered and tile.player != -1 and not self.map.is_tile_friendly(tile):
                 recheckPlayers.add(tile.player)
                 for adj in tile.movable:
                     if adj.player >= 0 and not self.map.is_tile_friendly(adj):
@@ -3989,15 +4422,19 @@ class ArmyTracker(object):
                     self.discovered_enemy_land_connector_tiles[tile.player].add(tile)
                     reFogLandPlayers.add(tile.player)
 
-                for player in self.map.players:
-                    # if not self.valid_general_positions_by_player[player.index]
-                    emergence = self.emergenceLocationMap[player.index].raw[tile.tile_index]
-                    for movable in tile.movable:
-                        if movable.discovered:
-                            continue
-                        movableEmergence = self.emergenceLocationMap[player.index].raw[movable.tile_index]
-                        if emergence > movableEmergence:
-                            self.emergenceLocationMap[player.index].raw[movable.tile_index] = movableEmergence + emergence // 2
+                # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_not_drag_informed_general_prediction_to_enemy_emergence:
+                # this spread may only touch the DISCOVERED tile's owner matrix.
+                # Running it for every player smeared pink's own emergence field
+                # into the fog beside green's reveal (19+20/2=29 at (22,15)) and
+                # dragged pink's joint FFA predicted general onto green's land.
+                discoveredOwner = self.map.players[tile.player]
+                emergence = self.emergenceLocationMap[discoveredOwner.index].raw[tile.tile_index]
+                for movable in tile.movable:
+                    if movable.discovered:
+                        continue
+                    movableEmergence = self.emergenceLocationMap[discoveredOwner.index].raw[movable.tile_index]
+                    if emergence > movableEmergence:
+                        self.emergenceLocationMap[discoveredOwner.index].raw[movable.tile_index] = movableEmergence + emergence // 2
 
             elif tile.player >= 0 and SearchUtils.any_where(tile.movable, lambda t: not t.discovered):
                 reFogLandPlayers.add(tile.player)
@@ -4013,6 +4450,11 @@ class ArmyTracker(object):
                     generalPositionPlayer = tile.player
                     if not tile.isGeneral:
                         generalPositionPlayer = -1
+                        # Tests: UnitTests/test_FfaGeneralPlacement.py - a city proven
+                        # to be an ex-general location is a permanent spawn-distance
+                        # exclusion anchor for joint FFA placement even after resume.
+                        if FfaGeneralPlacement.is_original_ffa(self.map):
+                            self.ffa_general_placement.ex_general_blockers.add(tile)
 
                     for player in self.map.players:
                         if player.dead:
@@ -4085,6 +4527,15 @@ class ArmyTracker(object):
                 # then we knew about this army, skip it.
                 continue
 
+            # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+            # an enemy-vs-enemy capture flips every victim tile to the killer in
+            # one turn; those are ownership transfers, not emergences, and each
+            # one would otherwise fire a full-map emergence limit for the killer.
+            if tile.delta.oldOwner >= 0:
+                oldOwnerObj = self.map.players[tile.delta.oldOwner]
+                if oldOwnerObj.capturedBy is not None or oldOwnerObj.dead:
+                    continue
+
             p = self.map.players[tile.player]
 
             if (p.tileCount > 75 or p.cityCount > 1) and not self.map.is_custom_map:
@@ -4096,21 +4547,43 @@ class ArmyTracker(object):
 
         for player in reFogLandPlayers:
             p = self.map.players[player]
-            if p.tileCount < 25:
-                with self.perf_timer.begin_move_event('extended tile dist limit by tile count'):
-                    totalTiles = p.tileCount
-                    limitDist = totalTiles
-                    # tiles = list([t for t in p.tiles if t.visible])
-                    for t in self.tiles_ever_owned_by_player[p.index]:
-                        if t.player != p.index:
-                            totalTiles += 1
-                            limitDist += 1
-                            # tiles.append(t)
-                        if t.visible:
-                            limitDist -= 1
+            # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+            # a just-captured or friendly player has no hidden general to bound;
+            # dead p2's stale tile count let this path force-pin a phantom
+            # general on 15,3 during our capture reveal.
+            if p.dead or p.capturedBy is not None or p.index == self.map.player_index or p.index in self.map.teammates:
+                continue
+            totalTiles = p.tileCount
+            limitDist = totalTiles
+            for t in self.tiles_ever_owned_by_player[p.index]:
+                if t.player != p.index:
+                    totalTiles += 1
+                    limitDist += 1
+                if t.visible:
+                    limitDist -= 1
 
-                    visibleElims = [t for t in self.tiles_ever_owned_by_player[p.index] if t.visible]
-                    self._limit_general_position_to_within_tiles_and_distance(p.index, visibleElims, limitDist, alsoIncreaseEmergence=False)
+            # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+            # the general must sit on an unseen own tile, so it can never be
+            # farther than their unseen-tile count (limitDist) from their visible
+            # land. For big players this bound is only informative when most of
+            # their land was just revealed (eg a capture reveal), so only pay
+            # the BFS when it is tight enough to cut real candidates.
+            bigPlayer = p.tileCount >= 25
+            visibleElims = [t for t in self.tiles_ever_owned_by_player[p.index] if t.visible]
+            if bigPlayer and (limitDist <= 0 or limitDist > 15 or len(visibleElims) == 0):
+                continue
+            with self.perf_timer.begin_move_event('extended tile dist limit by tile count'):
+                # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+                # for the extended big-player bound, also block traversal through
+                # tiles currently confirmed owned by other players; the general
+                # cannot have crossed them, so reachability must go through
+                # fog / own land only.
+                self._limit_general_position_to_within_tiles_and_distance(
+                    p.index,
+                    visibleElims,
+                    limitDist,
+                    alsoIncreaseEmergence=False,
+                    blockDiscoveredEnemyTiles=bigPlayer)
 
         for player in recheckPlayers:
             self._check_over_elimination(player)
@@ -4207,6 +4680,15 @@ class ArmyTracker(object):
         if player == self.map.player_index or player in self.map.teammates:
             return
 
+        # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+        # a captured player has no general left to locate, but their recorded
+        # emergence events survive; replaying them shrinks the stale candidate
+        # set to a single fog tile during the mass reveal and each replay is a
+        # full-map BFS of pure waste.
+        relimitPlayer = self.map.players[player]
+        if relimitPlayer.dead or relimitPlayer.capturedBy is not None:
+            return
+
         # UnitTests/test_EmergenceDistanceSums.py::EmergenceDistanceSumsTests.test_relimit_counts_full_distance_without_extending_elimination - keep the replay's sums local so a re-entrant over-elimination reset cannot replace or double-count the outer replay.
         distanceSums = EmergenceDistanceSums(
             distance_sum=MapMatrix(self.map, 0),
@@ -4232,9 +4714,20 @@ class ArmyTracker(object):
             self,
             tile: Tile,
             everOwned: set[Tile],
-            hasPerfectInfoOfPlayerCities: bool) -> bool:
+            hasPerfectInfoOfPlayerCities: bool,
+            blockDiscoveredEnemyFor: int = -1) -> bool:
         """Apply the shared tile-blocking rules used by emergence distance searches."""
         if tile.discoveredAsNeutral and tile not in everOwned:
+            return True
+        # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+        # a general cannot path through land we can currently see belongs to
+        # someone else; treat confirmed enemy tiles as traversal blockers when
+        # the caller opts in (capture-reveal distance bounds).
+        if (blockDiscoveredEnemyFor != -1
+                and tile.discovered
+                and tile.player >= 0
+                and tile.player != blockDiscoveredEnemyFor
+                and tile not in everOwned):
             return True
         return (
             (tile.isCostlyNeutralCity and (tile.visible or hasPerfectInfoOfPlayerCities))
@@ -4256,11 +4749,14 @@ class ArmyTracker(object):
             hasPerfectInfoOfPlayerCities = self.has_perfect_information_of_player_cities(player)
         everOwned = self.tiles_ever_owned_by_player[player]
 
+        sourceDistances = MapMatrix(self.map, 0)
+
         def accumulate(tile: Tile, bfsDist: int) -> bool:
             """Record this source's true distance before applying its traversal blockers."""
             tileIndex = tile.tile_index
             distanceSums.distance_sum.raw[tileIndex] += bfsDist + 1
             distanceSums.reach_count.raw[tileIndex] += 1
+            sourceDistances.raw[tileIndex] = bfsDist + 1
             return self._should_stop_general_emergence_bfs(
                 tile,
                 everOwned,
@@ -4276,6 +4772,7 @@ class ArmyTracker(object):
             startingTiles,
             len(self.map.tiles_by_index),
             accumulate)
+        distanceSums.source_distances[source] = sourceDistances
 
     # UnitTests/test_EmergenceDistanceSums.py::EmergenceDistanceSumsTests.test_accessor_adds_sources_and_rebuilds_after_removal - update on source additions and rebuild after any removal.
     def get_emergence_distance_sums(self, player: int) -> EmergenceDistanceSums:
@@ -4297,6 +4794,7 @@ class ArmyTracker(object):
         distanceSums.distance_sum.raw = [0] * len(self.map.tiles_by_index)
         distanceSums.reach_count.raw = [0] * len(self.map.tiles_by_index)
         distanceSums.source_tiles.clear()
+        distanceSums.source_distances.clear()
         for source in sourceTiles:
             self._accumulate_emergence_source_distances(player, source, distanceSums)
             distanceSums.source_tiles.add(source)
@@ -4328,6 +4826,81 @@ class ArmyTracker(object):
                 0,
                 expectedDistanceSum - effectiveSum) ** EMERGENCE_DISTANCE_BONUS_EXPONENT
         return bonusMatrix
+
+    # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - weight each emergence source by the enemy's city count at its event turn; pre-city emergences carry the strongest directional evidence.
+    def build_emergence_path_source_weights(
+            self,
+            player: int,
+            cityContestationHistory: typing.Dict[Tile, typing.List[CityOwnershipTransfer]]) -> typing.Dict[Tile, float]:
+        """Weight each emergence source by the player's city count at the event's estimated turn."""
+        uneliminated = self.uneliminated_emergence_events[player]
+        sources = set(uneliminated.keys()) | self.unrecaptured_emergence_events[player]
+        weights: typing.Dict[Tile, float] = {}
+        if len(sources) == 0:
+            return weights
+        launchTiming = self.player_launch_timings[player]
+        for source in sources:
+            storedLimit = uneliminated.get(source)
+            if storedLimit is None:
+                weights[source] = EMERGENCE_PATH_CONSISTENCY_UNRECAPTURED_WEIGHT
+                continue
+            estimatedEventTurn = launchTiming + storedLimit
+            citiesAtEvent = 0
+            for transfers in cityContestationHistory.values():
+                ownerAtEvent = -1
+                for transfer in transfers:
+                    if transfer.turn > estimatedEventTurn:
+                        break
+                    ownerAtEvent = transfer.player
+                if ownerAtEvent == player:
+                    citiesAtEvent += 1
+            weights[source] = EMERGENCE_PATH_CONSISTENCY_CITY_DECAY ** citiesAtEvent
+        return weights
+
+    # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - emergences should lie on shortest paths from the enemy general toward us; candidates whose routes to us bypass the observed emergences get a soft penalty.
+    def build_emergence_path_consistency_penalty_matrix(
+            self,
+            player: int,
+            sourceWeights: typing.Dict[Tile, float],
+            distanceToOurGeneral: MapMatrixInterface[int],
+            expectedGeneralDistance: int) -> MapMatrixInterface[float]:
+        """
+        Build a per-tile 'off-route' penalty: for each emergence source, how far off the candidate's
+        shortest route to our general the emergence lies (dist(candidate, source) + dist(source, us)
+        - dist(candidate, us)), weighted by the source's city-era weight and normalized by the
+        candidate's distance to our general. Lower is better; unexplained emergences penalize.
+        """
+        penaltyMatrix = MapMatrix(self.map, 0.0)
+        if not EMERGENCE_PATH_CONSISTENCY_ENABLED:
+            return penaltyMatrix
+
+        distanceSums = self.get_emergence_distance_sums(player)
+        if len(distanceSums.source_tiles) == 0:
+            return penaltyMatrix
+
+        unreachableDistance = expectedGeneralDistance * 2
+        for source, sourceWeight in sourceWeights.items():
+            if sourceWeight <= 0:
+                continue
+            sourceDistances = distanceSums.source_distances.get(source)
+            if sourceDistances is None:
+                continue
+            sourceToUs = distanceToOurGeneral.raw[source.tile_index]
+            if sourceToUs >= 900:
+                sourceToUs = unreachableDistance
+            for tile in self.map.tiles_by_index:
+                tileIndex = tile.tile_index
+                candidateToUs = distanceToOurGeneral.raw[tileIndex]
+                if candidateToUs >= 900:
+                    continue
+                sourceDistance = sourceDistances.raw[tileIndex]
+                if sourceDistance <= 0:
+                    sourceDistance = expectedGeneralDistance
+                detour = sourceDistance + sourceToUs - candidateToUs
+                if detour > 0:
+                    penaltyMatrix.raw[tileIndex] += (
+                        sourceWeight * detour / max(1, candidateToUs))
+        return penaltyMatrix
 
     def _handle_flipped_discovered_as_neutrals(self):
         with self.perf_timer.begin_move_event('handling discovered-as-neutral'):
@@ -4366,6 +4939,14 @@ class ArmyTracker(object):
             emergenceAmount: int = -1,
             bypass2v2Partner: bool = False,
             distanceSums: EmergenceDistanceSums | None = None) -> None:
+
+        # Tests/test_OpponentTracker.py::OpponentTrackerTests.test_should_not_transfer_gather_queue_when_we_capture_enemy
+        # our own capture produces unexplained deltas attributed to us (halved
+        # transferred armies, the captured general's combat remainder); those
+        # are accounting artifacts, not emergences, and our own general is
+        # always visible anyway. Same guard as re_limit_player_gen_locations.
+        if player == self.map.player_index or player in self.map.teammates:
+            return
 
         if not bypass2v2Partner and self.map.is_2v2:
             teammates = self.map.get_teammates_no_self(player)
@@ -4429,8 +5010,16 @@ class ArmyTracker(object):
             overrideCityPerfectInfo: bool | None = None,
             emergenceAmount: int = -1,
             dontCountSwamps: bool = True,
-            distanceSums: EmergenceDistanceSums | None = None) -> int:
+            distanceSums: EmergenceDistanceSums | None = None,
+            blockDiscoveredEnemyTiles: bool = False) -> int:
         """Limit candidates and optionally accumulate unbounded source distances."""
+        # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+        # this is called directly from the flipped-tiles reFogLand path which can
+        # still pick up our own index via undiscovered-neighbor bookkeeping; our
+        # own general is always visible so there is nothing to bound. Same guard
+        # as _limit_general_position_to_within_tile_and_distance.
+        if player == self.map.player_index or player in self.map.teammates:
+            return 0
         validSet = set()
 
         # ONLY USE FOR EMERGENCE
@@ -4454,11 +5043,19 @@ class ArmyTracker(object):
         emgMap = self.emergenceLocationMap[player]
         everOwned = self.tiles_ever_owned_by_player[player]
 
+        # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_infer_bottom_right_spawn_from_emergence_direction - re-limit replays are single-source; record that source's distances for the path-consistency penalty.
+        singleSourceDistances: MapMatrixInterface[int] | None = None
+        if distanceSums is not None and len(tiles) == 1:
+            singleSourceDistances = MapMatrix(self.map, 0)
+            distanceSums.source_distances[tiles[0]] = singleSourceDistances
+
         def limiter(t: Tile, dist: int) -> bool:
             tileIndex = t.tile_index
             if distanceSums is not None:
                 distanceSums.distance_sum.raw[tileIndex] += dist + 1
                 distanceSums.reach_count.raw[tileIndex] += 1
+                if singleSourceDistances is not None:
+                    singleSourceDistances.raw[tileIndex] = dist + 1
             if dist <= maxDist - 1:
                 if validPositions.raw[tileIndex]:
                     validSet.add(tileIndex)
@@ -4470,7 +5067,8 @@ class ArmyTracker(object):
             return self._should_stop_general_emergence_bfs(
                 t,
                 everOwned,
-                hasPerfectInfoOfPlayerCities)
+                hasPerfectInfoOfPlayerCities,
+                blockDiscoveredEnemyFor=player if blockDiscoveredEnemyTiles else -1)
 
         searchDepth = maxDist - 1
         if distanceSums is not None:
@@ -4820,6 +5418,7 @@ class ArmyTracker(object):
             army.record_fog_tile_revert(oldTile)
             # NEVER modify visible tile army values
             # oldTile.army = max(1, oldTile.army)
+            army.mark_fog_tile_revert_post(oldTile)
 
         army.record_fog_tile_revert(fogTargetTile)
         if fogTargetTile.player != army.player and not fogTargetTile.discovered:
@@ -4833,6 +5432,7 @@ class ArmyTracker(object):
             fogTargetTile.player = army.player
 
         fogTargetTile.army = max(1, army.value + 1)
+        army.mark_fog_tile_revert_post(fogTargetTile)
         army.update_tile(fogTargetTile)
         army.value = fogTargetTile.army - 1
         army.last_moved_turn = self.map.turn - 1
@@ -4944,6 +5544,7 @@ class ArmyTracker(object):
                     oldTile.army += 1
                 if self.map.is_army_bonus_turn:
                     oldTile.army += 1
+            army.mark_fog_tile_revert_post(oldTile)
             if self.log_debug:
                 logbook.info(f'FOG_PATH_OLD_TILE_CLEARED turn={self.map.turn} army={army} oldTile={oldTile} oldTileArmyAfter={oldTile.army}')
 
@@ -5001,6 +5602,7 @@ class ArmyTracker(object):
                 if not nextTile.isGeneral:
                     nextTile.player = army.player
 
+            army.mark_fog_tile_revert_post(nextTile)
             if self.log_debug and DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                 logbook.info(f'FOG DEBUG: Updated next tile {nextTile} army to {nextTile.army}, player to {nextTile.player}')
 
@@ -5098,28 +5700,120 @@ class ArmyTracker(object):
                         return True
 
                     logbook.info(f"try_find_army_sink did not find fog city for {str(army.tile)}, reducing army by {annihilatedFogArmy} anyway.")
-                    self._reduce_army_sink_for_fog_annihilation(army, annihilatedFogArmy)
-                    return True
+                    # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_create_phantom_visible_army
+                    # a co-claimed victim is skipped by the reduce; fall through to the next candidate.
+                    if self._reduce_army_sink_for_fog_annihilation(army, annihilatedFogArmy):
+                        return True
 
                 else:
                     # likelyArmy = army
-                    self._reduce_army_sink_for_fog_annihilation(army, annihilatedFogArmy)
-                    return True
+                    if self._reduce_army_sink_for_fog_annihilation(army, annihilatedFogArmy):
+                        return True
 
+        return False
+
+    def _tile_claimed_by_other_live_army(
+            self,
+            tile: Tile,
+            excludeArmies: typing.List[Army]
+    ) -> bool:
+        """
+        Returns True when the fog tile's army belief is backed by a live tracked
+        army outside the excluded set - either a dict-resident army seated on the
+        tile or one of its entangled alternatives. Claimants only need to be
+        resident in self.armies somewhere; they do not have to be keyed at this
+        tile (self.armies holds at most one army per coordinate).
+
+        @param tile: the tile whose claim backing is being checked.
+        @param excludeArmies: the army/group the check is being done for; its own
+            alternatives represent the same real army and never count as other claims.
+        @return: True if another live army or alternative claims the tile.
+        """
+        for other in self.armies.values():
+            if other.scrapped or other in excludeArmies:
+                continue
+            if other.tile == tile:
+                return True
+            for entangled in other.entangledArmies:
+                if entangled.scrapped or entangled in excludeArmies:
+                    continue
+                if entangled.tile == tile:
+                    return True
         return False
 
     def _reduce_army_sink_for_fog_annihilation(
             self,
             army: Army,
             annihilatedFogArmy: int
-    ):
+    ) -> bool:
+        """
+        Reduce a tracked fog army's value (and its tile belief) by the amount of
+        fog army the player's team is believed to have lost to an unseen fight.
+
+        @param army: the victim army chosen by try_find_army_sink.
+        @param annihilatedFogArmy: the amount of army believed annihilated.
+        @return: True when the reduce applied, False when the victim was skipped
+            because its tile belief is co-claimed by other live armies (reducing
+            one claimant cannot balance the books and corrupts a shared belief).
+        """
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_create_phantom_visible_army
+        # The sink may only consume standing the victim's group itself
+        # speculatively wrote onto the tile - recorded in fogTileReverts when a
+        # hypothesis is pushed onto a fog tile. A victim whose tile belief is
+        # NOT revert-owned is anchored to an external belief: a last-seen real
+        # value, an observation, or another army's speculative claim. Grinding
+        # it rewrites real knowledge and desyncs the tracker from a real stack
+        # (stay-clones anchored on the observed 20-belief at 15,15 got reduced
+        # to 17 by an unrelated 1-army annihilation while truth still showed 20).
+        victimGroupOwnsBelief = army.tile in army.fogTileReverts
+        if not victimGroupOwnsBelief:
+            for entangled in army.entangledArmies:
+                if entangled.tile == army.tile and army.tile in entangled.fogTileReverts:
+                    victimGroupOwnsBelief = True
+                    break
+        if not victimGroupOwnsBelief:
+            logbook.info(
+                f'ARMY_SINK_SKIP_UNOWNED turn={self.map.turn} army={army} annihilatedFogArmy={annihilatedFogArmy} '
+                f'tile={army.tile} tileArmy={army.tile.army}')
+            return False
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_create_phantom_visible_army
+        # A victim whose tile is co-claimed by other live armies/hypotheses is a
+        # bad sink: the tile's belief does not come from this army alone, so
+        # grinding the army down to 0 neither matches the belief nor the truth
+        # (the real 20-stack on 15,15 was claimed by 3 independent trackers).
+        if self._tile_claimed_by_other_live_army(army.tile, excludeArmies=[army]):
+            logbook.info(
+                f'ARMY_SINK_SKIP_COCLAIM turn={self.map.turn} army={army} annihilatedFogArmy={annihilatedFogArmy} '
+                f'tile={army.tile} tileArmy={army.tile.army}')
+            return False
+        logbook.info(
+            f'ARMY_SINK_REDUCE turn={self.map.turn} army={army} annihilatedFogArmy={annihilatedFogArmy} '
+            f'tile={army.tile} tileArmyBefore={army.tile.army} valueBefore={army.value} '
+            f'entangled={[f"{entangled.tile}:{entangled.value}" for entangled in army.entangledArmies]}')
         army.value -= annihilatedFogArmy
         if army.value < 0:
             army.value = 0
         army.tile.army = army.value + 1
+        reducedSet: typing.List[Army] = [army]
+        reducedSet.extend(army.entangledArmies)
         for entangled in army.entangledArmies:
-            entangled.value = max(0, entangled.value - annihilatedFogArmy)
-            entangled.tile.army = entangled.value + 1
+            # Tests/test_ArmyTracker.py::ArmyTrackerTests::test_should_not_create_phantom_visible_army
+            # The alternative's value and tile belief may only be reduced when
+            # this hypothesis itself produced that tile belief via a speculative
+            # fog claim (recorded in fogTileReverts by move_army_into_fog /
+            # back-push) and no other live army also claims the tile. An
+            # alternative seated on a tile whose belief predates it - e.g. a
+            # stay-clone left on a just-fogged origin tile - is anchored to a
+            # shared belief other hypotheses and the last real observation also
+            # hold; zeroing it killed the tracked stack on 15,15 even though the
+            # real 20-stack was still there.
+            if not entangled.tile.visible and entangled.tile in entangled.fogTileReverts and not self._tile_claimed_by_other_live_army(entangled.tile, excludeArmies=reducedSet):
+                entangled.value = max(0, entangled.value - annihilatedFogArmy)
+                entangled.tile.army = entangled.value + 1
+                logbook.info(
+                    f'ARMY_SINK_REDUCE_ENT turn={self.map.turn} entangled={entangled} '
+                    f'tile={entangled.tile} tileArmyAfter={entangled.tile.army} valueAfter={entangled.value}')
+        return True
 
     def _inc_slash_dec_fog_prediction_to_get_player_tile_count_right(
             self,
@@ -5197,10 +5891,15 @@ class ArmyTracker(object):
             return
 
         ourGen = self.map.generals[self.map.player_index]
-        bannedTiles, connectedTiles, coreConnected, pathToUnelim = self.get_fog_connected_based_on_emergences(player, predictedGeneralLocation)
+
+        bannedTiles, connectedTiles, coreConnected, pathToUnelim, genDistMap, maxGenReach = self.get_fog_connected_based_on_emergences(player, predictedGeneralLocation)
         self.connectedByPlayer[player] = connectedTiles
         self.coreConnectedByPlayer[player] = coreConnected
-        if len(coreConnected) == 0 and predictedGeneralLocation is not None:
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+        # get_fog_connected_based_on_emergences validates the prediction against current
+        # valid_general_positions internally; apply the same check here so a just-disproved
+        # location cannot re-enter as a fallback anchor.
+        if len(coreConnected) == 0 and predictedGeneralLocation is not None and self.valid_general_positions_by_player[player][predictedGeneralLocation]:
             coreConnected.add(predictedGeneralLocation)
             connectedTiles.add(predictedGeneralLocation)
 
@@ -5227,7 +5926,7 @@ class ArmyTracker(object):
         numStartTilesToFill = min(numTilesToFillIn, 24) - len(connectedDark)
 
         with self.perf_timer.begin_move_event(f'ArmyTracker fill land p{player}'):
-            tempPredictions = self._fill_land_from_connected_tiles_for_player(player, bannedTiles, connectedDark, connectedTiles, numStartTilesToFill, numTilesToFillIn, ourGen, pathToUnelim, playerExpectedFogTileCounts, tilesToConvertToTempPlayer)
+            tempPredictions = self._fill_land_from_connected_tiles_for_player(player, bannedTiles, connectedDark, connectedTiles, numStartTilesToFill, numTilesToFillIn, ourGen, pathToUnelim, playerExpectedFogTileCounts, tilesToConvertToTempPlayer, genDistMap=genDistMap, maxGenReach=maxGenReach)
 
         self.map.players[player].tiles.extend(tempPredictions)
 
@@ -5236,9 +5935,11 @@ class ArmyTracker(object):
             player: int,
             predictedGeneralLocation,
             additionalRequiredTiles: typing.Iterable[Tile] | None = None
-    ) -> typing.Tuple[MapMatrixSet, TileSet, TileSet, Path | None]:
+    ) -> typing.Tuple[MapMatrixSet, TileSet, TileSet, Path | None, MapMatrixInterface[int] | None, int | None]:
         """
-        Returns bannedTiles, connectedSet, coreConnectedSet, pathToClosestUneliminatedGenPosition
+        Returns bannedTiles, connectedSet, coreConnectedSet, pathToClosestUneliminatedGenPosition,
+        genDistMap (BFS distance from valid general positions through non-banned tiles), and
+        maxGenReach (the farthest plausible land distance from a valid general position).
         @param player:
         @param predictedGeneralLocation:
         @param additionalRequiredTiles:
@@ -5250,6 +5951,42 @@ class ArmyTracker(object):
         validGenSpots = self.valid_general_positions_by_player[player]
         teamStats = self.map.get_team_stats(player)
         perfectInfo = teamStats.cityCount == len(teamStats.teamPlayers)
+
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals:
+        # in original FFA every player's fog land must anchor to THEIR OWN jointly
+        # placed predicted general (ArmyTracker.ffa_general_placement), never to the
+        # bot's target-player prediction that used to be passed for everyone. The
+        # seed goes FIRST in requiredTiles so the spanning tree keeps it, and the
+        # genDistMap flood originates at that seed so speculative fill grows from
+        # the player's own spawn instead of the nearest of ALL valid candidates.
+        isOriginalFfa = FfaGeneralPlacement.is_original_ffa(self.map)
+        ffaSeed: Tile | None = None
+        if isOriginalFfa:
+            placement = self.ffa_general_placement
+            if player < len(placement.positions):
+                ffaSeed = placement.positions[player]
+            # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals
+            # and UnitTests/test_FfaGeneralPlacement.py::FfaGeneralPlacementTests.test_stale_ffa_seed_never_seeds_fog_land:
+            # the cached joint seed can be disproved between placement.refresh and
+            # this build (neutral-discovered, eliminated from the hard matrix), so
+            # re-validate it against the CURRENT hard mask plus terrain/discovered
+            # flags before it becomes a required tile or the genDistMap BFS source.
+            # A known living general is the exception: it is authoritative even
+            # when absent from the candidate matrix. No substitute anchor is
+            # invented - an invalid seed simply falls back to the legacy evidence
+            # path until the next placement.refresh picks a legal one.
+            if ffaSeed is not None:
+                if self.map.generals[player] is ffaSeed:
+                    pass
+                elif not (
+                        validGenSpots[ffaSeed]
+                        and not ffaSeed.discovered
+                        and not ffaSeed.discoveredAsNeutral
+                        and not ffaSeed.isMountain
+                        and not ffaSeed.isNotPathable
+                        and not ffaSeed.isCity):
+                    ffaSeed = None
+
         bannedTiles = MapMatrixSet(self.map)
         for tile in self.map.get_all_tiles():
             if (tile.discoveredAsNeutral or tile.visible) and tile not in uneliminated and tile not in unrecapturedEmergenceEvents and tile not in tilesEverOwned:
@@ -5261,6 +5998,12 @@ class ArmyTracker(object):
 
         requiredTiles = []
         requiredIncluded = set()
+        # The player's own FFA placement seed is the FIRST required tile: it is the
+        # anchor the whole fog-land blob grows from (regression:
+        # test_should_separate_ffa_fog_land_from_predicted_generals).
+        if ffaSeed is not None:
+            requiredIncluded.add(ffaSeed)
+            requiredTiles.append(ffaSeed)
         for tile in uneliminated.keys():
             # if not SearchUtils.any_where(tile.movable, lambda t: not t.visible):
             #     continue
@@ -5278,10 +6021,29 @@ class ArmyTracker(object):
                 if t not in requiredIncluded:
                     requiredIncluded.add(t)
                     requiredTiles.append(t)
+
+        if isOriginalFfa:
+            # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals
+            # and UnitTests/test_FfaGeneralPlacement.py::FfaGeneralPlacementTests.test_ffa_fog_connects_observed_land_evidence_without_emergence:
+            # the seed alone must not satisfy requiredIncluded - genuine observed
+            # land (positive-weight, non-transferred GeneralLandEvidence) still
+            # anchors the spanning web so historical known land is not lost just
+            # because a seed exists. Raw tilesEverOwned is deliberately NOT used
+            # here for FFA: it can be contaminated by temp-fog inference, while
+            # the evidence dict only contains actual observations.
+            for evidence in self.ffa_general_land_evidence[player].values():
+                evidenceTile = evidence.tile
+                if evidence.weight() <= 0.0 or evidenceTile in requiredIncluded:
+                    continue
+                requiredIncluded.add(evidenceTile)
+                requiredTiles.append(evidenceTile)
+
         # I think this is messing stuff up
         if len(requiredIncluded) == 0:
             for tile in tilesEverOwned:
                 if tile.isNotPathable:
+                    continue
+                if isOriginalFfa and tile.isTempFogPrediction:
                     continue
                 if not SearchUtils.any_where(tile.movable, lambda t: not t.visible):
                     continue
@@ -5296,6 +6058,25 @@ class ArmyTracker(object):
         # if len(requiredTiles) == 0:
         #     logbook.warning(f'ArmyTracker found no tiles to build fog land from for player {player}')
         #     return
+
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+        # the predicted location can be freshly disproved (sighted neutral this turn) while the
+        # bot-level refresh in perform_move_prep runs after this builder; a stale anchor drags the
+        # spanning tree toward proven-empty land, so only anchor to a still-valid candidate.
+        stalePredictedGen = predictedGeneralLocation is not None and not validGenSpots[predictedGeneralLocation]
+        if stalePredictedGen:
+            predictedGeneralLocation = None
+
+        validGenSpotTiles = [t for t in validGenSpots]
+        genDistMap: MapMatrixInterface[int] | None = None
+        if ffaSeed is not None:
+            # BFS distance from the player's OWN seed through non-banned tiles, so
+            # fill ordering originates at the chosen spawn rather than the nearest
+            # of every remaining valid general candidate.
+            genDistMap = SearchUtils.build_distance_map_matrix_with_skip(self.map, [ffaSeed], skipTiles=bannedTiles)
+        elif len(validGenSpotTiles) > 0:
+            genDistMap = SearchUtils.build_distance_map_matrix_with_skip(self.map, validGenSpotTiles, skipTiles=bannedTiles)
+
         with self.perf_timer.begin_move_event(f'Fog land build get_spanning_tree_set_from_tile_lists p{player} (num required {len(requiredTiles)})'):
             connectedSet, missingRequired = MapSpanningUtils.get_spanning_tree_set_from_tile_lists(self.map, requiredTiles, bannedTiles)
             # connectedTiles = [t for t in connectedSet]
@@ -5329,6 +6110,16 @@ class ArmyTracker(object):
                         noNeutralCities=True,
                         skipTiles=bannedTiles,
                         noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+            elif stalePredictedGen:
+                # the prediction was just disproved: still anchor the connected set to the nearest
+                # remaining valid spawn so the fill regrows from real candidates
+                pathToUnelim = SearchUtils.breadth_first_find_queue(
+                    self.map,
+                    [t for t in validGenSpots],
+                    lambda t, _1, _2: t in connectedSet,
+                    noNeutralCities=True,
+                    skipTiles=bannedTiles,
+                    noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
 
             if pathToUnelim is not None:
                 pathToUnelim = pathToUnelim.get_reversed()
@@ -5341,9 +6132,61 @@ class ArmyTracker(object):
                 logbook.warning(f'no pathToUnelim to p{player} spawn found!?')
 
         self._connect_discovered_enemy_land_connector_tiles(player, connectedSet, bannedTiles)
+
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_prune_dead_fog_land_prediction_on_empty_discovery:
+        # the player's land must be contiguous with SOME remaining general spawn and totals
+        # tileCount tiles, so the farthest it could possibly reach is the distance at which a flood
+        # from the valid spawns covers tileCount non-banned tiles. Predictions beyond that are
+        # provably dead land disconnected from every remaining general position (in N92iSpgIx t142,
+        # (4,13)/(5,13) sighted empty shrank valid spots to the (3,3)/(3,11) clusters, leaving
+        # (0,16),(0,17),(6,17),(7,16),(9,16),(9,17),(10,16) all past the bound). Required
+        # emergence anchors always extend the bound: 'was really there' evidence outranks distance.
+        maxGenReach: int | None = None
+        if genDistMap is not None:
+            plausibleDists = []
+            for tile in self.map.get_all_tiles():
+                dist = genDistMap.raw[tile.tile_index]
+                if dist >= 1000 or tile.isObstacle or tile in bannedTiles:
+                    continue
+                plausibleDists.append(dist)
+            plausibleDists.sort()
+            if len(plausibleDists) > 0:
+                maxGenReach = plausibleDists[min(self.map.players[player].tileCount, len(plausibleDists)) - 1]
+            else:
+                maxGenReach = 0
+            for tile in requiredTiles:
+                tileGenDist = genDistMap.raw[tile.tile_index]
+                if tileGenDist < 1000:
+                    maxGenReach = max(maxGenReach, tileGenDist)
+            # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_build_land_between_known_emergences:
+            # only leaf-trim the spanning set — dropping a CONNECTOR tile between required
+            # emergence anchors would sever land the set exists to connect. Iterated
+            # leaf-trim still eats entire dead-end branches beyond the reach bound
+            # (test_should_prune_dead_fog_land_prediction_on_empty_discovery).
+            requiredSet = set(requiredTiles)
+            prunedTiles: typing.List[Tile] = []
+            while True:
+                leaf = next(
+                    (t for t in connectedSet
+                     if t not in requiredSet
+                     and genDistMap.raw[t.tile_index] > maxGenReach
+                     and sum(1 for a in t.adjacents if a in connectedSet) <= 1),
+                    None)
+                if leaf is None:
+                    break
+                connectedSet.remove(leaf)
+                prunedTiles.append(leaf)
+            logbook.info(f'FOG GEN REACH p{player} turn={self.map.turn} maxGenReach={maxGenReach} plausibleTiles={len(plausibleDists)} prunedConn={len(connectedSet)} validGens={len(validGenSpotTiles)} pruned={prunedTiles}')
+
         coreConnected = MapSpanningUtils.trim_spanning_tree_ends_as_new_set(toTrim=connectedSet, trimDepth=5, minRemainingCount=int(0.49 + len(connectedSet) / 3))
 
-        return bannedTiles, connectedSet, coreConnected, pathToUnelim
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals:
+        # the FFA seed must remain a fill origin even when the spanning-tree end-trim
+        # would have shaved it off as a leaf.
+        if ffaSeed is not None and ffaSeed in connectedSet:
+            coreConnected.add(ffaSeed)
+
+        return bannedTiles, connectedSet, coreConnected, pathToUnelim, genDistMap, maxGenReach
 
     def _connect_discovered_enemy_land_connector_tiles(
             self,
@@ -5383,7 +6226,9 @@ class ArmyTracker(object):
             ourGen,
             pathToPotentialEnGeneral,
             playerExpectedFogTileCounts,
-            outputTilesToBeConverted
+            outputTilesToBeConverted,
+            genDistMap: MapMatrixInterface[int] | None = None,
+            maxGenReach: int | None = None
     ) -> typing.List[Tile]:
         """
         Returns temp prediction tiles
@@ -5397,6 +6242,11 @@ class ArmyTracker(object):
         @param pathToPotentialEnGeneral:
         @param playerExpectedFogTileCounts: The expected number of tiles of each tile value the opponent should have in the fog, per the opponentTracker fog tracker.
         @param outputTilesToBeConverted:
+        @param genDistMap: BFS distance from each tile to the nearest valid general position through
+            non-banned tiles; None disables the reach bound.
+        @param maxGenReach: Farthest distance from a valid general position a tile may be converted
+            at; tiles beyond it stay traversable but are never predicted (they cannot belong to the
+            player's land no matter which valid general position is real).
         @return:
         """
         # Tests/test_FogLandBuilder.py test_should_prune_dead_fog_land_prediction_on_empty_discovery:
@@ -5405,7 +6255,57 @@ class ArmyTracker(object):
         # predictions. This is deliberately NOT a bannedTiles union: banning them from the spanning
         # tree / fill BFS corrupts emergence accumulation and expansion pathing
         # (test_should_not_over_emerge_fog_island_dips / test_should_track_army_into_the_fog).
-        nonConvertibleTiles = self._get_active_fog_disproved_tiles(player)
+        nonConvertibleTiles = set(self._get_active_fog_disproved_tiles(player))
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_shouldnt_over_build_fog_land_on_vision_loss__when_enemy_out_of_cave_tiles_but_has_wallbreak_city:
+        # a tile sighted neutral during the CURRENT turn's update (darkened with lastSeen ==
+        # map.turn - 1) provably cannot have been captured since - the enemy's only intervening
+        # move was visible elsewhere ((17,16)/(16,17) at oNee0ECyL t207, enemy visibly moved
+        # 16,15->16,16). Fresh neutral sightings outrank stale tilesEverOwned evidence, so they
+        # join the non-convertible set. Copied union - must not pollute the live per-player
+        # disproved set, which would over-block the tile in later turns once it is genuinely
+        # unknown again.
+        for tile in self.map.get_all_tiles():
+            if tile.discoveredAsNeutral and tile.lastSeen >= self.map.turn - 1:
+                nonConvertibleTiles.add(tile)
+
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_should_separate_ffa_fog_land_from_predicted_generals:
+        # in original FFA each player's speculative fog fill must stay on their own
+        # side of the map: a tile strictly closer (Manhattan) to ANOTHER living
+        # player's jointly placed seed than to this player's own seed is somebody
+        # else's probable land and must never be converted into this player's temp
+        # prediction. Hard evidence always outranks the Voronoi guess: emergence
+        # events, unrecaptured emergences, tiles ever owned, and discovered enemy
+        # land connector tiles stay convertible, and every other player's exact
+        # seed tile is unconditionally non-convertible (it is THEIR general, never
+        # our speculative land). No spawn-distance radius is imposed on land -
+        # only the generals themselves are spaced.
+        if FfaGeneralPlacement.is_original_ffa(self.map):
+            placement = self.ffa_general_placement
+            ownSeed = placement.positions[player] if player < len(placement.positions) else None
+            otherSeeds: typing.List[Tile] = []
+            for otherPlayer in range(len(self.map.players)):
+                if otherPlayer == player or self.map.players[otherPlayer].dead:
+                    continue
+                if otherPlayer < len(placement.positions):
+                    otherSeed = placement.positions[otherPlayer]
+                    if otherSeed is not None:
+                        otherSeeds.append(otherSeed)
+            hardEvidenceTiles = (
+                set(self.uneliminated_emergence_events[player].keys())
+                | set(self.unrecaptured_emergence_events[player])
+                | set(self.tiles_ever_owned_by_player[player])
+                | set(self.discovered_enemy_land_connector_tiles[player]))
+            nonConvertibleTiles.update(otherSeeds)
+            if ownSeed is not None and len(otherSeeds) > 0:
+                for tile in self.map.get_all_tiles():
+                    if tile in nonConvertibleTiles or tile in hardEvidenceTiles:
+                        continue
+                    ownDistance = self.map.manhattan_dist(tile, ownSeed)
+                    for otherSeed in otherSeeds:
+                        if self.map.manhattan_dist(tile, otherSeed) < ownDistance:
+                            nonConvertibleTiles.add(tile)
+                            break
+
         secondIterConnected = connectedTiles.copy()
         if pathToPotentialEnGeneral is not None:
             secondIterConnected.update(pathToPotentialEnGeneral.tileList)
@@ -5428,15 +6328,15 @@ class ArmyTracker(object):
                 numMissingCities -= 1
                 outputTilesToBeConverted.add(potCity)
                 logbook.info(f'setting fog city {potCity} to be player owned in _fill_land_from_connected_tiles_for_player. Connecting it.')
-                self.determine_tiles_to_fill_in(outputTilesToBeConverted, nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1, nonConvertibleTiles=nonConvertibleTiles)  # +1 because the final tile is already part of our connected set
+                self.determine_tiles_to_fill_in(outputTilesToBeConverted, nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1, nonConvertibleTiles=nonConvertibleTiles, genDistMap=genDistMap, maxGenReach=maxGenReach)  # +1 because the final tile is already part of our connected set
 
             # here we make sure our connected tiles also connect to the enemy general
             nearGenBan.discard(pathToPotentialEnGeneral.tail.tile)
-            self.determine_tiles_to_fill_in([approxEnGen], nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1, nonConvertibleTiles=nonConvertibleTiles)  # +1 because the final tile is already part of our connected set
+            self.determine_tiles_to_fill_in([approxEnGen], nearGenBan, outputTilesToBeConverted, numStartTilesToFill + 1, nonConvertibleTiles=nonConvertibleTiles, genDistMap=genDistMap, maxGenReach=maxGenReach)  # +1 because the final tile is already part of our connected set
             # we want to start our second whole expansiony thingy from these new tiles, too, because probably they've expanded backwards some.
             secondIterConnected = list(itertools.chain.from_iterable([connectedTiles, outputTilesToBeConverted]))
 
-        self.determine_tiles_to_fill_in(secondIterConnected, bannedTiles, outputTilesToBeConverted, numTilesToFillIn, nonConvertibleTiles=nonConvertibleTiles)
+        self.determine_tiles_to_fill_in(secondIterConnected, bannedTiles, outputTilesToBeConverted, numTilesToFillIn, nonConvertibleTiles=nonConvertibleTiles, genDistMap=genDistMap, maxGenReach=maxGenReach)
         currentTileAmount = SearchUtils.Counter(1)
         if len(playerExpectedFogTileCounts) > 0:
             currentTileAmount.value = max(playerExpectedFogTileCounts.keys())
@@ -5541,6 +6441,8 @@ class ArmyTracker(object):
             tilesToConvertToAddTo: typing.Set[Tile],
             numTilesToFillIn: int,
             nonConvertibleTiles: typing.Set[Tile] | None = None,
+            genDistMap: MapMatrixInterface[int] | None = None,
+            maxGenReach: int | None = None,
             # tilesToPathButNotInclude: typing.Set[Tile]
     ):
         beforeCount = len(tilesToConvertToAddTo)
@@ -5552,6 +6454,8 @@ class ArmyTracker(object):
         skips.difference_update(connectedDarkList)
         for tile in connectedDarkList:
             if not tile.discovered and tile.player == -1 and tile not in nonConvertibleTiles:
+                if maxGenReach is not None and genDistMap.raw[tile.tile_index] > maxGenReach:
+                    continue
                 tilesToConvertToAddTo.add(tile)
                 preseededConnectedDark += 1
 
@@ -5578,31 +6482,56 @@ class ArmyTracker(object):
             return tile in deferVisionBaseline
 
         def add_deferred_vision_edge_tiles_if_needed():
-            for deferredTile in deferredVisionEdgeTileSet:
+            deferredList = list(deferredVisionEdgeTileSet)
+            if genDistMap is not None:
+                deferredList.sort(key=lambda t: genDistMap.raw[t.tile_index])
+            for deferredTile in deferredList:
                 if len(tilesToConvertToAddTo) >= numFillTilesNeeded:
                     return
                 if deferredTile in nonConvertibleTiles:
                     continue
+                if maxGenReach is not None and genDistMap.raw[deferredTile.tile_index] > maxGenReach:
+                    continue
                 tilesToConvertToAddTo.add(deferredTile)
 
+        # Tests/test_FogLandBuilder.py::FogLandBuilderTests.test_fog_fill_prefers_land_near_valid_general_positions__fills_19_0_over_17_16:
+        # the player's land must be contiguous with SOME remaining valid general position, so the
+        # most plausible unknown tiles are the ones closest to a valid spawn. The BFS below still
+        # enumerates connectivity exactly as before, but candidates are collected and selected in
+        # ascending genDist order instead of BFS-encounter order - otherwise a vision-edge tile
+        # far from every spawn ((17,16), genDist 14 in oNee0ECyL t207) can consume quota that a
+        # gen-proximal tile ((19,0), genDist 4) should have had. Without genDistMap the selection
+        # preserves BFS order, matching legacy behavior.
+        candidateFillTiles: typing.List[Tile] = []
+
         def findFunc(tile: Tile, army: float, dist: int) -> bool:
-            if len(tilesToConvertToAddTo) >= numFillTilesNeeded:
+            if len(tilesToConvertToAddTo) + len(candidateFillTiles) >= numFillTilesNeeded:
                 return True
 
             # Tests/test_FogLandBuilder.py test_should_prune_dead_fog_land_prediction_on_empty_discovery:
             # disproved tiles stay traversable (they are not in skips) so the fill can reach tiles
-            # beyond them, but they are never added to tilesToConvertToAddTo.
+            # beyond them, but they are never added to tilesToConvertToAddTo. The same holds for
+            # tiles beyond maxGenReach - traversable, never converted, since the player's land
+            # cannot extend that far from any remaining valid general position.
             if tile.player == -1 and tile not in tilesToConvertToAddTo and not tile.isSwamp and tile not in nonConvertibleTiles:
+                if maxGenReach is not None and genDistMap.raw[tile.tile_index] > maxGenReach:
+                    return False
                 if is_vision_edge_tile(tile):
                     if tile not in deferredVisionEdgeTileSet and tile not in connectedDark:
                         deferredVisionEdgeTileSet.add(tile)
                     return False
-                tilesToConvertToAddTo.add(tile)
+                candidateFillTiles.append(tile)
 
             return False
 
         # TODO add breadth_first_foreach_terminating and use that instead so we dont waste time building unused paths in exchange for not fully looping
         fakePath = SearchUtils.breadth_first_find_queue(self.map, connectedDarkList, findFunc, skipTiles=skips, noNeutralCities=True, noLog=True)  # , prioFunc=lambda t: (ourGen.x - t.x)**2 + (ourGen.y - t.y)**2
+        if genDistMap is not None:
+            candidateFillTiles.sort(key=lambda t: genDistMap.raw[t.tile_index])
+        for candidateTile in candidateFillTiles:
+            if len(tilesToConvertToAddTo) >= numFillTilesNeeded:
+                break
+            tilesToConvertToAddTo.add(candidateTile)
         add_deferred_vision_edge_tiles_if_needed()
         if fakePath is None:
             if len(tilesToConvertToAddTo) < numFillTilesNeeded:
@@ -5632,7 +6561,12 @@ class ArmyTracker(object):
         """
         if player == -1:
             return
-        if self.map.players[player].dead:
+        # Tests/test_GeneralPrediction.py::GeneralPredictionTests.test_should_not_over_limit_enemy_general_on_capture_reveal
+        # players dead lags a turn after a capture while capturedBy is set
+        # immediately; a just-captured player's stale emergence events collapsed
+        # their candidate set to one tile and force-pinned a phantom general.
+        playerObj = self.map.players[player]
+        if playerObj.dead or playerObj.capturedBy is not None:
             return
         if player == self.map.player_index:
             logbook.warning(f'Attempted _check_over_elimination for self {player} who is always visible...?')
@@ -5643,6 +6577,14 @@ class ArmyTracker(object):
             logbook.warning(f'Attempted _check_over_elimination for teammate {player} who is always visible...?')
             if DebugHelper.IS_DEBUG_OR_UNIT_TEST_MODE:
                 raise AssertionError(f'Attempted _check_over_elimination for teammate {player} who is always visible...?')
+            return
+
+        # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_should_not_stall_on_emergence_pathing_after_player_capture -
+        # during the emergence scan, record the player and return so every emergence event is
+        # processed into uneliminated_emergence_events before the reset+re-limit runs once per
+        # player at the end of the scan.
+        if self._defer_emergence_over_elim_checks:
+            self._deferred_over_elim_players.add(player)
             return
 
         validGenPos = self.valid_general_positions_by_player[player]
@@ -5672,9 +6614,20 @@ class ArmyTracker(object):
                     mustResetAndIncrease = True
             else:
                 logbook.info(f'SETTING THE ONLY VALID REMAINING TILE TO BE GENERAL {lastValid} for player p{player}')
+                existingGen = self.map.generals[player]
                 if not lastValid.isGeneral:
+                    # Tests/test_ArmyTracker.py::ArmyTrackerTests.test_check_over_elimination_does_not_pin_over_known_enemy_general -
+                    # live ffa bVK2OP478 t84: the emergence limit collapsed the candidate set to a lone
+                    # fog tile while generals[player] still pointed at the server-revealed real
+                    # general (7,7); force-pinning the survivor overwrote the KNOWN general with a
+                    # fog guess and left a phantom isGeneral marker on the real tile. When a live
+                    # general ref already exists, restore it into the candidate set instead of
+                    # overwriting it - the collapse was the over-elimination.
+                    if existingGen is not None and existingGen is not lastValid and existingGen.isGeneral:
+                        logbook.error(f'For player {player} the only remaining valid tile {lastValid} conflicts with known general {existingGen}. Restoring the known general instead of pinning a fog guess...')
+                        validGenPos.raw[existingGen.tile_index] = True
                     # UnitTests/test_ArmyInterceptionUnit.ArmyInterceptionUnitTests.test_should_correctly_value_intercept_from_general - combat tile 5,15 owned by p0 being set as general for p1
-                    if lastValid.player != -1 and lastValid.player != player:
+                    elif lastValid.player != -1 and lastValid.player != player:
                         logbook.error(f'For player {player} we only have one valid tile left, {lastValid}, however it is owned by player {lastValid.player}. Refusing to set gen position...')
                         mustResetAndIncrease = True
                     else:
@@ -5682,6 +6635,11 @@ class ArmyTracker(object):
                         lastValid.player = player
                         self.map.generals[player] = lastValid
                         self.map.players[player].general = lastValid
+                        # TEMPORARY DIAGNOSTIC (general-coloring investigation): record every
+                        # general rebind and flag refs whose tile owner does not match the slot
+                        logbook.info(
+                            f'GENDIAG OVER-ELIM PIN t{self.map.turn}: generals[{player}]={lastValid} '
+                            f'(oldOwner={lastValid.delta.oldOwner},v={lastValid.visible},d={lastValid.discovered})')
                 elif lastValid.player != player:
                     logbook.error(f'For player {player} we only have one valid tile left, {lastValid}, however we think thats a different general...')
                     mustResetAndIncrease = True

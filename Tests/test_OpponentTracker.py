@@ -1,3 +1,5 @@
+import logbook
+
 from Sim.GameSimulator import GameSimulatorHost
 from Strategy.OpponentTracker import OpponentTracker
 from Strategy import TeamAttackData
@@ -992,3 +994,178 @@ class OpponentTrackerTests(TestBase):
         # zero reason to touch city army...
         self.assertEqual(7, bot.opponent_tracker.current_team_cycle_stats[enemyGeneral.player].approximate_fog_city_army)
 
+
+    def test_should_transfer_gather_queue_and_fog_pools_on_enemy_capture(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_transfer_gather_queue_and_fog_pools_on_enemy_capture___p9lH7ucI----1--243.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 243, fill_out_tiles=True)
+
+        # player e (4) gets a stack next to green's (c, player 2) known general at 11,8 and kills them.
+        killerStack = map.GetTile(11, 7)
+        killerStack.player = 4
+        killerStack.army = 50
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=243)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(4, '11,7->11,8')
+        simHost.queue_player_moves_str(general.player, 'None  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        victimQueueBefore = bot.opponent_tracker.get_player_gather_queue(2).get_amount_dict()
+        killerQueueBefore = bot.opponent_tracker.get_player_gather_queue(4).get_amount_dict()
+        victimFogArmyBefore = bot.opponent_tracker.current_team_cycle_stats[2].approximate_fog_army_available_total
+        victimFogCityBefore = bot.opponent_tracker.current_team_cycle_stats[2].approximate_fog_city_army
+        killerFogArmyBefore = bot.opponent_tracker.current_team_cycle_stats[4].approximate_fog_army_available_total
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+
+        victimQueue = bot.opponent_tracker.get_player_gather_queue(2)
+        killerQueue = bot.opponent_tracker.get_player_gather_queue(4)
+
+        # the victim's fog gather queue is fully consumed by the transfer
+        self.assertEqual(0, victimQueue.length)
+        self.assertEqual(0, victimQueue.total_sum)
+
+        # every victim queue entry transferred to the killer halved (1s stay 1)
+        expectedHalvedCounts: dict[int, int] = {}
+        for tileSize, count in victimQueueBefore.items():
+            halvedSize = tileSize - tileSize // 2
+            expectedHalvedCounts[halvedSize] = expectedHalvedCounts.get(halvedSize, 0) + count
+        for halvedSize, count in expectedHalvedCounts.items():
+            self.assertGreaterEqual(
+                killerQueue.get_count(halvedSize),
+                killerQueueBefore.get(halvedSize, 0) + count,
+                f'killer queue should have gained {count} tiles of size {halvedSize}')
+
+        # the victim's shared fog pools halve onto the killer and zero out on the dead team
+        self.assertEqual(0, bot.opponent_tracker.current_team_cycle_stats[2].approximate_fog_army_available_total)
+        self.assertEqual(0, bot.opponent_tracker.current_team_cycle_stats[2].approximate_fog_army_available_total_true)
+        self.assertEqual(0, bot.opponent_tracker.current_team_cycle_stats[2].approximate_fog_city_army)
+        # the killer also spends a little pool on normal per-turn accounting
+        # (assumed AFK gathers etc) over the simulated turns, so allow slack.
+        self.assertGreaterEqual(
+            bot.opponent_tracker.current_team_cycle_stats[4].approximate_fog_army_available_total,
+            killerFogArmyBefore + victimFogArmyBefore - victimFogArmyBefore // 2 - 2)
+        self.assertGreaterEqual(
+            bot.opponent_tracker.current_team_cycle_stats[4].approximate_fog_city_army,
+            victimFogCityBefore - victimFogCityBefore // 2 - 2)
+
+    def test_should_not_transfer_gather_queue_when_we_capture_enemy(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_transfer_gather_queue_and_fog_pools_on_enemy_capture___p9lH7ucI----1--243.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 243, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=243)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(general.player, '10,8->11,8  None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        ourQueueBefore = bot.opponent_tracker.get_player_gather_queue(general.player).get_amount_dict()
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=2)
+
+        ourQueue = bot.opponent_tracker.get_player_gather_queue(general.player)
+
+        # us capturing must not pull the victim's queue into our own (we have perfect info of our land)
+        self.assertEqual(ourQueueBefore, ourQueue.get_amount_dict())
+
+    def test_should_preserve_fog_army_across_ffa_round_bonus(self) -> None:
+        """Diagnostic repro for the live t149->t150 FFA army-bonus/cycle boundary.
+
+        Resumes the imported t149 bot state with the replay-true map as sim ground
+        truth and every player queued to a no-op so only round-boundary accounting
+        runs. Logs player 2's (hhbhyhb) fog-army pools, gather queue, derived fog
+        risk, and scoreboard before/after the single simulated turn.
+
+        The serialized island_ids cache is dropped before resume because
+        rebuild_islands_from_ids crashes on the true-map sim base for this fixture;
+        islands recompute fresh via the supported legacy-resume path.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_preserve_fog_army_across_ffa_round_bonus___1qEuiySOGo---3--149.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_preserve_fog_army_across_ffa_round_bonus___1qEuiySOGo---3--149.truemap.txtmap'
+
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 149, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=149)
+        rawMap.resume_data.pop('island_ids', None)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        for playerIndex in range(len(map.players)):
+            simHost.queue_player_moves_str(playerIndex, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        player2Team = map.team_ids_by_player_index[2]
+        opponentTracker = bot.opponent_tracker
+
+        def _log_p2_fog_state(tag: str) -> None:
+            """Logs player 2's fog-army accounting snapshot for the round-bonus repro."""
+            stats = opponentTracker.current_team_cycle_stats[player2Team]
+            queue = opponentTracker.get_player_gather_queue(2)
+            history = opponentTracker.team_score_data_history[player2Team]
+            latestTurn = max(history.keys()) if len(history) > 0 else -1
+            latest = history[latestTurn] if latestTurn >= 0 else None
+            teamScore = playerMap.get_team_stats_by_team_id(player2Team)
+            fogAvail = stats.approximate_fog_army_available_total if stats is not None else -1
+            fogTrue = stats.approximate_fog_army_available_total_true if stats is not None else -1
+            fogCityArmy = stats.approximate_fog_city_army if stats is not None else -1
+            fogCityCount = stats.fog_city_count if stats is not None else -1
+            gatherMoves = stats.moves_spent_gathering_fog_tiles if stats is not None else -1
+            cityLimit = opponentTracker.estimate_fog_city_usage_count_by_cycle_behavior(2) if stats is not None else -1
+            cityRisk = opponentTracker.get_fog_city_risk_in_turns_by_cycle_behavior(2) if stats is not None else -1
+            logbook.info(
+                f'OT_FFA_ROUND_BONUS_REPRO {tag} mapTurn={map.turn} p2Team={player2Team} '
+                f'p2 fogAvail={fogAvail} fogTrue={fogTrue} fogCityArmy={fogCityArmy} fogCityCount={fogCityCount} '
+                f'p2 gatherMoves={gatherMoves} cityLimit={cityLimit} cityRisk={cityRisk} '
+                f'p2 queueAmounts={queue.get_amount_dict()} queueSum={queue.total_sum} queueLen={queue.length} '
+                f'p2 scoreboardTurn={latestTurn} scoreboard={latest} curTeamStats={teamScore}')
+
+        self.begin_capturing_logging()
+        _log_p2_fog_state('before')
+        riskBefore = opponentTracker.get_approximate_fog_army_risk(2, logContext='round_bonus_before')
+        self.assertEqual(riskBefore, 96, 'fixture must reproduce the live t149 derived fog-army risk')
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        _log_p2_fog_state('after')
+        riskAfter = opponentTracker.get_approximate_fog_army_risk(2, logContext='round_bonus_after')
+
+        afterStats = opponentTracker.current_team_cycle_stats[player2Team]
+        afterQueue = opponentTracker.get_player_gather_queue(2)
+        afterTeamScore = playerMap.get_team_stats_by_team_id(player2Team)
+        afterCityRisk = opponentTracker.get_fog_city_risk_in_turns_by_cycle_behavior(2)
+        logbook.info(
+            f'OT_FFA_ROUND_BONUS_REPRO afterValues fogAvail={afterStats.approximate_fog_army_available_total} '
+            f'fogTrue={afterStats.approximate_fog_army_available_total_true} fogCityArmy={afterStats.approximate_fog_city_army} '
+            f'gatherMoves={afterStats.moves_spent_gathering_fog_tiles} cityRisk={afterCityRisk} '
+            f'queueSum={afterQueue.total_sum} scoreboardScore={afterTeamScore.score}')
+
+        self.assertNoFriendliesKilled(map, general)
+        self.assertIsNone(winner)
+        self.assertGreaterEqual(riskAfter, riskBefore, 'No combat or emergence occurred: round rollover must not forget previously gatherable fog city army')
+        with self.subTest('gather counter resets while gathered city army carries'):
+            self.assertEqual(0, afterStats.moves_spent_gathering_fog_tiles, 'the new cycle stats must reset the gather-move counter')
+        with self.subTest('derived risk equals available fog army plus actual city contribution'):
+            self.assertEqual(
+                afterStats.approximate_fog_army_available_total + afterCityRisk,
+                riskAfter,
+                'fog-army risk must equal the available fog army plus the actual fog-city contribution')
+        with self.subTest('fog pools conserve the scoreboard with no duplication'):
+            visibleArmy = sum(tile.army for tile in playerMap.players[2].tiles if tile.visible)
+            accountedArmy = (
+                afterStats.approximate_fog_army_available_total
+                + afterStats.approximate_fog_city_army
+                + afterQueue.total_sum
+                + visibleArmy)
+            self.assertEqual(
+                afterTeamScore.score,
+                accountedArmy,
+                'visible army + gather queue + fog city pool + fog army pool must equal the playerMap scoreboard')

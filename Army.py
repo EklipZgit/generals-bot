@@ -15,6 +15,12 @@ class FogTileRevert:
     army: int
     player: int
     isTempFogPrediction: bool
+    # tile.army immediately after the claim that recorded this revert. Lets the
+    # restore subtract only the claiming army's own delta instead of resurrecting
+    # accumulated predictions from OTHER armies that have since vacated the tile.
+    # None = recorded before post-claim tracking (serialized/resumed state) or
+    # never stamped; restores of those must never inflate a tile.
+    postArmy: int | None = None
 
 
 class Army(object):
@@ -118,6 +124,13 @@ class Army(object):
     def record_fog_tile_revert(self, tile: Tile):
         if tile not in self.fogTileReverts:
             self.fogTileReverts[tile] = FogTileRevert(tile, tile.army, tile.player, tile.isTempFogPrediction)
+
+    def mark_fog_tile_revert_post(self, tile: Tile):
+        """Stamp the post-claim tile.army onto the recorded revert so a later
+        restore can undo only this army's own delta (see ArmyTracker.restore_fog_tile_reverts)."""
+        revert = self.fogTileReverts.get(tile)
+        if revert is not None:
+            revert.postArmy = tile.army
 
     def absorb_fog_tile_reverts(self, other: Army):
         for tile, revert in other.fogTileReverts.items():

@@ -1,5 +1,10 @@
 import random
+import time
+from unittest.mock import patch
 
+import logbook
+
+import DebugHelper
 import SearchUtils
 from Army import Army
 from ArmyTracker import ArmyTracker
@@ -28,6 +33,69 @@ class ArmyTrackerTests(TestBase):
         bot.armyTracker.log_debug = True
 
         return bot
+
+    def _enemy_tracker_groups_near(self, bot, enemy_player, anchor, radius, min_value=15):
+        """Union-find over Army.entangledArmies links: returns the distinct
+        non-entangled tracker groups for `enemy_player` anchored within
+        `radius` of `anchor` (manhattan). Mutually entangled alternatives count
+        as ONE group - matching how the tracker treats a split army's
+        hypotheses as a single army."""
+        armies = [
+            a for a in bot.armyTracker.armies.values()
+            if a.player == enemy_player
+            and a.value >= min_value
+            and abs(a.tile.x - anchor.x) + abs(a.tile.y - anchor.y) <= radius]
+        parent = {id(a): id(a) for a in armies}
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        for a in armies:
+            for e in a.entangledArmies:
+                if id(e) in parent:
+                    ra, rb = find(id(a)), find(id(e))
+                    if ra != rb:
+                        parent[rb] = ra
+
+        groups = {}
+        for a in armies:
+            groups.setdefault(find(id(a)), []).append(a)
+        return list(groups.values())
+
+    def _true_stacks_near(self, map, enemy_player, anchor, radius, min_army=10):
+        """True (sim) stacks of `enemy_player` within `radius` of `anchor`,
+        counting each owned tile with >= min_army as a stack."""
+        stacks = []
+        for tile in map.get_all_tiles():
+            if (tile.player == enemy_player
+                    and tile.army >= min_army
+                    and abs(tile.x - anchor.x) + abs(tile.y - anchor.y) <= radius):
+                stacks.append(tile)
+        return stacks
+
+    def _make_tracker_group_recorder(self, bot, map, playerMap, enemy_player, anchor, radius, snapshots, violations):
+        """Records a per-turn snapshot of non-entangled enemy tracker groups
+        vs true stacks near `anchor`. Appends to `violations` whenever the
+        tracker maintains MORE non-entangled groups than the true map has
+        stacks - the fog-desync multiplication signature (a single hypothesis
+        on empty land is unfalsifiable, not multiplication)."""
+
+        def record_state():
+            groups = self._enemy_tracker_groups_near(bot, enemy_player, anchor, radius)
+            desc = ' | '.join(
+                '{' + ' '.join(f'{a.name}@{a.tile} v{a.value} ls{a.last_seen_turn}' for a in g) + '}'
+                for g in groups)
+            true_stacks = self._true_stacks_near(map, enemy_player, anchor, radius)
+            true_desc = ' '.join(f'{t}={t.army}' for t in true_stacks)
+            line = f't{playerMap.turn}: groups={len(groups)} true={true_desc} :: {desc}'
+            snapshots.append(line)
+            if len(groups) >= 2 and len(groups) > len(true_stacks):
+                violations.append(line)
+
+        return record_state
 
     def test_should_skip_stale_fog_revert_player_change_after_general_prediction_corrected(self):
         rawMap = """|  |  |  |
@@ -248,6 +316,123 @@ bScore=1
         self.assertEqual(0, general.player)
         self.assertFalse(wrongPredictionTile.isGeneral)
         self.assertEqual(0, wrongPredictionTile.player)
+
+    def test_check_over_elimination_does_not_pin_over_known_enemy_general(self):
+        """
+        Repro of live ffa bVK2OP478 t84: p1's real general was server-revealed at (7,7)
+        (generals[1]=7,7), then an emergence limit collapsed valid_general_positions to a
+        lone fog tile and _check_over_elimination force-pinned it as the general -
+        overwriting the KNOWN general ref with a fog guess and leaving two isGeneral
+        tiles on the map. The pin must never replace a live isGeneral general ref.
+        """
+        testData = """
+|    |    |    |    |
+aG1  a1        bG1
+
+
+|    |    |    |    |
+player_index=0
+aTiles=2
+aScore=2
+bTiles=1
+bScore=1
+        """
+        map, general, enemyGeneral = self.load_map_and_generals_from_string(testData, 84, fill_out_tiles=False, player_index=0)
+        tracker = ArmyTracker(map)
+        map.generals[1] = enemyGeneral
+        map.players[1].general = enemyGeneral
+
+        fogTile = map.GetTile(2, 2)
+        fogTile.visible = False
+        fogTile.discovered = False
+        fogTile.isGeneral = False
+        fogTile.player = -1
+
+        validPositions = tracker.valid_general_positions_by_player[1]
+        for tile in map.get_all_tiles():
+            validPositions.raw[tile.tile_index] = False
+        validPositions.raw[fogTile.tile_index] = True
+
+        tracker._check_over_elimination(1)
+
+        self.assertEqual(enemyGeneral, map.generals[1])
+        self.assertEqual(enemyGeneral, map.players[1].general)
+        self.assertTrue(enemyGeneral.isGeneral)
+        self.assertFalse(fogTile.isGeneral)
+        self.assertEqual(-1, fogTile.player)
+        self.assertTrue(validPositions.raw[enemyGeneral.tile_index])
+
+    def test_reset_wrong_undiscovered_fog_guess_clears_general_refs(self):
+        """
+        Repro of live ffa bVK2OP478 t137: a fog-pinned general (generals[1]=8,7 pin)
+        later proved wrong and reset_wrong_undiscovered_fog_guess cleared the tile's
+        isGeneral/owner while it was still invisible - but generals[1] and
+        players[1].general kept pointing at the dead tile for 40+ turns, reporting a
+        100%-confidence general on a neutral tile. The reset must drop the refs.
+        """
+        testData = """
+|    |    |    |    |
+aG1  a1
+
+
+|    |    |    |    |
+player_index=0
+aTiles=2
+aScore=2
+        """
+        map, general = self.load_map_and_general_from_string(testData, 137, player_index=0)
+        pinTile = map.GetTile(2, 2)
+        pinTile.visible = False
+        pinTile.discovered = False
+        pinTile.player = -1
+        pinTile.isGeneral = True
+        pinTile.player = 1
+        map.generals[1] = pinTile
+        map.players[1].general = pinTile
+
+        map.reset_wrong_undiscovered_fog_guess(pinTile)
+
+        self.assertFalse(pinTile.isGeneral)
+        self.assertIsNone(map.generals[1])
+        self.assertIsNone(map.players[1].general)
+
+    def test_visible_general_reveal_clears_orphaned_fog_pin_flag(self):
+        """
+        Repro of live ffa pUUy0ztZL t124 (GENDIAG VIOLATION 'map.generals[5] overwrite
+        15,8 -> 21,9; prev still isGeneral'): when the server reveals a player's real
+        general and overwrites generals[p], a previous fog PIN on a different tile must
+        lose its isGeneral flag - otherwise a phantom '+' marker renders in that
+        player's color forever.
+        """
+        testData = """
+|    |    |    |    |
+aG1  a1
+
+
+|    |    |    |    |
+player_index=0
+aTiles=2
+aScore=2
+        """
+        map, general = self.load_map_and_general_from_string(testData, 124, player_index=0)
+        pinTile = map.GetTile(1, 2)
+        pinTile.visible = False
+        pinTile.discovered = False
+        pinTile.player = -1
+        pinTile.isGeneral = True
+        pinTile.player = 1
+        map.generals[1] = pinTile
+        map.players[1].general = pinTile
+
+        map.update_turn(map.turn + 1)
+        realGenTile = map.GetTile(3, 2)
+        map.update_visible_tile(realGenTile.x, realGenTile.y, 1, 44, is_city=False, is_general=True)
+        map.update()
+
+        self.assertTrue(realGenTile.isGeneral)
+        self.assertEqual(realGenTile, map.generals[1])
+        self.assertEqual(realGenTile, map.players[1].general)
+        self.assertFalse(pinTile.isGeneral)
 
     def run_generated_adj_test(self, aArmy, aMove, bArmy, bMove, data, debugMode):
         map, general, enemyGeneral = self.load_map_and_generals_from_string(data, 97, fill_out_tiles=False, player_index=0)
@@ -2966,3 +3151,649 @@ a1   b1   b1   bG1
         army = bot.armyTracker.armies.get(playerMap.At(10,12))
         self.assertIsNone(army)
 
+    def test_should_not_stall_on_emergence_pathing_after_player_capture(self):
+        """
+        Live repro: Human.exe-ffa-2026-11-14_01-45-18---LoHQUt6SB turn 252.
+        Completing the general kill 18,18 -> 17,18 converts ~90 tiles of dead
+        player d to us and reveals their land. Before the fix every tile whose
+        fog-predicted army was wrong landed in map.army_emergences, and the
+        emergence loop ran handle_unaccounted_delta -> find_fog_source
+        pathfinding on EACH of them (~70 tiles, all <= 14 army) for ~290ms of
+        the ~600ms turn. The fix normalizes capture-transfer deltas in the map
+        (repaired transfer tiles + gainedSight flips to a capturer) and ignores
+        emergences attributed to ourselves, so no emergence work may run on
+        tiles that ended up ours. Over-elimination re-limits are also deferred
+        until all emergence events are processed, so none may interleave
+        between handle_unaccounted_delta calls.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_stall_on_emergence_pathing_after_player_capture___LoHQUt6SB---1--252.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(mapFile, 252, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=252)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        victimIndex = playerMap.At(17, 18).player
+
+        tracker = bot.armyTracker
+        fogSourceCalls = []
+        hudCalls = []
+        relimitCalls = []
+        captureTurns = []
+        origFindFogSource = tracker.find_fog_source
+        origHandleDelta = tracker.handle_unaccounted_delta
+        origRelimit = tracker.re_limit_player_gen_locations
+
+        def countedFindFogSource(armyPlayer, tile, delta=None, depthLimit=None):
+            start = time.perf_counter()
+            result = origFindFogSource(armyPlayer, tile, delta, depthLimit)
+            fogSourceCalls.append((tracker.map.turn, tile.tile_index, delta, time.perf_counter() - start))
+            return result
+
+        def countedHandleDelta(tile, player, delta):
+            hudCalls.append((tracker.map.turn, tile.tile_index, delta, time.perf_counter()))
+            return origHandleDelta(tile, player, delta)
+
+        def countedRelimit(player, playerElimEvents):
+            relimitCalls.append((tracker.map.turn, player, len(playerElimEvents), time.perf_counter()))
+            return origRelimit(player, playerElimEvents)
+
+        tracker.find_fog_source = countedFindFogSource
+        tracker.handle_unaccounted_delta = countedHandleDelta
+        tracker.re_limit_player_gen_locations = countedRelimit
+        # the player_capture event fires during move resolution of turn N while the
+        # view map is still on turn N, but the ownership transfer it causes only
+        # lands in the diff applied as update N+1 - so the reveal turn is +1.
+        playerMap.notify_player_captures.append(lambda capturee, capturer: captureTurns.append(playerMap.turn + 1))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=4)
+        self.assertIsNone(winner)
+
+        tracker.find_fog_source = origFindFogSource
+        tracker.handle_unaccounted_delta = origHandleDelta
+        tracker.re_limit_player_gen_locations = origRelimit
+
+        # the queued QK path / its recalculation must actually complete the kill
+        # for the mass reveal to happen at all.
+        self.assertEqual(general.player, playerMap.At(17, 18).player, 'bot must complete the 18,18->17,18 general kill for the mass reveal')
+        self.assertTrue(playerMap.players[victimIndex].dead, 'the captured player must be dead after the general kill')
+        self.assertEqual(1, len(captureTurns), 'expected exactly one player capture during the sim run')
+        killTurn = captureTurns[0]
+
+        for moveTimer in bot.perf_timer.move_history:
+            if moveTimer is None:
+                continue
+            for ev in moveTimer.event_list:
+                if ev is not None and ev.event_name == 'ArmyTracker emergence pathing':
+                    logbook.info(
+                        f'EMERGENCE_SCOPE t{moveTimer.turn}: {ev.get_duration():.4f}s, '
+                        f'find_fog_source={len([c for c in fogSourceCalls if c[0] == moveTimer.turn])} calls '
+                        f'({sum(c[3] for c in fogSourceCalls if c[0] == moveTimer.turn):.4f}s), '
+                        f'handle_unaccounted_delta={len([c for c in hudCalls if c[0] == moveTimer.turn])} calls, '
+                        f're_limit={len([c for c in relimitCalls if c[0] == moveTimer.turn])} calls')
+
+        revealFogCalls = [c for c in fogSourceCalls if c[0] == killTurn]
+        revealHudCalls = [c for c in hudCalls if c[0] == killTurn]
+        revealRelimits = [c for c in relimitCalls if c[0] == killTurn]
+        # the core invariant: no emergence work may run on tiles that ended up OURS.
+        # The ~90 tiles the kill transferred to us are capture-transfer artifacts, not
+        # emergences - they must be normalized/ignored before they can run per-tile
+        # fog-source pathing or general-position limiting. Residual calls on ENEMY
+        # tiles are legitimate emergence work (e.g. the -131 f general event).
+        selfFogCalls = [c for c in revealFogCalls if playerMap.tiles_by_index[c[1]].player == general.player]
+        selfHudCalls = [c for c in revealHudCalls if playerMap.tiles_by_index[c[1]].player == general.player]
+        self.assertEqual([], selfFogCalls, f'mass reveal at t{killTurn} ran find_fog_source on tiles that are ours: {[(playerMap.tiles_by_index[c[1]], c[2]) for c in selfFogCalls]}')
+        self.assertEqual([], selfHudCalls, f'mass reveal at t{killTurn} ran handle_unaccounted_delta on tiles that are ours: {[(playerMap.tiles_by_index[c[1]], c[2]) for c in selfHudCalls]}')
+        # smoke bound against a regression to the per-revealed-tile pathing flood
+        # (the live turn ran ~70; this sim repro ran 27 before the fix).
+        self.assertLessEqual(len(revealFogCalls), 15, f'mass reveal at t{killTurn} ran find_fog_source {len(revealFogCalls)} times ({sum(c[3] for c in revealFogCalls):.3f}s of pathing)')
+        # all emergences must be processed into events BEFORE any over-elimination
+        # re-limit runs: no gen re-limit may interleave between emergence events
+        # (before the defer, an over-elimination mid-scan reset+replayed every prior
+        # event once per trigger - O(events x map-wide BFS) on mass reveals). Re-limit
+        # passes outside the emergence window (neutral-discovery before, flipped-tile
+        # rechecks after) are legitimate.
+        if len(revealHudCalls) > 1:
+            firstHud = min(c[3] for c in revealHudCalls)
+            lastHud = max(c[3] for c in revealHudCalls)
+            interleaved = [c for c in revealRelimits if firstHud < c[3] < lastHud]
+            self.assertEqual([], interleaved, f'reveal turn t{killTurn} interleaved gen re-limits between emergence events instead of batching: {interleaved}')
+
+
+    def test_should_not_double_fog_capture_emergence(self) -> None:
+        """Diagnostic repro for the live t156->t157 double-counted fog-capture emergence.
+
+        Player 2 (hhbhyhb, 'c') moves 13,8->12,8 capturing a blue 'b2' tile whose
+        source it cannot see; the bot's fog model remembers 13,8 as 'b2'. The
+        emerged army should be announced once as 87 (88 source - 1 move = 87
+        sent; 87 - 2 defender = 85 surviving on the destination), not doubled to
+        174, the capture destination should settle at owner 2 army 85 on both the
+        true map and the bot's player map, and the false emergence must not
+        invalidate player 2's real general (23,5) or fabricate
+        playerMap.generals[2]. Our own 13,0->13,1 move only preserves the live
+        game's vision pattern; player 5 (pink) also moves 9,7->9,8 as in the
+        live game and every other player is queued to a no-op.
+
+        The serialized island_ids cache is dropped before resume because
+        rebuild_islands_from_ids crashes on the true-map sim base for this
+        fixture; islands recompute fresh via the supported legacy-resume path.
+        """
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_double_fog_capture_emergence___1qEuiySOGo---3--156.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_not_double_fog_capture_emergence___1qEuiySOGo---3--156.truemap.txtmap'
+
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 156, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=156)
+        rawMap.resume_data.pop('island_ids', None)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        for playerIndex in range(len(map.players)):
+            if playerIndex == general.player:
+                simHost.queue_player_moves_str(playerIndex, '13,0->13,1')
+            elif playerIndex == 2:
+                simHost.queue_player_moves_str(playerIndex, '13,8->12,8')
+            elif playerIndex == 5:
+                simHost.queue_player_moves_str(playerIndex, '9,7->9,8')
+            else:
+                simHost.queue_player_moves_str(playerIndex, 'None')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+        opponentTracker = bot.opponent_tracker
+
+        self.begin_capturing_logging()
+        with patch.object(opponentTracker, 'notify_emerged_army', wraps=opponentTracker.notify_emerged_army) as emergenceSpy:
+            winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+
+        emergenceCalls: list[tuple[Tile, int, int]] = []
+        for call in emergenceSpy.call_args_list:
+            notifyTile = call.args[0] if len(call.args) > 0 else call.kwargs['tile']
+            notifyPlayer = call.args[1] if len(call.args) > 1 else call.kwargs['emergingPlayer']
+            notifyAmount = call.args[2] if len(call.args) > 2 else call.kwargs['emergenceAmount']
+            emergenceCalls.append((notifyTile, notifyPlayer, notifyAmount))
+            logbook.info(f'AT_FOG_CAPTURE_REPRO notify_emerged_army tile={notifyTile} p={notifyPlayer} amount={notifyAmount}')
+        for emergeTile, emergeTuple in playerMap.army_emergences.items():
+            emergeAmount, emergePlayer = emergeTuple
+            logbook.info(f'AT_FOG_CAPTURE_REPRO army_emergences tile={emergeTile} amount={emergeAmount} byPlayer={emergePlayer}')
+        simDest = map.GetTile(12, 8)
+        visionDest = playerMap.GetTile(12, 8)
+        logbook.info(f'AT_FOG_CAPTURE_REPRO dest(12,8) mapTurn={map.turn} simMap p={simDest.player} army={simDest.army} | playerMap p={visionDest.player} army={visionDest.army}')
+        p2GenTile = playerMap.GetTile(23, 5)
+        logbook.info(
+            f'AT_FOG_CAPTURE_REPRO p2gen(23,5) validGenPos={bot.armyTracker.valid_general_positions_by_player[2][p2GenTile]} '
+            f'playerMap.generals[2]={playerMap.generals[2]}')
+
+        self.assertNoFriendliesKilled(map, general)
+        self.assertIsNone(winner)
+
+        # zero-amount notifications carry no army (emergence pathing can queue a
+        # 0 remainder on the resolved fog source); only real announcements count
+        p2EmergenceMagnitudes = [abs(amount) for _, notifyPlayer, amount in emergenceCalls if notifyPlayer == 2 and amount != 0]
+        p2MapEmergenceMagnitudes = [abs(amount) for amount, emergePlayer in playerMap.army_emergences.values() if emergePlayer == 2]
+        with self.subTest('p2 fog-capture emergence amount'):
+            self.assertEqual([87], p2EmergenceMagnitudes, f'p2 should announce exactly one 87 fog-capture emergence, got {p2EmergenceMagnitudes}')
+        with self.subTest('playerMap.army_emergences p2 magnitudes'):
+            self.assertEqual([87], p2MapEmergenceMagnitudes, f'playerMap should record exactly one 87 p2 emergence, got {p2MapEmergenceMagnitudes}')
+        with self.subTest('capture destination owner and army'):
+            self.assertEqual(2, simDest.player, f'destination 12,8 should be owned by player 2, got {simDest.player}')
+            self.assertEqual(85, simDest.army, f'destination 12,8 should have 85 army, got {simDest.army}')
+            self.assertEqual(2, visionDest.player, f'playerMap destination 12,8 should be owned by player 2, got {visionDest.player}')
+            self.assertEqual(85, visionDest.army, f'playerMap destination 12,8 should have 85 army, got {visionDest.army}')
+        with self.subTest('p2 true general stays a valid general position'):
+            self.assertTrue(bot.armyTracker.valid_general_positions_by_player[2][p2GenTile], 'player 2 real general tile (23,5) must remain a valid general position')
+        with self.subTest('playerMap.generals[2] stays empty'):
+            self.assertIsNone(playerMap.generals[2], f'playerMap.generals[2] should stay None (general not visible), got {playerMap.generals[2]}')
+
+    def test_should_predict_fog_army_before_visible_path_endpoint(self) -> None:
+        # Repro of Human.exe-1v1-2026-11-15_02-20-32---8lCA7C85i turn 423/424:
+        # the enemy fog army at 7,11 has three expected paths that include
+        # visible tiles later in the path (our territory at the path tails).
+        # Filtering expected paths on ANY visible tile deleted all three, so
+        # the tracker never advanced the army to 7,10 and the bot could not
+        # intercept it.
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/should_not_split_intercept_army_and_should_retake_cities___8lCA7C85i---0--423.txtmap'
+        trueMapFile = 'GameContinuationEntries/should_not_split_intercept_army_and_should_retake_cities___8lCA7C85i---0--423.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 423, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=423)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        simHost.queue_player_moves_str(enemyGeneral.player, '7,11->7,10')
+        simHost.queue_player_moves_str(general.player, '3,4->3,5')
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=1)
+        self.assertIsNone(winner)
+        self.assertNoFriendliesKilled(map, general)
+
+        # one executed turn (423) plus the end-of-run refresh scans at turn 424
+        self.assertEqual(424, playerMap.turn)
+        tile7_10 = playerMap.GetTile(7, 10)
+        tile7_11 = playerMap.GetTile(7, 11)
+        armyAt7_10 = bot.armyTracker.armies.get(tile7_10)
+        armyAt7_11 = bot.armyTracker.armies.get(tile7_11)
+        self.assertIsNotNone(armyAt7_10, 'expected a tracked fog army prediction at 7,10 after the 7,11->7,10 move')
+        self.assertEqual(enemyGeneral.player, armyAt7_10.player)
+        self.assertGreater(armyAt7_10.value, 100)
+        if armyAt7_11 is not None:
+            self.assertTrue(
+                armyAt7_11.player != enemyGeneral.player or armyAt7_11.value <= 100,
+                f'expected no substantial enemy army still tracked at 7,11, found {armyAt7_11}')
+        self.assertGreater(tile7_10.army, 100, f'expected playerMap to predict a >100 army at 7,10, got {tile7_10.army}')
+
+    def test_shouldnt_leave_nonentangled_city_army_after_fog_split(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_leave_nonentangled_city_army_after_fog_split___4gIv_HBLAC---1--486.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_leave_nonentangled_city_army_after_fog_split___4gIv_HBLAC---1--486.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 486, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=486)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 25 turns after turn 486
+        simHost.queue_player_moves_str(0, 'none  none  8,8->8,9->8,10  none  none  6,16->5,16  none  5,16->4,16->4,15->4,14->4,13->4,12->5,12  3,16->2,16->1,16->0,16  1,17->0,17->0,16->0,15->0,14->1,14->2,14  2,15->2,14->2,13')  # replay moves: NewSouth
+        # simHost.queue_player_moves_str(general.player, '10,10->9,10->8,10->7,10->8,10->9,10z->9,9->8,9  8,10->8,9->7,9->6,9->6,10->6,11->6,10->6,9')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        watched = [playerMap.GetTile(5, 6), playerMap.GetTile(5, 7), playerMap.GetTile(5, 8), playerMap.GetTile(5, 9), playerMap.GetTile(5, 10)]
+        snapshots = []
+        def record_state():
+            state = []
+            for tile in watched:
+                army = bot.armyTracker.armies.get(tile)
+                state.append(
+                    f'{tile}:{tile.army} army={army} entangled={[str(e) for e in army.entangledArmies] if army is not None else None}')
+            snapshots.append(f't{playerMap.turn}: ' + ' | '.join(state))
+        simHost.run_between_turns(record_state)
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=5)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # On turn 487 the 52-value hypothesis sitting on the enemy city at 5,9 splits
+        # into entangled alternatives (up to 5,8, down to 5,10, and "stayed" at 5,9:
+        # stepping onto the visible tile 6,9 would have been observed and wasn't).
+        # The buggy implementation dropped the stay paths without creating the
+        # entangled stay-clone, then still restored the bare tile value — which a
+        # later get_or_create_army_at minted into a duplicate NON-entangled ~56
+        # tracker on top of the entangled pair, multiplying armies in the fog.
+        tile59 = playerMap.GetTile(5, 9)
+        army59 = bot.armyTracker.armies.get(tile59)
+        self.assertIsNotNone(
+            army59,
+            f'expected an entangled stay-branch tracker on city 5,9, snapshots={snapshots}')
+        self.assertTrue(
+            army59.entangledValue is not None or len(army59.entangledArmies) > 0,
+            f'tracker on 5,9 must be entangled with the fog-split alternatives, '
+            f'found non-entangled {army59}. snapshots={snapshots}')
+        entangledTiles = {army.tile for army in army59.entangledArmies}
+        self.assertIn(
+            playerMap.GetTile(5, 8), entangledTiles,
+            f'stay-tracker on 5,9 must be entangled with the up-branch on 5,8, '
+            f'entangledTiles={entangledTiles}. snapshots={snapshots}')
+        self.assertIn(
+            playerMap.GetTile(5, 10), entangledTiles,
+            f'stay-tracker on 5,9 must be entangled with the down-branch on 5,10, '
+            f'entangledTiles={entangledTiles}. snapshots={snapshots}')
+
+        # Second half of the same multiplication: army U died at 8,10 on turn 490
+        # carrying stale fogTileReverts for 5,6 and 5,7 recorded while those tiles
+        # held OTHER armies' accumulated predictions (36 and 245 respectively in
+        # the live game). Blindly restoring those snapshots minted non-entangled
+        # phantom trackers ([J 5,6 v35], [K 5,7 v231] which then merged upward to
+        # a fake 267 stack) - the bot then treated the phantom as a real threat.
+        # With post-claim restore the unverifiable snapshots are skipped.
+        for x, y in [(5, 6), (5, 7)]:
+            tile = playerMap.GetTile(x, y)
+            armyAt = bot.armyTracker.armies.get(tile)
+            self.assertTrue(
+                armyAt is None or armyAt.entangledValue is not None or len(armyAt.entangledArmies) > 0,
+                f'tracker on {x},{y} must be entangled; found non-entangled phantom {armyAt} '
+                f'restored from a stale fog revert. snapshots={snapshots}')
+            self.assertLessEqual(
+                tile.army, 100,
+                f'fog tile {x},{y} inflated to {tile.army} by a stale revert restore. '
+                f'snapshots={snapshots}')
+
+    def test_shouldnt_dup_seen_stack_onto_adjacent_fog_tile(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_dup_seen_stack_onto_adjacent_fog_tile___embRNX_sW---1--258.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_dup_seen_stack_onto_adjacent_fog_tile___embRNX_sW---1--258.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 258, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=258)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 258
+        simHost.queue_player_moves_str(0, '15,18->15,17  15,19->16,19  15,20->16,20  15,21->15,20->15,19->15,18->15,17->15,16->14,16->14,15->14,14->14,13')  # replay moves: imp25
+        # simHost.queue_player_moves_str(general.player, '14,13->13,13->12,13  7,13->6,13  10,15->9,15->9,16->9,17->8,17  8,15->8,16  16,11->16,12->15,12  15,9->15,10  15,11->15,12')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(12, 13)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged this game (embRNX_sW): the tracker
+        # minted a second non-entangled tracker next to a real tracked stack, so
+        # the bot counted one enemy army twice in fog sums.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 12,13. snapshots={snapshots}')
+
+    def test_shouldnt_track_two_enemy_stacks_on_one_real_stack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_track_two_enemy_stacks_on_one_real_stack___CzCrk_8FB---1--144.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_track_two_enemy_stacks_on_one_real_stack___CzCrk_8FB---1--144.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 144, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=144)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 144
+        simHost.queue_player_moves_str(0, '14,12->13,12->13,11->13,10->13,9->12,9->12,10->11,10->11,9->11,8->12,8->13,8->14,8')  # replay moves: imp25
+        # simHost.queue_player_moves_str(general.player, '8,9->9,9->9,10->10,10->9,10->9,11->8,11->8,12->8,13->9,13->9,14->10,14->10,13')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(13, 12)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged CzCrk_8FB turn 145: the enemy
+        # stack moved 14,12->13,12 and the tracker kept one tracker per tile -
+        # a stale one on the origin plus the real one at the destination -
+        # counting one army twice.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 13,12. snapshots={snapshots}')
+
+    def test_shouldnt_mint_inferred_tracker_next_to_tracked_stack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_mint_inferred_tracker_next_to_tracked_stack___4gIv_HBLAC---1--289.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_mint_inferred_tracker_next_to_tracked_stack___4gIv_HBLAC---1--289.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 289, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=289)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 289
+        simHost.queue_player_moves_str(0, '5,12->4,12->4,13->4,14->5,14  none  6,16->6,15->6,14->5,14->4,14  5,12->4,12->4,13->4,14')  # replay moves: NewSouth
+        # simHost.queue_player_moves_str(general.player, '8,12->7,12->7,13->7,14->6,14->5,14->4,14->5,14  4,14->5,14  12,1->12,2  6,10->7,10  8,4->8,3  13,6->13,5')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(4, 12)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged 4gIv_HBLAC turn 290: an inferred
+        # (never-seen) tracker materialized on 5,12 next to the real tracked
+        # stack at 4,12 - a phantom clone counting the same army twice.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 4,12. snapshots={snapshots}')
+
+    def test_shouldnt_mint_inferred_clone_of_tracked_stack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_mint_inferred_clone_of_tracked_stack___AEh_hJHFp---0--282.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_mint_inferred_clone_of_tracked_stack___AEh_hJHFp---0--282.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 282, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=282)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 282
+        # simHost.queue_player_moves_str(general.player, '14,12->13,12  12,12->12,11->12,10->13,10->14,10->15,10->16,10->16,9->16,8->15,8->15,7->16,7')  # replay line for Human.exe
+        simHost.queue_player_moves_str(1, '12,8->13,8->14,8->15,8->16,8->17,8->17,7->18,7->19,7->19,6->18,6->18,5->19,5')  # replay moves: imp25
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(13, 8)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged AEh_hJHFp turn 283: the enemy
+        # stack moved 12,8->13,8 and an inferred tracker claiming ~55 stayed
+        # anchored on the origin tile next to the real tracked stack.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 13,8. snapshots={snapshots}')
+
+    def test_shouldnt_mint_inferred_army_on_real_stack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_mint_inferred_army_on_real_stack___embRNX_sW---1--477.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_mint_inferred_army_on_real_stack___embRNX_sW---1--477.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 477, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=477)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 477
+        simHost.queue_player_moves_str(0, '2,9->3,9->4,9->5,9->6,9  15,21->15,20->15,19->14,19->13,19->13,18->13,17  10,12->10,11->10,10')  # replay moves: imp25
+        # simHost.queue_player_moves_str(general.player, '16,4->15,4  13,1->13,2->13,3->13,4  15,4->14,4->13,4->12,4->11,4->10,4->9,4->9,5->8,5')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(12, 13)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged embRNX_sW turn 488: an inferred
+        # (ls0) tracker claiming ~47 was minted anchored at 12,13 - the SAME
+        # tile as the real enemy stack a separate tracker already accounted
+        # for. One army, two independent trackers.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 12,13. snapshots={snapshots}')
+
+    def test_shouldnt_dup_stack_across_adjacent_fog_tiles(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_dup_stack_across_adjacent_fog_tiles___1XWwleuVP---1--433.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_dup_stack_across_adjacent_fog_tiles___1XWwleuVP---1--433.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 433, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=433)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 433
+        simHost.queue_player_moves_str(0, '14,9->13,9  12,8->12,9->13,9->13,10->14,10->14,11->14,12->13,12->13,13  none  none  16,5->15,5')  # replay moves: imp25
+        # simHost.queue_player_moves_str(general.player, '11,16->11,17  14,20->14,19  11,17->12,17->13,17->13,16->13,15->13,14  4,16->5,16  13,14->13,13->13,12->13,11->13,10')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(12, 8)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged 1XWwleuVP turn 434: the enemy
+        # stack left 12,8 and the tracker kept an inferred ~84 claim on the
+        # vacated tile next to the real ~84 tracker at 12,7 - same army
+        # counted as two stacks.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 12,8. snapshots={snapshots}')
+
+    def test_shouldnt_add_extra_tracker_beside_real_stack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_add_extra_tracker_beside_real_stack___VuYUlTylK---0--281.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_add_extra_tracker_beside_real_stack___VuYUlTylK---0--281.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 281, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=281)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 281
+        # simHost.queue_player_moves_str(general.player, '4,6->5,6  12,9->11,9  none  none  4,10->3,10  8,1->8,2->8,3->8,4  12,10->11,10  5,4->6,4  8,9->8,10  8,4->8,3')  # replay line for Human.exe
+        simHost.queue_player_moves_str(1, '11,12->11,11->11,10->11,9->11,8->11,7->11,6->11,5->11,4->12,4->12,3->12,2  14,7->14,8')  # replay moves: cristal
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(11, 11)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged VuYUlTylK turn 282: the real ~78
+        # stack was tracked at 11,11 while an extra inferred group (11,12|7,14)
+        # claimed ~42 of the same army as non-entangled alternatives.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 11,11. snapshots={snapshots}')
+
+    def test_shouldnt_track_three_trackers_for_one_stack(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_track_three_trackers_for_one_stack___4DHleBjww---1--295.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_track_three_trackers_for_one_stack___4DHleBjww---1--295.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 295, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=295)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 295
+        simHost.queue_player_moves_str(0, '8,12->8,11->8,10->9,10->9,9->8,9->8,8->8,7->7,7->7,6->6,6->6,5->6,4')  # replay moves: EklipZ
+        # simHost.queue_player_moves_str(general.player, '9,10->8,10  7,3->7,4  6,6->6,5  7,9->8,9  none  14,2->13,2->13,3->12,3  4,13->3,13  12,3->11,3  9,0->9,1  11,3->10,3')  # replay line for Human.exe
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(8, 11)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged 4DHleBjww turn 296: three
+        # non-entangled trackers anchored 8,10/8,11/8,12 covered what the true
+        # map shows is a single enemy stack column - two phantom clones.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 8,11. snapshots={snapshots}')
+
+    def test_shouldnt_add_lone_tracker_next_to_entangled_pair(self):
+        debugMode = not TestBase.GLOBAL_BYPASS_REAL_TIME_TEST and True
+        mapFile = 'GameContinuationEntries/shouldnt_add_lone_tracker_next_to_entangled_pair___yFuf7KgJ7---0--371.txtmap'
+        trueMapFile = 'GameContinuationEntries/shouldnt_add_lone_tracker_next_to_entangled_pair___yFuf7KgJ7---0--371.truemap.txtmap'
+        map, general, enemyGeneral = self.load_map_and_generals(trueMapFile, 371, fill_out_tiles=True)
+
+        rawMap, _ = self.load_map_and_general(mapFile, respect_undiscovered=True, turn=371)
+
+        self.enable_search_time_limits_and_disable_debug_asserts()
+        simHost = GameSimulatorHost(map, player_with_viewer=general.player, playerMapVision=rawMap, allAfkExceptMapPlayer=True)
+        # replay moves for the 12 turns after turn 371
+        # simHost.queue_player_moves_str(general.player, '19,11->19,10  14,9->15,9->16,9->16,10->17,10->17,11->18,11->18,12  14,5->13,5->13,6->13,7->13,8')  # replay line for Human.exe
+        simHost.queue_player_moves_str(1, '16,17->17,17->17,16->18,16->18,15->18,14->18,13->18,12  none  none  none  0,13->1,13->1,12')  # replay moves: imp25
+        bot = self.get_debug_render_bot(simHost, general.player)
+        playerMap = simHost.get_player_map(general.player)
+
+        anchor = playerMap.GetTile(13, 16)
+        snapshots = []
+        violations = []
+        simHost.run_between_turns(
+            self._make_tracker_group_recorder(bot, map, playerMap, enemyGeneral.player, anchor, 2, snapshots, violations))
+
+        self.begin_capturing_logging()
+        winner = simHost.run_sim(run_real_time=debugMode and not self.GLOBAL_BYPASS_RENDERING, turn_time=0.25, turns=6)
+        self.assertIsNone(winner)
+        for snap in snapshots:
+            logbook.info(f'SNAPSHOT {snap}')
+        self.assertNoFriendliesKilled(map, general)
+
+        # ScanRecentGamesForFogDesyncs flagged yFuf7KgJ7 turn 372: a lone
+        # non-entangled ~51 tracker sat at 13,16 BETWEEN the two alternatives
+        # of an entangled ~89 group (12,16|14,16) - a third independent tracker
+        # for what is one stack.
+        self.assertEqual(
+            [], violations,
+            f'tracker multiplied an enemy army into multiple non-entangled fog trackers near 13,16. snapshots={snapshots}')
